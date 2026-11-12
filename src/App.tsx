@@ -26,6 +26,7 @@ import {
   Radio,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   SlidersHorizontal,
   Upload,
   LayoutGrid,
@@ -281,6 +282,12 @@ import {
   renderSmartSketchOverlayFrame,
   SmartSketchAudioEngine,
 } from './utils/geometryAndAlgorithms';
+import { LibraryNoteMiniThumb } from './components/LibraryNoteMiniThumb';
+import { WarmStudioToggle } from './components/WarmStudioToggle';
+import {
+  buildLibraryFilterChips,
+  formatRecentRelativeLabel,
+} from './utils/libraryUiHelpers';
 import {
   MIND_MAPS_CATALOG,
   type MindMapSubject,
@@ -2211,6 +2218,7 @@ export default function App() {
     typeof initialSession?.activeWidthSlotIdx === 'number' ? initialSession.activeWidthSlotIdx : 0
   );
   const [showWidthPopover, setShowWidthPopover] = useState<boolean>(false);
+  const [openLassoOcrMenu, setOpenLassoOcrMenu] = useState<'math' | 'chem' | null>(null);
   const [lineStyle, setLineStyle] = useState<LineStyleType>(() => initialSession?.lineStyle || 'solid');
   const [arrowEnd, setArrowEnd] = useState<boolean>(() => Boolean(initialSession?.arrowEnd));
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(() =>
@@ -3693,6 +3701,31 @@ export default function App() {
     return 'date';
   });
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
+  const [activeLibrarySubjectFilter, setActiveLibrarySubjectFilter] = useState<string>('all');
+  const [recentOpenedAtMap, setRecentOpenedAtMap] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem('bestnotes_recent_opened_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const recordNotebookOpened = useCallback((nbId: string) => {
+    const now = Date.now();
+    setRecentOpenedAtMap((prev) => {
+      const next = { ...prev, [nbId]: now };
+      try {
+        localStorage.setItem('bestnotes_recent_opened_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
   const [showLibraryFavoritesOnly, setShowLibraryFavoritesOnly] = useState<boolean>(false);
   const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(() =>
     typeof initialSession?.activeLibraryFolder === 'string' && initialSession.activeLibraryFolder.trim().length > 0
@@ -3702,6 +3735,7 @@ export default function App() {
   const [isClosingDocument, setIsClosingDocument] = useState<boolean>(false);
   const navigateToLibraryFolder = useCallback((targetPath: string | null, _immediate = false) => {
     setActiveLibraryFolder(targetPath);
+    setActiveLibrarySubjectFilter('all');
   }, []);
   const [customFolders, setCustomFolders] = useState<CustomFolderMeta[]>(() => {
     if (initialAuthUid) {
@@ -3741,6 +3775,28 @@ export default function App() {
   const [folderPickerNbId, setFolderPickerNbId] = useState<string | null>(null);
   const [draggingLibraryNbId, setDraggingLibraryNbId] = useState<string | null>(null);
   const [dragOverFolderName, setDragOverFolderName] = useState<string | null>(null);
+  const [libraryThumbHoverPreview, setLibraryThumbHoverPreview] = useState<{
+    nbId: string;
+    anchorRight: number;
+    anchorTop: number;
+  } | null>(null);
+  const handleLibraryThumbPointerEnter = useCallback(
+    (e: React.PointerEvent<HTMLElement>, nbId: string) => {
+      if (e.pointerType !== 'mouse' || draggingLibraryNbId) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      setLibraryThumbHoverPreview({
+        nbId,
+        anchorRight: rect.right,
+        anchorTop: rect.top,
+      });
+    },
+    [draggingLibraryNbId]
+  );
+  const clearLibraryThumbHoverPreview = useCallback((nbId?: string) => {
+    setLibraryThumbHoverPreview((prev) =>
+      !prev ? null : !nbId || prev.nbId === nbId ? null : prev
+    );
+  }, []);
   const [deletedCloudNotebooks, setDeletedCloudNotebooks] = useState<Notebook[]>([]);
   const localDeletedNotebooksRef = useRef<Notebook[]>([]);
   const [showRecycleBinBar, setShowRecycleBinBar] = useState<boolean>(false);
@@ -7768,6 +7824,7 @@ export default function App() {
       !showSettingsModal &&
       !showUserDropdown &&
       !showTagsPopover &&
+      !openLassoOcrMenu &&
       !libraryTagEditorNbId &&
       !folderPickerNbId &&
       !shareMenuTarget
@@ -7797,6 +7854,7 @@ export default function App() {
         if (triggerType !== 'settings') setShowSettingsModal(false);
         if (triggerType !== 'user') setShowUserDropdown(false);
         if (triggerType !== 'tags') setShowTagsPopover(false);
+        if (triggerType !== 'lasso-ocr') setOpenLassoOcrMenu(null);
         if (triggerType !== 'lib-tags') setLibraryTagEditorNbId(null);
         if (triggerType !== 'lib-folder') setFolderPickerNbId(null);
         if (triggerType !== 'share-menu') setShareMenuTarget(null);
@@ -7813,6 +7871,7 @@ export default function App() {
       setShowSettingsModal(false);
       setShowUserDropdown(false);
       setShowTagsPopover(false);
+      setOpenLassoOcrMenu(null);
       setLibraryTagEditorNbId(null);
       setFolderPickerNbId(null);
       setShareMenuTarget(null);
@@ -7829,6 +7888,7 @@ export default function App() {
         setShowSettingsModal(false);
         setShowUserDropdown(false);
         setShowTagsPopover(false);
+        setOpenLassoOcrMenu(null);
         setLibraryTagEditorNbId(null);
         setFolderPickerNbId(null);
         setShareMenuTarget(null);
@@ -7851,6 +7911,7 @@ export default function App() {
     showSettingsModal,
     showUserDropdown,
     showTagsPopover,
+    openLassoOcrMenu,
     libraryTagEditorNbId,
     folderPickerNbId,
     shareMenuTarget,
@@ -11827,14 +11888,14 @@ export default function App() {
             ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
             ctx.shadowBlur = 7;
             ctx.shadowOffsetY = 2;
-            ctx.fillStyle = allSameGroup ? '#334155' : '#059669';
+            ctx.fillStyle = allSameGroup ? '#475569' : '#1e3a5f';
             ctx.beginPath();
             ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 11);
             ctx.fill();
 
             // Middle Pill (when both Texts and Shapes/Images are selected): Κείμενο μόνο
             if (hasMixedTextAndShapes) {
-              ctx.fillStyle = '#0284c7';
+              ctx.fillStyle = '#334155';
               ctx.beginPath();
               ctx.roundRect(
                 txtOnlyCx - txtOnlyPillW / 2,
@@ -11847,7 +11908,7 @@ export default function App() {
             }
 
             // Right Pill: Κέντραρε (Center X+Y)
-            ctx.fillStyle = '#4f46e5';
+            ctx.fillStyle = '#334155';
             ctx.beginPath();
             ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 11);
             ctx.fill();
@@ -50713,7 +50774,12 @@ export default function App() {
       {(viewMode === 'library' || notebooks.length === 0) && !isCleanProjectorMode ? (
         <div
           data-library-scroll-container="true"
-          className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]"
+          onScroll={() => clearLibraryThumbHoverPreview()}
+          className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f8f7f4]"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(100, 116, 139, 0.16) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+          }}
         >
           <div className="max-w-5xl mx-auto space-y-5">
             {(() => {
@@ -50860,9 +50926,27 @@ export default function App() {
                 )
               );
 
+              // Collect filter chips (subjects + explicit #tags) across notebooks in the current Library scope
+              const scopeNotebooksForChips = notebooks.filter((nb) => {
+                if (showLibraryFavoritesOnly && !nb.favorite) return false;
+                if (!currentFolderPath) return true;
+                const nbF = normalizeFolderPath(nb.folder || '');
+                return nbF === currentFolderPath || nbF.startsWith(`${currentFolderPath}/`);
+              });
+              const { chips: libraryFilterChips, noteChipKeys: libraryNoteChipKeys } =
+                buildLibraryFilterChips(scopeNotebooksForChips);
+              const effSubjectFilter =
+                activeLibrarySubjectFilter !== 'all' &&
+                libraryFilterChips.some((c) => c.key === activeLibrarySubjectFilter)
+                  ? activeLibrarySubjectFilter
+                  : 'all';
+
               // Filter & Sort Folders (shows direct child folders of currentFolderPath, or matching folders when searching / filtering by Favorites)
               const visibleFolders = Array.from(folderMap.values())
                 .filter((f) => {
+                  if (effSubjectFilter !== 'all' && currentFolderPath === '' && !query) {
+                    return false;
+                  }
                   if (showLibraryFavoritesOnly) {
                     if (!f.favorite) return false;
                     if (
@@ -50901,14 +50985,20 @@ export default function App() {
                   if (showLibraryFavoritesOnly && !nb.favorite) {
                     return false;
                   }
+                  if (
+                    effSubjectFilter !== 'all' &&
+                    !libraryNoteChipKeys.get(nb.id)?.has(effSubjectFilter)
+                  ) {
+                    return false;
+                  }
                   const nbF = normalizeFolderPath(nb.folder || '');
                   if (!showLibraryFavoritesOnly) {
                     if (currentFolderPath !== '' && nbF !== currentFolderPath) {
-                      if (!query || !nbF.startsWith(`${currentFolderPath}/`)) {
+                      if ((!query && effSubjectFilter === 'all') || !nbF.startsWith(`${currentFolderPath}/`)) {
                         return false;
                       }
                     }
-                    if (currentFolderPath === '' && !query && nbF !== '') {
+                    if (currentFolderPath === '' && !query && effSubjectFilter === 'all' && nbF !== '') {
                       return false;
                     }
                   } else if (
@@ -50937,6 +51027,27 @@ export default function App() {
                     ? getNotebookSizeBytes(b) - getNotebookSizeBytes(a)
                     : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
                 );
+
+              const recentlyOpenedNotebooks =
+                currentFolderPath === '' &&
+                !query &&
+                !showLibraryFavoritesOnly &&
+                effSubjectFilter === 'all' &&
+                notebooks.length > 0
+                  ? [...notebooks]
+                      .sort((a, b) => {
+                        const aMs = Math.max(
+                          recentOpenedAtMap[a.id] || 0,
+                          new Date(a.updatedAt || 0).getTime() || 0
+                        );
+                        const bMs = Math.max(
+                          recentOpenedAtMap[b.id] || 0,
+                          new Date(b.updatedAt || 0).getTime() || 0
+                        );
+                        return bMs - aMs;
+                      })
+                      .slice(0, 4)
+                  : [];
 
               const totalVisibleBytes = visibleNotebooks.reduce(
                 (acc, nb) => acc + getNotebookSizeBytes(nb),
@@ -50967,6 +51078,8 @@ export default function App() {
 
               const openNotebookDirectly = (nb: Notebook) => {
                 if (Date.now() - lastLibraryDragEndAtRef.current < 350) return;
+                clearLibraryThumbHoverPreview();
+                recordNotebookOpened(nb.id);
                 if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                 setActiveNotebookId(nb.id);
                 setActivePageIndex(0);
@@ -51526,10 +51639,10 @@ export default function App() {
                                 }}
                                 className={`flex items-center gap-1.5 text-2xl font-bold rounded-xl px-2 py-0.5 transition cursor-pointer focus:outline-none ${
                                   isCrumbDropHover
-                                    ? 'bg-amber-100 text-[#0066ff] ring-2 ring-[#0066ff]'
+                                    ? 'bg-amber-100 text-[#1e3a5f] ring-2 ring-[#1e3a5f]'
                                     : isLastCrumb
-                                    ? 'text-[#0066ff] bg-sky-50/80 border border-sky-200/80'
-                                    : 'text-slate-600 hover:text-[#0066ff] hover:bg-slate-200/60'
+                                    ? 'text-[#1e3a5f] bg-white/90 border border-slate-300/80 shadow-2xs'
+                                    : 'text-slate-600 hover:text-[#1e3a5f] hover:bg-slate-200/60'
                                 }`}
                                 title={`Μετάβαση στον φάκελο «${crumbPath.replace(/\//g, ' › ')}»`}
                               >
@@ -51586,6 +51699,7 @@ export default function App() {
                             ],
                           };
                           userEditedInSessionRef.current.add(newNb.id);
+                          recordNotebookOpened(newNb.id);
                           setNotebooks((prev) => [newNb, ...prev]);
                           setOpenNotebookIds((prev) => [...prev, newNb.id]);
                           setActiveNotebookId(newNb.id);
@@ -51595,17 +51709,17 @@ export default function App() {
                           setPan({ x: 0, y: 0 });
                           setViewMode('editor');
                         }}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-200/90 hover:bg-emerald-300/90 border border-emerald-400/80 text-emerald-900 text-[15px] font-bold shadow-xs transition cursor-pointer"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] border border-[#1e3a5f] text-white text-[14px] font-bold shadow-xs transition cursor-pointer"
                       >
-                        <Plus className="w-[18px] h-[18px] text-emerald-800 stroke-[2.5]" />
+                        <Plus className="w-[17px] h-[17px] text-white stroke-[2.5]" />
                         <span>Νέα Σημείωση</span>
                       </button>
 
                       <button
                         onClick={() => setIsCreatingFolder((v) => !v)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-200/90 hover:bg-sky-300/90 border border-sky-400/80 text-sky-900 text-[15px] font-bold shadow-xs transition cursor-pointer"
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300/90 text-slate-700 text-[14px] font-semibold shadow-2xs transition cursor-pointer"
                       >
-                        <FolderPlus className="w-[18px] h-[18px] text-sky-800 stroke-[2.2]" />
+                        <FolderPlus className="w-[17px] h-[17px] text-slate-600 stroke-[2]" />
                         <span>Νέος Φάκελος</span>
                       </button>
 
@@ -51803,164 +51917,277 @@ export default function App() {
                   )}
 
                   {/* Search Field + Sort Toggle (Alphabetical / Date) + View Toggle (Icons / List) */}
-                  <div className="bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      {/* Search Input */}
-                      <div className="relative flex-1 min-w-[220px]">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={librarySearchQuery}
-                          onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                          placeholder="Αναζήτηση σε σημειώσεις, φακέλους, #tags και κείμενα (π.χ. βροχη, νερο)..."
-                          className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
-                        />
-                        {librarySearchQuery && (
-                          <button
-                            onClick={() => setLibrarySearchQuery('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Right Controls: Favorites + Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        {/* Favorites Toggle Button */}
-                        <button
-                          type="button"
-                          onClick={() => setShowLibraryFavoritesOnly((v) => !v)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer focus:outline-none ${
-                            showLibraryFavoritesOnly
-                              ? 'bg-amber-400 text-slate-900 border-amber-500 shadow-xs'
-                              : 'bg-amber-50/80 hover:bg-amber-100 text-amber-800 border-amber-200/90'
-                          }`}
-                          title="Προβολή μόνο των Αγαπημένων φακέλων και σημειώσεων"
-                        >
-                          <Star
-                            className={`w-3.5 h-3.5 ${
-                              showLibraryFavoritesOnly
-                                ? 'fill-slate-900 text-slate-900'
-                                : 'fill-amber-400 text-amber-500'
-                            }`}
+                  <div className="space-y-2.5">
+                    <div className="bg-white/95 border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        {/* Search Input */}
+                        <div className="relative flex-1 min-w-[220px]">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={librarySearchQuery}
+                            onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                            placeholder="Αναζήτηση σε σημειώσεις, φακέλους ή #tags..."
+                            className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#1e3a5f]"
                           />
-                          <span>Αγαπημένα</span>
-                          {totalFavoritesCount > 0 && (
-                            <span
-                              className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                                showLibraryFavoritesOnly
-                                  ? 'bg-slate-900/15 text-slate-900'
-                                  : 'bg-amber-200/80 text-amber-900'
-                              }`}
+                          {librarySearchQuery && (
+                            <button
+                              onClick={() => setLibrarySearchQuery('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                             >
-                              {totalFavoritesCount}
-                            </span>
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           )}
-                        </button>
-
-                        {/* Sort Selector (Left of View Toggle) */}
-                        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
-                          <span className="flex items-center px-1.5 text-slate-400">
-                            <ArrowUpDown className="w-3.5 h-3.5" />
-                          </span>
-                          <button
-                            onClick={() => {
-                              setLibrarySortBy('alpha');
-                              try {
-                                localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                              librarySortBy === 'alpha'
-                                ? 'bg-white text-[#0066ff] shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Αλφαβητικά
-                          </button>
-                          <button
-                            onClick={() => {
-                              setLibrarySortBy('date');
-                              try {
-                                localStorage.setItem('bestnotes_lib_sort_v1', 'date');
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                              librarySortBy === 'date'
-                                ? 'bg-white text-[#0066ff] shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Ημερομηνία
-                          </button>
-                          <button
-                            onClick={() => {
-                              setLibrarySortBy('size');
-                              try {
-                                localStorage.setItem('bestnotes_lib_sort_v1', 'size');
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                              librarySortBy === 'size'
-                                ? 'bg-white text-[#0066ff] shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Μέγεθος
-                          </button>
                         </div>
 
-                        {/* View Mode Toggle: Icons (Grid) vs List */}
-                        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                        {/* Right Controls: Favorites + Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          {/* Favorites Toggle Button */}
                           <button
-                            onClick={() => {
-                              setLibraryLayoutMode('grid');
-                              try {
-                                localStorage.setItem('bestnotes_lib_layout_v1', 'grid');
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                              libraryLayoutMode === 'grid'
-                                ? 'bg-[#0066ff] text-white shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
+                            type="button"
+                            onClick={() => setShowLibraryFavoritesOnly((v) => !v)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer focus:outline-none ${
+                              showLibraryFavoritesOnly
+                                ? 'bg-amber-400 text-slate-900 border-amber-500 shadow-xs'
+                                : 'bg-amber-50/80 hover:bg-amber-100 text-amber-800 border-amber-200/90'
                             }`}
-                            title="Προβολή σε Εικονίδια (Grid)"
+                            title="Προβολή μόνο των Αγαπημένων φακέλων και σημειώσεων"
                           >
-                            <LayoutGrid className="w-3.5 h-3.5" />
-                            <span>Εικονίδια</span>
+                            <Star
+                              className={`w-3.5 h-3.5 ${
+                                showLibraryFavoritesOnly
+                                  ? 'fill-slate-900 text-slate-900'
+                                  : 'fill-amber-400 text-amber-500'
+                              }`}
+                            />
+                            <span>Αγαπημένα</span>
+                            {totalFavoritesCount > 0 && (
+                              <span
+                                className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                                  showLibraryFavoritesOnly
+                                    ? 'bg-slate-900/15 text-slate-900'
+                                    : 'bg-amber-200/80 text-amber-900'
+                                }`}
+                              >
+                                {totalFavoritesCount}
+                              </span>
+                            )}
                           </button>
-                          <button
-                            onClick={() => {
-                              setLibraryLayoutMode('list');
-                              try {
-                                localStorage.setItem('bestnotes_lib_layout_v1', 'list');
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                              libraryLayoutMode === 'list'
-                                ? 'bg-[#0066ff] text-white shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                            title="Προβολή σε Λίστα (List)"
-                          >
-                            <List className="w-3.5 h-3.5" />
-                            <span>Λίστα</span>
-                          </button>
+
+                          {/* Sort Selector (Left of View Toggle) */}
+                          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                            <span className="flex items-center px-1.5 text-slate-400">
+                              <ArrowUpDown className="w-3.5 h-3.5" />
+                            </span>
+                            <button
+                              onClick={() => {
+                                setLibrarySortBy('alpha');
+                                try {
+                                  localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                                librarySortBy === 'alpha'
+                                  ? 'bg-white text-[#1e3a5f] shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Αλφαβητικά
+                            </button>
+                            <button
+                              onClick={() => {
+                                setLibrarySortBy('date');
+                                try {
+                                  localStorage.setItem('bestnotes_lib_sort_v1', 'date');
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                                librarySortBy === 'date'
+                                  ? 'bg-white text-[#1e3a5f] shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Ημερομηνία
+                            </button>
+                            <button
+                              onClick={() => {
+                                setLibrarySortBy('size');
+                                try {
+                                  localStorage.setItem('bestnotes_lib_sort_v1', 'size');
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                                librarySortBy === 'size'
+                                  ? 'bg-white text-[#1e3a5f] shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Μέγεθος
+                            </button>
+                          </div>
+
+                          {/* View Mode Toggle: Icons (Grid) vs List */}
+                          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                            <button
+                              onClick={() => {
+                                setLibraryLayoutMode('grid');
+                                try {
+                                  localStorage.setItem('bestnotes_lib_layout_v1', 'grid');
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                                libraryLayoutMode === 'grid'
+                                  ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Προβολή σε Εικονίδια (Grid)"
+                            >
+                              <LayoutGrid className="w-3.5 h-3.5" />
+                              <span>Εικονίδια</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setLibraryLayoutMode('list');
+                                try {
+                                  localStorage.setItem('bestnotes_lib_layout_v1', 'list');
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                                libraryLayoutMode === 'list'
+                                  ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Προβολή σε Λίστα (List)"
+                            >
+                              <List className="w-3.5 h-3.5" />
+                              <span>Λίστα</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
+
+                    {/* Subject & #Tag Quick Filter Chips Bar */}
+                    {libraryFilterChips.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap px-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLibrarySubjectFilter('all')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                            effSubjectFilter === 'all'
+                              ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-2xs'
+                              : 'bg-white/90 hover:bg-slate-50 border-slate-200/90 text-slate-600'
+                          }`}
+                        >
+                          <span>Όλα ({scopeNotebooksForChips.length})</span>
+                        </button>
+                        {libraryFilterChips.map((chip) => {
+                          const isActive = effSubjectFilter === chip.key;
+                          return (
+                            <button
+                              key={chip.key}
+                              type="button"
+                              onClick={() =>
+                                setActiveLibrarySubjectFilter(isActive ? 'all' : chip.key)
+                              }
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                                isActive
+                                  ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-2xs'
+                                  : 'bg-white/90 hover:bg-slate-50 border-slate-200/90 text-slate-700'
+                              }`}
+                              title={
+                                chip.isSubject
+                                  ? `Φιλτράρισμα σημειώσεων: ${chip.label}`
+                                  : `Φιλτράρισμα με tag ${chip.label}`
+                              }
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor: isActive ? '#93c5fd' : chip.color,
+                                }}
+                              />
+                              <span>
+                                {chip.label} ({chip.count})
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Recently Opened Strip on Home Screen (Larger Vertical Thumbnails for 1-Tap Resume) */}
+                  {recentlyOpenedNotebooks.length > 0 && (
+                    <div>
+                      <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                        Πρόσφατα Ανοιγμένα
+                      </h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                        {recentlyOpenedNotebooks.map((rNb) => {
+                          const recentTs = Math.max(
+                            recentOpenedAtMap[rNb.id] || 0,
+                            new Date(rNb.updatedAt || 0).getTime() || 0
+                          );
+                          const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
+                          return (
+                            <div
+                              key={`recent-${rNb.id}`}
+                              onPointerDown={(e) => {
+                                clearLibraryThumbHoverPreview();
+                                startLibraryNotebookPointerDrag(e, rNb);
+                              }}
+                              onClick={() => openNotebookDirectly(rNb)}
+                              className="group bg-white/95 hover:bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 p-3 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition flex items-center gap-3.5 cursor-pointer select-none"
+                            >
+                              <div
+                                onPointerEnter={(e) => handleLibraryThumbPointerEnter(e, rNb.id)}
+                                onPointerLeave={() => clearLibraryThumbHoverPreview(rNb.id)}
+                                className="shrink-0"
+                              >
+                                <LibraryNoteMiniThumb
+                                  notebookId={rNb.id}
+                                  title={rNb.title}
+                                  updatedAt={rNb.updatedAt}
+                                  coverColor={rNb.coverColor}
+                                  firstPage={rNb.pages[0]}
+                                  p0BgUrl={p0Url}
+                                  variant="recent"
+                                  className="group-hover:shadow-sm transition"
+                                />
+                              </div>
+                              <div
+                                className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-0.5"
+                                title={`Άνοιγμα «${rNb.title}»`}
+                              >
+                                <div>
+                                  <p className="text-[13px] font-bold text-[#0f172a] group-hover:text-[#1e3a5f] line-clamp-2 leading-snug">
+                                    {rNb.title}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 mt-1">
+                                    {formatRecentRelativeLabel(recentTs || rNb.updatedAt)}
+                                  </p>
+                                </div>
+                                <span className="inline-block self-start max-w-full truncate px-2 py-0.5 rounded-md bg-indigo-50/90 text-[#1e3a5f] text-[10.5px] font-semibold mt-2">
+                                  {rNb.folder || 'Βιβλιοθήκη'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* =================================================================
                       MODE A: ICONS VIEW (GRID) — Folder Icons & 1st-Page Note Thumbnails
@@ -52481,64 +52708,43 @@ export default function App() {
                                   }
                                 >
                                   {(() => {
-                                    const nbSyncRec = driveSyncedRecords[nb.id];
                                     const isNbDriveUpToDate = isNotebookDriveSynced(
                                       nb,
                                       driveBasePath
                                     );
-                                    const hasNbChangesSinceSync = Boolean(
-                                      nbSyncRec && !isNbDriveUpToDate
-                                    );
                                     const isThisNbUploading = activeDriveUploadingNbId === nb.id;
-                                    const renderNbDriveBadge = (posClass: string) => (
-                                      <button
-                                        type="button"
-                                        onPointerDown={(e) => e.stopPropagation()}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (!isThisNbUploading) {
-                                            void performDrivePdfSync(true, undefined, nb, true);
+                                    const needsNbDriveSync =
+                                      Boolean(driveAccessToken || driveEmail) &&
+                                      (!isNbDriveUpToDate || isThisNbUploading);
+                                    const renderNbDriveBadge = (posClass: string) =>
+                                      needsNbDriveSync ? (
+                                        <button
+                                          type="button"
+                                          onPointerDown={(e) => e.stopPropagation()}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!isThisNbUploading) {
+                                              void performDrivePdfSync(true, undefined, nb, true);
+                                            }
+                                          }}
+                                          className={`${posClass} z-20 pointer-events-auto inline-flex items-center justify-center p-1 rounded-full border shadow-xs backdrop-blur-xs transition cursor-pointer ${
+                                            isThisNbUploading
+                                              ? 'bg-red-50/95 border-red-300 text-red-600 cursor-wait'
+                                              : 'bg-white/95 hover:bg-red-50 border-red-200 text-red-500 hover:text-red-600'
+                                          }`}
+                                          title={
+                                            isThisNbUploading
+                                              ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
+                                              : `Εκκρεμεί συγχρονισμός με το Google Drive — Πάτα για άμεση ενημέρωση`
                                           }
-                                        }}
-                                        className={`${posClass} z-20 pointer-events-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold shadow-2xs backdrop-blur-xs transition cursor-pointer ${
-                                          isThisNbUploading
-                                            ? 'bg-red-50/95 border-red-300 text-red-600 cursor-wait'
-                                            : isNbDriveUpToDate
-                                            ? 'bg-emerald-50/95 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
-                                            : hasNbChangesSinceSync
-                                            ? 'bg-amber-50/95 hover:bg-amber-100 border-amber-300 text-amber-700'
-                                            : 'bg-white/90 hover:bg-sky-50 border-slate-200/90 text-slate-600 hover:text-[#0066ff]'
-                                        }`}
-                                        title={
-                                          isThisNbUploading
-                                            ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
-                                            : isNbDriveUpToDate
-                                            ? `✅ Ενημερωμένο στο Google Drive — Καμία αλλαγή από τον τελευταίο συγχρονισμό`
-                                            : hasNbChangesSinceSync
-                                            ? `⚠️ Έχει αλλαγές μετά τον τελευταίο συγχρονισμό Google Drive — Πάτα για άμεση ενημέρωση`
-                                            : `Δεν έχει συγχρονιστεί ακόμη στο Google Drive — Πάτα για συγχρονισμό`
-                                        }
-                                      >
-                                        {isThisNbUploading ? (
-                                          <>
-                                            <RefreshCw className="w-2.5 h-2.5 bn-drive-sync-spin text-red-600" />
-                                            <span>Drive...</span>
-                                          </>
-                                        ) : isNbDriveUpToDate ? (
-                                          <span>✓ Drive</span>
-                                        ) : hasNbChangesSinceSync ? (
-                                          <>
-                                            <RefreshCw className="w-2.5 h-2.5 text-amber-600" />
-                                            <span>Αλλαγές</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                            <span>Drive</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    );
+                                        >
+                                          <RefreshCw
+                                            className={`w-3 h-3 ${
+                                              isThisNbUploading ? 'bn-drive-sync-spin text-red-600' : ''
+                                            }`}
+                                          />
+                                        </button>
+                                      ) : null;
 
                                     return isLandscapeNb ? (
                                       /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) floating cleanly with no vertical background frame */
@@ -52888,7 +53094,7 @@ export default function App() {
                        ================================================================= */
                     <div
                       key={`list-${activeLibraryFolder || 'root'}`}
-                      className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden bn-fast-fade-in"
+                      className="space-y-2 bn-fast-fade-in"
                     >
                       {/* Folders in List Mode */}
                       {visibleFolders.map((folder) => {
@@ -52908,12 +53114,12 @@ export default function App() {
                             onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                             onDrop={(e) => handleFolderDrop(e, folder.path)}
                             onClick={() => navigateToLibraryFolder(folder.path)}
-                            className={`flex items-center justify-between px-4 py-3 transition-all duration-200 cursor-pointer gap-3 ${
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200 cursor-pointer gap-3 shadow-2xs ${
                               isDropHover
-                                ? 'bg-amber-100/80 ring-2 ring-inset ring-[#0066ff]'
+                                ? 'bg-amber-100/90 border-[#1e3a5f] ring-2 ring-inset ring-[#1e3a5f]'
                                 : draggingLibraryNbId
-                                ? 'bg-amber-50/40'
-                                : 'hover:bg-amber-50/40'
+                                ? 'bg-amber-50/60 border-amber-200'
+                                : 'bg-white/95 border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -53167,14 +53373,14 @@ export default function App() {
                           }
                         }}
                         title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
-                        className={`flex items-center justify-between px-4 py-2.5 transition cursor-pointer select-none gap-3 ${
+                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
                           isLibraryDropZoneActive
-                            ? 'bg-sky-100/90 ring-2 ring-inset ring-[#0066ff]'
-                            : 'bg-slate-50/70 hover:bg-sky-50/60'
+                            ? 'bg-sky-100/90 border-[#1e3a5f] ring-2 ring-inset ring-[#1e3a5f]'
+                            : 'bg-white/75 border-slate-300/90 hover:bg-white hover:border-slate-400'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="w-9 h-10 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-white text-slate-400">
+                          <div className="w-10 h-11 rounded-lg border border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-slate-50 text-slate-400">
                             <Upload className="w-4 h-4" />
                           </div>
                           <div className="min-w-0 flex-1">
@@ -53194,196 +53400,190 @@ export default function App() {
                         const nbBytes = getNotebookSizeBytes(nb);
                         const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
                         const nbTs = formatLibraryTimestampParts(nb.updatedAt, nb.id);
+                        const p0BgUrl = resolvePageBackgroundUrl(nb.id, nb.pages[0], 'thumb');
+                        const isNbDriveUpToDate = isNotebookDriveSynced(nb, driveBasePath);
+                        const isThisNbUploading = activeDriveUploadingNbId === nb.id;
+                        const needsNbDriveSync =
+                          Boolean(driveAccessToken || driveEmail) &&
+                          (!isNbDriveUpToDate || isThisNbUploading);
                         return (
                           <div
                             key={`list-nb-${nb.id}`}
-                            onPointerDown={(e) => startLibraryNotebookPointerDrag(e, nb)}
+                            onPointerDown={(e) => {
+                              clearLibraryThumbHoverPreview();
+                              startLibraryNotebookPointerDrag(e, nb);
+                            }}
                             onClick={() => openNotebookDirectly(nb)}
-                            title="Πάτα για άνοιγμα ή σύρε (Drag & Drop) μέσα σε φάκελο"
-                            className={`flex items-center justify-between px-4 py-3 hover:bg-sky-50/50 transition cursor-grab active:cursor-grabbing select-none gap-3 ${
-                              isDraggingThisNb ? 'opacity-45 bg-sky-50' : ''
+                            style={{
+                              contentVisibility: 'auto',
+                              containIntrinsicSize: 'auto 74px',
+                            }}
+                            className={`flex items-center justify-between px-4 py-2.5 rounded-xl border transition cursor-grab active:cursor-grabbing select-none gap-3 shadow-2xs ${
+                              isDraggingThisNb
+                                ? 'opacity-45 bg-sky-50 border-[#1e3a5f]'
+                                : 'bg-white/95 hover:bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
                               <div
-                                className="w-9 h-11 rounded-lg border border-slate-300 shadow-2xs flex items-center justify-center shrink-0 relative overflow-hidden bg-[#fffdf7] touch-none select-none"
+                                onPointerEnter={(e) => handleLibraryThumbPointerEnter(e, nb.id)}
+                                onPointerLeave={() => clearLibraryThumbHoverPreview(nb.id)}
+                                className="shrink-0"
                               >
-                                <div
-                                  className="absolute left-0 top-0 bottom-0 w-1.5"
-                                  style={{ backgroundColor: nb.coverColor }}
+                                <LibraryNoteMiniThumb
+                                  notebookId={nb.id}
+                                  title={nb.title}
+                                  updatedAt={nb.updatedAt}
+                                  coverColor={nb.coverColor}
+                                  firstPage={nb.pages[0]}
+                                  p0BgUrl={p0BgUrl}
+                                  variant="list"
+                                  className="hover:ring-2 hover:ring-[#1e3a5f]/30 transition"
                                 />
-                                <FileText className="w-4 h-4 text-slate-500 ml-1" />
                               </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {renamingNotebookId === nb.id && renamingNotebookContext === 'list' ? (
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    value={renamingTitleDraft}
-                                    onClick={(e) => e.stopPropagation()}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onFocus={(e) => e.currentTarget.select()}
-                                    onChange={(e) => setRenamingTitleDraft(e.target.value)}
-                                    onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
-                                    onKeyDown={(e) => {
-                                      e.stopPropagation();
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        commitRenamingNotebook(nb.id, renamingTitleDraft);
-                                      } else if (e.key === 'Escape') {
-                                        e.preventDefault();
-                                        setRenamingNotebookId(null);
-                                        setRenamingNotebookContext(null);
-                                      }
-                                    }}
-                                    className="px-2 py-0.5 rounded-lg bg-white text-[#1b2a4a] text-sm font-bold border border-[#0066ff] shadow-xs focus:outline-none min-w-[180px]"
-                                  />
-                                ) : (
-                                  <p
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      startRenamingNotebook(nb, 'list');
-                                    }}
-                                    title="Πάτα για μετονομασία σημείωσης"
-                                    className="text-sm font-bold text-[#1b2a4a] hover:text-[#0066ff] hover:underline truncate cursor-text"
-                                  >
-                                    {nb.title}
-                                  </p>
-                                )}
-                                {(() => {
-                                  const nbSyncRec = driveSyncedRecords[nb.id];
-                                  const isNbDriveUpToDate = isNotebookDriveSynced(
-                                    nb,
-                                    driveBasePath
-                                  );
-                                  const hasNbChangesSinceSync = Boolean(
-                                    nbSyncRec && !isNbDriveUpToDate
-                                  );
-                                  const isThisNbUploading = activeDriveUploadingNbId === nb.id;
-                                  return (
-                                    <button
-                                      type="button"
+                              <div
+                                className="min-w-0 flex-1"
+                                title="Πάτα για άνοιγμα ή σύρε (Drag & Drop) μέσα σε φάκελο"
+                              >
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {renamingNotebookId === nb.id && renamingNotebookContext === 'list' ? (
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={renamingTitleDraft}
+                                      onClick={(e) => e.stopPropagation()}
                                       onPointerDown={(e) => e.stopPropagation()}
-                                      onClick={(e) => {
+                                      onFocus={(e) => e.currentTarget.select()}
+                                      onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                                      onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                                      onKeyDown={(e) => {
                                         e.stopPropagation();
-                                        if (!isThisNbUploading) {
-                                          void performDrivePdfSync(true, undefined, nb, true);
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          commitRenamingNotebook(nb.id, renamingTitleDraft);
+                                        } else if (e.key === 'Escape') {
+                                          e.preventDefault();
+                                          setRenamingNotebookId(null);
+                                          setRenamingNotebookContext(null);
                                         }
                                       }}
-                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9.5px] font-bold transition cursor-pointer shrink-0 ${
-                                        isThisNbUploading
-                                          ? 'bg-red-50 border-red-300 text-red-600 cursor-wait'
-                                          : isNbDriveUpToDate
-                                          ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
-                                          : hasNbChangesSinceSync
-                                          ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-700'
-                                          : 'bg-slate-50 hover:bg-sky-50 border-slate-200 text-slate-500 hover:text-[#0066ff]'
-                                      }`}
-                                      title={
-                                        isThisNbUploading
-                                          ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
-                                          : isNbDriveUpToDate
-                                          ? `✅ Ενημερωμένο στο Google Drive — Καμία αλλαγή από τον τελευταίο συγχρονισμό`
-                                          : hasNbChangesSinceSync
-                                          ? `⚠️ Έχει αλλαγές μετά τον τελευταίο συγχρονισμό Google Drive — Πάτα για άμεση ενημέρωση`
-                                          : `Δεν έχει συγχρονιστεί ακόμη στο Google Drive — Πάτα για συγχρονισμό`
-                                      }
+                                      className="px-2 py-0.5 rounded-lg bg-white text-[#1b2a4a] text-sm font-bold border border-[#1e3a5f] shadow-xs focus:outline-none min-w-[180px]"
+                                    />
+                                  ) : (
+                                    <p
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        startRenamingNotebook(nb, 'list');
+                                      }}
+                                      title="Πάτα για μετονομασία σημείωσης"
+                                      className="text-sm font-bold text-[#0f172a] hover:text-[#1e3a5f] hover:underline truncate cursor-text"
                                     >
-                                      {isThisNbUploading ? (
-                                        <>
-                                          <RefreshCw className="w-2.5 h-2.5 bn-drive-sync-spin text-red-600" />
-                                          <span>Drive...</span>
-                                        </>
-                                      ) : isNbDriveUpToDate ? (
-                                        <span>✓ Drive</span>
-                                      ) : hasNbChangesSinceSync ? (
-                                        <>
-                                          <RefreshCw className="w-2.5 h-2.5 text-amber-600" />
-                                          <span>Αλλαγές</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                          <span>Drive</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  );
-                                })()}
+                                      {nb.title}
+                                    </p>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 flex items-center tabular-nums mt-0.5">
+                                  <span className="inline-block w-[55px] shrink-0">
+                                    {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'}
+                                  </span>
+                                  <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                  <span className="inline-block w-[46px] shrink-0 text-left font-semibold text-[#1e3a5f]">
+                                    {nbSizeLabel}
+                                  </span>
+                                  <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                  <span className="inline-block w-[60px] shrink-0">{nbTs.datePart}</span>
+                                  <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                  <span className="inline-block w-[34px] shrink-0">{nbTs.timePart}</span>
+                                </p>
                               </div>
-                              <p className="text-[11px] text-slate-500 flex items-center tabular-nums">
-                                <span className="inline-block w-[55px] shrink-0">
-                                  {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'}
-                                </span>
-                                <span className="text-slate-300 mx-1 shrink-0">•</span>
-                                <span className="inline-block w-[46px] shrink-0 text-left font-semibold text-sky-700">
-                                  {nbSizeLabel}
-                                </span>
-                                <span className="text-slate-300 mx-1 shrink-0">•</span>
-                                <span className="inline-block w-[60px] shrink-0">{nbTs.datePart}</span>
-                                <span className="text-slate-300 mx-1 shrink-0">•</span>
-                                <span className="inline-block w-[34px] shrink-0">{nbTs.timePart}</span>
-                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <div className="w-8 flex items-center justify-center shrink-0">
+                                {needsNbDriveSync && (
+                                  <button
+                                    type="button"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!isThisNbUploading) {
+                                        void performDrivePdfSync(true, undefined, nb, true);
+                                      }
+                                    }}
+                                    className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                      isThisNbUploading
+                                        ? 'bg-red-50 text-red-600 cursor-wait'
+                                        : 'text-red-500 hover:text-red-600 hover:bg-red-50'
+                                    }`}
+                                    title={
+                                      isThisNbUploading
+                                        ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
+                                        : `Εκκρεμεί συγχρονισμός με το Google Drive — Πάτα για άμεση ενημέρωση`
+                                    }
+                                  >
+                                    <RefreshCw
+                                      className={`w-4 h-4 ${
+                                        isThisNbUploading ? 'bn-drive-sync-spin text-red-600' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                data-popover-trigger="share-menu"
+                                onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
+                                className="p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                                title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleShareNotebookPdf(nb);
+                                }}
+                                className="p-2 rounded-lg text-slate-500 hover:text-[#1e3a5f] hover:bg-slate-100 transition cursor-pointer"
+                                title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
+                              >
+                                <Share2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleNotebookFavorite(nb);
+                                }}
+                                className={`p-2 rounded-lg transition cursor-pointer focus:outline-none ${
+                                  nb.favorite
+                                    ? 'bg-amber-50/90 text-amber-500 hover:bg-amber-100'
+                                    : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                }`}
+                                title={
+                                  nb.favorite
+                                    ? 'Αφαίρεση από τα Αγαπημένα'
+                                    : 'Προσθήκη στα Αγαπημένα'
+                                }
+                              >
+                                <Star
+                                  className={`w-4 h-4 ${
+                                    nb.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                  }`}
+                                />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotebookById(nb);
+                                }}
+                                className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                title={`Διαγραφή σημείωσης "${nb.title}"`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              data-popover-trigger="share-menu"
-                              onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
-                              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
-                              title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleShareNotebookPdf(nb);
-                              }}
-                              className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
-                              title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleNotebookFavorite(nb);
-                              }}
-                              className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
-                                nb.favorite
-                                  ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
-                                  : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
-                              }`}
-                              title={
-                                nb.favorite
-                                  ? 'Αφαίρεση από τα Αγαπημένα'
-                                  : 'Προσθήκη στα Αγαπημένα'
-                              }
-                            >
-                              <Star
-                                className={`w-4 h-4 ${
-                                  nb.favorite ? 'fill-amber-400 text-amber-500' : ''
-                                }`}
-                              />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteNotebookById(nb);
-                              }}
-                              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
-                              title={`Διαγραφή σημείωσης "${nb.title}"`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
                         );
                       })}
 
@@ -53394,6 +53594,58 @@ export default function App() {
                       )}
                     </div>
                   )}
+
+                  {/* Desktop Hover First-Page Preview Popover for List & Recent Thumbnails */}
+                  {libraryThumbHoverPreview &&
+                    !draggingLibraryNbId &&
+                    (() => {
+                      const previewNb = notebooks.find(
+                        (n) => n.id === libraryThumbHoverPreview.nbId
+                      );
+                      if (!previewNb) return null;
+                      const p0 = previewNb.pages[0];
+                      const pW = getPageLogicalWidth(p0);
+                      const pH = getPageLogicalHeight(p0);
+                      const isLandscape = pW > pH;
+                      const cardW = isLandscape ? 320 : 250;
+                      const pageH = Math.min(350, Math.round((cardW * pH) / Math.max(1, pW)));
+                      const winW = typeof window !== 'undefined' ? window.innerWidth : 1280;
+                      const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+                      const left = Math.max(
+                        16,
+                        Math.min(libraryThumbHoverPreview.anchorRight + 14, winW - cardW - 36)
+                      );
+                      const top = Math.max(
+                        52,
+                        Math.min(libraryThumbHoverPreview.anchorTop - 24, winH - pageH - 76)
+                      );
+                      const p0PreviewUrl = resolvePageBackgroundUrl(previewNb.id, p0, 'full');
+                      return (
+                        <div
+                          style={{ left, top }}
+                          className="fixed z-[180] pointer-events-none rounded-2xl bg-white/98 border border-slate-200/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] p-2.5 bn-fast-fade-in"
+                        >
+                          <LibraryNoteMiniThumb
+                            notebookId={previewNb.id}
+                            title={previewNb.title}
+                            updatedAt={previewNb.updatedAt}
+                            coverColor={previewNb.coverColor}
+                            firstPage={p0}
+                            p0BgUrl={p0PreviewUrl}
+                            variant="preview"
+                            style={{ width: cardW, height: pageH }}
+                          />
+                          <div className="mt-2 px-0.5 flex items-center justify-between gap-2" style={{ maxWidth: cardW }}>
+                            <span className="text-xs font-bold text-[#0f172a] truncate">
+                              {previewNb.title}
+                            </span>
+                            <span className="text-[10.5px] font-semibold text-slate-400 shrink-0">
+                              {previewNb.pages.length} {previewNb.pages.length === 1 ? 'σελ.' : 'σελ.'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   {/* Floating Ghost Card while Dragging a Notebook in Library (Mouse / Touch / Apple Pencil) */}
                   {libraryTouchDrag && (
@@ -53960,20 +54212,21 @@ export default function App() {
             style={{ touchAction: 'manipulation' }}
             className={`${
               isCleanProjectorMode || isLivePdfMode ? 'hidden' : 'sticky top-0 z-30 flex'
-            } items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain`}
+            } items-center justify-between px-4 py-1.5 bg-[#f7f5f0] border-b border-[#dfd8cb] shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain`}
           >
             {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting + Paste */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setPencilOnlyMode(!pencilOnlyMode)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer ${
                   pencilOnlyMode
-                    ? 'bg-[#0066ff] text-white shadow-xs'
-                    : 'bg-white text-slate-600 border border-slate-300'
+                    ? 'bg-[#1e3a5f] text-white shadow-xs'
+                    : 'bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] hover:bg-[#ece7dc]'
                 }`}
                 title="Palm Rejection: Όταν είναι ON, μόνο το Apple Pencil γράφει"
               >
-                ✏️ {pencilOnlyMode ? 'Pencil Only' : 'All Touch'}
+                <Pen className="w-3 h-3 shrink-0" />
+                <span>{pencilOnlyMode ? 'Pencil Only' : 'All Touch'}</span>
               </button>
 
               {/*
@@ -53990,7 +54243,7 @@ export default function App() {
             </div>
 
       {/* Center: Goodnotes 6 Iconic Pill Toolbar (Lightweight Reader & Highlighter Mode when isLightweightDocMode is true) */}
-            <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-xs border border-slate-200/90">
+            <div className="flex items-center gap-1 bg-[#fdfbf7] px-2 py-1 rounded-full shadow-xs border border-[#dfd8cb]">
               {[
                 { id: 'pen', title: 'Pen (Μολύβι / Στυλό + Αυτόματο Πλαίσιο/Κύκλος με κράτημα) — P / Π', icon: Pen },
                 { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', icon: Eraser },
@@ -54145,12 +54398,8 @@ export default function App() {
                     }}
                     className={`p-2 rounded-full transition cursor-pointer ${
                       isActive
-                        ? tool.id === 'lasso' || tool.id === 'rect-lasso'
-                          ? 'bg-[#22c55e] text-white ring-2 ring-emerald-300 shadow-xs scale-105'
-                          : tool.id === 'align-objects'
-                          ? 'bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-xs scale-105'
-                          : 'bg-[#0066ff] text-white shadow-xs scale-105'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs scale-105'
+                        : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f]'
                     }`}
                     title={tool.title}
                   >
@@ -54159,21 +54408,21 @@ export default function App() {
                 );
               })}
 
-              <div className="h-5 w-px bg-slate-200 mx-0.5" />
+              <div className="h-5 w-px bg-[#dfd8cb] mx-0.5" />
 
               {isLightweightDocMode ? (
                 <span
-                  className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold whitespace-nowrap select-none"
+                  className="px-2.5 py-1 rounded-full bg-[#efebe3] border border-[#dfd8cb] text-[#1e3a5f] text-[11px] font-bold whitespace-nowrap select-none"
                   title="Ενεργός Κόφτης για PDF / Εικόνες: Γρήγορη ανάγνωση, υπογράμμιση και αυτόματο πλαίσιο/κύκλος"
                 >
-                  📖 Απλή Ανάγνωση & Υπογράμμιση
+                  Απλή Ανάγνωση & Υπογράμμιση
                 </span>
               ) : (
                 <>
                   {/* Upload Photo / PDF / .goodnotes from Device + Direct 1-Click Paste + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
                   <button
                     onClick={() => fileInputImageRef.current?.click()}
-                    className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
+                    className="p-2 rounded-full text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f] transition cursor-pointer"
                     title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
                   >
                     <Upload className="w-4 h-4" />
@@ -54181,7 +54430,7 @@ export default function App() {
 
                   <button
                     onClick={handlePaste}
-                    className="p-2 rounded-full text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
+                    className="p-2 rounded-full text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f] transition cursor-pointer"
                     title="Άμεση Επικόλληση (Paste — Ctrl+V / Cmd+V) εικόνας, κειμένου ή αντικειμένου"
                   >
                     <ClipboardPaste className="w-4 h-4" />
@@ -54196,14 +54445,14 @@ export default function App() {
                     }}
                     className={`relative p-2 rounded-full transition cursor-pointer ${
                       showShapeLibraryPanel
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-emerald-600 hover:bg-emerald-50'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f]'
                     }`}
                     title="Συλλογή Εικόνων & Σχημάτων"
                   >
                     <ImageIcon className="w-4 h-4" />
                     {shapeLibrary.length > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                      <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1e3a5f] text-white text-[9px] font-bold flex items-center justify-center border border-[#fdfbf7]">
                         {shapeLibrary.length}
                       </span>
                     )}
@@ -54235,7 +54484,7 @@ export default function App() {
                       );
                     }}
                     className={`p-2 rounded-full transition cursor-pointer ${
-                      rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
+                      rulerState.visible ? 'bg-[#1e3a5f] text-white shadow-xs' : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f]'
                     }`}
                     title="Χάρακας (Ruler) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
                   >
@@ -54245,7 +54494,11 @@ export default function App() {
                   <button
                     data-popover-trigger="math"
                     onClick={() => setShowMathModal((v) => !v)}
-                    className="p-2 rounded-full text-purple-600 hover:bg-purple-50 transition cursor-pointer"
+                    className={`p-2 rounded-full transition cursor-pointer ${
+                      showMathModal
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f]'
+                    }`}
                     title="LaTeX & Επίλυση Εξίσωσης (CAS)"
                   >
                     <Calculator className="w-4 h-4" />
@@ -54260,9 +54513,9 @@ export default function App() {
                       setShowColorPopover(false);
                     }}
                     className={`p-2 rounded-full transition cursor-pointer ${
-                      showLayersPanel ? 'bg-[#1b2a4a] text-white' : 'text-slate-700 hover:bg-slate-100'
+                      showLayersPanel ? 'bg-[#1e3a5f] text-white shadow-xs' : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#1e3a5f]'
                     }`}
-                    title="Layers (Επίπεδα με 🔒 Κλείδωμα & 👁️ Απόκρυψη)"
+                    title="Layers (Επίπεδα με Κλείδωμα & Απόκρυψη)"
                   >
                     <Layers className="w-4 h-4" />
                   </button>
@@ -54342,16 +54595,15 @@ export default function App() {
                         return next;
                       });
                     }}
-                    className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
+                    className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
                       (showSimulationPanel && simActiveCategory !== null) ||
                       (isSimulating && getValidCircuitSims(activePage).length > 0) ||
-                      (isSpringSimulating && getValidSpringSims(activePage).length > 0)
-                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                        : showSimulationPanel
-                        ? 'bg-slate-200 text-slate-700 border border-slate-300'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/90'
+                      (isSpringSimulating && getValidSpringSims(activePage).length > 0) ||
+                      showSimulationPanel
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                     }`}
-                    title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια (⚙️▶️)"
+                    title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια"
                   >
                     <svg
                       className="w-4 h-4 shrink-0"
@@ -54372,7 +54624,7 @@ export default function App() {
                     <span className="hidden sm:inline">Sim</span>
                     {((isSimulating && getValidCircuitSims(activePage).length > 0) ||
                       (isSpringSimulating && getValidSpringSims(activePage).length > 0)) && (
-                      <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
+                      <span className="w-2 h-2 rounded-full bg-[#34d399]" />
                     )}
                   </button>
                 </>
@@ -54380,7 +54632,7 @@ export default function App() {
             </div>
 
             {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots (with 12-Step Popover!) + 3 Color Slots */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-xs border border-slate-200/90 relative">
+            <div className="flex items-center gap-2 bg-[#fdfbf7] px-3 py-1 rounded-full shadow-xs border border-[#dfd8cb] relative">
               {(() => {
                 const selIds =
                   selectedStrokeIds.length > 0
@@ -54462,8 +54714,8 @@ export default function App() {
                             }}
                             className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
                               isSlotActive || Math.abs(strokeWidth - w) < 0.25
-                                ? 'bg-sky-50 ring-2 ring-[#0066ff]'
-                                : 'hover:bg-slate-100'
+                                ? 'bg-[#efebe3] ring-2 ring-[#1e3a5f]'
+                                : 'hover:bg-[#ece7dc]'
                             }`}
                             title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
                           >
@@ -54481,7 +54733,7 @@ export default function App() {
                           setShowColorPopover(false);
                           setShowShapeLibraryPanel(false);
                         }}
-                        className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
+                        className="px-1.5 py-0.5 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] text-[10px] font-bold text-[#1e3a5f] cursor-pointer"
                         title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
                       >
                         {strokeWidth.toFixed(1)}px
@@ -54493,8 +54745,8 @@ export default function App() {
                         }}
                         className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
                           effectiveDashed
-                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                            : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
+                            ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-xs'
+                            : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
                         }`}
                         title={
                           effectiveDashed
@@ -54517,7 +54769,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="h-5 w-px bg-slate-200" />
+                    <div className="h-5 w-px bg-[#dfd8cb]" />
 
                     {/* 5 Color Memories + Scroll Left/Right for 5 Most Recent Colors + Rainbow Picker + Fill Controls */}
                     <div className="flex items-center gap-1">
@@ -54548,7 +54800,7 @@ export default function App() {
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
-                                  ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                                  ? 'ring-2 ring-offset-1 ring-[#1e3a5f] scale-110'
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
@@ -54565,7 +54817,7 @@ export default function App() {
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
-                                  ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                                  ? 'ring-2 ring-offset-1 ring-[#1e3a5f] scale-110'
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
@@ -54584,7 +54836,7 @@ export default function App() {
                         className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
                         title="Όλα τα Χρώματα & Στυλ Γραμμής"
                       />
-                      <div className="h-4 w-px bg-slate-200 mx-0.5" />
+                      <div className="h-4 w-px bg-[#dfd8cb] mx-0.5" />
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           onClick={() => toggleFillStyleToSelection(false)}
@@ -54596,7 +54848,7 @@ export default function App() {
                                 ? '0 1px 2px rgba(0,0,0,0.45)'
                                 : undefined,
                           }}
-                          className="relative overflow-hidden px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border-[1.5px] bg-white transition cursor-pointer"
+                          className="relative overflow-hidden px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border-[1.5px] bg-[#fdfbf7] transition cursor-pointer"
                           title="Εναλλαγή Γεμάτο / Διάφανο (Συντόμευση: F / Φ)"
                         >
                           {effectiveFilled && (
@@ -54630,8 +54882,8 @@ export default function App() {
                           }}
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition cursor-pointer ${
                             showFillTransPopover
-                              ? 'bg-sky-50 border-[#0066ff] text-[#0066ff] ring-2 ring-sky-200'
-                              : 'bg-slate-100 hover:bg-sky-50 border-slate-200/90 hover:border-sky-300 text-slate-600 hover:text-[#0066ff]'
+                              ? 'bg-[#efebe3] border-[#1e3a5f] text-[#1e3a5f] ring-2 ring-[#1e3a5f]/25'
+                              : 'bg-[#efebe3] hover:bg-[#e4ded2] border-[#dfd8cb] text-[#2c3e50]'
                           }`}
                           title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για μπάρα επιλογής 5% – 95% ανά 5%)`}
                         >
@@ -54680,12 +54932,12 @@ export default function App() {
                     top: fillTransPopoverPos.top,
                     left: fillTransPopoverPos.left,
                   }}
-                  className="fixed z-50 bg-white/98 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3 py-2.5 flex flex-col gap-2 w-[248px]"
+                  className="fixed z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-xl border border-[#dfd8cb] px-3 py-2.5 flex flex-col gap-2 w-[248px]"
                 >
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-2xs shrink-0"
+                        className="w-3.5 h-3.5 rounded-full border border-[#dfd8cb] shadow-2xs shrink-0"
                         style={{
                           backgroundColor: previewColor,
                           opacity: Math.max(0.05, Math.min(0.95, (100 - currentTrans) / 100)),
@@ -54693,7 +54945,7 @@ export default function App() {
                       />
                       <span>Διαφάνεια Γεμίσματος</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-[#0066ff] font-extrabold text-[11px]">
+                    <span className="px-2 py-0.5 rounded-full bg-[#efebe3] border border-[#dfd8cb] text-[#1e3a5f] font-extrabold text-[11px]">
                       {currentTrans}%
                     </span>
                   </div>
@@ -54702,7 +54954,7 @@ export default function App() {
                     <button
                       onClick={() => applyFillTransparencyToSelection(Math.max(5, currentTrans - 5))}
                       disabled={currentTrans <= 5}
-                      className="w-6 h-6 shrink-0 rounded-full bg-slate-100 hover:bg-sky-50 disabled:opacity-40 border border-slate-200 text-slate-700 hover:text-[#0066ff] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#1e3a5f] font-bold text-xs flex items-center justify-center cursor-pointer transition"
                       title="Μείωση διαφάνειας (-5%)"
                     >
                       −
@@ -54714,7 +54966,7 @@ export default function App() {
                       step={5}
                       value={currentTrans}
                       onChange={(e) => applyFillTransparencyToSelection(parseInt(e.target.value, 10))}
-                      className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#0066ff]"
+                      className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#1e3a5f]"
                       style={{
                         background: `linear-gradient(to right, ${previewColor} 0%, rgba(226,232,240,0.45) 100%)`,
                       }}
@@ -54722,7 +54974,7 @@ export default function App() {
                     <button
                       onClick={() => applyFillTransparencyToSelection(Math.min(95, currentTrans + 5))}
                       disabled={currentTrans >= 95}
-                      className="w-6 h-6 shrink-0 rounded-full bg-slate-100 hover:bg-sky-50 disabled:opacity-40 border border-slate-200 text-slate-700 hover:text-[#0066ff] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#1e3a5f] font-bold text-xs flex items-center justify-center cursor-pointer transition"
                       title="Αύξηση διαφάνειας (+5%)"
                     >
                       +
@@ -54738,11 +54990,11 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="width"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-20 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 flex flex-col gap-3 w-72"
+              className="fixed right-20 top-24 z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-2xl border border-[#dfd8cb] p-3.5 flex flex-col gap-3 w-72"
             >
-              <div className="flex items-center justify-between text-xs font-bold text-[#1b2a4a]">
+              <div className="flex items-center justify-between text-xs font-bold text-[#1e3a5f]">
                 <span>Πάχος Γραμμής (12 Επιλογές)</span>
-                <button onClick={() => setShowWidthPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                <button onClick={() => setShowWidthPopover(false)} className="text-[#64748b] hover:text-[#1e3a5f] cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -54763,8 +55015,8 @@ export default function App() {
                       }}
                       className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border text-[10px] font-semibold transition cursor-pointer ${
                         isSelected
-                          ? 'bg-sky-50 border-[#0066ff] text-[#0066ff]'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                          ? 'bg-[#efebe3] border-[#1e3a5f] text-[#1e3a5f]'
+                          : 'bg-[#f7f5f0] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
                       }`}
                     >
                       <div className="h-5 flex items-center justify-center">
@@ -54782,10 +55034,10 @@ export default function App() {
                 })}
               </div>
 
-              <div className="pt-1 border-t border-slate-100">
-                <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+              <div className="pt-1 border-t border-[#e8e2d6]">
+                <div className="flex justify-between text-[11px] text-[#64748b] mb-1">
                   <span>Ακριβής Ρύθμιση:</span>
-                  <span className="font-bold text-[#0066ff]">{strokeWidth.toFixed(1)} px</span>
+                  <span className="font-bold text-[#1e3a5f]">{strokeWidth.toFixed(1)} px</span>
                 </div>
                 <input
                   type="range"
@@ -54802,7 +55054,7 @@ export default function App() {
                       return next;
                     });
                   }}
-                  className="w-full accent-[#0066ff]"
+                  className="w-full accent-[#1e3a5f]"
                 />
               </div>
             </div>
@@ -54814,11 +55066,11 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="color"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-6 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2.5 w-64"
+              className="fixed right-6 top-24 z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-2xl border border-[#dfd8cb] p-3 flex flex-col gap-2.5 w-64"
             >
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <div className="flex items-center justify-between text-xs font-bold text-[#1e3a5f]">
                 <span>Παλέτα Χρωμάτων</span>
-                <button onClick={() => setShowColorPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                <button onClick={() => setShowColorPopover(false)} className="text-[#64748b] hover:text-[#1e3a5f] cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -54832,15 +55084,15 @@ export default function App() {
                         colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                       }
                     }}
-                    className={`w-8 h-8 rounded-full border border-slate-200 mx-auto cursor-pointer transition ${
-                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'hover:scale-105'
+                    className={`w-8 h-8 rounded-full border border-[#dfd8cb] mx-auto cursor-pointer transition ${
+                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#1e3a5f] scale-110' : 'hover:scale-105'
                     }`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
               </div>
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                <span className="text-[11px] font-semibold text-slate-600">Επιλογή Νέου Χρώματος:</span>
+              <div className="flex items-center justify-between pt-2 border-t border-[#e8e2d6] text-xs">
+                <span className="text-[11px] font-semibold text-[#64748b]">Επιλογή Νέου Χρώματος:</span>
                 <input
                   type="color"
                   value={strokeColor}
@@ -54851,7 +55103,7 @@ export default function App() {
                       colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                     }
                   }}
-                  className="w-8 h-7 rounded cursor-pointer border border-slate-200"
+                  className="w-8 h-7 rounded cursor-pointer border border-[#dfd8cb]"
                 />
               </div>
             </div>
@@ -54874,7 +55126,7 @@ export default function App() {
               <div
                 data-sticky-app-nav="true"
                 style={{ touchAction: 'manipulation' }}
-                className="sticky top-0 z-30 flex items-center justify-center flex-wrap px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0"
+                className="sticky top-0 z-30 flex items-center justify-center flex-wrap px-4 py-1 bg-[#f7f5f0]/95 border-b border-[#dfd8cb] text-xs gap-2 shrink-0"
               >
                 {(activeTool === 'text' || selectedTextId !== null) && (() => {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
@@ -54977,10 +55229,10 @@ export default function App() {
                       {/* Bold (B) Toggle */}
                       <button
                         onClick={() => applyBold(!currentBold)}
-                        className={`px-2.5 py-1 rounded-full font-normal transition cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-full font-semibold transition cursor-pointer ${
                           currentBold
-                            ? 'bg-[#0066ff] text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] hover:bg-[#ece7dc]'
                         }`}
                         title="Έντονα Γράμματα (Bold)"
                       >
@@ -54988,7 +55240,7 @@ export default function App() {
                       </button>
 
                       {/* Greek Font Style Selector: Custom ExplainBoardsHand / Custom ExplainBoardsPen / Mansalva / Playpen / GFS / Printed */}
-                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                         {(
                           [
                             { id: 'calligraphic', label: 'Καλλιγραφική' },
@@ -55003,10 +55255,10 @@ export default function App() {
                             key={fOpt.id}
                             onClick={() => applyFontFamily(fOpt.id)}
                             style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
-                            className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
                               currentFontFamily === fOpt.id
-                                ? 'bg-purple-600 text-white shadow-xs'
-                                : 'text-slate-700 hover:bg-white'
+                                ? 'bg-[#1e3a5f] text-white shadow-xs'
+                                : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#1e3a5f]'
                             }`}
                             title={`Γραμματοσειρά: ${fOpt.label}`}
                           >
@@ -55015,29 +55267,31 @@ export default function App() {
                         ))}
                       </div>
 
-                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
+                      <div className="h-4 w-px bg-[#dfd8cb] mx-0.5 shrink-0" />
 
                       {/* Font Size Controls */}
-                      <button
-                        onClick={() => applyFontSize(currentSize - 1)}
-                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
-                        title="Μικρότερη γραμματοσειρά (-1px)"
-                      >
-                        A-
-                      </button>
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-semibold tabular-nums select-none"
-                        title={`Τρέχον μέγεθος γραμματοσειράς: ${currentSize}px`}
-                      >
-                        {currentSize}
-                      </span>
-                      <button
-                        onClick={() => applyFontSize(currentSize + 1)}
-                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
-                        title="Μεγαλύτερη γραμματοσειρά (+1px)"
-                      >
-                        A+
-                      </button>
+                      <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                        <button
+                          onClick={() => applyFontSize(currentSize - 1)}
+                          className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer transition"
+                          title="Μικρότερη γραμματοσειρά (-1px)"
+                        >
+                          A-
+                        </button>
+                        <span
+                          className="px-2 py-0.5 rounded-full bg-[#fdfbf7] text-[#1e3a5f] border border-[#dfd8cb] text-[11px] font-bold tabular-nums select-none"
+                          title={`Τρέχον μέγεθος γραμματοσειράς: ${currentSize}px`}
+                        >
+                          {currentSize}
+                        </span>
+                        <button
+                          onClick={() => applyFontSize(currentSize + 1)}
+                          className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer transition"
+                          title="Μεγαλύτερη γραμματοσειρά (+1px)"
+                        >
+                          A+
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}
@@ -55392,7 +55646,7 @@ export default function App() {
                         <React.Fragment key={sp.id}>
                           {isFirstSim && (
                             <div
-                              className="h-5 w-px bg-emerald-300/80 ml-2.5 mr-1 shrink-0"
+                              className="h-5 w-px bg-[#dfd8cb] ml-2.5 mr-1 shrink-0"
                               title="Αντικείμενα Προσομοιώσεων Φυσικής"
                             />
                           )}
@@ -55404,12 +55658,10 @@ export default function App() {
                             title={sp.title}
                             className={`flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
                               isSelected
-                                ? isSim
-                                  ? 'bg-emerald-200/90 border-emerald-600 ring-2 ring-emerald-500/35 shadow-xs'
-                                  : 'bg-sky-100/90 border-[#0066ff] ring-2 ring-[#0066ff]/30 shadow-xs'
+                                ? 'bg-[#efebe3] border-[#1e3a5f] ring-2 ring-[#1e3a5f]/25 shadow-xs'
                                 : isSim
-                                  ? 'bg-emerald-50/95 border-emerald-200/90 hover:bg-emerald-100/90'
-                                  : 'bg-slate-100 border-slate-200/80 hover:bg-slate-200'
+                                  ? 'bg-[#f7f5f0] border-[#dfd8cb] hover:bg-[#ece7dc]'
+                                  : 'bg-[#fdfbf7] border-[#dfd8cb] hover:bg-[#ece7dc]'
                             }`}
                           >
                             {sp.icon}
@@ -55431,8 +55683,8 @@ export default function App() {
                       onClick={() => setEraserSubType('stroke')}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
                         eraserSubType === 'stroke'
-                          ? 'bg-[#0066ff] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          ? 'bg-[#1e3a5f] text-white shadow-xs'
+                          : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
                       }`}
                       title="Stroke Σβήστρα (σβήνει ολόκληρη τη γραμμή ή τον μαρκαδόρο με ένα άγγιγμα)"
                     >
@@ -55444,8 +55696,8 @@ export default function App() {
                       onClick={() => setEraserSubType('precision')}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
                         eraserSubType === 'precision'
-                          ? 'bg-[#0066ff] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          ? 'bg-[#1e3a5f] text-white shadow-xs'
+                          : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
                       }`}
                       title="Pixel Σβήστρα (σβήνει ακριβώς το σημείο όπου ακουμπάει, και σε γραμμές και σε μαρκαδόρο)"
                     >
@@ -55465,43 +55717,45 @@ export default function App() {
                       <span>Pixel</span>
                     </button>
 
-                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    {(
-                      [
-                        { id: 'small', label: 'Μικρή' },
-                        { id: 'medium', label: 'Μεσαία' },
-                        { id: 'large', label: 'Μεγάλη' },
-                      ] as const
-                    ).map((sz) => {
-                      const activeSz = eraserSize === sz.id;
-                      return (
-                        <button
-                          key={sz.id}
-                          onClick={() => setEraserSize(sz.id)}
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
-                            activeSz
-                              ? 'bg-rose-500 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                          title={`Μέγεθος Σβήστρας (${sz.label})`}
-                        >
-                          {sz.label}
-                        </button>
-                      );
-                    })}
+                    <div className="h-4 w-px bg-[#dfd8cb] mx-1 shrink-0" />
+                    <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                      {(
+                        [
+                          { id: 'small', label: 'Μικρή' },
+                          { id: 'medium', label: 'Μεσαία' },
+                          { id: 'large', label: 'Μεγάλη' },
+                        ] as const
+                      ).map((sz) => {
+                        const activeSz = eraserSize === sz.id;
+                        return (
+                          <button
+                            key={sz.id}
+                            onClick={() => setEraserSize(sz.id)}
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                              activeSz
+                                ? 'bg-[#1e3a5f] text-white shadow-xs'
+                                : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#1e3a5f]'
+                            }`}
+                            title={`Μέγεθος Σβήστρας (${sz.label})`}
+                          >
+                            {sz.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {activeTool === 'lasso' && showAlignSubBar && (
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {/* Horizontal Alignment: Left / Center X / Right */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                    <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                       <button
                         onClick={() => handleAlignSelected('left')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Αριστερά (Align Left Edges)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="4" y1="3" x2="4" y2="21" />
                           <rect x="7" y="6" width="13" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="7" y="14" width="8" height="4" rx="1" />
@@ -55510,10 +55764,10 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('center-x')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Κεντράρισμα Οριζόντια (Align Horizontal Centers — X)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="12" y1="3" x2="12" y2="21" />
                           <rect x="4" y="6" width="16" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="7" y="14" width="10" height="4" rx="1" />
@@ -55522,10 +55776,10 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('right')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Δεξιά (Align Right Edges)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="20" y1="3" x2="20" y2="21" />
                           <rect x="4" y="6" width="13" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="9" y="14" width="8" height="4" rx="1" />
@@ -55535,13 +55789,13 @@ export default function App() {
                     </div>
 
                     {/* Vertical Alignment: Top / Center Y / Bottom */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                    <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                       <button
                         onClick={() => handleAlignSelected('top')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Πάνω (Align Top Edges)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="4" x2="21" y2="4" />
                           <rect x="6" y="7" width="4" height="13" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="14" y="7" width="4" height="8" rx="1" />
@@ -55550,10 +55804,10 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('center-y')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Κεντράρισμα Κατακόρυφα (Align Vertical Centers — Y)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="12" x2="21" y2="12" />
                           <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="14" y="7" width="4" height="10" rx="1" />
@@ -55562,10 +55816,10 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('bottom')}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Κάτω (Align Bottom Edges)"
                       >
-                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-[#1e3a5f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="20" x2="21" y2="20" />
                           <rect x="6" y="4" width="4" height="13" rx="1" fill="currentColor" fillOpacity="0.25" />
                           <rect x="14" y="9" width="4" height="8" rx="1" />
@@ -55577,10 +55831,11 @@ export default function App() {
                     {/* Dead Center (Both X and Y at once!) */}
                     <button
                       onClick={() => handleAlignSelected('center-both')}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal shadow-2xs transition cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-medium shadow-2xs transition cursor-pointer"
                       title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y — J / Ξ)"
                     >
-                      <span>🎯 Κέντρο X+Y</span>
+                      <Target className="w-3.5 h-3.5" />
+                      <span>Κέντρο X+Y</span>
                     </button>
 
                     {/* Quick Group / Ungroup right inside the Align bar */}
@@ -55620,7 +55875,7 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
                             <Ungroup className="w-3.5 h-3.5" />
@@ -55634,7 +55889,7 @@ export default function App() {
                           <>
                             <button
                               onClick={handleGroupSelected}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-medium cursor-pointer"
                               title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                             >
                               <Group className="w-3.5 h-3.5" />
@@ -55643,7 +55898,7 @@ export default function App() {
                             {selectedStrokeIds.length >= 2 && (
                               <button
                                 onClick={handleConvertSelectedStrokesToPolygon}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal shadow-2xs transition cursor-pointer"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#1e3a5f] font-medium shadow-2xs transition cursor-pointer"
                                 title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
                               >
                                 <span>⬠ Πολύγωνο</span>
@@ -55664,148 +55919,247 @@ export default function App() {
                     Boolean(selectedImgObj) ||
                     Boolean(selectedTextId)) && (
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handleCutSelected}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
-                      title="Αποκοπή (Cut)"
-                    >
-                      <Scissors className="w-3.5 h-3.5" />
-                      <span>Cut</span>
-                    </button>
-                    <button
-                      onClick={handleCopySelected}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
-                      title="Αντιγραφή (Copy)"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
-                    </button>
-                    <button
-                      onClick={handleDuplicateSelected}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-normal cursor-pointer"
-                      title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Αντίγραφο</span>
-                    </button>
+                    <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                      <button
+                        onClick={handleCutSelected}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer transition"
+                        title="Αποκοπή (Cut)"
+                      >
+                        <Scissors className="w-3.5 h-3.5 text-[#475569]" />
+                        <span>Cut</span>
+                      </button>
+                      <button
+                        onClick={handleCopySelected}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer transition"
+                        title="Αντιγραφή (Copy)"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-[#475569]" />
+                        <span>Copy</span>
+                      </button>
+                      <button
+                        onClick={handleDuplicateSelected}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer transition"
+                        title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-[#475569]" />
+                        <span>Αντίγραφο</span>
+                      </button>
+                    </div>
 
                     {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) — hidden when in text/math mode */}
                     {activeTool !== 'text' && selectedTextId === null && editingTextId === null && (
-                      <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                      <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                         <button
                           onClick={() => handleMirrorSelected('horizontal')}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-indigo-700 font-normal transition cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium transition cursor-pointer"
                           title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
                         >
-                          <MirrorHorizontalIcon className="w-4 h-4" />
+                          <MirrorHorizontalIcon className="w-4 h-4 text-[#475569]" />
                           <span>Mirror</span>
                         </button>
                         <button
                           onClick={() => handleMirrorSelected('vertical')}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-indigo-700 font-normal transition cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium transition cursor-pointer"
                           title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
                         >
-                          <MirrorVerticalIcon className="w-4 h-4" />
+                          <MirrorVerticalIcon className="w-4 h-4 text-[#475569]" />
                           <span>Mirror</span>
                         </button>
                       </div>
                     )}
 
-                    <button
-                      data-popover-trigger="library"
-                      onClick={handleAddSelectedToShapeLibrary}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer shadow-2xs whitespace-nowrap"
-                      title="Προσθήκη του επιλεγμένου αντικειμένου στη Βιβλιοθήκη Σχημάτων (με όνομα & tags)"
-                    >
-                      <span>+Βιβλιοθήκη</span>
-                    </button>
+                    <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                      <button
+                        data-popover-trigger="library"
+                        onClick={handleAddSelectedToShapeLibrary}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
+                        title="Προσθήκη του επιλεγμένου αντικειμένου στη Βιβλιοθήκη Σχημάτων (με όνομα & tags)"
+                      >
+                        <span>+Βιβλιοθήκη</span>
+                      </button>
 
-                    <button
-                      onClick={() => void handleOpenAiAnimateForSelection()}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-700 hover:to-indigo-700 text-white font-semibold cursor-pointer shadow-xs whitespace-nowrap"
-                      title="Ζωντάνεμα: Άμεσο Ζωντανό Σκίτσο με Ήχο στην τεχνοτροπία σας!"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Ζωντάνεμα</span>
-                    </button>
+                      <button
+                        onClick={() => void handleOpenAiAnimateForSelection()}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#1e3a5f] font-semibold cursor-pointer whitespace-nowrap transition"
+                        title="Ζωντάνεμα: Άμεσο Ζωντανό Σκίτσο με Ήχο στην τεχνοτροπία σας!"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#475569]" />
+                        <span>Ζωντάνεμα</span>
+                      </button>
+                    </div>
 
                     {selectedStrokeIds.length > 0 && (
-                      <>
+                      <div className="flex items-center gap-1 bg-[#efebe3] p-0.5 rounded-full border border-[#dfd8cb] relative">
+                        {/* 1. Direct textOCR (Single Tap) */}
                         <button
-                          onClick={handleConvertSelectedStrokesToPolygon}
-                          className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal shadow-2xs transition cursor-pointer whitespace-nowrap"
-                          title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
-                        >
-                          <span>Πολύγωνο</span>
-                        </button>
-                        <button
-                          onClick={() => void handleConvertLassoToCalligraphic()}
+                          onClick={() => {
+                            setOpenLassoOcrMenu(null);
+                            void handleConvertLassoToCalligraphic();
+                          }}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
-                              ? 'bg-violet-300 text-white cursor-wait'
-                              : 'bg-violet-600 hover:bg-violet-700 text-white'
+                              ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
+                              : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#1e3a5f] border-[#dfd8cb] shadow-2xs'
                           }`}
-                          title="textOCR: Μετατροπή χειρόγραφου ελληνικού κειμένου σε κείμενο με επιλογή γραμματοσειράς (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+                          title="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
                         >
+                          <Type className="w-3.5 h-3.5" />
                           <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
                         </button>
-                        <button
-                          onClick={() => void handleConvertLassoToMathOCR()}
-                          disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
-                            isConvertingHandwriting
-                              ? 'bg-purple-300 text-white cursor-wait'
-                              : 'bg-purple-600 hover:bg-purple-700 text-white'
-                          }`}
-                          title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=) και μονάδων μέτρησης"
-                        >
-                          <span>{isConvertingHandwriting ? 'MathOCR...' : 'MathOCR'}</span>
-                        </button>
-                        <button
-                          onClick={() => void handleConvertLassoToChemOCR()}
-                          disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
-                            isConvertingHandwriting
-                              ? 'bg-teal-300 text-white cursor-wait'
-                              : 'bg-teal-600 hover:bg-teal-700 text-white'
-                          }`}
-                          title="ChemOCR: Αναγνώριση χειρόγραφης χημικής αντίδρασης (π.χ. C + O₂ → CO₂) και εμφάνιση δομής ατόμων & κίνησης ηλεκτρονίων"
-                        >
-                          <span>{isConvertingHandwriting ? 'ChemOCR...' : 'ChemOCR'}</span>
-                        </button>
-                        <button
-                          onClick={() => void handleConvertLassoTo3DMoleculeOCR()}
-                          disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
-                            isConvertingHandwriting
-                              ? 'bg-sky-300 text-white cursor-wait'
-                              : 'bg-sky-700 hover:bg-sky-800 text-white'
-                          }`}
-                          title="3D.OCR: Αναγνώριση χειρόγραφης χημικής ένωσης (π.χ. H₂O, CH₄, CO₂, NH₃, SO₂, BF₃...) και εμφάνιση του Draggable 3D Μορίου με χρωματικό νέφος φορτίου!"
-                        >
-                          <span>{isConvertingHandwriting ? '3D.OCR...' : '3D.OCR'}</span>
-                        </button>
-                        <button
-                          onClick={() => void handleConvertLassoToMathGraph()}
-                          disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
-                            isConvertingHandwriting
-                              ? 'bg-emerald-300 text-white cursor-wait'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          }`}
-                          title="Διάγραμμα OCR: Αναγνώριση 1 ή περισσότερων χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9 και y₂ = x² - 16) και σχεδίαση σε κοινό σύστημα αξόνων!"
-                        >
-                          <span>{isConvertingHandwriting ? 'Διάγραμμα...' : 'Διάγραμμα'}</span>
-                        </button>
-                        <button
-                          onClick={() => registerOrActivateAtomSimFromLasso()}
-                          className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal shadow-2xs transition cursor-pointer whitespace-nowrap"
-                          title="Μετατροπή του επιλεγμένου σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου με Περιοδικό Πίνακα"
-                        >
-                          <span>Άτομο</span>
-                        </button>
-                      </>
+
+                        {/* 2. Math Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο) */}
+                        <div className="relative">
+                          <button
+                            data-popover-trigger="lasso-ocr"
+                            onClick={() => setOpenLassoOcrMenu((v) => (v === 'math' ? null : 'math'))}
+                            disabled={isConvertingHandwriting}
+                            className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+                              openLassoOcrMenu === 'math'
+                                ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-xs'
+                                : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#1e3a5f] border-[#dfd8cb]'
+                            }`}
+                            title="Μαθηματικά & Γεωμετρία OCR (Εξίσωση, Διάγραμμα, Πολύγωνο)"
+                          >
+                            <span className="font-serif font-bold text-[12px] leading-none">Σ</span>
+                            <span>Math</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${openLassoOcrMenu === 'math' ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {openLassoOcrMenu === 'math' && (
+                            <div
+                              data-ui-panel="true"
+                              data-popover-panel="lasso-ocr"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] rounded-2xl shadow-xl p-1.5 flex flex-col gap-1"
+                            >
+                              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                                Math · Μαθηματικά & Γεωμετρία
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  void handleConvertLassoToMathOCR();
+                                }}
+                                disabled={isConvertingHandwriting}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=)"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center font-serif text-[12px]">Σ</span>
+                                  <span>Εξίσωση</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">MathOCR / LaTeX</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  void handleConvertLassoToMathGraph();
+                                }}
+                                disabled={isConvertingHandwriting}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="Διάγραμμα OCR: Αναγνώριση χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9) και σχεδίαση σε σύστημα αξόνων"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[11px]">📈</span>
+                                  <span>Διάγραμμα</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">Συναρτήσεις / Άξονες</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  handleConvertSelectedStrokesToPolygon();
+                                }}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[12px]">⬠</span>
+                                  <span>Πολύγωνο</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">Ένωση γραμμών</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 3. Chem Dropdown (Αντιδράσεις, 3D, 2D Άτομο) */}
+                        <div className="relative">
+                          <button
+                            data-popover-trigger="lasso-ocr"
+                            onClick={() => setOpenLassoOcrMenu((v) => (v === 'chem' ? null : 'chem'))}
+                            disabled={isConvertingHandwriting}
+                            className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+                              openLassoOcrMenu === 'chem'
+                                ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-xs'
+                                : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#1e3a5f] border-[#dfd8cb]'
+                            }`}
+                            title="Χημεία & Άτομο (Αντιδράσεις ChemOCR, 3D Μόριο, 2D Άτομο)"
+                          >
+                            <FlaskConical className="w-3.5 h-3.5" />
+                            <span>Chem</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${openLassoOcrMenu === 'chem' ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {openLassoOcrMenu === 'chem' && (
+                            <div
+                              data-ui-panel="true"
+                              data-popover-panel="lasso-ocr"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] rounded-2xl shadow-xl p-1.5 flex flex-col gap-1"
+                            >
+                              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                                Chem · Χημεία & Άτομα
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  void handleConvertLassoToChemOCR();
+                                }}
+                                disabled={isConvertingHandwriting}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="ChemOCR: Αναγνώριση χειρόγραφης χημικής αντίδρασης (π.χ. C + O₂ → CO₂) με δομή ατόμων & κίνηση ηλεκτρονίων"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center"><FlaskConical className="w-3.5 h-3.5" /></span>
+                                  <span>Αντιδράσεις</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">ChemOCR / Ισοστάθμιση</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  void handleConvertLassoTo3DMoleculeOCR();
+                                }}
+                                disabled={isConvertingHandwriting}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="3D.OCR: Αναγνώριση χειρόγραφης ένωσης (H₂O, CH₄, CO₂...) και εμφάνιση Draggable 3D Μορίου με νέφη φορτίου"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[10px] font-bold">3D</span>
+                                  <span>3D Μόριο</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">3D.OCR / Νέφη</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenLassoOcrMenu(null);
+                                  registerOrActivateAtomSimFromLasso();
+                                }}
+                                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#1e3a5f] transition cursor-pointer"
+                                title="2D (Άτομο): Μετατροπή του σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου"
+                              >
+                                <span className="flex items-center gap-2 font-semibold text-xs">
+                                  <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center"><Atom className="w-3.5 h-3.5" /></span>
+                                  <span>2D (Άτομο)</span>
+                                </span>
+                                <span className="text-[10px] text-[#64748b] font-medium">Μοντέλο Bohr Sim</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
 
                     {/* Multi-Curve / Single-Curve Selector Pills & Quick Continuous/Dashed Toggle when a Math Diagram is selected */}
@@ -55877,7 +56231,7 @@ export default function App() {
                           activeCurveStrokes.every((s) => s.lineStyle === 'dashed');
 
                         return (
-                          <div className="flex items-center gap-1 bg-rose-50/90 px-1.5 py-0.5 rounded-full border border-rose-200/90">
+                          <div className="flex items-center gap-1 bg-[#ece7dc] px-1.5 py-0.5 rounded-full border border-[#dfd8cb]">
                             {sortedCurves.map(([fnIdx, info]) => {
                               const isThisCurveOnly =
                                 !hasAxesSelected &&
@@ -55893,10 +56247,10 @@ export default function App() {
                                         : info.ids
                                     );
                                   }}
-                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
                                     isThisCurveOnly
-                                      ? 'bg-white text-slate-900 ring-2 ring-rose-500 shadow-2xs'
-                                      : 'hover:bg-white/80 text-slate-700'
+                                      ? 'bg-[#fdfbf7] text-[#1e3a5f] ring-1 ring-[#1e3a5f] shadow-2xs'
+                                      : 'hover:bg-[#fdfbf7] text-[#2c3e50]'
                                   }`}
                                   title={`Επιλογή μόνο της καμπύλης ${info.label} (για αλλαγή χρώματος, πάχους ή συνεχούς/διακεκομμένης γραμμής)`}
                                 >
@@ -55912,10 +56266,10 @@ export default function App() {
                               onClick={() =>
                                 applyLineStyleToSelection(isCurrentlyDashed ? 'solid' : 'dashed')
                               }
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
                                 isCurrentlyDashed
-                                  ? 'bg-amber-600 text-white shadow-2xs'
-                                  : 'bg-white/90 hover:bg-white text-slate-700 border border-slate-200'
+                                  ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                  : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#2c3e50] border border-[#dfd8cb]'
                               }`}
                               title="Εναλλαγή Συνεχούς (───) / Διακεκομμένης (- - -) γραμμής για την επιλεγμένη καμπύλη"
                             >
@@ -55926,31 +56280,31 @@ export default function App() {
                       })()}
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                    <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                       <button
                         onClick={() => handleZOrderSelected('to-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                         title="Send to Back (Εντελώς πίσω)"
                       >
                         Πίσω
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                         title="Send Backward (1 βήμα πίσω)"
                       >
                         -1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                         title="Bring Forward (1 βήμα μπροστά)"
                       >
                         +1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('to-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                         title="Bring to Front (Εντελώς μπροστά)"
                       >
                         Μπροστά
@@ -56000,25 +56354,28 @@ export default function App() {
                           {hasGroupedItem && allAlreadyInSameGroup ? (
                             <button
                               onClick={handleUngroupSelected}
-                              className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                               title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                             >
+                              <Ungroup className="w-3.5 h-3.5" />
                               <span>Ungroup</span>
                             </button>
                           ) : totalSelCount >= 2 ? (
                             <button
                               onClick={handleGroupSelected}
-                              className="flex items-center px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer whitespace-nowrap"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-medium cursor-pointer whitespace-nowrap shadow-2xs transition"
                               title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                             >
+                              <Group className="w-3.5 h-3.5" />
                               <span>Group ({totalSelCount})</span>
                             </button>
                           ) : hasGroupedItem ? (
                             <button
                               onClick={handleUngroupSelected}
-                              className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
                               title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                             >
+                              <Ungroup className="w-3.5 h-3.5" />
                               <span>Ungroup</span>
                             </button>
                           ) : null}
@@ -56042,7 +56399,7 @@ export default function App() {
                                   focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
                                 }
                               }}
-                              className="flex items-center px-2 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
+                              className="flex items-center px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#1e3a5f] font-medium cursor-pointer whitespace-nowrap transition"
                               title="Διατήρηση μόνο των επιλεγμένων κειμένων για επεξεργασία"
                             >
                               <span>Κείμενο μόνο</span>
@@ -56051,7 +56408,7 @@ export default function App() {
                           {totalSelCount >= 2 && (
                             <button
                               onClick={() => handleAlignSelected('center-both')}
-                              className="flex items-center px-2 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
+                              className="flex items-center px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#1e3a5f] font-medium cursor-pointer whitespace-nowrap transition"
                               title="Απόλυτο Κεντράρισμα Κειμένου & Σχήματος (Dead Center X + Y — J / Ξ)"
                             >
                               <span>Κέντραρε</span>
@@ -56105,10 +56462,11 @@ export default function App() {
                                 onClick={() => {
                                   registerOrActivateSimFromLasso();
                                 }}
-                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal text-[11px] cursor-pointer shadow-2xs transition"
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold text-[11px] cursor-pointer shadow-2xs transition"
                                 title="Δημιουργία/Ενεργοποίηση Προσομοίωσης από το επιλεγμένο κύκλωμα (αυτόματο κλείσιμο Λάσο)"
                               >
-                                <span>⚡ Προσομοίωση ({getNextDefaultSimName(activePage)})</span>
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>Προσομοίωση ({getNextDefaultSimName(activePage)})</span>
                               </button>
                             )}
                             {(hasBat || hasVs || hasBulb || hasRes) && (
@@ -56134,11 +56492,11 @@ export default function App() {
                                     return { ...page, strokes: res.strokes, circuitSims: nextSims };
                                   });
                                 }}
-                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-normal text-[11px] cursor-pointer transition"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#1e3a5f] font-medium text-[11px] cursor-pointer transition"
                                 title="Μετατροπή Μπαταρίας ↔ Πηγής Τάσης και Λαμπτήρα ↔ Αντιστάτη με 1 κλικ!"
                               >
+                                <RefreshCw className="w-3 h-3" />
                                 <span>
-                                  🔄{' '}
                                   {hasBat
                                     ? 'Σε Πηγή'
                                     : hasVs
@@ -56162,17 +56520,22 @@ export default function App() {
                                     return { ...page, strokes: toggled.strokes };
                                   });
                                 }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal text-[11px] cursor-pointer transition ${
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-semibold text-[11px] cursor-pointer transition ${
                                   swStroke.switchClosed !== false
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-rose-600 text-white'
+                                    ? 'bg-[#f1f6f3] border-[#c8dfd0] text-[#15803d]'
+                                    : 'bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c]'
                                 }`}
                                 title="Άνοιγμα / Κλείσιμο Διακόπτη Κυκλώματος"
                               >
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    swStroke.switchClosed !== false ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
+                                  }`}
+                                />
                                 <span>
                                   {swStroke.switchClosed !== false
-                                    ? '🟢 Κλειστός (ON)'
-                                    : '🔴 Ανοιχτός (OFF)'}
+                                    ? 'Κλειστός (ON)'
+                                    : 'Ανοιχτός (OFF)'}
                                 </span>
                               </button>
                             )}
@@ -56232,7 +56595,7 @@ export default function App() {
                           setSelectedImageIds([]);
                           setSelectedImageId(null);
                         }}
-                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-normal cursor-pointer"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c] font-medium cursor-pointer transition"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Διαγραφή</span>
@@ -56262,7 +56625,7 @@ export default function App() {
                         }));
                         showToast(`📐 Επαναφέρθηκαν οι πραγματικές αναλογίες (${natW}×${natH}px)!`);
                       }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-normal cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#1e3a5f] font-medium cursor-pointer transition"
                       title="Επαναφορά στις πραγματικές αρχικές αναλογίες (Aspect Ratio) της εικόνας"
                     >
                       <span>1:1</span>
@@ -56293,10 +56656,10 @@ export default function App() {
                         }));
                         showToast('🪄 Transparent BG ολοκληρώθηκε!');
                       }}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-normal cursor-pointer transition ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border font-medium cursor-pointer transition ${
                         selectedImgObj.transparentBg
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                          ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-2xs'
+                          : 'bg-[#fdfbf7] hover:bg-[#ece7dc] border-[#dfd8cb] text-[#2c3e50]'
                       }`}
                     >
                       <Wand2 className="w-3.5 h-3.5" />
@@ -56316,9 +56679,10 @@ export default function App() {
                         }));
                         showToast('🪄 Magic Wand ολοκληρώθηκε!');
                       }}
-                      className="px-2.5 py-1 rounded-full bg-teal-600 text-white font-normal cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer transition"
                     >
-                      🪄 Magic Wand
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span>Magic Wand</span>
                     </button>
                     <button
                       onClick={() => {
@@ -56326,11 +56690,14 @@ export default function App() {
                         lassoPolygonRef.current = [];
                         showToast('✂️ Σχεδίασε οποιοδήποτε σχήμα πάνω στην εικόνα για Lasso Crop!');
                       }}
-                      className={`px-2.5 py-1 rounded-full font-normal cursor-pointer ${
-                        imageCropMode === 'freehand' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-800'
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border font-medium cursor-pointer transition ${
+                        imageCropMode === 'freehand'
+                          ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white'
+                          : 'bg-[#fdfbf7] hover:bg-[#ece7dc] border-[#dfd8cb] text-[#2c3e50]'
                       }`}
                     >
-                      ✂️ Lasso Crop
+                      <Scissors className="w-3.5 h-3.5" />
+                      <span>Lasso Crop</span>
                     </button>
                     <button
                       onClick={() => {
@@ -56338,8 +56705,10 @@ export default function App() {
                         lassoPolygonRef.current = [];
                         showToast('🧲 Magnetic Lasso: Πέρασε το Pencil γύρω από τις ακμές του σχήματος!');
                       }}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-normal cursor-pointer ${
-                        imageCropMode === 'magnetic' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-800'
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border font-medium cursor-pointer transition ${
+                        imageCropMode === 'magnetic'
+                          ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white'
+                          : 'bg-[#fdfbf7] hover:bg-[#ece7dc] border-[#dfd8cb] text-[#2c3e50]'
                       }`}
                     >
                       <Magnet className="w-3.5 h-3.5" />
@@ -56364,7 +56733,7 @@ export default function App() {
                           ),
                         }));
                       }}
-                      className="p-1 rounded-full bg-slate-200 text-slate-700 cursor-pointer"
+                      className="p-1.5 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#2c3e50] cursor-pointer transition"
                       title="Επαναφορά εικόνας"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -57985,7 +58354,7 @@ export default function App() {
                 style={{ left: simPanelPos.x, top: simPanelPos.y }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-md border border-emerald-200 shadow-2xl p-3 text-slate-800 space-y-2.5 select-none"
+                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-xl p-3 text-[#2c3e50] space-y-2.5 select-none"
               >
                 {/* Compact Draggable Header ("Προσομοίωση") */}
                 <div
@@ -58020,14 +58389,15 @@ export default function App() {
                     simPanelDragRef.current = null;
                   }}
                   style={{ touchAction: 'none' }}
-                  className="flex items-center justify-between pb-1.5 border-b border-slate-100 cursor-grab active:cursor-grabbing"
+                  className="flex items-center justify-between pb-1.5 border-b border-[#e8e2d6] cursor-grab active:cursor-grabbing"
                   title="Σύρε από εδώ για μετακίνηση του παραθύρου Προσομοίωσης"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-extrabold text-[#1b2a4a]">
+                    <span className="w-2 h-2 rounded-full bg-[#1e3a5f]" />
+                    <span className="text-xs font-bold text-[#1e3a5f]">
                       Προσομοίωση
                     </span>
-                    <span className="text-[11px] text-slate-300 font-bold ml-0.5">⠿</span>
+                    <span className="text-[11px] text-[#a8a29e] font-bold ml-0.5">⠿</span>
                   </div>
                   <button
                     type="button"
@@ -58035,7 +58405,7 @@ export default function App() {
                       setShowSimulationPanel(false);
                       setSimActiveCategory(null);
                     }}
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-[#efebe3] text-[#64748b] hover:text-[#1e3a5f] cursor-pointer transition"
                     title="Κλείσιμο παραθύρου"
                   >
                     <X className="w-4 h-4" />
@@ -58043,7 +58413,7 @@ export default function App() {
                 </div>
 
                 {/* Top-Level Physics & Chemistry Simulation Category Switcher: "Κυκλώματα" | "Ελατήρια" | "Δυνάμεις" | "Άτομο" */}
-                <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
+                <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[#efebe3] border border-[#dfd8cb]">
                   <button
                     type="button"
                     onClick={() => {
@@ -58104,10 +58474,10 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'circuits'
-                        ? 'bg-[#1b2a4a] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                     }`}
                   >
                     <span>Κυκλώματα</span>
@@ -58117,10 +58487,10 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
-                        ? 'bg-[#1b2a4a] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                     }`}
                   >
                     <span>Ελατήρια</span>
@@ -58134,10 +58504,10 @@ export default function App() {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'forces'
-                        ? 'bg-[#1b2a4a] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                     }`}
                   >
                     <span>Δυνάμεις</span>
@@ -58151,10 +58521,10 @@ export default function App() {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
-                        ? 'bg-[#1b2a4a] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                        ? 'bg-[#1e3a5f] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                     }`}
                   >
                     <span>Άτομο</span>
@@ -58178,24 +58548,25 @@ export default function App() {
                     });
 
                   return (
-                    <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                    <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                       {selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim && (
                         <button
                           type="button"
                           onClick={() => {
                             registerOrActivateSimFromLasso();
                           }}
-                          className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                           title="Προσθέτει το επιλεγμένο με Λάσο κύκλωμα ως προσομοίωση και κλείνει αυτόματα το πλαίσιο επιλογής"
                         >
-                          <span>➕ Προσθήκη από Λάσο ({nextSimLabel})</span>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Προσθήκη από Λάσο ({nextSimLabel})</span>
                         </button>
                       )}
 
                       {allNotebookSims.length > 0 ? (
                         <>
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                               Ενεργό Κύκλωμα:
                             </span>
                           </div>
@@ -58231,10 +58602,10 @@ export default function App() {
                               return (
                                 <div
                                   key={sim.id}
-                                  className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                  className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                     isCurrent
-                                      ? 'bg-slate-200 text-slate-800 border-slate-400 shadow-2xs'
-                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-[#efebe3] text-[#1e3a5f] border-[#1e3a5f]/50 shadow-2xs'
+                                      : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                                   }`}
                                 >
                                   {isEditingThis ? (
@@ -58253,7 +58624,7 @@ export default function App() {
                                           setEditingSimId(null);
                                         }
                                       }}
-                                      className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-slate-400 text-[11px] font-extrabold text-slate-800 focus:outline-none"
+                                      className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-[#1e3a5f] text-[11px] font-bold text-[#1e3a5f] focus:outline-none"
                                     />
                                   ) : (
                                     <button
@@ -58294,8 +58665,8 @@ export default function App() {
                                       }}
                                       className={`px-1 py-1 text-[10px] cursor-pointer transition ${
                                         isCurrent
-                                          ? 'text-slate-600 hover:text-slate-950'
-                                          : 'text-slate-400 hover:text-slate-700'
+                                          ? 'text-[#475569] hover:text-[#1e3a5f]'
+                                          : 'text-[#94a3b8] hover:text-[#1e3a5f]'
                                       }`}
                                       title={`Μετονομασία "${sim.name}"`}
                                     >
@@ -58338,8 +58709,8 @@ export default function App() {
                                     }}
                                     className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                       isCurrent
-                                        ? 'text-slate-600 hover:text-rose-600'
-                                        : 'text-slate-400 hover:text-rose-600'
+                                        ? 'text-[#475569] hover:text-[#b91c1c]'
+                                        : 'text-[#94a3b8] hover:text-[#b91c1c]'
                                     }`}
                                     title={`Αφαίρεση "${sim.name}" από τη λίστα προσομοιώσεων`}
                                   >
@@ -58351,15 +58722,15 @@ export default function App() {
                           </div>
                         </>
                       ) : (
-                        <div className="text-[10.5px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug text-center">
-                          🎯 Επιλέξτε με το <b>Λάσο</b> ένα κλειστό κύκλωμα (με Μπαταρία/Πηγή) και πατήστε <b>Sim</b> για να δημιουργηθεί το <b>{nextSimLabel}</b>.
+                        <div className="text-[10.5px] font-medium text-[#64748b] bg-[#f7f5f0] border border-[#e8e2d6] rounded-lg p-2 leading-snug text-center">
+                          Επιλέξτε με το <b>Λάσο</b> ένα κλειστό κύκλωμα (με Μπαταρία/Πηγή) και πατήστε <b>Sim</b> για να δημιουργηθεί το <b>{nextSimLabel}</b>.
                         </div>
                       )}
                     </div>
                   );
                 })()}
 
-                {/* Single-Row Controls: Small Square Play/Pause Button + Simple Grey "Ένωση" & "Ολοκλήρωση" */}
+                {/* Single-Row Controls: Small Square Play/Pause Button + Simple Warm "Ένωση" & "Ολοκλήρωση" */}
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
@@ -58389,8 +58760,8 @@ export default function App() {
                     }}
                     className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center shadow-2xs transition cursor-pointer ${
                       isSimulating && getActiveCircuitSim(activePage)
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        ? 'bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c]'
+                        : 'bg-[#1e3a5f] hover:bg-[#162d4a] text-white'
                     }`}
                     title={
                       isSimulating && getActiveCircuitSim(activePage)
@@ -58560,7 +58931,7 @@ export default function App() {
                       setCircuitAlignFlashStart(performance.now());
                       showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
-                    className="flex-1 h-8 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[11px] flex items-center justify-center transition cursor-pointer"
+                    className="flex-1 h-8 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center transition cursor-pointer"
                     title="Ευθυγραμμίζει αυτόματα τους οριζόντιους/κάθετους αγωγούς του ενεργού κυκλώματος"
                   >
                     <span>Ένωση</span>
@@ -58569,7 +58940,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => handleStartCircuitCompletion()}
-                    className="flex-1 h-8 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[11px] flex items-center justify-center transition cursor-pointer"
+                    className="flex-1 h-8 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center transition cursor-pointer"
                     title="Προτείνει αυτόματη ολοκλήρωση του κυκλώματος με διακεκομμένη γραμμή, διακόπτη και 4 κόμβους ρύθμισης καλωδίων"
                   >
                     <span>Ολοκλήρωση</span>
@@ -58595,14 +58966,14 @@ export default function App() {
                         );
                         if (hasOpenSourceVoltmeter) {
                           return (
-                            <div className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-[10.5px] leading-snug text-center">
-                              📟 Ανοιχτό κύκλωμα (I = 0) — Το βολτόμετρο μετράει ενεργά την τάση της πηγής!
+                            <div className="w-full py-1.5 px-2.5 rounded-xl bg-[#f1f6f3] border border-[#c8dfd0] text-[#15803d] font-semibold text-[10.5px] leading-snug text-center">
+                              Ανοιχτό κύκλωμα (I = 0) — Το βολτόμετρο μετράει ενεργά την τάση της πηγής!
                             </div>
                           );
                         }
                         return (
-                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
-                            ⏳ Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης αριστερά.
+                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-[#f7f5f0] border border-[#dfd8cb] text-[#64748b] font-medium text-[10.5px] leading-snug text-center">
+                            Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης.
                           </div>
                         );
                       }
@@ -58620,17 +58991,22 @@ export default function App() {
                               return next;
                             });
                           }}
-                          className={`w-full py-1 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-1.5 border shadow-2xs transition cursor-pointer ${
+                          className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-2 border shadow-2xs transition cursor-pointer ${
                             simCircuitSwitchClosed
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                              ? 'bg-[#f1f6f3] border-[#c8dfd0] text-[#15803d] hover:bg-[#e7f0eb]'
+                              : 'bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#fae8e8]'
                           }`}
                           title="Κάνε κλικ στον διακόπτη ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
                         >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              simCircuitSwitchClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
+                            }`}
+                          />
                           <span>
                             {simCircuitSwitchClosed
-                              ? '🟢 Διακόπτης: Κλειστός'
-                              : '🔴 Διακόπτης: Ανοιχτός'}
+                              ? 'Διακόπτης: Κλειστός'
+                              : 'Διακόπτης: Ανοιχτός'}
                           </span>
                         </button>
                       );
@@ -58640,7 +59016,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => acceptCircuitCompletionProposal()}
-                        className="py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                        className="py-1.5 px-2 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-bold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
                         title="Αποδοχή του προτεινόμενου κυκλώματος"
                       >
                         <span>✓ Αποδοχή</span>
@@ -58648,7 +59024,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => cancelCircuitCompletionProposal()}
-                        className="py-1.5 px-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                        className="py-1.5 px-2 rounded-lg bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c] font-bold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
                         title="Ακύρωση πρότασης ολοκλήρωσης"
                       >
                         <span>✕ Ακύρωση</span>
@@ -58662,12 +59038,12 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => handleConvertActiveCircuitMode('pictorial')}
-                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
+                    className="px-2 py-2 rounded-xl bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[11px] font-bold text-[#2c3e50] shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
                     title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
                   >
                     <svg
                       viewBox="0 0 28 18"
-                      className="w-7 h-4.5 shrink-0 text-slate-800"
+                      className="w-7 h-4.5 shrink-0 text-[#1e3a5f]"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.9"
@@ -58682,12 +59058,12 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => handleConvertActiveCircuitMode('schematic')}
-                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
+                    className="px-2 py-2 rounded-xl bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[11px] font-bold text-[#2c3e50] shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
                     title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
                   >
                     <svg
                       viewBox="0 0 28 18"
-                      className="w-7 h-4.5 shrink-0 text-slate-800"
+                      className="w-7 h-4.5 shrink-0 text-[#1e3a5f]"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.9"
@@ -58702,63 +59078,62 @@ export default function App() {
                 </div>
 
                 {/* Simulation Visual Options */}
-                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                    <span>⚡ Κίνηση Ηλεκτρονίων / Φορτίων</span>
-                    <input
-                      type="checkbox"
+                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2 divide-y divide-[#e8e2d6]/70">
+                  <div className="space-y-1.5">
+                    <WarmStudioToggle
                       checked={simShowElectrons}
-                      onChange={(e) => setSimShowElectrons(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                      onChange={setSimShowElectrons}
+                      icon={<Zap className="w-3.5 h-3.5" />}
+                      label="Ηλεκτρόνια / Φορτία"
+                      className="w-full"
                     />
-                  </label>
 
-                  {simShowElectrons && (
-                    <div className="grid grid-cols-2 gap-1 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSimFlowDirection('electrons');
-                          setSimParticleStyle('green-energy');
-                        }}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          simFlowDirection === 'electrons'
-                            ? 'bg-[#65a30d] text-white border-[#65a30d] shadow-xs'
-                            : 'bg-white text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        Πραγματική φορά
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSimFlowDirection('conventional');
-                          setSimParticleStyle('blue-electrons');
-                        }}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          simFlowDirection === 'conventional'
-                            ? 'bg-[#0ea5e9] text-white border-[#0ea5e9] shadow-xs'
-                            : 'bg-white text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        Συμβατική Φορά
-                      </button>
-                    </div>
-                  )}
+                    {simShowElectrons && (
+                      <div className="grid grid-cols-2 gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSimFlowDirection('electrons');
+                            setSimParticleStyle('green-energy');
+                          }}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                            simFlowDirection === 'electrons'
+                              ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                              : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                          }`}
+                        >
+                          Πραγματική φορά
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSimFlowDirection('conventional');
+                            setSimParticleStyle('blue-electrons');
+                          }}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                            simFlowDirection === 'conventional'
+                              ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                              : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                          }`}
+                        >
+                          Συμβατική Φορά
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                    <span>⬛ Σκούρος Σωλήνας Καλωδίων</span>
-                    <input
-                      type="checkbox"
+                  <div className="pt-1.5">
+                    <WarmStudioToggle
                       checked={simShowDarkWireTrack}
-                      onChange={(e) => setSimShowDarkWireTrack(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                      onChange={setSimShowDarkWireTrack}
+                      label="Σκούρος Σωλήνας Καλωδίων"
+                      className="w-full"
                     />
-                  </label>
+                  </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[10.5px] font-semibold text-slate-600">
-                      Ταχύτητα ({simSpeedMultiplier.toFixed(1)}x):
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <span className="text-[10.5px] font-semibold text-[#475569]">
+                      Ταχύτητα (<span className="text-[#1e3a5f] font-bold">{simSpeedMultiplier.toFixed(1)}x</span>):
                     </span>
                     <input
                       type="range"
@@ -58767,7 +59142,7 @@ export default function App() {
                       step="0.2"
                       value={simSpeedMultiplier}
                       onChange={(e) => setSimSpeedMultiplier(parseFloat(e.target.value))}
-                      className="w-28 accent-emerald-600 cursor-pointer"
+                      className="w-28 accent-[#1e3a5f] cursor-pointer"
                     />
                   </div>
                 </div>
@@ -58789,24 +59164,25 @@ export default function App() {
                     return (
                       <div className="space-y-2.5">
                         {/* 1. Named Spring Simulations Selector (ελ01, ελ02, ...) */}
-                        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5">
                           {hasSelectedSpring && (
                             <button
                               type="button"
                               onClick={() => {
                                 registerOrActivateSpringSimFromLasso();
                               }}
-                              className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                              className="w-full py-1.5 px-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                               title="Δημιουργεί σύστημα ελατηρίου-μάζας με θέση ισορροπίας από το επιλεγμένο ελατήριο"
                             >
-                              <span>➕ Προσθήκη από Λάσο ({nextSpringLabel})</span>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Προσθήκη από Λάσο ({nextSpringLabel})</span>
                             </button>
                           )}
 
                           {allSpringSims.length > 0 ? (
                             <>
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                   Ενεργό Ελατήριο:
                                 </span>
                               </div>
@@ -58842,10 +59218,10 @@ export default function App() {
                                   return (
                                     <div
                                       key={sim.id}
-                                      className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                      className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                         isCurrent
-                                          ? 'bg-slate-200 text-slate-800 border-slate-400 shadow-2xs'
-                                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                          ? 'bg-[#efebe3] text-[#1e3a5f] border-[#1e3a5f]/50 shadow-2xs'
+                                          : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                                       }`}
                                     >
                                       {isEditingThis ? (
@@ -58864,7 +59240,7 @@ export default function App() {
                                               setEditingSpringSimId(null);
                                             }
                                           }}
-                                          className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-slate-400 text-[11px] font-extrabold text-slate-800 focus:outline-none"
+                                          className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-[#1e3a5f] text-[11px] font-bold text-[#1e3a5f] focus:outline-none"
                                         />
                                       ) : (
                                         <button
@@ -58903,8 +59279,8 @@ export default function App() {
                                           }}
                                           className={`px-1 py-1 text-[10px] cursor-pointer transition ${
                                             isCurrent
-                                              ? 'text-slate-600 hover:text-slate-950'
-                                              : 'text-slate-400 hover:text-slate-700'
+                                              ? 'text-[#475569] hover:text-[#1e3a5f]'
+                                              : 'text-[#94a3b8] hover:text-[#1e3a5f]'
                                           }`}
                                           title={`Μετονομασία "${sim.name}"`}
                                         >
@@ -58944,8 +59320,8 @@ export default function App() {
                                         }}
                                         className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                           isCurrent
-                                            ? 'text-slate-600 hover:text-rose-600'
-                                            : 'text-slate-400 hover:text-rose-600'
+                                            ? 'text-[#475569] hover:text-[#b91c1c]'
+                                            : 'text-[#94a3b8] hover:text-[#b91c1c]'
                                         }`}
                                         title={`Αφαίρεση "${sim.name}"`}
                                       >
@@ -58957,8 +59333,8 @@ export default function App() {
                               </div>
                             </>
                           ) : (
-                            <div className="text-[10.5px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug text-center">
-                              🧲 Πλησιάστε ένα <b>Ελατήριο</b> σε ταβάνι/πάτωμα και έπειτα ένα <b>Σώμα</b> (τετράγωνο/κύκλο) στο ελεύθερο άκρο του για να δημιουργηθεί αυτόματα η <b>Θέση Ισορροπίας ({nextSpringLabel})</b>!
+                            <div className="text-[10.5px] font-medium text-[#64748b] bg-[#f7f5f0] border border-[#e8e2d6] rounded-lg p-2 leading-snug text-center">
+                              Πλησιάστε ένα <b>Ελατήριο</b> σε ταβάνι/πάτωμα και έπειτα ένα <b>Σώμα</b> στο ελεύθερο άκρο του για να δημιουργηθεί η <b>Θέση Ισορροπίας ({nextSpringLabel})</b>.
                             </div>
                           )}
                         </div>
@@ -58966,7 +59342,7 @@ export default function App() {
                         {activeSpring && (
                           <>
                             {/* 1B. Two-Mode Switcher on the SAME Spring Setup: Hooke's Law (F_ελ - Δl) vs Simple Harmonic Oscillation (Α.Α.Τ.) */}
-                            <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                            <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-xl border border-[#dfd8cb]">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -58982,14 +59358,15 @@ export default function App() {
                                     initialPhaseMode: 'eq',
                                   }));
                                 }}
-                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                   !activeSpring.showAmplitudeLines
-                                    ? 'bg-sky-600 text-white shadow-2xs'
-                                    : 'text-slate-600 hover:bg-white/70'
+                                    ? 'bg-[#1e3a5f] text-white shadow-xs'
+                                    : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                                 }`}
                                 title="Μελέτη Ελαστικής Παραμόρφωσης & Νόμου του Hooke (Fελ = k·Δl) με χάρακα, πίνακα τιμών και διάγραμμα Fελ–Δl"
                               >
-                                <span>📏 Νόμος Hooke</span>
+                                <Ruler className="w-3.5 h-3.5" />
+                                <span>Νόμος Hooke</span>
                               </button>
                               <button
                                 type="button"
@@ -59000,14 +59377,14 @@ export default function App() {
                                     showPositionScale: true,
                                   }));
                                 }}
-                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                   activeSpring.showAmplitudeLines
-                                    ? 'bg-emerald-600 text-white shadow-2xs'
-                                    : 'text-slate-600 hover:bg-white/70'
+                                    ? 'bg-[#1e3a5f] text-white shadow-xs'
+                                    : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                                 }`}
                                 title="Μελέτη Απλής Αρμονικής Ταλάντωσης με κλίμακα θέσης (+A / 0 / -A), πλάτος και διαγράμματα x(t), υ(t), α(t)"
                               >
-                                <span>〰️ Ταλάντωση (Α.Α.Τ.)</span>
+                                <span>〰 Ταλάντωση (Α.Α.Τ.)</span>
                               </button>
                             </div>
 
@@ -59023,9 +59400,9 @@ export default function App() {
                                       setIsSpringPaused(false);
                                       setIsSpringSimulating(true);
                                     }}
-                                    className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                                   >
-                                    <span>▶️ Έναρξη Αμείωτης Ταλάντωσης</span>
+                                    <span>▶ Έναρξη Αμείωτης Ταλάντωσης</span>
                                   </button>
                                 ) : (
                                   <div className="space-y-1.5">
@@ -59033,10 +59410,10 @@ export default function App() {
                                       <button
                                         type="button"
                                         onClick={() => setIsSpringPaused((p) => !p)}
-                                        className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
+                                        className={`py-1.5 px-2 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1 border shadow-2xs transition cursor-pointer ${
                                           isSpringPaused
-                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                            : 'bg-amber-500 hover:bg-amber-600 text-white'
+                                            ? 'bg-[#1e3a5f] hover:bg-[#162d4a] text-white border-[#1e3a5f]'
+                                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border-[#dfd8cb]'
                                         }`}
                                         title={
                                           isSpringPaused
@@ -59045,7 +59422,7 @@ export default function App() {
                                         }
                                       >
                                         <span>
-                                          {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
+                                          {isSpringPaused ? '▶ Συνέχεια' : '❚❚ Παύση'}
                                         </span>
                                       </button>
                                       <button
@@ -59055,10 +59432,11 @@ export default function App() {
                                           springSimLastFrameTimeRef.current = null;
                                           setSpringGraphClearTick((t) => t + 1);
                                         }}
-                                        className="py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                                        title="Καθαρισμός των καμπυλών στα διαγραμματα x(t), υ(t), α(t)"
+                                        className="py-1.5 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                        title="Καθαρισμός των καμπυλών στα διαγράμματα x(t), υ(t), α(t)"
                                       >
-                                        <span>🧹 Καθαρισμός</span>
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Καθαρισμός</span>
                                       </button>
                                     </div>
                                     <button
@@ -59070,22 +59448,22 @@ export default function App() {
                                         springSimLastFrameTimeRef.current = null;
                                         setSpringGraphClearTick((t) => t + 1);
                                       }}
-                                      className="w-full py-1 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                      className="w-full py-1 px-2 rounded-lg bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c] font-semibold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
                                       title="Διακοπή ταλάντωσης και καθαρισμός διαγραμμάτων"
                                     >
-                                      <span>⏹️ Διακοπή & Επαναφορά</span>
+                                      <span>■ Διακοπή & Επαναφορά</span>
                                     </button>
                                   </div>
                                 )}
 
                                 {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
-                                <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/80 space-y-1.5">
+                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                       Αρχική Θέση (t = 0):
                                     </span>
-                                    <span className="text-[9.5px] text-slate-400 font-semibold">
-                                      ή τράβηξε το σώμα!
+                                    <span className="text-[9.5px] text-[#94a3b8] font-medium">
+                                      ή σύρε το σώμα
                                     </span>
                                   </div>
                                   <div className="grid grid-cols-4 gap-1">
@@ -59122,10 +59500,10 @@ export default function App() {
                                             initialPhaseMode: opt.id,
                                           }));
                                         }}
-                                        className={`py-1 px-1 rounded-lg text-[9.5px] font-bold border transition cursor-pointer ${
+                                        className={`py-1 px-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
                                           activeSpring.initialPhaseMode === opt.id
-                                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
-                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                            ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                                            : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                                         }`}
                                       >
                                         {opt.label}
@@ -59147,11 +59525,11 @@ export default function App() {
                                   const maxFreqHz = maxRootRatio / (2 * Math.PI);
 
                                   return (
-                                    <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                    <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                                       <div className="space-y-0.5">
-                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                          <span>⚖️ Μάζα Σώματος (m):</span>
-                                          <span className="text-emerald-700 font-extrabold">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-[#2c3e50]">
+                                          <span>⚖ Μάζα Σώματος (m):</span>
+                                          <span className="text-[#1e3a5f] font-extrabold">
                                             {curM.toFixed(2)} kg
                                           </span>
                                         </div>
@@ -59173,14 +59551,14 @@ export default function App() {
                                               mass: val,
                                             }));
                                           }}
-                                          className="w-full accent-emerald-600 cursor-pointer"
+                                          className="w-full accent-[#1e3a5f] cursor-pointer"
                                         />
                                       </div>
 
                                       <div className="space-y-0.5">
-                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-[#2c3e50]">
                                           <span>🌀 Σταθερά Ελατηρίου (k):</span>
-                                          <span className="text-sky-700 font-extrabold">
+                                          <span className="text-[#1e3a5f] font-extrabold">
                                             {curK.toFixed(2)} N/m
                                           </span>
                                         </div>
@@ -59202,16 +59580,16 @@ export default function App() {
                                               stiffness: val,
                                             }));
                                           }}
-                                          className="w-full accent-sky-600 cursor-pointer"
+                                          className="w-full accent-[#1e3a5f] cursor-pointer"
                                         />
                                       </div>
 
-                                      <div className="space-y-0.5 pt-1 border-t border-slate-200/70">
-                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                      <div className="space-y-0.5 pt-1 border-t border-[#e8e2d6]">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-[#2c3e50]">
                                           <span title="f = (1 / 2π) · √(k / m)">
-                                            〰️ Συχνότητα f = <span className="font-serif italic">1/2π √(k/m)</span>:
+                                            〰 Συχνότητα f = <span className="font-serif italic">1/2π √(k/m)</span>:
                                           </span>
-                                          <span className="text-indigo-700 font-extrabold">
+                                          <span className="text-[#1e3a5f] font-extrabold">
                                             {curFreqHz.toFixed(2)} Hz
                                           </span>
                                         </div>
@@ -59251,7 +59629,7 @@ export default function App() {
                                               stiffness: Number(nextK.toFixed(3)),
                                             }));
                                           }}
-                                          className="w-full accent-indigo-600 cursor-pointer"
+                                          className="w-full accent-[#1e3a5f] cursor-pointer"
                                         />
                                       </div>
                                     </div>
@@ -59259,73 +59637,66 @@ export default function App() {
                                 })()}
 
                                 {/* 5. Canvas Display Checkboxes (Unified Position Scale + Amplitude +A/-A & Θ.Ι., Natural Length l₀, Force Vectors) */}
-                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                    <span>📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={activeSpring.showAmplitudeLines}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        if (!checked) {
-                                          setIsSpringSimulating(false);
-                                          setIsSpringPaused(false);
-                                          springSimElapsedRef.current = 0;
-                                          springSimLastFrameTimeRef.current = null;
-                                          setSpringPhaseShiftAnim(null);
-                                        }
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          showAmplitudeLines: checked,
-                                          showPositionScale: checked,
-                                          initialPhaseMode: checked ? sim.initialPhaseMode : 'eq',
-                                        }));
-                                      }}
-                                      className="accent-blue-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
+                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5 divide-y divide-[#e8e2d6]/70">
+                                  <WarmStudioToggle
+                                    checked={activeSpring.showAmplitudeLines}
+                                    onChange={(checked) => {
+                                      if (!checked) {
+                                        setIsSpringSimulating(false);
+                                        setIsSpringPaused(false);
+                                        springSimElapsedRef.current = 0;
+                                        springSimLastFrameTimeRef.current = null;
+                                        setSpringPhaseShiftAnim(null);
+                                      }
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        showAmplitudeLines: checked,
+                                        showPositionScale: checked,
+                                        initialPhaseMode: checked ? sim.initialPhaseMode : 'eq',
+                                      }));
+                                    }}
+                                    icon={<Ruler className="w-3.5 h-3.5" />}
+                                    label="Κλίμακα & Πλάτος (+A / -A)"
+                                    className="w-full"
+                                  />
 
                                   {activeSpring.naturalSpringStrokeId && (
-                                    <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                      <span>🌀 Ελατήριο Φυσικού Μήκους (l₀)</span>
-                                      <input
-                                        type="checkbox"
+                                    <div className="pt-1.5">
+                                      <WarmStudioToggle
                                         checked={activeSpring.showNaturalSpring}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
+                                        onChange={(checked) => {
                                           updateActiveSpringSimConfig((sim) => ({
                                             ...sim,
                                             showNaturalSpring: checked,
                                           }));
                                           renderStaticSceneRef.current();
                                         }}
-                                        className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                                        label="Φυσικό Μήκος (l₀)"
+                                        className="w-full"
                                       />
-                                    </label>
+                                    </div>
                                   )}
 
-                                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                    <span>🏹 Διανύσματα Δυνάμεων (W, Fελ, ΣF)</span>
-                                    <input
-                                      type="checkbox"
+                                  <div className="pt-1.5">
+                                    <WarmStudioToggle
                                       checked={activeSpring.showForceVectors}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
+                                      onChange={(checked) => {
                                         updateActiveSpringSimConfig((sim) => ({
                                           ...sim,
                                           showForceVectors: checked,
                                         }));
                                       }}
-                                      className="accent-rose-600 w-4 h-4 cursor-pointer"
+                                      label="Διανύσματα Δυνάμεων (W, Fελ, ΣF)"
+                                      className="w-full"
                                     />
-                                  </label>
+                                  </div>
                                 </div>
 
                                 {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
-                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                                   <div className="flex items-center justify-between gap-1">
-                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                                      Ζωντανά Διαγράμματα (1, 2 ή 3):
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                                      Ζωντανά Διαγράμματα:
                                     </span>
                                     <div className="flex items-center gap-2">
                                       {(activeSpring.graphs.xt.visible ||
@@ -59338,10 +59709,10 @@ export default function App() {
                                             springSimLastFrameTimeRef.current = null;
                                             setSpringGraphClearTick((t) => t + 1);
                                           }}
-                                          className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                          className="text-[9.5px] font-semibold text-[#1e3a5f] hover:underline cursor-pointer"
                                           title="Καθαρισμός των καμπυλών στα διαγράμματα"
                                         >
-                                          🧹 Καθαρισμός
+                                          Καθαρισμός
                                         </button>
                                       )}
                                       {(activeSpring.graphs.xt.customMoved ||
@@ -59359,25 +59730,19 @@ export default function App() {
                                               },
                                             }));
                                           }}
-                                          className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                          className="text-[9.5px] font-semibold text-[#1e3a5f] hover:underline cursor-pointer"
                                           title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
                                         >
-                                          ↺ Στοίχιση
+                                          Στοίχιση
                                         </button>
                                       )}
                                     </div>
                                   </div>
 
-                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                    <span className="flex items-center gap-1.5">
-                                      <span className="w-2.5 h-2.5 rounded-full bg-amber-800 inline-block" />
-                                      <span>Θέση – Χρόνος x(t)</span>
-                                    </span>
-                                    <input
-                                      type="checkbox"
+                                  <div className="space-y-1.5 divide-y divide-[#e8e2d6]/70">
+                                    <WarmStudioToggle
                                       checked={activeSpring.graphs.xt.visible}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
+                                      onChange={(checked) => {
                                         updateActiveSpringSimConfig((sim) => ({
                                           ...sim,
                                           graphs: {
@@ -59386,79 +59751,66 @@ export default function App() {
                                           },
                                         }));
                                       }}
-                                      className="accent-amber-800 w-4 h-4 cursor-pointer"
+                                      icon={<span className="w-2.5 h-2.5 rounded-full bg-[#b45309] inline-block" />}
+                                      label="Θέση – Χρόνος x(t)"
+                                      className="w-full"
                                     />
-                                  </label>
 
-                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                    <span className="flex items-center gap-1.5">
-                                      <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
-                                      <span>Ταχύτητα – Χρόνος υ(t)</span>
-                                    </span>
-                                    <input
-                                      type="checkbox"
-                                      checked={activeSpring.graphs.vt.visible}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          graphs: {
-                                            ...sim.graphs,
-                                            vt: { ...sim.graphs.vt, visible: checked },
-                                          },
-                                        }));
-                                      }}
-                                      className="accent-purple-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
+                                    <div className="pt-1.5">
+                                      <WarmStudioToggle
+                                        checked={activeSpring.graphs.vt.visible}
+                                        onChange={(checked) => {
+                                          updateActiveSpringSimConfig((sim) => ({
+                                            ...sim,
+                                            graphs: {
+                                              ...sim.graphs,
+                                              vt: { ...sim.graphs.vt, visible: checked },
+                                            },
+                                          }));
+                                        }}
+                                        icon={<span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block" />}
+                                        label="Ταχύτητα – Χρόνος υ(t)"
+                                        className="w-full"
+                                      />
+                                    </div>
 
-                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                    <span className="flex items-center gap-1.5">
-                                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
-                                      <span>Επιτάχυνση – Χρόνος α(t)</span>
-                                    </span>
-                                    <input
-                                      type="checkbox"
-                                      checked={activeSpring.graphs.at.visible}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          graphs: {
-                                            ...sim.graphs,
-                                            at: { ...sim.graphs.at, visible: checked },
-                                          },
-                                        }));
-                                      }}
-                                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
+                                    <div className="pt-1.5">
+                                      <WarmStudioToggle
+                                        checked={activeSpring.graphs.at.visible}
+                                        onChange={(checked) => {
+                                          updateActiveSpringSimConfig((sim) => ({
+                                            ...sim,
+                                            graphs: {
+                                              ...sim.graphs,
+                                              at: { ...sim.graphs.at, visible: checked },
+                                            },
+                                          }));
+                                        }}
+                                        icon={<span className="w-2.5 h-2.5 rounded-full bg-[#059669] inline-block" />}
+                                        label="Επιτάχυνση – Χρόνος α(t)"
+                                        className="w-full"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               </>
                             ) : (
-                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-1.5">
-                                <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
-                                  <span>Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(activeSpring.showHookeCanvasTable)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      updateActiveSpringSimConfig((sim) => ({
-                                        ...sim,
-                                        showHookeCanvasTable: checked,
-                                      }));
-                                    }}
-                                    className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                                  />
-                                </label>
-                                <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
-                                  <span>Διάγραμμα Fελ – Δl (στον καμβά)</span>
-                                  <input
-                                    type="checkbox"
+                              <div className="bg-[#fdfbf7] border border-[#e8e2d6] rounded-xl p-2.5 space-y-1.5 divide-y divide-[#e8e2d6]/70">
+                                <WarmStudioToggle
+                                  checked={Boolean(activeSpring.showHookeCanvasTable)}
+                                  onChange={(checked) => {
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      showHookeCanvasTable: checked,
+                                    }));
+                                  }}
+                                  label="Πίνακας Τιμών Fελ – Δl (στον καμβά)"
+                                  className="w-full"
+                                />
+                                <div className="pt-1.5">
+                                  <WarmStudioToggle
                                     checked={Boolean(activeSpring.graphs.hooke?.visible)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
+                                    onChange={(checked) => {
                                       updateActiveSpringSimConfig((sim) => ({
                                         ...sim,
                                         graphs: {
@@ -59470,9 +59822,10 @@ export default function App() {
                                         },
                                       }));
                                     }}
-                                    className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                    label="Διάγραμμα Fελ – Δl (στον καμβά)"
+                                    className="w-full"
                                   />
-                                </label>
+                                </div>
                               </div>
                             )}
                           </>
@@ -59490,7 +59843,7 @@ export default function App() {
                     return (
                       <div className="space-y-2">
                         {/* 1. 4 Sub-Modes Grid (Ανάλυση, Σύνθεση, Κεκλιμένο, Εκκρεμές) */}
-                        <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-xl border border-[#dfd8cb]">
                           {(
                             [
                               { id: 'analysis', label: 'Ανάλυση F' },
@@ -59503,10 +59856,10 @@ export default function App() {
                               key={tab.id}
                               type="button"
                               onClick={() => createOrActivateForceSim(tab.id, false)}
-                              className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                              className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                 curMode === tab.id
-                                  ? 'bg-[#1976d2] text-white shadow-2xs'
-                                  : 'text-slate-600 hover:bg-white/80'
+                                  ? 'bg-[#1e3a5f] text-white shadow-xs'
+                                  : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                               }`}
                             >
                               <span>{tab.label}</span>
@@ -59515,28 +59868,29 @@ export default function App() {
                         </div>
 
                         {/* 2. Active Force Simulations List (δυν01, δυν02, ...) */}
-                        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                           {selectedStrokeIds.length > 0 && (
                             <button
                               type="button"
                               onClick={() => {
                                 registerOrActivateForceSimFromLasso();
                               }}
-                              className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                              className="w-full py-1.5 px-2.5 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                               title="Δηλώνει τα επιλεγμένα με Λάσο σχήματα (διάνυσμα, 2 διανύσματα, εκκρεμές ή κεκλιμένο) ως προσομοίωση"
                             >
-                              <span>➕ Προσθήκη από Λάσο ({getNextDefaultForceSimName(activePage)})</span>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Προσθήκη από Λάσο ({getNextDefaultForceSimName(activePage)})</span>
                             </button>
                           )}
 
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                               Ενεργή Προσομοίωση:
                             </span>
                             <button
                               type="button"
                               onClick={() => createOrActivateForceSim(curMode, true)}
-                              className="px-2 py-0.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-extrabold cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#1e3a5f] text-[10px] font-bold cursor-pointer transition"
                               title="Δημιουργία νέου έτοιμου προτύπου προσομοίωσης στη σελίδα"
                             >
                               + Νέο
@@ -59550,10 +59904,10 @@ export default function App() {
                                 return (
                                   <div
                                     key={sim.id}
-                                    className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                    className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
-                                        ? 'bg-sky-600 text-white border-sky-700 shadow-2xs'
-                                        : 'bg-white text-slate-700 border-slate-200 hover:border-sky-400'
+                                        ? 'bg-[#efebe3] text-[#1e3a5f] border-[#1e3a5f]/50 shadow-2xs'
+                                        : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
                                     <button
@@ -59598,8 +59952,8 @@ export default function App() {
                                       }}
                                       className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
                                         isCurrent
-                                          ? 'hover:bg-sky-800 text-sky-100 hover:text-white'
-                                          : 'hover:bg-rose-50 text-slate-400 hover:text-rose-600'
+                                          ? 'text-[#475569] hover:text-[#b91c1c]'
+                                          : 'text-[#94a3b8] hover:text-[#b91c1c]'
                                       }`}
                                       title={`Αφαίρεση προσομοίωσης "${sim.name}" (τα σχήματα παραμένουν στη σελίδα)`}
                                     >
@@ -59610,24 +59964,21 @@ export default function App() {
                               })}
                             </div>
                           ) : (
-                            <p className="text-[10.5px] text-slate-500 text-center py-1 leading-snug">
+                            <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
                               Σχεδίασε με μολύβι/σχήματα (1 διάνυσμα, 2 διανύσματα, ταβάνι+νήμα+σφαιρίδιο ή κεκλιμένο+σώμα) και πάτα <b>Sim</b>!
                             </p>
                           )}
 
                           {activeForce && (
-                            <div className="pt-1.5 border-t border-slate-200/80">
-                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                <span>🔢 Αριθμητικές Τιμές (N, °)</span>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(activeForce.showNumericValues)}
-                                  onChange={() =>
-                                    handleForceSimAction(activeForce, 'toggle-numeric-values')
-                                  }
-                                  className="accent-sky-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
+                            <div className="pt-2 border-t border-[#e8e2d6]">
+                              <WarmStudioToggle
+                                checked={Boolean(activeForce.showNumericValues)}
+                                onChange={() =>
+                                  handleForceSimAction(activeForce, 'toggle-numeric-values')
+                                }
+                                label="Αριθμητικές Τιμές (N, °)"
+                                className="w-full"
+                              />
                             </div>
                           )}
                         </div>
@@ -59635,39 +59986,33 @@ export default function App() {
                         {/* 3. Mode-Specific Interactive Controls */}
                         {activeForce &&
                           (activeForce.mode === 'analysis' || activeForce.mode === 'synthesis') && (
-                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90">
+                            <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6]">
                               {isForceSimAtIntegerValues(activeForce, activePage) ? (
-                                <label
-                                  data-force-calc-toggle="true"
-                                  className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer"
-                                >
-                                  <span className="flex items-center gap-1.5">
-                                    <span>🧮 Υπολογισμοί</span>
-                                    <span className="text-[9.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                                <WarmStudioToggle
+                                  checked={Boolean(activeForce.showCalc)}
+                                  onChange={() =>
+                                    handleForceSimAction(activeForce, 'toggle-calc')
+                                  }
+                                  label="Υπολογισμοί"
+                                  badge={
+                                    <span className="text-[9.5px] font-semibold text-[#1e3a5f] bg-[#efebe3] border border-[#dfd8cb] px-1.5 py-0.5 rounded-full">
                                       🧲
                                     </span>
-                                  </span>
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(activeForce.showCalc)}
-                                    onChange={() =>
-                                      handleForceSimAction(activeForce, 'toggle-calc')
-                                    }
-                                    className="accent-sky-600 w-4 h-4 cursor-pointer"
-                                  />
-                                </label>
+                                  }
+                                  className="w-full"
+                                />
                               ) : (
-                                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 select-none">
-                                  <span>🧮 Υπολογισμοί</span>
+                                <div className="flex items-center justify-between text-[11px] font-medium text-[#94a3b8] select-none">
+                                  <span>Υπολογισμοί (απαιτούνται ακέραιες τιμές)</span>
                                 </div>
                               )}
                             </div>
                           )}
 
                         {activeForce && activeForce.mode === 'incline' && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
-                            <p className="text-[10px] text-slate-600 leading-snug">
-                              🟢 Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου επιπέδου (15°–60°) για αλλαγή γωνίας θ!
+                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                            <p className="text-[10px] text-[#64748b] leading-snug">
+                              Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου (15°–60°) για αλλαγή γωνίας θ.
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               <button
@@ -59675,10 +60020,10 @@ export default function App() {
                                 onClick={() =>
                                   handleForceSimAction(activeForce, 'toggle-forces')
                                 }
-                                className={`flex-1 py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                   activeForce.showForces
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-slate-700 text-white'
+                                    ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                 }`}
                               >
                                 Δυνάμεις (B, N)
@@ -59689,13 +60034,13 @@ export default function App() {
                                   onClick={() =>
                                     handleForceSimAction(activeForce, 'start-incline-an')
                                   }
-                                  className={`flex-1 py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                     activeForce.anMode === 'B'
-                                      ? 'bg-lime-400 text-slate-900 border border-lime-600'
-                                      : 'bg-slate-700 text-white'
+                                      ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                      : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                   }`}
                                 >
-                                  ✏️ Ανάλυση B
+                                  Ανάλυση B
                                 </button>
                               )}
                             </div>
@@ -59705,18 +60050,18 @@ export default function App() {
                                   type="button"
                                   onClick={() => handleForceSimAction(activeForce, 'prev-step')}
                                   disabled={curStep <= 0}
-                                  className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                  className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
                                 >
                                   ◀ Προηγ.
                                 </button>
-                                <span className="text-[11px] font-bold text-slate-700">
+                                <span className="text-[11px] font-bold text-[#1e3a5f]">
                                   Βήμα {curStep}/6
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleForceSimAction(activeForce, 'next-step')}
                                   disabled={curStep >= 6}
-                                  className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                  className="flex-1 py-1 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
                                 >
                                   Επόμ. ▶
                                 </button>
@@ -59726,30 +60071,30 @@ export default function App() {
                         )}
 
                         {activeForce && activeForce.mode === 'pendulum' && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
+                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                             <div className="grid grid-cols-2 gap-1.5">
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleForceSimAction(activeForce, 'toggle-pause')
                                 }
-                                className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                   activeForce.isPaused
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-blue-600 text-white'
+                                    ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                 }`}
                               >
-                                {activeForce.isPaused ? '▶ Συνέχεια' : '⏸ Παύση'}
+                                {activeForce.isPaused ? '▶ Συνέχεια' : '❚❚ Παύση'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleForceSimAction(activeForce, 'toggle-forces')
                                 }
-                                className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                   activeForce.showForces
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-slate-700 text-white'
+                                    ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                 }`}
                               >
                                 Δυνάμεις (B, T)
@@ -59761,10 +60106,10 @@ export default function App() {
                                 onClick={() =>
                                   handleForceSimAction(activeForce, 'toggle-trajectory')
                                 }
-                                className={`w-full py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                   activeForce.showTrajectory
-                                    ? 'bg-slate-200 text-slate-900 border border-slate-400'
-                                    : 'bg-slate-700 text-white'
+                                    ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                 }`}
                               >
                                 ⋯ Τροχιά Εκκρεμούς
@@ -59776,10 +60121,10 @@ export default function App() {
                                 onClick={() =>
                                   handleForceSimAction(activeForce, 'toggle-resultant')
                                 }
-                                className={`w-full py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                   activeForce.showResultant
-                                    ? 'bg-teal-600 text-white'
-                                    : 'bg-slate-700 text-white'
+                                    ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                 }`}
                               >
                                 Συνισταμένη (ΣF)
@@ -59793,26 +60138,26 @@ export default function App() {
                                     onClick={() =>
                                       handleForceSimAction(activeForce, 'start-an-T')
                                     }
-                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                    className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                       activeForce.anMode === 'T'
-                                        ? 'bg-lime-400 text-slate-900 border border-lime-600'
-                                        : 'bg-slate-700 text-white'
+                                        ? 'bg-[#1e3a5f] text-white'
+                                        : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                     }`}
                                   >
-                                    ✏️ Ανάλυση Τ
+                                    Ανάλυση Τ
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() =>
                                       handleForceSimAction(activeForce, 'start-an-B')
                                     }
-                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                    className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
                                       activeForce.anMode === 'B'
-                                        ? 'bg-lime-400 text-slate-900 border border-lime-600'
-                                        : 'bg-slate-700 text-white'
+                                        ? 'bg-[#1e3a5f] text-white'
+                                        : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                                     }`}
                                   >
-                                    ✏️ Ανάλυση B
+                                    Ανάλυση B
                                   </button>
                                 </div>
                                 {(activeForce.anMode === 'T' || activeForce.anMode === 'B') && (
@@ -59823,11 +60168,11 @@ export default function App() {
                                         handleForceSimAction(activeForce, 'prev-step')
                                       }
                                       disabled={curStep <= 0}
-                                      className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                      className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
                                     >
                                       ◀ Προηγ.
                                     </button>
-                                    <span className="text-[11px] font-bold text-slate-700">
+                                    <span className="text-[11px] font-bold text-[#1e3a5f]">
                                       Βήμα {curStep}/6
                                     </span>
                                     <button
@@ -59836,7 +60181,7 @@ export default function App() {
                                         handleForceSimAction(activeForce, 'next-step')
                                       }
                                       disabled={curStep >= 6}
-                                      className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                      className="flex-1 py-1 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
                                     >
                                       Επόμ. ▶
                                     </button>
@@ -59864,20 +60209,21 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setShowPeriodicTableModal((v) => !v)}
-                          className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center shadow-sm transition cursor-pointer ${
+                          className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
                             showPeriodicTableModal
-                              ? 'bg-indigo-700 text-white ring-2 ring-indigo-300'
-                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                              ? 'bg-[#1e3a5f] text-white shadow-xs'
+                              : 'bg-[#1e3a5f] hover:bg-[#162d4a] text-white'
                           }`}
                         >
+                          <Atom className="w-3.5 h-3.5" />
                           <span>Περιοδικός Πίνακας</span>
                         </button>
 
                         {/* 2. Ενεργή Προσομοίωση Ατόμου & Λίστα Ατόμων στη σκηνή */}
-                        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-2">
+                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">
-                              Προσομοιωσεις Ατομου:
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                              Προσομοιώσεις Ατόμου:
                             </span>
                             <div className="flex items-center gap-1">
                               <button
@@ -59893,7 +60239,7 @@ export default function App() {
                                     setShowPeriodicTableModal(true);
                                   }
                                 }}
-                                className="px-2 py-0.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-extrabold cursor-pointer shadow-2xs transition"
+                                className="px-2 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#1e3a5f] text-[10px] font-bold cursor-pointer transition"
                                 title="Προσθήκη νέου ατόμου δίπλα στο υπάρχον (ή από την επιλογή Lasso)"
                               >
                                 + Άτομο Δίπλα
@@ -59910,8 +60256,8 @@ export default function App() {
                                     key={sim.id}
                                     className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
-                                        ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
-                                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                        ? 'bg-[#efebe3] text-[#1e3a5f] border-[#1e3a5f]/50 shadow-2xs'
+                                        : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
                                     <button
@@ -59964,8 +60310,8 @@ export default function App() {
                                       }}
                                       className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
                                         isCurrent
-                                          ? 'hover:bg-indigo-800 text-indigo-100 hover:text-white'
-                                          : 'hover:bg-rose-50 text-slate-400 hover:text-rose-600'
+                                          ? 'text-[#475569] hover:text-[#b91c1c]'
+                                          : 'text-[#94a3b8] hover:text-[#b91c1c]'
                                       }`}
                                       title={`Διαγραφή προσομοίωσης "${sim.name}"`}
                                     >
@@ -59976,15 +60322,15 @@ export default function App() {
                               })}
                             </div>
                           ) : (
-                            <p className="text-[10.5px] text-slate-500 text-center py-1 leading-snug">
-                              Ζωγράφισε πυρήνα & τροχιές, επίλεξέ τα με το <b>Λάσο</b> και πάτα <b>⚛️ Άτομο</b>, ή επίλεξε στοιχείο από τον Περιοδικό Πίνακα!
+                            <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
+                              Ζωγράφισε πυρήνα & τροχιές, επίλεξέ τα με το <b>Λάσο</b> και πάτα <b>Άτομο</b>, ή επίλεξε στοιχείο από τον Περιοδικό Πίνακα!
                             </p>
                           )}
 
                           {/* Επιλογή ποιο άτομο της σκηνής ενημερώνεται από τον Περιοδικό Πίνακα */}
                           {activeAtomSim && activeAtomSim.atoms.length > 0 && (
-                            <div className="pt-1.5 border-t border-slate-200/80 space-y-1">
-                              <span className="text-[9.5px] font-bold text-slate-500 block">
+                            <div className="pt-2 border-t border-[#e8e2d6] space-y-1">
+                              <span className="text-[9.5px] font-bold text-[#64748b] block">
                                 Άτομα στη σκηνή (κλικ για επιλογή):
                               </span>
                               <div className="flex flex-wrap gap-1">
@@ -59996,8 +60342,8 @@ export default function App() {
                                       key={atNode.id}
                                       className={`inline-flex items-center rounded-lg border text-[10.5px] font-bold transition ${
                                         isSel
-                                          ? 'bg-violet-600 text-white border-violet-700'
-                                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                          ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                                          : 'bg-[#fdfbf7] text-[#2c3e50] border-[#dfd8cb] hover:bg-[#efebe3]'
                                       }`}
                                     >
                                       <button
@@ -60058,16 +60404,16 @@ export default function App() {
 
                         {/* 3. Επιλογή Εμφάνισης Τροχιών (Όλες vs Μόνο Εξωτερική με αχνές διακεκομμένες τις εσωτερικές) */}
                         {activeAtomSim && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
-                            <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
-                              Εμφανιση Τροχιων:
+                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                            <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider block">
+                              Εμφάνιση Τροχιών:
                             </span>
-                            <div className="grid grid-cols-3 gap-1">
+                            <div className="grid grid-cols-3 gap-1 bg-[#efebe3] p-1 rounded-xl border border-[#dfd8cb]">
                               {(
                                 [
                                   { id: 'auto', label: 'Αυτόματα (≤3)' },
-                                  { id: 'all', label: 'Όλες οι τροχιές' },
-                                  { id: 'valence-only', label: 'Μόνο εξωτερική' },
+                                  { id: 'all', label: 'Όλες' },
+                                  { id: 'valence-only', label: 'Μόνο εξωτ.' },
                                 ] as const
                               ).map((opt) => (
                                 <button
@@ -60083,10 +60429,10 @@ export default function App() {
                                       ),
                                     }))
                                   }
-                                  className={`py-1.5 px-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                                     activeAtomSim.shellDisplayMode === opt.id
-                                      ? 'bg-indigo-600 text-white shadow-2xs'
-                                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                      : 'text-[#475569] hover:text-[#1e3a5f] hover:bg-[#fdfbf7]'
                                   }`}
                                 >
                                   {opt.label}
@@ -60094,28 +60440,27 @@ export default function App() {
                               ))}
                             </div>
 
-                            <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 pt-1 cursor-pointer">
-                              <span>Αργή περιστροφή ζευγών e⁻ (2-2)</span>
-                              <input
-                                type="checkbox"
+                            <div className="pt-1 border-t border-[#e8e2d6]">
+                              <WarmStudioToggle
                                 checked={activeAtomSim.isRotating !== false}
                                 onChange={() =>
                                   handleAtomSimAction(activeAtomSim, 'toggle-rotation')
                                 }
-                                className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                                label="Περιστροφή ζευγών e⁻ (2-2)"
+                                className="w-full"
                               />
-                            </label>
+                            </div>
                           </div>
                         )}
 
                         {/* 4. Χημική Αντίδραση & 2s Κίνηση Ηλεκτρονίων (➔) */}
                         {activeAtomSim && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
-                            <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
-                              Χημικοι Δεσμοι & Αντιδραση:
+                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                            <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider block">
+                              Χημικοί Δεσμοί & Αντίδραση:
                             </span>
-                            <p className="text-[10px] text-slate-500 leading-snug">
-                              Γράπωσε με το ποντίκι/πενάκι ένα <b>εξωτερικό ηλεκτρόνιο</b> και άφησέ το πάνω σε διπλανό άτομο για <b>Ετεροπολικό</b> ή <b>Ομοιοπολικό</b> δεσμό!
+                            <p className="text-[10px] text-[#64748b] leading-snug">
+                              Σύρε ένα <b>εξωτερικό ηλεκτρόνιο</b> σε διπλανό άτομο για <b>Ετεροπολικό</b> ή <b>Ομοιοπολικό</b> δεσμό.
                             </p>
                             <div className="flex flex-col gap-1.5">
                               <button
@@ -60123,7 +60468,7 @@ export default function App() {
                                 onClick={() =>
                                   handleAtomSimAction(activeAtomSim, 'toggle-reaction-eq')
                                 }
-                                className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
+                                className="w-full py-1.5 px-2.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50] font-bold text-[10.5px] transition cursor-pointer"
                               >
                                 {activeAtomSim.showReactionEquation
                                   ? 'Απόκρυψη Εξίσωσης Αντίδρασης'
@@ -60139,7 +60484,7 @@ export default function App() {
                                       'play-reaction-arrow'
                                     )
                                   }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50] font-bold text-[10.5px] transition cursor-pointer"
                                 >
                                   Κίνηση Ηλεκτρονίων Αντίδρασης (2s)
                                 </button>
@@ -60152,8 +60497,8 @@ export default function App() {
                                 }
                                 className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] transition cursor-pointer ${
                                   activeAtomSim.showOxidationNumbers
-                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs'
-                                    : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                                    ? 'bg-[#1e3a5f] hover:bg-[#162d4a] text-white shadow-2xs'
+                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50]'
                                 }`}
                               >
                                 {activeAtomSim.showOxidationNumbers
@@ -60170,7 +60515,7 @@ export default function App() {
                                       'toggle-atoms-below'
                                     )
                                   }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50] font-bold text-[10.5px] transition cursor-pointer"
                                 >
                                   {activeAtomSim.showAtomsBelowReaction === false
                                     ? 'Εμφάνιση Δομής Ατόμων κάτω από την Αντίδραση'
@@ -60184,7 +60529,7 @@ export default function App() {
                                   onClick={() =>
                                     handleAtomSimAction(activeAtomSim, 'reset-bonds')
                                   }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50] font-bold text-[10.5px] transition cursor-pointer"
                                 >
                                   Επαναφορά Ηλεκτρονίων & Δεσμών
                                 </button>
@@ -60197,16 +60542,20 @@ export default function App() {
                               const cloudChecked =
                                 validAtomSims.find((s) => s.show3DMolecule)?.showChargeCloud !== false;
                               return (
-                                <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
-                                  <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
-                                    3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
+                                <div className="pt-2 border-t border-[#e8e2d6] space-y-1.5">
+                                  <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider block">
+                                    3D Μόριο & Νέφος Φορτίου (δ⁺/δ⁻):
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() =>
                                       handleAtomSimAction(activeAtomSim, 'toggle-3d-molecule')
                                     }
-                                    className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
+                                    className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] transition cursor-pointer ${
+                                      any3DVisible
+                                        ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                        : 'bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#2c3e50]'
+                                    }`}
                                   >
                                     {any3DVisible
                                       ? 'Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
@@ -60214,10 +60563,8 @@ export default function App() {
                                   </button>
 
                                   {any3DVisible && (
-                                    <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
-                                      <span>Χρωματικό νέφος φορτίου (δ⁻ / δ⁺)</span>
-                                      <input
-                                        type="checkbox"
+                                    <div className="pt-1 border-t border-[#e8e2d6]">
+                                      <WarmStudioToggle
                                         checked={cloudChecked}
                                         onChange={() =>
                                           handleAtomSimAction(
@@ -60225,9 +60572,10 @@ export default function App() {
                                             'toggle-charge-cloud'
                                           )
                                         }
-                                        className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                        label="Χρωματικό νέφος φορτίου (δ⁻ / δ⁺)"
+                                        className="w-full"
                                       />
-                                    </label>
+                                    </div>
                                   )}
                                 </div>
                               );
