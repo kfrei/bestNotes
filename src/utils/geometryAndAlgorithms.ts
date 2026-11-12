@@ -12975,9 +12975,12 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       s = `${s.slice(0, m.index)}${op}{${convertSingleExpr(inside, depth + 1)}}${s.slice(closeIdx + 1)}`;
     }
 
-    // 4. Convert simple exponents `^2`, `^-2`, `^n` (without swallowing the next variable in `x^2y^3`!) and subscripts `_max`, `_0`
+    // 4. Convert simple exponents `^2`, `^-2`, `^n` (without swallowing the next variable in `x^2y^3`!) and subscripts `_2`, `_max`, `_0`
     s = s.replace(/\^\s*(-?(?:\d+(?:\.\d+)?|[a-zA-Zα-ωΑ-Ω]))/g, '^{$1}');
-    s = s.replace(/_\s*([a-zA-Zα-ωΑ-Ω0-9.]+)/g, '_{$1}');
+    // 4a. Numeric subscripts (e.g. `_2` in `H_2O` or `_1` in `x_1y`): stop strictly at digits so following letters like `O` or `y` are NOT swallowed!
+    s = s.replace(/_\s*(\d+(?:\.\d+)?)/g, '_{$1}');
+    // 4b. Textual/symbolic subscripts (e.g. `_max`, `_min`, `_ολ`, `_x`, `_A`)
+    s = s.replace(/_\s*([a-zA-Zα-ωΑ-Ω.]+)/g, '_{$1}');
     // Guard against any stacked double superscripts `a^{b}^{c}` which cause a KaTeX parse error
     s = s.replace(/([a-zA-Zα-ωΑ-Ω0-9)}])\^\{([^}]+)\}\s*\^\{([^}]+)\}/g, '{$1^{$2}}^{$3}');
 
