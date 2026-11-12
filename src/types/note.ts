@@ -151,6 +151,7 @@ export interface TextObject {
   chemRawInput?: string; // Original user input for ChemOCR / Chemistry check so missing/wrong subscripts & coefficients are highlighted in red
   layerId: string;
   groupId?: string;
+  zOrder?: number;
 }
 
 export interface SmartSketchEffectRegion {

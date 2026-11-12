@@ -3850,10 +3850,13 @@ export default function App() {
   // DUAL-CANVAS REFS FOR ZERO-LATENCY (0ms / 120Hz) APPLE PENCIL INKING Across Multi-Page Word-Style Stack!
   // 1. staticCanvasMapRef: Per-page 2x Retina canvas for background paper + committed strokes
   // 2. activeCanvasMapRef: Per-page 2x Retina desynchronized hardware overlay for 0ms wet ink
+  // 3. overTextCanvasMapRef: Per-page 2x Retina canvas for strokes/shapes positioned in front of text boxes
   const staticCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const activeCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const overTextCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overTextCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const activeDrawingPageIndexRef = useRef<number>(activePageIndex);
 
@@ -9506,38 +9509,49 @@ export default function App() {
           stroke: StrokeObject;
           memberIds: string[];
           bounds: { cx: number; cy: number };
+          score: number;
         }
       | {
           type: 'image';
           image: ImageObject;
           bounds: { cx: number; cy: number };
+          score: number;
         }
       | null => {
       const imgList = pageObj.images || [];
       const strokeList = pageObj.strokes || [];
       const lockedLayers = new Set(pageObj.layers.filter((l) => l.locked).map((l) => l.id));
+      const layerRankMap = new Map(
+        pageObj.layers.map((l, lIdx) => [l.id, pageObj.layers.length - lIdx])
+      );
+      const getScore = (layerId: string, z: number) => {
+        const rank = layerRankMap.get(layerId) ?? 1;
+        return rank * 1000000 + z;
+      };
 
-      let topHitImg: { img: ImageObject; z: number } | null = null;
+      let topHitImg: { img: ImageObject; score: number } | null = null;
       for (let idx = 0; idx < imgList.length; idx++) {
         const im = imgList[idx];
         if (lockedLayers.has(im.layerId)) continue;
         if (pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height) {
           const z = im.zOrder ?? idx + 1;
-          if (!topHitImg || z >= topHitImg.z) {
-            topHitImg = { img: im, z };
+          const score = getScore(im.layerId, z);
+          if (!topHitImg || score >= topHitImg.score) {
+            topHitImg = { img: im, score };
           }
         }
       }
 
-      let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      let topHitStroke: { stroke: StrokeObject; score: number } | null = null;
       // Pass 1: Strictly match actual drawn edges/curves so inner shapes inside larger shapes always win!
       for (let idx = 0; idx < strokeList.length; idx++) {
         const s = strokeList[idx];
         if (lockedLayers.has(s.layerId)) continue;
         if (isPointNearStroke(pt, s, 9, false)) {
           const z = s.zOrder ?? imgList.length + idx + 1;
-          if (!topHitStroke || z >= topHitStroke.z) {
-            topHitStroke = { stroke: s, z };
+          const score = getScore(s.layerId, z);
+          if (!topHitStroke || score >= topHitStroke.score) {
+            topHitStroke = { stroke: s, score };
           }
         }
       }
@@ -9548,14 +9562,15 @@ export default function App() {
           if (lockedLayers.has(s.layerId)) continue;
           if (isPointNearStroke(pt, s, 9, true)) {
             const z = s.zOrder ?? imgList.length + idx + 1;
-            if (!topHitStroke || z >= topHitStroke.z) {
-              topHitStroke = { stroke: s, z };
+            const score = getScore(s.layerId, z);
+            if (!topHitStroke || score >= topHitStroke.score) {
+              topHitStroke = { stroke: s, score };
             }
           }
         }
       }
 
-      if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
+      if (topHitStroke && (!topHitImg || topHitStroke.score >= topHitImg.score)) {
         const tappedStroke = topHitStroke.stroke;
         const memberStrokes = tappedStroke.groupId
           ? strokeList.filter((s) => s.groupId === tappedStroke.groupId)
@@ -9577,6 +9592,7 @@ export default function App() {
           stroke: tappedStroke,
           memberIds,
           bounds: { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 },
+          score: topHitStroke.score,
         };
       }
 
@@ -9586,6 +9602,7 @@ export default function App() {
           type: 'image',
           image: im,
           bounds: { cx: im.x + im.width / 2, cy: im.y + im.height / 2 },
+          score: topHitImg.score,
         };
       }
 
@@ -11132,6 +11149,17 @@ export default function App() {
       ctx.imageSmoothingQuality = 'high';
       ctx.clearRect(0, 0, pWidth, pHeight);
 
+      const overCanvas =
+        overTextCanvasMapRef.current.get(pageObj.id) ||
+        (pageIdx === activePageIndex ? overTextCanvasRef.current : null);
+      const overCtx = overCanvas ? overCanvas.getContext('2d') : null;
+      if (overCtx) {
+        overCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        overCtx.imageSmoothingEnabled = true;
+        overCtx.imageSmoothingQuality = 'high';
+        overCtx.clearRect(0, 0, pWidth, pHeight);
+      }
+
       // 0. Full-Page PDF or JPG/PNG Document Background:
       // Leave staticCanvas transparent over the hardware-accelerated <img> layer so we never duplicate 2x bitmaps in VRAM!
       if (pageObj.backgroundDataUrl || pageObj.pdfPageNumber) {
@@ -11236,7 +11264,42 @@ export default function App() {
         return a.z - b.z;
       });
 
+      const pageTextsForZ = (pageObj.texts || []).filter((t) => {
+        const l = visibleLayerMap.get(t.layerId);
+        return !l || l.visible;
+      });
+
       for (const entry of entries) {
+        let targetCtx = ctx;
+        if (overCtx && pageTextsForZ.length > 0) {
+          const entryBounds =
+            entry.kind === 'stroke'
+              ? getStrokeBounds(entry.stroke)
+              : {
+                  minX: entry.img.x,
+                  minY: entry.img.y,
+                  maxX: entry.img.x + entry.img.width,
+                  maxY: entry.img.y + entry.img.height,
+                };
+          const isFrontOfText = pageTextsForZ.some((t) => {
+            const tRank = layerRankMap.get(t.layerId) ?? 1;
+            const tZ = t.zOrder ?? 0;
+            const isAbove = entry.layerRank > tRank || (entry.layerRank === tRank && entry.z > tZ);
+            if (!isAbove) return false;
+            const tw = t.boxWidth || (Math.max(t.text.length, 1) * (t.fontSize || 20) * 0.6);
+            const th = t.boxHeight || ((t.fontSize || 20) * 1.5);
+            return (
+              entryBounds.minX <= t.x + tw &&
+              entryBounds.maxX >= t.x &&
+              entryBounds.minY <= t.y + th &&
+              entryBounds.maxY >= t.y
+            );
+          });
+          if (isFrontOfText) {
+            targetCtx = overCtx;
+          }
+        }
+
         if (entry.kind === 'image') {
           const imgObj = entry.img;
           const layer = visibleLayerMap.get(imgObj.layerId);
@@ -11298,26 +11361,26 @@ export default function App() {
               }, 0);
             }
 
-            ctx.save();
-            ctx.globalAlpha = layer?.opacity ?? 1;
+            targetCtx.save();
+            targetCtx.globalAlpha = layer?.opacity ?? 1;
             if (imgObj.rotation) {
               const icx = imgObj.x + drawW / 2;
               const icy = imgObj.y + drawH / 2;
-              ctx.translate(icx, icy);
-              ctx.rotate((imgObj.rotation * Math.PI) / 180);
-              ctx.translate(-icx, -icy);
+              targetCtx.translate(icx, icy);
+              targetCtx.rotate((imgObj.rotation * Math.PI) / 180);
+              targetCtx.translate(-icx, -icy);
             }
             if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
-              ctx.beginPath();
-              ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
+              targetCtx.beginPath();
+              targetCtx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
               for (let i = 1; i < imgObj.clipPolygon.length; i++) {
-                ctx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
+                targetCtx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
               }
-              ctx.closePath();
-              ctx.clip();
+              targetCtx.closePath();
+              targetCtx.clip();
             }
-            ctx.drawImage(imgEl, imgObj.x, imgObj.y, drawW, drawH);
-            ctx.restore();
+            targetCtx.drawImage(imgEl, imgObj.x, imgObj.y, drawW, drawH);
+            targetCtx.restore();
           }
         } else {
           const s = entry.stroke;
@@ -11382,7 +11445,7 @@ export default function App() {
               continue;
             }
           }
-          drawStrokeOnContext(ctx, s, false);
+          drawStrokeOnContext(targetCtx, s, false);
         }
       }
 
@@ -12537,12 +12600,14 @@ export default function App() {
     }
   }, [renderStaticScene, viewMode, activeNotebook.id]);
 
-  // Sync activeCanvasRef & staticCanvasRef with the current active page in the multi-page stack
+  // Sync activeCanvasRef, staticCanvasRef & overTextCanvasRef with the current active page in the multi-page stack
   useEffect(() => {
     activeDrawingPageIndexRef.current = activePageIndex;
     const st = staticCanvasMapRef.current.get(activePage.id);
     const ac = activeCanvasMapRef.current.get(activePage.id);
+    const ov = overTextCanvasMapRef.current.get(activePage.id);
     if (st) staticCanvasRef.current = st;
+    if (ov) overTextCanvasRef.current = ov;
     if (ac) {
       activeCanvasRef.current = ac;
       const ctx =
@@ -13638,7 +13703,13 @@ export default function App() {
               zOrder: baseZ + duplicatedImgs.length + idx,
             })),
           ],
-          texts: [...(page.texts || []), ...duplicatedTexts],
+          texts: [
+            ...(page.texts || []),
+            ...duplicatedTexts.map((t, idx) => ({
+              ...t,
+              zOrder: baseZ + duplicatedImgs.length + duplicatedStrokes.length + idx,
+            })),
+          ],
         };
       });
 
@@ -35774,6 +35845,11 @@ export default function App() {
         fontFamily: textFontFamily,
         textAlign,
         layerId: activeLayerId,
+        zOrder:
+          (targetPage.images?.length || 0) +
+          (targetPage.strokes?.length || 0) +
+          (targetPage.texts?.length || 0) +
+          1,
       };
       lastTextCreatedTimeRef.current = performance.now();
       textEditUndoRecordedForIdRef.current = newTxt.id;
@@ -35821,7 +35897,11 @@ export default function App() {
       const lockedTxtLayerIds = new Set(
         targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
       );
+      const layerRankMap = new Map(
+        targetPage.layers.map((l, lIdx) => [l.id, targetPage.layers.length - lIdx])
+      );
       const txtListForTouch = targetPage.texts || [];
+      const selectableObj = findSelectableObjectAtPagePoint(pt, targetPage);
       for (let idx = txtListForTouch.length - 1; idx >= 0; idx--) {
         const candTxt = txtListForTouch[idx];
         if (lockedTxtLayerIds.has(candTxt.layerId)) continue;
@@ -35835,6 +35915,17 @@ export default function App() {
           `[data-text-id="${candTxt.id}"]`
         ) as HTMLElement | null;
         if (isPagePointOnTextGlyphs(pt, candTxt, 6)) {
+          if (selectableObj) {
+            const txtRank = layerRankMap.get(candTxt.layerId) ?? 1;
+            const txtZ =
+              candTxt.zOrder ??
+              (targetPage.images?.length || 0) + (targetPage.strokes?.length || 0) + idx + 1;
+            const txtScore = txtRank * 1000000 + txtZ;
+            if (selectableObj.score > txtScore) {
+              // Stroke or image is in front of this text box! Allow the stroke to be selected instead.
+              continue;
+            }
+          }
           const grpId = candTxt.groupId;
           const grpStrokes = grpId
             ? targetPage.strokes.filter((s) => s.groupId === grpId).map((s) => s.id)
@@ -35900,7 +35991,7 @@ export default function App() {
         }
       }
 
-      const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
+      const fingerHit = selectableObj || findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
         if (activeTool !== 'lasso') {
           setActiveTool('lasso');
@@ -44929,10 +45020,10 @@ export default function App() {
     showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
 
-  // Unified Z-Order / Layering across BOTH Images and Shapes / Strokes / Groups:
+  // Unified Z-Order / Layering across Images, Shapes / Strokes / Groups, AND Text Boxes:
   // - 'to-back': Send to Back (Εντελώς πίσω)
-  // - 'step-back': Send Backward (-1 επίπεδο πίσω — περνάει πίσω από την επικαλυπτόμενη εικόνα ή σχήμα!)
-  // - 'step-front': Bring Forward (+1 επίπεδο μπροστά — περνάει μπροστά από την επικαλυπτόμενη εικόνα ή σχήμα!)
+  // - 'step-back': Send Backward (-1 επίπεδο πίσω — περνάει πίσω από το επικαλυπτόμενο αντικείμενο!)
+  // - 'step-front': Bring Forward (+1 επίπεδο μπροστά — περνάει μπροστά από το επικαλυπτόμενο αντικείμενο!)
   // - 'to-front': Bring to Front (Εντελώς μπροστά)
   const handleZOrderSelected = (action: 'to-back' | 'step-back' | 'step-front' | 'to-front') => {
     const baseStrokeIds =
@@ -44941,22 +45032,57 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
-    if (!selectedImageId && baseStrokeIds.length === 0) return;
+    const baseTxtIds =
+      selectedLassoTextIds.length > 0
+        ? selectedLassoTextIds
+        : selectedTextId
+        ? [selectedTextId]
+        : [];
+    if (!selectedImageId && baseStrokeIds.length === 0 && baseTxtIds.length === 0) return;
 
     updateActivePage((page) => {
       const imgList = page.images || [];
       const strokeList = page.strokes || [];
+      const txtList = page.texts || [];
 
       const baseSet = new Set(baseStrokeIds);
-      const groupIds = new Set(
-        strokeList
-          .filter((s) => baseSet.has(s.id) && s.groupId)
-          .map((s) => s.groupId!)
-      );
+      const baseTxtSet = new Set(baseTxtIds);
+
+      const groupIds = new Set<string>();
+      for (const s of strokeList) {
+        if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+      }
+      for (const t of txtList) {
+        if (baseTxtSet.has(t.id) && t.groupId && !t.groupId.startsWith('math-graph-grp-')) {
+          groupIds.add(t.groupId);
+        }
+      }
+      for (const im of imgList) {
+        if (selectedImageId === im.id && im.groupId) groupIds.add(im.groupId);
+      }
+
       const targetStrokeIds = new Set(
         strokeList
           .filter((s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))
           .map((s) => s.id)
+      );
+      const targetTxtIds = new Set(
+        txtList
+          .filter(
+            (t) =>
+              baseTxtSet.has(t.id) ||
+              (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
+          )
+          .map((t) => t.id)
+      );
+      const targetImgIds = new Set(
+        imgList
+          .filter(
+            (im) =>
+              (selectedImageId && im.id === selectedImageId) ||
+              (im.groupId && groupIds.has(im.groupId))
+          )
+          .map((im) => im.id)
       );
 
       type ZUnit = {
@@ -44964,6 +45090,7 @@ export default function App() {
         z: number;
         images: ImageObject[];
         strokes: StrokeObject[];
+        texts: TextObject[];
         bounds: { minX: number; minY: number; maxX: number; maxY: number };
       };
 
@@ -44982,17 +45109,102 @@ export default function App() {
         return { minX, minY, maxX, maxY };
       };
 
+      const computeTextBounds = (t: TextObject) => {
+        const tw = t.boxWidth || Math.max(t.text.length, 1) * (t.fontSize || 20) * 0.6;
+        const th = t.boxHeight || (t.fontSize || 20) * 1.5;
+        return {
+          minX: t.x,
+          minY: t.y,
+          maxX: t.x + tw,
+          maxY: t.y + th,
+        };
+      };
+
+      const computeTextsBounds = (items: TextObject[]) => {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const t of items) {
+          const tb = computeTextBounds(t);
+          if (tb.minX < minX) minX = tb.minX;
+          if (tb.minY < minY) minY = tb.minY;
+          if (tb.maxX > maxX) maxX = tb.maxX;
+          if (tb.maxY > maxY) maxY = tb.maxY;
+        }
+        return { minX, minY, maxX, maxY };
+      };
+
+      const targetImages = imgList.filter((im) => targetImgIds.has(im.id));
+      const targetStrokes = strokeList.filter((s) => targetStrokeIds.has(s.id));
+      const targetTexts = txtList.filter((t) => targetTxtIds.has(t.id));
+
+      let targetMinX = Infinity,
+        targetMinY = Infinity,
+        targetMaxX = -Infinity,
+        targetMaxY = -Infinity;
+      let maxTargetZ = 0;
+
+      for (const im of targetImages) {
+        targetMinX = Math.min(targetMinX, im.x);
+        targetMinY = Math.min(targetMinY, im.y);
+        targetMaxX = Math.max(targetMaxX, im.x + im.width);
+        targetMaxY = Math.max(targetMaxY, im.y + im.height);
+        const z = im.zOrder ?? imgList.indexOf(im) + 1;
+        if (z > maxTargetZ) maxTargetZ = z;
+      }
+      if (targetStrokes.length > 0) {
+        const sb = computeStrokesBounds(targetStrokes);
+        targetMinX = Math.min(targetMinX, sb.minX);
+        targetMinY = Math.min(targetMinY, sb.minY);
+        targetMaxX = Math.max(targetMaxX, sb.maxX);
+        targetMaxY = Math.max(targetMaxY, sb.maxY);
+        for (const st of targetStrokes) {
+          const z = st.zOrder ?? imgList.length + strokeList.indexOf(st) + 1;
+          if (z > maxTargetZ) maxTargetZ = z;
+        }
+      }
+      if (targetTexts.length > 0) {
+        const tb = computeTextsBounds(targetTexts);
+        targetMinX = Math.min(targetMinX, tb.minX);
+        targetMinY = Math.min(targetMinY, tb.minY);
+        targetMaxX = Math.max(targetMaxX, tb.maxX);
+        targetMaxY = Math.max(targetMaxY, tb.maxY);
+        for (const tx of targetTexts) {
+          const z = tx.zOrder ?? imgList.length + strokeList.length + txtList.indexOf(tx) + 1;
+          if (z > maxTargetZ) maxTargetZ = z;
+        }
+      }
+
       const units: ZUnit[] = [];
 
-      // 1. Add all Images into unified ZUnit list
-      imgList.forEach((im, idx) => {
-        const z = im.zOrder ?? idx + 1;
-        const isTarget = Boolean(selectedImageId && im.id === selectedImageId);
+      // Add target group if there are selected targets
+      if (targetImages.length > 0 || targetStrokes.length > 0 || targetTexts.length > 0) {
         units.push({
-          isTarget,
+          isTarget: true,
+          z: maxTargetZ,
+          images: targetImages,
+          strokes: targetStrokes,
+          texts: targetTexts,
+          bounds: {
+            minX: targetMinX === Infinity ? 0 : targetMinX,
+            minY: targetMinY === Infinity ? 0 : targetMinY,
+            maxX: targetMaxX === -Infinity ? 0 : targetMaxX,
+            maxY: targetMaxY === -Infinity ? 0 : targetMaxY,
+          },
+        });
+      }
+
+      // Add non-target Images into unified ZUnit list
+      imgList.forEach((im, idx) => {
+        if (targetImgIds.has(im.id)) return;
+        const z = im.zOrder ?? idx + 1;
+        units.push({
+          isTarget: false,
           z,
           images: [im],
           strokes: [],
+          texts: [],
           bounds: {
             minX: im.x,
             minY: im.y,
@@ -45002,42 +45214,26 @@ export default function App() {
         });
       });
 
-      // 2. Add all Strokes / Stroke Groups into unified ZUnit list
-      const targetStrokes = !selectedImageId ? strokeList.filter((s) => targetStrokeIds.has(s.id)) : [];
-      let targetStrokesInserted = false;
-      const visitedGroupIds = new Set<string>();
-
+      // Add non-target Strokes / Stroke Groups into unified ZUnit list
+      const visitedStrokeGroupIds = new Set<string>();
       strokeList.forEach((s, idx) => {
+        if (targetStrokeIds.has(s.id)) return;
         const defaultZ = imgList.length + idx + 1;
         const z = s.zOrder ?? defaultZ;
 
-        if (!selectedImageId && targetStrokeIds.has(s.id)) {
-          if (!targetStrokesInserted && targetStrokes.length > 0) {
-            const maxTargetZ = Math.max(
-              ...targetStrokes.map((ts) => ts.zOrder ?? defaultZ)
-            );
-            units.push({
-              isTarget: true,
-              z: maxTargetZ,
-              images: [],
-              strokes: targetStrokes,
-              bounds: computeStrokesBounds(targetStrokes),
-            });
-            targetStrokesInserted = true;
-          }
-          return;
-        }
-
         if (s.groupId) {
-          if (visitedGroupIds.has(s.groupId)) return;
-          visitedGroupIds.add(s.groupId);
-          const grpMembers = strokeList.filter((m) => m.groupId === s.groupId && !targetStrokeIds.has(m.id));
+          if (visitedStrokeGroupIds.has(s.groupId)) return;
+          visitedStrokeGroupIds.add(s.groupId);
+          const grpMembers = strokeList.filter(
+            (m) => m.groupId === s.groupId && !targetStrokeIds.has(m.id)
+          );
           if (grpMembers.length > 0) {
             units.push({
               isTarget: false,
               z,
               images: [],
               strokes: grpMembers,
+              texts: [],
               bounds: computeStrokesBounds(grpMembers),
             });
           }
@@ -45047,12 +45243,48 @@ export default function App() {
             z,
             images: [],
             strokes: [s],
+            texts: [],
             bounds: computeStrokesBounds([s]),
           });
         }
       });
 
-      // Sort all units (Images + Strokes/Shapes) by their current visual zOrder (back-to-front)
+      // Add non-target Texts / Text Groups into unified ZUnit list
+      const visitedTextGroupIds = new Set<string>();
+      txtList.forEach((t, idx) => {
+        if (targetTxtIds.has(t.id)) return;
+        const defaultZ = imgList.length + strokeList.length + idx + 1;
+        const z = t.zOrder ?? defaultZ;
+
+        if (t.groupId && !t.groupId.startsWith('math-graph-grp-')) {
+          if (visitedTextGroupIds.has(t.groupId)) return;
+          visitedTextGroupIds.add(t.groupId);
+          const grpMembers = txtList.filter(
+            (m) => m.groupId === t.groupId && !targetTxtIds.has(m.id)
+          );
+          if (grpMembers.length > 0) {
+            units.push({
+              isTarget: false,
+              z,
+              images: [],
+              strokes: [],
+              texts: grpMembers,
+              bounds: computeTextsBounds(grpMembers),
+            });
+          }
+        } else {
+          units.push({
+            isTarget: false,
+            z,
+            images: [],
+            strokes: [],
+            texts: [t],
+            bounds: computeTextBounds(t),
+          });
+        }
+      });
+
+      // Sort all units by their current visual zOrder (back-to-front)
       units.sort((a, b) => a.z - b.z);
 
       const tIdx = units.findIndex((u) => u.isTarget);
@@ -45070,7 +45302,6 @@ export default function App() {
       } else if (action === 'to-front') {
         units.push(removed);
       } else if (action === 'step-back') {
-        // Find the nearest overlapping Image or Shape/Stroke behind tIdx (or tIdx - 1 if none overlap)
         let insertAt = Math.max(0, tIdx - 1);
         for (let i = tIdx - 1; i >= 0; i--) {
           if (boxesOverlap(removed.bounds, units[i].bounds)) {
@@ -45080,7 +45311,6 @@ export default function App() {
         }
         units.splice(insertAt, 0, removed);
       } else if (action === 'step-front') {
-        // Find the nearest overlapping Image or Shape/Stroke in front of tIdx (or tIdx + 1 if none overlap)
         let insertAt = Math.min(units.length, tIdx + 1);
         for (let i = tIdx; i < units.length; i++) {
           if (boxesOverlap(removed.bounds, units[i].bounds)) {
@@ -45091,26 +45321,46 @@ export default function App() {
         units.splice(insertAt, 0, removed);
       }
 
-      // Reassign clean sequential zOrder (1, 2, 3, ...) across all Images and Strokes
+      // Reassign clean sequential zOrder (1, 2, 3, ...) across all Images, Strokes, and Texts
       let nextZ = 1;
-      const nextImages: ImageObject[] = [];
-      const nextStrokes: StrokeObject[] = [];
+      const nextImagesMap = new Map<string, number>();
+      const nextStrokesMap = new Map<string, number>();
+      const nextTextsMap = new Map<string, number>();
 
       for (const u of units) {
         for (const im of u.images) {
-          nextImages.push({ ...im, zOrder: nextZ++ });
+          nextImagesMap.set(im.id, nextZ++);
         }
         for (const st of u.strokes) {
-          nextStrokes.push({ ...st, zOrder: nextZ++ });
+          nextStrokesMap.set(st.id, nextZ++);
+        }
+        for (const tx of u.texts) {
+          nextTextsMap.set(tx.id, nextZ++);
         }
       }
+
+      const nextImages = imgList.map((im) => ({
+        ...im,
+        zOrder: nextImagesMap.get(im.id) ?? im.zOrder ?? nextZ++,
+      }));
+      const nextStrokes = strokeList.map((s) => ({
+        ...s,
+        zOrder: nextStrokesMap.get(s.id) ?? s.zOrder ?? nextZ++,
+      }));
+      const nextTexts = txtList.map((t) => ({
+        ...t,
+        zOrder: nextTextsMap.get(t.id) ?? t.zOrder ?? nextZ++,
+      }));
 
       return {
         ...page,
         images: nextImages,
         strokes: nextStrokes,
+        texts: nextTexts,
       };
     });
+
+    scheduleCoalescedStaticRender();
 
     showToast(
       action === 'to-back'
@@ -62129,15 +62379,7 @@ export default function App() {
                             }
 
                             const startedOnDragBar = Boolean(targetEl?.closest('[data-text-drag]'));
-                            if (
-                              !resizeHandle &&
-                              !startedOnDragBar &&
-                              (txt.text || '').trim().length > 0 &&
-                              !isClientPointOnTextElementGlyphs(ev.clientX, ev.clientY, ev.currentTarget, 6)
-                            ) {
-                              setSelectedTextId(null);
-                              setEditingTextId(null);
-                              draggingTextRef.current = null;
+                            if (!resizeHandle && !startedOnDragBar) {
                               const pageEl = ev.currentTarget.closest('[data-page-idx]') as HTMLElement | null;
                               if (pageEl) {
                                 const pRect = pageEl.getBoundingClientRect();
@@ -62146,23 +62388,23 @@ export default function App() {
                                     x: (ev.clientX - pRect.left) * (pW / pRect.width),
                                     y: (ev.clientY - pRect.top) * (pH / pRect.height),
                                   };
-                                  const otherTxt = [...(pageObj.texts || [])]
-                                    .reverse()
-                                    .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
-                                  if (otherTxt) {
-                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
-                                    activeDrawingPageIndexRef.current = pageIdx;
-                                    setSelectedTextId(otherTxt.id);
-                                    setSelectedLassoTextIds([]);
-                                    setSelectedStrokeIds([]);
-                                    setSelectedImageIds([]);
-                                    setSelectedImageId(null);
-                                    setActiveNodeStrokeId(null);
-                                    setShowToolSubBar(true);
-                                    return;
-                                  }
                                   const hit = findSelectableObjectAtPagePoint(pt, pageObj);
-                                  if (hit) {
+                                  const clickedOnGlyphs =
+                                    (txt.text || '').trim().length > 0 &&
+                                    isClientPointOnTextElementGlyphs(ev.clientX, ev.clientY, ev.currentTarget, 6);
+
+                                  const txtLayerIdx = pageObj.layers.findIndex((l) => l.id === txt.layerId);
+                                  const txtRank = txtLayerIdx !== -1 ? pageObj.layers.length - txtLayerIdx : 1;
+                                  const txtZ =
+                                    txt.zOrder ??
+                                    (pageObj.images?.length || 0) + (pageObj.strokes?.length || 0) + 1;
+                                  const txtScore = txtRank * 1000000 + txtZ;
+
+                                  // If the user tapped on a stroke/image in front of this text box, OR if tapped outside glyphs:
+                                  if (hit && (hit.score > txtScore || !clickedOnGlyphs)) {
+                                    setSelectedTextId(null);
+                                    setEditingTextId(null);
+                                    draggingTextRef.current = null;
                                     if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
                                     activeDrawingPageIndexRef.current = pageIdx;
                                     setActiveTool('lasso');
@@ -62179,10 +62421,35 @@ export default function App() {
                                       setSelectedLassoTextIds([]);
                                       setActiveNodeStrokeId(hit.memberIds.length === 1 ? hit.memberIds[0] : null);
                                     }
+                                    return;
+                                  }
+
+                                  if (!clickedOnGlyphs) {
+                                    const otherTxt = [...(pageObj.texts || [])]
+                                      .reverse()
+                                      .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
+                                    if (otherTxt) {
+                                      setSelectedTextId(null);
+                                      setEditingTextId(null);
+                                      draggingTextRef.current = null;
+                                      if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                      activeDrawingPageIndexRef.current = pageIdx;
+                                      setSelectedTextId(otherTxt.id);
+                                      setSelectedLassoTextIds([]);
+                                      setSelectedStrokeIds([]);
+                                      setSelectedImageIds([]);
+                                      setSelectedImageId(null);
+                                      setActiveNodeStrokeId(null);
+                                      setShowToolSubBar(true);
+                                      return;
+                                    }
+                                    setSelectedTextId(null);
+                                    setEditingTextId(null);
+                                    draggingTextRef.current = null;
+                                    return;
                                   }
                                 }
                               }
-                              return;
                             }
                             const wasAlreadySelected =
                               selectedTextId === txt.id || editingTextId === txt.id;
@@ -62350,15 +62617,7 @@ export default function App() {
                               resizeHandle = null;
                             }
 
-                            if (
-                              !resizeHandle &&
-                              !startedOnDragBar &&
-                              (txt.text || '').trim().length > 0 &&
-                              !isClientPointOnTextElementGlyphs(t.clientX, t.clientY, ev.currentTarget, 6)
-                            ) {
-                              setSelectedTextId(null);
-                              setEditingTextId(null);
-                              draggingTextRef.current = null;
+                            if (!resizeHandle && !startedOnDragBar) {
                               const pageEl = ev.currentTarget.closest('[data-page-idx]') as HTMLElement | null;
                               if (pageEl) {
                                 const pRect = pageEl.getBoundingClientRect();
@@ -62367,23 +62626,23 @@ export default function App() {
                                     x: (t.clientX - pRect.left) * (pW / pRect.width),
                                     y: (t.clientY - pRect.top) * (pH / pRect.height),
                                   };
-                                  const otherTxt = [...(pageObj.texts || [])]
-                                    .reverse()
-                                    .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
-                                  if (otherTxt) {
-                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
-                                    activeDrawingPageIndexRef.current = pageIdx;
-                                    setSelectedTextId(otherTxt.id);
-                                    setSelectedLassoTextIds([]);
-                                    setSelectedStrokeIds([]);
-                                    setSelectedImageIds([]);
-                                    setSelectedImageId(null);
-                                    setActiveNodeStrokeId(null);
-                                    setShowToolSubBar(true);
-                                    return;
-                                  }
                                   const hit = findSelectableObjectAtPagePoint(pt, pageObj);
-                                  if (hit) {
+                                  const clickedOnGlyphs =
+                                    (txt.text || '').trim().length > 0 &&
+                                    isClientPointOnTextElementGlyphs(t.clientX, t.clientY, ev.currentTarget, 6);
+
+                                  const txtLayerIdx = pageObj.layers.findIndex((l) => l.id === txt.layerId);
+                                  const txtRank = txtLayerIdx !== -1 ? pageObj.layers.length - txtLayerIdx : 1;
+                                  const txtZ =
+                                    txt.zOrder ??
+                                    (pageObj.images?.length || 0) + (pageObj.strokes?.length || 0) + 1;
+                                  const txtScore = txtRank * 1000000 + txtZ;
+
+                                  // If the user tapped on a stroke/image in front of this text box, OR if tapped outside glyphs:
+                                  if (hit && (hit.score > txtScore || !clickedOnGlyphs)) {
+                                    setSelectedTextId(null);
+                                    setEditingTextId(null);
+                                    draggingTextRef.current = null;
                                     if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
                                     activeDrawingPageIndexRef.current = pageIdx;
                                     setActiveTool('lasso');
@@ -62400,10 +62659,35 @@ export default function App() {
                                       setSelectedLassoTextIds([]);
                                       setActiveNodeStrokeId(hit.memberIds.length === 1 ? hit.memberIds[0] : null);
                                     }
+                                    return;
+                                  }
+
+                                  if (!clickedOnGlyphs) {
+                                    const otherTxt = [...(pageObj.texts || [])]
+                                      .reverse()
+                                      .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
+                                    if (otherTxt) {
+                                      setSelectedTextId(null);
+                                      setEditingTextId(null);
+                                      draggingTextRef.current = null;
+                                      if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                      activeDrawingPageIndexRef.current = pageIdx;
+                                      setSelectedTextId(otherTxt.id);
+                                      setSelectedLassoTextIds([]);
+                                      setSelectedStrokeIds([]);
+                                      setSelectedImageIds([]);
+                                      setSelectedImageId(null);
+                                      setActiveNodeStrokeId(null);
+                                      setShowToolSubBar(true);
+                                      return;
+                                    }
+                                    setSelectedTextId(null);
+                                    setEditingTextId(null);
+                                    draggingTextRef.current = null;
+                                    return;
                                   }
                                 }
                               }
-                              return;
                             }
 
                             if (
@@ -62571,7 +62855,9 @@ export default function App() {
                             (!isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
                               ? 'z-10 pointer-events-none border border-transparent'
-                              : 'z-50 border border-transparent bg-white/20 cursor-grab active:cursor-grabbing'
+                              : isEditingTxt
+                              ? 'z-25 border border-transparent bg-white/20'
+                              : 'z-12 border border-transparent bg-white/20 cursor-grab active:cursor-grabbing'
                           }`}
                         >
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (compact side pills + small corner circles) */}
@@ -64138,6 +64424,23 @@ export default function App() {
                         </div>
                       );
                     })}
+
+                    {/* Layer 2.2: 2x Retina Static Canvas for Strokes & Shapes positioned in front of Text Boxes */}
+                    <canvas
+                      ref={(el) => {
+                        if (el) {
+                          overTextCanvasMapRef.current.set(pageObj.id, el);
+                          if (isCurrentActive) overTextCanvasRef.current = el;
+                          scheduleCoalescedStaticRender();
+                        } else {
+                          overTextCanvasMapRef.current.delete(pageObj.id);
+                        }
+                      }}
+                      width={pW * CANVAS_DPR}
+                      height={pH * CANVAS_DPR}
+                      style={{ width: pW, height: pH }}
+                      className="absolute inset-0 pointer-events-none z-20"
+                    />
 
                     {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when 3-10 discrete straight lines/edges are selected */}
                     {isCurrentActive &&
