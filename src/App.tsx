@@ -62891,7 +62891,7 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
+                                      className="w-[62px] min-w-[62px] max-w-[62px] py-1 px-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer text-center flex items-center justify-center shrink-0 truncate select-none text-[11px]"
                                       title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
@@ -62977,9 +62977,9 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className={`px-2 py-1 rounded-md font-bold border transition cursor-pointer ${
+                                      className={`w-[24px] min-w-[24px] max-w-[24px] py-1 rounded-md font-bold border transition cursor-pointer text-center flex items-center justify-center shrink-0 ${
                                         displayedBold
-                                          ? 'bg-[#d5cec0] text-[#1f1f1f] border-stone-400/95'
+                                          ? 'bg-[#1e3a5f] text-white border-[#163b66]'
                                           : 'bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border-stone-300/80'
                                       }`}
                                       title="Bold (Έντονα — στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
@@ -63061,13 +63061,13 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-2 py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer"
+                                    className="w-[26px] min-w-[26px] max-w-[26px] py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer text-center flex items-center justify-center shrink-0"
                                     title="Μικρότερη γραμματοσειρά (-1px)"
                                   >
                                     A-
                                   </button>
                                   <span
-                                    className="px-1.5 py-1 rounded-md font-bold text-[11.5px] tabular-nums bg-[#fdfbf7] text-[#0066ff] border border-stone-300/80 select-none flex items-center justify-center min-w-[24px]"
+                                    className="w-[28px] min-w-[28px] max-w-[28px] py-1 rounded-md font-bold text-[11.5px] tabular-nums bg-[#fdfbf7] text-[#1e3a5f] border border-stone-300/80 select-none flex items-center justify-center shrink-0 text-center"
                                     title={`Μέγεθος γραμματοσειράς: ${displayedFontSize}px`}
                                   >
                                     {displayedFontSize}
@@ -63146,7 +63146,7 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-2 py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer"
+                                    className="w-[26px] min-w-[26px] max-w-[26px] py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer text-center flex items-center justify-center shrink-0"
                                     title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                   >
                                     A+
@@ -63238,7 +63238,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleInsertPowerCaretInText(txt.id)}
-                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
+                                        className="w-[26px] min-w-[26px] max-w-[26px] py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer text-center flex items-center justify-center shrink-0"
                                         title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
                                       >
                                         xⁿ
@@ -63247,7 +63247,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleInsertSubscriptInText(txt.id)}
-                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
+                                        className="w-[26px] min-w-[26px] max-w-[26px] py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer text-center flex items-center justify-center shrink-0"
                                         title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
                                       >
                                         xᵢ
@@ -63256,7 +63256,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleConvertTextToMath(txt.id)}
-                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
+                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer shrink-0"
                                         title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                                       >
                                         Math
@@ -63267,7 +63267,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
-                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer shrink-0"
                                     title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                                   >
                                     Γράφ.
@@ -63276,7 +63276,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCheckChemistryInTextBox(txt.id)}
-                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap shrink-0"
                                     title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                                   >
                                     Chem
@@ -63285,7 +63285,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
-                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap shrink-0"
                                     title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
                                   >
                                     3D
@@ -63305,7 +63305,7 @@ export default function App() {
                                       }
                                       setEditingTextId(isEditingTxt ? null : txt.id);
                                     }}
-                                    className="p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium flex items-center justify-center transition cursor-pointer"
+                                    className="w-[26px] min-w-[26px] max-w-[26px] p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium flex items-center justify-center shrink-0 transition cursor-pointer"
                                     title={
                                       isEditingTxt
                                         ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
@@ -63340,7 +63340,7 @@ export default function App() {
                                       setSelectedTextId(null);
                                       setEditingTextId(null);
                                     }}
-                                    className="p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 flex items-center justify-center transition cursor-pointer"
+                                    className="w-[26px] min-w-[26px] max-w-[26px] p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 flex items-center justify-center shrink-0 transition cursor-pointer"
                                     title="Διαγραφή κειμένου"
                                   >
                                     <Trash2 className="w-3.5 h-3.5 text-[#333333] stroke-[1.9]" />
