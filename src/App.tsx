@@ -1144,6 +1144,28 @@ const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v2';
 const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
 const AUTH_UID_STORAGE_KEY = 'bestnotes_auth_uid';
 const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
+const USER_EDITED_SESSION_STORAGE_KEY = 'bestnotes_user_edited_session_ids_v1';
+
+function loadUserEditedSessionIds(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(USER_EDITED_SESSION_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
+
+function saveUserEditedSessionIds(ids: Set<string>): void {
+  try {
+    sessionStorage.setItem(USER_EDITED_SESSION_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignore
+  }
+}
 
 // Safe internal fallback object when notebooks array is empty (0 notes)
 const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
@@ -1950,7 +1972,7 @@ export default function App() {
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
   const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
   const remoteDeletedIdsRef = useRef<Set<string>>(new Set());
-  const userEditedInSessionRef = useRef<Set<string>>(new Set());
+  const userEditedInSessionRef = useRef<Set<string>>(loadUserEditedSessionIds());
   const userEditedFoldersInSessionRef = useRef<boolean>(false);
   const hasLoadedUserDocRef = useRef<boolean>(false);
   const hasReceivedCloudFoldersRef = useRef<boolean>(false);
@@ -2162,27 +2184,6 @@ export default function App() {
                   if (!cur) {
                     map.set(idbNb.id, idbNb);
                     changed = true;
-                  } else if (
-                    allRemotePrimaryIdsRef.current.has(idbNb.id) &&
-                    !userEditedInSessionRef.current.has(idbNb.id)
-                  ) {
-                    // Never overwrite an authoritative Cloud notebook with a stale IndexedDB copy;
-                    // only restore stripped local backgroundDataUrl on PDF pages if missing in Cloud.
-                    const idbBgByPageId = new Map<string, string>();
-                    for (const p of idbNb.pages || []) {
-                      if (p.backgroundDataUrl) idbBgByPageId.set(p.id, p.backgroundDataUrl);
-                    }
-                    if (idbBgByPageId.size > 0 && (cur.pages || []).some((p) => !p.backgroundDataUrl)) {
-                      map.set(idbNb.id, {
-                        ...cur,
-                        pages: (cur.pages || []).map((p, idx) => {
-                          if (p.backgroundDataUrl) return p;
-                          const bg = idbBgByPageId.get(p.id) || idbNb.pages?.[idx]?.backgroundDataUrl;
-                          return bg ? { ...p, backgroundDataUrl: bg } : p;
-                        }),
-                      });
-                      changed = true;
-                    }
                   } else {
                     const idbTime = idbNb.updatedAt || '';
                     const curTime = cur.updatedAt || '';
@@ -2191,6 +2192,23 @@ export default function App() {
                     if (idbTime > curTime || (idbTime === curTime && idbScore > curScore)) {
                       map.set(idbNb.id, idbNb);
                       changed = true;
+                    } else {
+                      // cur is newer or equal; only restore stripped local backgroundDataUrl on PDF pages if missing in cur
+                      const idbBgByPageId = new Map<string, string>();
+                      for (const p of idbNb.pages || []) {
+                        if (p.backgroundDataUrl) idbBgByPageId.set(p.id, p.backgroundDataUrl);
+                      }
+                      if (idbBgByPageId.size > 0 && (cur.pages || []).some((p) => !p.backgroundDataUrl)) {
+                        map.set(idbNb.id, {
+                          ...cur,
+                          pages: (cur.pages || []).map((p, idx) => {
+                            if (p.backgroundDataUrl) return p;
+                            const bg = idbBgByPageId.get(p.id) || idbNb.pages?.[idx]?.backgroundDataUrl;
+                            return bg ? { ...p, backgroundDataUrl: bg } : p;
+                          }),
+                        });
+                        changed = true;
+                      }
                     }
                   }
                 }
@@ -6128,18 +6146,13 @@ export default function App() {
             const localUpdatedAt = localNb.updatedAt || '';
             const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
 
-            // 1. MULTI-DEVICE & REFRESH-SAFE TIMESTAMP RULE:
-            // - Only keep a local copy with localUpdatedAt > remoteUpdatedAt if the snapshot is from local cache
-            //   OR the user actively edited this notebook during the current session.
-            if (
-              localUpdatedAt &&
-              remoteUpdatedAt &&
-              localUpdatedAt > remoteUpdatedAt &&
-              (isFromCache || userEditedInSessionRef.current.has(id))
-            ) {
+            // 1. REFRESH & MULTI-DEVICE TIMESTAMP RULE:
+            // If local is strictly newer than remote, KEEP local! Never overwrite newer local work with an older Cloud snapshot!
+            if (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt) {
+              userEditedInSessionRef.current.add(id);
+              saveUserEditedSessionIds(userEditedInSessionRef.current);
               if (
                 !isFromCache &&
-                userEditedInSessionRef.current.has(id) &&
                 (inFlightSavesMapRef.current.get(id) || 0) === 0
               ) {
                 notebooksToPushBack.push(localNb);
@@ -6147,13 +6160,10 @@ export default function App() {
               continue;
             }
 
-            // 2. Otherwise, if the user has NOT edited this notebook in the current session OR the Cloud version
-            //    has a newer/equal timestamp, pull the authoritative Cloud version down!
-            if (
-              !userEditedInSessionRef.current.has(id) ||
-              (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt))
-            ) {
+            // 2. Otherwise, if the Cloud version has a strictly newer timestamp, pull the authoritative Cloud version down!
+            if (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) {
               userEditedInSessionRef.current.delete(id);
+              saveUserEditedSessionIds(userEditedInSessionRef.current);
               const localBgByPageId = new Map<string, string>();
               for (const lp of localNb.pages || []) {
                 if (lp.backgroundDataUrl) localBgByPageId.set(lp.id, lp.backgroundDataUrl);
@@ -6177,8 +6187,25 @@ export default function App() {
               continue;
             }
 
-            // 3. Otherwise, userEditedInSessionRef.current.has(id) is true AND localUpdatedAt >= remoteUpdatedAt:
-            // Keep the active in-session user edits on this device; they will be synced by performCloudFirestoreSyncNow.
+            // 3. Timestamps are equal or remoteUpdatedAt is missing:
+            if (userEditedInSessionRef.current.has(id)) {
+              if (
+                !isFromCache &&
+                (inFlightSavesMapRef.current.get(id) || 0) === 0
+              ) {
+                notebooksToPushBack.push(localNb);
+              }
+              continue;
+            }
+            const localScore = getNotebookContentScore(localNb);
+            const remoteScore = getNotebookContentScore(rem.nb);
+            if (remoteScore > localScore) {
+              mergedMap.set(id, rem.nb);
+              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
+              anyChanged = true;
+              continue;
+            }
             continue;
           }
 
@@ -6460,10 +6487,6 @@ export default function App() {
         if (userEditedFoldersInSessionRef.current) {
           commitUserFoldersChange(customFoldersRef.current);
         }
-        // Clear in-session edit flags once this device goes to sleep / background so when it wakes up later,
-        // any newer changes made on another device (Mac mini <-> iPad) are accepted immediately!
-        userEditedInSessionRef.current.clear();
-        userEditedFoldersInSessionRef.current = false;
       }
     };
     const flushOnPageHide = () => {
@@ -8570,6 +8593,7 @@ export default function App() {
         ? (activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current)
         : activePageIndexLiveRef.current;
       userEditedInSessionRef.current.add(liveNbId);
+      saveUserEditedSessionIds(userEditedInSessionRef.current);
       const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
       suppressNextUndoRecordRef.current = false;
       setNotebooks((prevNotebooks) => {
@@ -52237,6 +52261,8 @@ export default function App() {
                           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
                           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
                           localStorage.removeItem(`${UI_SESSION_STORAGE_KEY}_latest`);
+                          sessionStorage.removeItem(USER_EDITED_SESSION_STORAGE_KEY);
+                          userEditedInSessionRef.current.clear();
                         } catch {
                           // ignore
                         }
@@ -60626,6 +60652,7 @@ export default function App() {
                                     type="button"
                                     onClick={() => {
                                       userEditedInSessionRef.current.add(activeNotebook.id);
+                                      saveUserEditedSessionIds(userEditedInSessionRef.current);
                                       setNotebooks((prev) =>
                                         prev.map((nb) => {
                                           if (nb.id !== activeNotebook.id) return nb;
