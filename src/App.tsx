@@ -55192,41 +55192,8 @@ export default function App() {
 
                     <div className="h-5 w-px bg-[#dfd8cb]" />
 
-                    {/* 5 Color Memories + 5 Most Recent Colors + Switcher + Rainbow Picker + Fill Controls */}
+                    {/* 5 Color Memories + 5 Most Recent Colors (Swipe/Wheel to switch) + Rainbow Picker + Fill Controls */}
                     <div className="flex items-center gap-1.5">
-                      {/* Page Switcher: "Βασικά ● ○" <-> "Πρόσφατα ○ ●" */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextPage: 0 | 1 = colorStripPage === 0 ? 1 : 0;
-                          setColorStripPage(nextPage);
-                          colorStripRef.current?.scrollTo({
-                            left: nextPage === 1 ? 152 : 0,
-                            behavior: 'smooth',
-                          });
-                        }}
-                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full hover:bg-[#ece7dc] border border-[#dfd8cb] bg-[#efebe3]/80 transition cursor-pointer text-[10px] font-semibold text-[#2c3e50] shrink-0 select-none"
-                        title={
-                          colorStripPage === 0
-                            ? 'Προβολή: 5 Βασικά Χρώματα — Κλικ για τα 5 Πρόσφατα'
-                            : 'Προβολή: 5 Πρόσφατα Χρώματα — Κλικ για τα 5 Βασικά'
-                        }
-                      >
-                        <span className="leading-none">{colorStripPage === 0 ? 'Βασικά' : 'Πρόσφατα'}</span>
-                        <span className="flex gap-1 items-center">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                              colorStripPage === 0 ? 'bg-[#234978]' : 'bg-[#c5bfae]'
-                            }`}
-                          />
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                              colorStripPage === 1 ? 'bg-[#234978]' : 'bg-[#c5bfae]'
-                            }`}
-                          />
-                        </span>
-                      </button>
-
                       <div
                         ref={colorStripRef}
                         onScroll={(e) => {
@@ -55249,8 +55216,8 @@ export default function App() {
                         className="w-[152px] overflow-x-auto snap-x snap-mandatory flex items-center scroll-smooth [&::-webkit-scrollbar]:hidden"
                         title={
                           colorStripPage === 0
-                            ? '5 Βασικά Χρώματα — Κλικ στο «Βασικά» ή σύρετε για τα 5 Πρόσφατα'
-                            : '5 Πρόσφατα Χρώματα — Κλικ στο «Πρόσφατα» ή σύρετε για τα 5 Βασικά'
+                            ? '5 Βασικά Χρώματα — Σύρετε για τα 5 Πρόσφατα'
+                            : '5 Πρόσφατα Χρώματα — Σύρετε για τα 5 Βασικά'
                         }
                       >
                         {/* Page 1: 5 Primary Color Memories */}
@@ -55266,7 +55233,7 @@ export default function App() {
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Βασικό Χρώμα #${idx + 1} (${c}) — Κλικ στο «Βασικά» για τα Πρόσφατα`}
+                              title={`Βασικό Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Πρόσφατα`}
                             />
                           ))}
                         </div>
@@ -55283,7 +55250,7 @@ export default function App() {
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Κλικ στο «Πρόσφατα» για τα Βασικά`}
+                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Βασικά`}
                             />
                           ))}
                         </div>
