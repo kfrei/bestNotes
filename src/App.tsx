@@ -4098,9 +4098,12 @@ export default function App() {
   const [showMathModal, setShowMathModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [thumbnailCols, setThumbnailCols] = useState<3 | 4>(3);
-  const [mathInput, setMathInput] = useState<string>('I = \\frac{q}{t} \\implies 15 \\cdot t = 90');
+  const [mathInput, setMathInput] = useState<string>(
+    'I = \\frac{q}{t} \\implies q = I \\cdot t \\implies q = 2 \\cdot 15 \\implies q = 30\\text{ C}'
+  );
   const [mathEquationToSolve, setMathEquationToSolve] = useState<string>('15 * t = 90');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const mathTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // DUAL-CANVAS REFS FOR ZERO-LATENCY (0ms / 120Hz) APPLE PENCIL INKING Across Multi-Page Word-Style Stack!
   // 1. staticCanvasMapRef: Per-page 2x Retina canvas for background paper + committed strokes
@@ -55110,7 +55113,20 @@ export default function App() {
 
                   <button
                     data-popover-trigger="math"
-                    onClick={() => setShowMathModal((v) => !v)}
+                    onClick={() => {
+                      setShowMathModal((v) => {
+                        const next = !v;
+                        if (next) {
+                          const selMathTxt = (activePage.texts || []).find(
+                            (t) => t.id === selectedTextId && t.isMath
+                          );
+                          if (selMathTxt?.latex) {
+                            setMathInput(selMathTxt.latex);
+                          }
+                        }
+                        return next;
+                      });
+                    }}
                     className={`p-2 rounded-full transition cursor-pointer ${
                       showMathModal
                         ? 'bg-[#234978] text-white shadow-xs'
@@ -66135,7 +66151,7 @@ export default function App() {
             data-popover-panel="math"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-lg shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
+            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-3.5"
           >
             <div className="flex items-center justify-between">
               <h2 id="mathDialogTitle" className="text-lg font-bold text-[#234978] flex items-center gap-2">
@@ -66206,6 +66222,7 @@ export default function App() {
                 </button>
               </div>
               <textarea
+                ref={mathTextareaRef}
                 rows={3}
                 value={mathInput}
                 onChange={(e) => setMathInput(e.target.value)}
@@ -66214,9 +66231,88 @@ export default function App() {
               />
             </div>
 
+            {/* Quick LaTeX Reference Chips & Explanation Guide */}
+            <div className="space-y-2 pt-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#234978] flex items-center gap-1.5">
+                  <span>⌨️ Βασική κωδικοποίηση LaTeX:</span>
+                </span>
+                <span className="text-[10.5px] font-medium text-[#64748b]">
+                  (Πατήστε για αυτόματη εισαγωγή)
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Κλάσμα', code: '\\frac{a}{b}', tip: 'Κλάσμα \\frac{αριθμητής}{παρονομαστής}' },
+                  { label: 'Δείκτης', code: '_{1}', tip: 'Κάτω δείκτης _{1}' },
+                  { label: 'Εκθέτης', code: '^{2}', tip: 'Εκθέτης / Δύναμη ^{2}' },
+                  { label: 'Συνεπάγεται', code: ' \\implies ', tip: 'Συνεπάγεται \\implies' },
+                  { label: 'Βέλος', code: ' \\rightarrow ', tip: 'Δεξιόστροφο βέλος \\rightarrow' },
+                  { label: 'Επί', code: ' \\cdot ', tip: 'Τελεία πολλαπλασιασμού \\cdot' },
+                  { label: 'Δέλτα', code: '\\Delta ', tip: 'Σύμβολο μεταβολής \\Delta' },
+                  { label: 'Ρίζα', code: '\\sqrt{x}', tip: 'Τετραγωνική ρίζα \\sqrt{x}' },
+                  { label: 'Συν/Πλην', code: ' \\pm ', tip: 'Συν ή πλην \\pm' },
+                  { label: 'Μονάδα', code: '\\text{ C}', tip: 'Μονάδα μέτρησης \\text{ C}' },
+                ].map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (mathTextareaRef.current) {
+                        const ta = mathTextareaRef.current;
+                        const start = ta.selectionStart ?? mathInput.length;
+                        const end = ta.selectionEnd ?? mathInput.length;
+                        const nextVal = mathInput.slice(0, start) + chip.code + mathInput.slice(end);
+                        setMathInput(nextVal);
+                        setTimeout(() => {
+                          ta.focus();
+                          const newPos = start + chip.code.length;
+                          ta.setSelectionRange(newPos, newPos);
+                        }, 0);
+                      } else {
+                        setMathInput((prev) => (prev ? `${prev} ${chip.code}` : chip.code));
+                      }
+                    }}
+                    className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] active:scale-95 border border-[#dfd8cb] text-xs text-[#234978] hover:border-[#234978]/50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    title={chip.tip}
+                  >
+                    <span className="text-[10px] font-semibold text-[#64748b]">{chip.label}</span>
+                    <span className="font-bold font-mono text-[#234978] bg-white/70 px-1 py-0.2 rounded border border-[#dfd8cb]/60">{chip.code}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Explanatory note */}
+              <div className="p-2.5 rounded-xl bg-[#fdfbf7]/80 border border-[#dfd8cb] text-[11px] text-[#475569] leading-relaxed shadow-2xs">
+                <div className="font-bold text-[#234978] mb-1 flex items-center gap-1.5">
+                  <span>💡 Πώς γράφουμε σε LaTeX:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10.5px]">
+                  <div>
+                    • <strong>Κλάσμα:</strong> <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\frac&#123;q&#125;&#123;t&#125;</code>
+                  </div>
+                  <div>
+                    • <strong>Συνεπάγεται & Βέλος:</strong> <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\implies</code>, <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\rightarrow</code>
+                  </div>
+                  <div>
+                    • <strong>Δείκτης / Εκθέτης:</strong> <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">v_&#123;0&#125;</code>, <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">t^&#123;2&#125;</code>
+                  </div>
+                  <div>
+                    • <strong>Πολλαπλασιασμός:</strong> <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\cdot</code> (π.χ. <code className="font-mono text-[#234978] bg-[#efebe3] px-1 py-0.2 rounded">2 \cdot 15</code>)
+                  </div>
+                  <div>
+                    • <strong>Μονάδες μέτρησης:</strong> <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\text&#123; C&#125;</code>, <code className="font-mono text-[#234978] font-bold bg-[#efebe3] px-1 py-0.2 rounded">\text&#123; m/s&#125;</code>
+                  </div>
+                  <div>
+                    • <strong>Νέα σειρά:</strong> Πατήστε <strong className="text-[#234978]">Enter</strong> για ξεχωριστές γραμμές
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="p-4 rounded-xl bg-[#efebe3]/40 border border-[#dfd8cb] text-[#2c3e50] overflow-x-auto">
               <div className="flex flex-col items-start gap-2">
-                {splitAndCleanMathLatexLines(mathInput || 'I = \\frac{q}{t}').map((rowLatex, rIdx) => (
+                {splitAndCleanMathLatexLines(mathInput || 'I = \\frac{q}{t} \\implies q = I \\cdot t \\implies q = 2 \\cdot 15 \\implies q = 30\\text{ C}').map((rowLatex, rIdx) => (
                   <div
                     key={rIdx}
                     dangerouslySetInnerHTML={{
