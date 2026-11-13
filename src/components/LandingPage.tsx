@@ -27,6 +27,9 @@ import {
 } from 'lucide-react';
 import {
   auth,
+  db,
+  setDoc,
+  doc,
   googleProvider,
   GoogleAuthProvider,
   signInWithPopup,
@@ -1112,8 +1115,11 @@ export const AuthModal: React.FC<{
       const gEmail = result.user.email || result.user.displayName || '';
       if (token) {
         try {
+          const now = Date.now();
+          localStorage.setItem('bestnotes_drive_token_v3', token);
+          localStorage.setItem('bestnotes_drive_token_time_v3', String(now));
           localStorage.setItem('bestnotes_drive_token_v1', token);
-          localStorage.setItem('bestnotes_drive_token_time_v1', String(Date.now()));
+          localStorage.setItem('bestnotes_drive_token_time_v1', String(now));
           if (gEmail) localStorage.setItem('bestnotes_drive_email_v1', gEmail);
           window.dispatchEvent(
             new CustomEvent('bestnotes-drive-auth', {
@@ -1122,6 +1128,22 @@ export const AuthModal: React.FC<{
           );
         } catch {
           // ignore
+        }
+        if (result.user?.uid) {
+          try {
+            await setDoc(
+              doc(db, 'users', result.user.uid),
+              {
+                driveEmail: gEmail,
+                driveAccessTokenV3: token,
+                driveTokenIssuedAtV3: Date.now(),
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          } catch {
+            // ignore
+          }
         }
       }
       onSuccess();

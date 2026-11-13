@@ -3401,9 +3401,15 @@ export default function App() {
   const hasAutoSyncedSchoolFoldersRef = useRef<boolean>(false);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     try {
-      const savedToken = localStorage.getItem('bestnotes_drive_token_v3');
-      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
-      if (savedToken && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+      const savedToken =
+        localStorage.getItem('bestnotes_drive_token_v3') ||
+        localStorage.getItem('bestnotes_drive_token_v1');
+      const savedTime = Number(
+        localStorage.getItem('bestnotes_drive_token_time_v3') ||
+        localStorage.getItem('bestnotes_drive_token_time_v1') ||
+        '0'
+      );
+      if (savedToken && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
         return null;
       }
       return savedToken;
@@ -6510,29 +6516,18 @@ export default function App() {
       const targetNb = overrideNotebook ?? activeNotebook;
       const hintEmail = driveEmail || currentUser.email || null;
 
-      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      // Check token age synchronously before any await
       try {
-        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
-        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+        const savedTime = Number(
+          localStorage.getItem('bestnotes_drive_token_time_v3') ||
+          localStorage.getItem('bestnotes_drive_token_time_v1') ||
+          '0'
+        );
+        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
           token = null;
         }
       } catch {
         // ignore
-      }
-
-      // If user explicitly triggered Drive PDF sync (or has Drive linked) and the 1h token expired, renew seamlessly with login_hint!
-      if (!token && forceDrivePrompt && showFeedback) {
-        try {
-          const refreshed = await signInToGoogleDrive(
-            hintEmail,
-            driveNeedsFullScopeConsentRef.current
-          );
-          driveNeedsFullScopeConsentRef.current = false;
-          token = refreshed.accessToken;
-          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-        } catch {
-          // ignore if popup closed
-        }
       }
 
       if (!token) {
@@ -6702,54 +6697,14 @@ export default function App() {
           if (err?.message === 'DRIVE_SCOPE_MISSING') {
             driveNeedsFullScopeConsentRef.current = true;
           }
-          // Keep driveEmail connected so Google Drive never logs out visually, and invalidate the expired/limited token!
           invalidateDriveToken(token);
-          // If this was a manual user click, automatically refresh the token with login_hint right now and retry!
-          if (showFeedback) {
-            try {
-              const refreshed = await signInToGoogleDrive(
-                hintEmail,
-                err?.message === 'DRIVE_SCOPE_MISSING'
-              );
-              driveNeedsFullScopeConsentRef.current = false;
-              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              let retryRes: Awaited<ReturnType<typeof syncNotebookPdfToGoogleDrive>> | null = null;
-              for (const nbItem of targetsToSync) {
-                setActiveDriveUploadingNbId(nbItem.id);
-                retryRes = await syncNotebookPdfToGoogleDrive(
-                  refreshed.accessToken,
-                  nbItem,
-                  nbItem.id === activeNotebook.id ? pdfExportOpts : { ...pdfExportOpts, liveSimCanvas: null },
-                  driveBasePath
-                );
-                markNotebookDriveSynced(nbItem, driveBasePath);
-              }
-              setActiveDriveUploadingNbId(null);
-              setSyncStatus('synced');
-              setIsDirty(false);
-              setSecondsToNextSync(20);
-              secondsToNextDrivePdfSyncRef.current = 120;
-              hasPendingDrivePdfSyncRef.current = false;
-              if (retryRes) {
-                const linkToSave =
-                  targetsToSync.length > 1
-                    ? retryRes.folderWebViewLink || retryRes.webViewLink
-                    : retryRes.webViewLink || retryRes.folderWebViewLink;
-                if (linkToSave) setLastDrivePdfLink(linkToSave);
-                showToast(
-                  targetsToSync.length > 1
-                    ? `☁️ Google Drive (${retryRes.targetPathDisplay}): Συγχρονίστηκαν ${targetsToSync.length} PDF!`
-                    : `☁️ Google Drive (${retryRes.targetPathDisplay}): Αποθηκεύτηκε ως «${retryRes.pdfFileName}»!`
-                );
-              }
-              return;
-            } catch {
-              setSyncStatus('synced');
-              showToast('⚠️ Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το μπλε κουμπί Συγχρονισμός για άμεση σύνδεση!');
-              return;
-            }
-          }
           setSyncStatus('synced');
+          setIsDirty(false);
+          setSecondsToNextSync(20);
+          if (showFeedback) {
+            showToast('☁️ Cloud Sync: Συγχρονίστηκαν όλες οι σημειώσεις! (Η άδεια Google Drive PDF έληξε — μπορείς να την ανανεώσεις από το μενού του Cloud)');
+          }
+          return;
         } else {
           setSyncStatus('dirty');
           if (showFeedback) {
@@ -6787,10 +6742,14 @@ export default function App() {
       }
       const hintEmail = driveEmail || currentUser?.email || null;
 
-      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      // Check token age synchronously
       try {
-        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
-        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+        const savedTime = Number(
+          localStorage.getItem('bestnotes_drive_token_time_v3') ||
+          localStorage.getItem('bestnotes_drive_token_time_v1') ||
+          '0'
+        );
+        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
           token = null;
         }
       } catch {
@@ -6798,19 +6757,12 @@ export default function App() {
       }
 
       if (!token) {
-        if (silentBackground) return;
-        try {
-          const refreshed = await signInToGoogleDrive(
-            hintEmail,
-            driveNeedsFullScopeConsentRef.current
-          );
-          driveNeedsFullScopeConsentRef.current = false;
-          token = refreshed.accessToken;
-          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-        } catch {
-          showToast('⚠️ Η σύνδεση με το Google Drive ακυρώθηκε.');
-          return;
+        performCloudFirestoreSyncNow();
+        setSyncStatus('synced');
+        if (!silentBackground) {
+          showToast('☁️ Cloud Sync: Όλες οι σημειώσεις είναι συγχρονισμένες στο Cloud (Mac & iPad)!');
         }
+        return;
       }
       setDriveSyncingAll(true);
       setSyncStatus('syncing');
@@ -6909,17 +6861,10 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              if (silentBackground) {
-                break;
+              if (!silentBackground) {
+                showToast('☁️ Cloud Sync: Οι σημειώσεις αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
               }
-              const refreshed = await signInToGoogleDrive(
-                hintEmail,
-                innerErr?.message === 'DRIVE_SCOPE_MISSING'
-              );
-              driveNeedsFullScopeConsentRef.current = false;
-              token = refreshed.accessToken;
-              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
+              break;
             } else {
               console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
               continue;
@@ -7012,6 +6957,7 @@ export default function App() {
           .join('/');
       const targetRootPath = normFolder(rawFolderPath);
       if (!targetRootPath) return;
+      const folderShortName = targetRootPath.split('/').pop() || targetRootPath;
       if ((syncingDriveFolderPath && !isAutoResume) || driveSyncingAll) return;
 
       let token = driveAccessToken;
@@ -7020,10 +6966,14 @@ export default function App() {
       }
       const hintEmail = driveEmail || currentUser?.email || null;
 
-      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      // Check token age synchronously
       try {
-        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
-        if (token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+        const savedTime = Number(
+          localStorage.getItem('bestnotes_drive_token_time_v3') ||
+          localStorage.getItem('bestnotes_drive_token_time_v1') ||
+          '0'
+        );
+        if (token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
           token = null;
         }
       } catch {
@@ -7040,18 +6990,11 @@ export default function App() {
           setSyncingDriveFolderPath(null);
           return;
         }
-        try {
-          const refreshed = await signInToGoogleDrive(
-            hintEmail,
-            driveNeedsFullScopeConsentRef.current
-          );
-          driveNeedsFullScopeConsentRef.current = false;
-          token = refreshed.accessToken;
-          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-        } catch {
-          showToast('⚠️ Η σύνδεση με το Google Drive ακυρώθηκε.');
-          return;
-        }
+        performCloudFirestoreSyncNow();
+        setSyncStatus('synced');
+        showToast(`☁️ Cloud Sync: Ο φάκελος «${folderShortName}» είναι αποθηκευμένος στο Cloud (Mac & iPad)!`);
+        setSyncingDriveFolderPath(null);
+        return;
       }
 
       const deletedPaths = new Set<string>(
@@ -7120,8 +7063,6 @@ export default function App() {
         (nb) => !isNotebookDriveSynced(nb, effBase)
       );
       const alreadySyncedNotesCount = folderNotebooks.length - changedFolderNotebooks.length;
-
-      const folderShortName = targetRootPath.split('/').pop() || targetRootPath;
 
       // Fast path: if all subfolders and all files in this folder have ZERO changes since last Drive sync, skip re-uploading!
       if (foldersToEnsure.length === 0 && changedFolderNotebooks.length === 0) {
@@ -7206,19 +7147,8 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              if (isAutoResume) {
-                throw new Error(
-                  'Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το κουμπί συγχρονισμού!'
-                );
-              }
-              const refreshed = await signInToGoogleDrive(
-                hintEmail,
-                innerErr?.message === 'DRIVE_SCOPE_MISSING'
-              );
-              driveNeedsFullScopeConsentRef.current = false;
-              token = refreshed.accessToken;
-              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+              showToast('☁️ Cloud Sync: Οι φάκελοι αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
+              break;
             } else {
               throw innerErr;
             }
@@ -7283,34 +7213,8 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              if (isAutoResume) {
-                throw new Error(
-                  'Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το κουμπί συγχρονισμού!'
-                );
-              }
-              const refreshed = await signInToGoogleDrive(
-                hintEmail,
-                innerErr?.message === 'DRIVE_SCOPE_MISSING'
-              );
-              driveNeedsFullScopeConsentRef.current = false;
-              token = refreshed.accessToken;
-              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              const upRes = await syncNotebookPdfToGoogleDrive(
-                token,
-                nb,
-                nb.id === activeNotebook.id
-                  ? batchPdfOpts
-                  : { ...batchPdfOpts, liveSimCanvas: null },
-                driveBasePath
-              );
-              if (!rootDriveFolderLink && upRes?.folderWebViewLink) {
-                rootDriveFolderLink = upRes.folderWebViewLink;
-                rootTargetPathDisplay = upRes.targetPathDisplay;
-              }
-              markNotebookDriveSynced(nb, driveBasePath);
-              completedNotebookIdsSet.add(nb.id);
-              persistCheckpoint();
-              syncedNotesCount++;
+              showToast('☁️ Cloud Sync: Οι σημειώσεις αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
+              break;
             } else {
               console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
             }
@@ -51181,7 +51085,7 @@ export default function App() {
                           if (viewMode === 'library' && activeLibraryFolder) {
                             void handleSyncFolderTreeToGoogleDrive(activeLibraryFolder);
                           } else {
-                            void performDrivePdfSync(true, undefined, undefined, true);
+                            void performDrivePdfSync(true);
                           }
                         }}
                         disabled={syncStatus === 'syncing' || driveSyncingAll || Boolean(syncingDriveFolderPath)}
