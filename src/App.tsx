@@ -1873,6 +1873,12 @@ export default function App() {
     return 'landing';
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthResolved, setIsAuthResolved] = useState<boolean>(false);
+  const isKnownAuthenticated = Boolean(
+    currentUser ||
+    initialAuthUid ||
+    localStorage.getItem(AUTH_FLAG_STORAGE_KEY) === 'true'
+  );
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const explicitLandingNavRef = useRef<boolean>(false);
@@ -1928,6 +1934,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      setIsAuthResolved(true);
       if (isTvReceiverModeRef.current) return;
       try {
         if (user) {
@@ -50833,8 +50840,8 @@ export default function App() {
             </>
           )}
 
-          {/* Direct Login / Sign-Up Pill + Live 16:9 Board Button when in Guest Mode */}
-          {!currentUser && (
+          {/* Direct Login / Sign-Up Pill + Live 16:9 Board Button when in Guest Mode (only in editor when verified not logged in) */}
+          {viewMode === 'editor' && isAuthResolved && !currentUser && !isKnownAuthenticated && (
             <>
               <button
                 type="button"
@@ -50885,7 +50892,7 @@ export default function App() {
               }
             >
               <UserIcon className="w-4 h-4" />
-              {(currentUser || driveAccessToken || driveEmail) && (
+              {(currentUser || driveAccessToken || driveEmail || isKnownAuthenticated) && (
                 <span
                   className={`absolute top-1 right-1 w-2 h-2 rounded-full border border-[#1b2a4a] ${
                     driveAccessToken || driveEmail ? 'bg-emerald-400' : 'bg-sky-400'
@@ -50909,10 +50916,12 @@ export default function App() {
                       <div className="text-xs font-bold text-[#234978] truncate">
                         {currentUser
                           ? currentUser.displayName || currentUser.email?.split('@')[0] || 'Χρήστης BestNotes'
+                          : isKnownAuthenticated
+                          ? 'Σύνδεση...'
                           : 'Επισκέπτης (Guest)'}
                       </div>
                       <div className="text-[11px] text-[#64748b] truncate">
-                        {currentUser?.email || 'Χωρίς σύνδεση λογαριασμού'}
+                        {currentUser?.email || (isKnownAuthenticated ? 'Ανάκτηση λογαριασμού...' : 'Χωρίς σύνδεση λογαριασμού')}
                       </div>
                     </div>
                   </div>
