@@ -54576,7 +54576,7 @@ export default function App() {
                         {/* 3. Folder Icon (30 Ready-Made Icons) */}
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold text-[#234978]">
-                            Εικονίδιο Φακέλου (30 Icons)
+                            Εικονίδιο Φακέλου
                           </label>
                           <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
                             {FOLDER_PRESET_ICONS.map((ic) => {
