@@ -11201,6 +11201,27 @@ export function autoAlignAndConnectCircuit(
       }
     }
 
+    // For the leftmost vertical conductor (cIdx === 0), if there is no explicit switch anywhere in the circuit
+    // and no vertical components on this column, ensure the knife switch gap is physically split and preserved!
+    const hasAnyExplicitSwitch = alignedComps.some((c) => c.kind === 'switch');
+    if (cIdx === 0 && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length === 1) {
+      const singleV = mergedV[0];
+      const totalH = singleV.yB - singleV.yT;
+      if (totalH >= 50) {
+        const swYCenter = (singleV.yT + singleV.yB) / 2;
+        const swHalfGap = Math.min(21, Math.max(14, totalH * 0.18));
+        const swYTop = Math.round(swYCenter - swHalfGap);
+        const swYBot = Math.round(swYCenter + swHalfGap);
+        mergedV.length = 0;
+        if (swYTop - singleV.yT >= 6) {
+          mergedV.push({ yT: singleV.yT, yB: swYTop, stroke: singleV.stroke });
+        }
+        if (singleV.yB - swYBot >= 6) {
+          mergedV.push({ yT: swYBot, yB: singleV.yB, stroke: singleV.stroke });
+        }
+      }
+    }
+
     for (let mIdx = 0; mIdx < mergedV.length; mIdx++) {
       const mv = mergedV[mIdx];
       const yBreaks: number[] = [mv.yT];

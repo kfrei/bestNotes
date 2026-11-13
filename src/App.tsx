@@ -11759,6 +11759,10 @@ export default function App() {
           if (s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5)) {
             continue;
           }
+          // Never render legacy bugged switch-gap filler wire strokes
+          if (s.id.includes('-v-left-top-bot-') || s.id.includes('-v-left-bot-top-')) {
+            continue;
+          }
           // Hide natural length (l0) spring when user unchecks "Εμφάνιση Φυσικού Μήκους (l₀)"
           if (hiddenNaturalSpringIds.has(s.id)) {
             continue;
@@ -11812,22 +11816,49 @@ export default function App() {
           ) {
             const hits =
               autoSwitchHitsRef.current.length > 0
-                ? autoSwitchHitsRef.current
+                ? [...autoSwitchHitsRef.current]
                 : autoSwitchHitRef.current
-                ? [autoSwitchHitRef.current]
+                ? [{ ...autoSwitchHitRef.current, simId: autoSwitchHitRef.current.simId || '' }]
                 : [];
+            if (hits.length === 0 && pageValidSims.length > 0) {
+              for (const sim of pageValidSims) {
+                const sStrokes = strokeList.filter((st) => sim.strokeIds.includes(st.id));
+                const sData = analyzeCircuitForSimulation(sStrokes, sim.switchClosed ?? true);
+                if (sData.autoSwitch) {
+                  hits.push({
+                    simId: sim.id,
+                    x: sData.autoSwitch.x,
+                    yCenter: sData.autoSwitch.yCenter,
+                    yTop: sData.autoSwitch.yTop,
+                    yBottom: sData.autoSwitch.yBottom,
+                    closed: sData.autoSwitch.closed,
+                  });
+                }
+              }
+            }
             const swHit = hits.find((sw) => {
               const p0 = s.points[0];
               const p1 = s.points[s.points.length - 1];
-              const isVert = Math.abs(p1.x - p0.x) <= 12 && Math.abs(p1.y - p0.y) >= 20;
+              const isVert = Math.abs(p1.x - p0.x) <= 18 && Math.abs(p1.y - p0.y) >= 12;
               if (!isVert) return false;
               const midX = (p0.x + p1.x) / 2;
-              if (Math.abs(midX - sw.x) > 12) return false;
+              if (Math.abs(midX - sw.x) > 18) return false;
               const yMin = Math.min(p0.y, p1.y);
               const yMax = Math.max(p0.y, p1.y);
-              return yMin <= sw.yTop + 4 && yMax >= sw.yBottom - 4;
+              return (
+                (yMin <= sw.yTop + 6 && yMax >= sw.yBottom - 6) ||
+                (yMin >= sw.yTop - 6 && yMax <= sw.yBottom + 6)
+              );
             });
             if (swHit) {
+              const p0 = s.points[0];
+              const p1 = s.points[s.points.length - 1];
+              const yMin = Math.min(p0.y, p1.y);
+              const yMax = Math.max(p0.y, p1.y);
+              // If wire stroke lies entirely inside the knife switch gap, completely omit it from static rendering!
+              if (yMin >= swHit.yTop - 6 && yMax <= swHit.yBottom + 6) {
+                continue;
+              }
               targetCtx.save();
               targetCtx.beginPath();
               targetCtx.rect(0, 0, pWidth, swHit.yTop);
@@ -24730,6 +24761,8 @@ export default function App() {
               y2: sp.fixedY2 !== undefined ? sp.fixedY2 : yBot + botRightYOffset,
             };
 
+      if (sp.existingStrokeId) continue;
+
       if (sp.kind === 'h-top' || sp.kind === 'h-bot') {
         const sMinX = Math.min(targetCoords.x1, targetCoords.x2);
         const sMaxX = Math.max(targetCoords.x1, targetCoords.x2);
@@ -24801,6 +24834,10 @@ export default function App() {
             const wireIdTop = `st-wire-ex-${Date.now()}-${sp.id}-top-${Math.random().toString(36).slice(2, 5)}`;
             const wireIdBot = `st-wire-ex-${Date.now()}-${sp.id}-bot-${Math.random().toString(36).slice(2, 5)}`;
             sp.existingStrokeId = wireIdTop;
+            const botSpan = spans.find((s) => s.id === 'v-left-bot');
+            if (botSpan) {
+              botSpan.existingStrokeId = wireIdBot;
+            }
             matchedWireStrokes.push({
               id: wireIdTop,
               tool: 'pen',
@@ -24813,12 +24850,12 @@ export default function App() {
               isShape: true,
               shapeType: 'line',
               points: [
-                { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
+                { x: targetCoords.x1, y: yTop, pressure: 0.7 },
                 {
                   x: targetCoords.x1,
                   y: swYTop,
                   cx: targetCoords.x1,
-                  cy: (targetCoords.y1 + swYTop) / 2,
+                  cy: (yTop + swYTop) / 2,
                   pressure: 0.7,
                 },
               ],
@@ -24837,10 +24874,10 @@ export default function App() {
               points: [
                 { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
                 {
-                  x: targetCoords.x2,
-                  y: targetCoords.y2,
+                  x: targetCoords.x1,
+                  y: yBot,
                   cx: targetCoords.x1,
-                  cy: (swYBot + targetCoords.y2) / 2,
+                  cy: (swYBot + yBot) / 2,
                   pressure: 0.7,
                 },
               ],
@@ -26544,15 +26581,18 @@ export default function App() {
       if (simData.autoSwitch) {
         const sw = simData.autoSwitch;
         ctx.save();
-        // Mask the underlying vertical wire between yTop and yBottom so the switch gap is clearly visible!
-        const paperBg = getEffectivePaperColor(activePage);
-        ctx.strokeStyle = paperBg;
-        ctx.lineWidth = showDarkWireTrack ? 16 : 10;
-        ctx.lineCap = 'butt';
-        ctx.beginPath();
-        ctx.moveTo(sw.x, sw.yTop + 2);
-        ctx.lineTo(sw.x, sw.yBottom - 2);
-        ctx.stroke();
+        // Mask the underlying vertical wire between yTop and yBottom so the switch gap is clearly visible
+        // (Only applied when dark wire track is enabled, so normal grid/lined paper lines are never erased or smudged!)
+        if (showDarkWireTrack) {
+          const paperBg = getEffectivePaperColor(activePage);
+          ctx.strokeStyle = paperBg;
+          ctx.lineWidth = 16;
+          ctx.lineCap = 'butt';
+          ctx.beginPath();
+          ctx.moveTo(sw.x, sw.yTop + 2);
+          ctx.lineTo(sw.x, sw.yBottom - 2);
+          ctx.stroke();
+        }
 
         // Draw top & bottom dark circular switch contact terminals
         for (const ty of [sw.yTop, sw.yBottom]) {
@@ -63824,7 +63864,7 @@ export default function App() {
                         width={pW * CANVAS_DPR}
                         height={pH * CANVAS_DPR}
                         style={{ width: pW, height: pH }}
-                        className="absolute inset-0 pointer-events-none z-10"
+                        className="absolute inset-0 pointer-events-none z-30"
                       />
                     )}
 
