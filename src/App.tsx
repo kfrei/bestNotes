@@ -17822,7 +17822,7 @@ export default function App() {
     }
   };
 
-  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 1s after lifting, then gently fades out over 0.35s!)
+  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 0.8s after lifting, then gently fades out over 0.28s — 20% faster!)
   const renderLaserOverlay = (alpha = 1) => {
     const c = activeCanvasRef.current;
     const ctx = activeCtxRef.current;
@@ -43929,13 +43929,13 @@ export default function App() {
       }
       cancelLaserTimers();
       renderLaserOverlay(1);
-      // Keep all drawn laser circles/strokes on screen for 1 second (1000ms) after lifting the pencil,
-      // then smoothly fade out over 0.35 seconds (350ms)!
+      // Keep all drawn laser circles/strokes on screen for 0.8 seconds (800ms, 20% faster than 1000ms) after lifting the pencil,
+      // then smoothly fade out over 0.28 seconds (280ms, 20% faster than 350ms)!
       laserClearTimerRef.current = window.setTimeout(() => {
         laserClearTimerRef.current = null;
         if (isDrawingRef.current) return;
         const fadeStart = performance.now();
-        const fadeDurationMs = 350;
+        const fadeDurationMs = 280;
         const stepFade = (now: number) => {
           if (isDrawingRef.current) {
             laserFadeRafRef.current = null;
@@ -43954,7 +43954,7 @@ export default function App() {
           }
         };
         laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
-      }, 1000);
+      }, 800);
       return;
     }
 
