@@ -2358,7 +2358,10 @@ export default function App() {
   } | null>(null);
 
   // Goodnotes 6 Toolbar State
-  const [activeTool, setActiveTool] = useState<ToolType>(() => initialSession?.activeTool || 'pen');
+  const [activeTool, setActiveTool] = useState<ToolType>(() => {
+    const raw = initialSession?.activeTool;
+    return raw && raw !== 'tape' ? raw : 'pen';
+  });
   const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>(() => initialSession?.lassoMode || 'rect');
   const lassoModeRef = useRef<'rect' | 'freehand'>(initialSession?.lassoMode || 'rect');
   useEffect(() => {
@@ -54868,7 +54871,6 @@ export default function App() {
                 { id: 'lasso', title: 'Select (Ελεύθερη Επιλογή Λάσο) — S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
                 { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', icon: AlignObjectsIcon },
-                { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
                 { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
               ]
                 .filter((tool) =>
