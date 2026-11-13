@@ -56133,16 +56133,6 @@ export default function App() {
                           ),
                         },
                         {
-                          id: 'arc',
-                          title: 'Τόξο',
-                          isSimItem: false,
-                          icon: (
-                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 4.5 17.5 A 12.5 12.5 0 0 1 27.5 17.5" />
-                            </svg>
-                          ),
-                        },
-                        {
                           id: 'double-arrow',
                           title: 'Διπλό Βέλος',
                           isSimItem: false,
