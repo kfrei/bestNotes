@@ -46604,6 +46604,58 @@ export default function App() {
     };
   }, [handleCreateNewNoteTab, handleCloseCurrentTab, viewMode]);
 
+  const toggleImagesLibrary = useCallback(() => {
+    setShowShapeLibraryPanel((prev) => {
+      const next = !prev;
+      if (next) {
+        setShowWidthPopover(false);
+        setShowColorPopover(false);
+        showToast('🖼️ Images (Συλλογή Εικόνων & Σχημάτων) — I / Ι');
+      } else {
+        showToast('🖼️ Κλείσιμο Συλλογής Εικόνων');
+      }
+      return next;
+    });
+  }, [showToast]);
+
+  const toggleRuler = useCallback(() => {
+    const targetPageObj = activeNotebook.pages[activePageIndex] || activePage;
+    const targetPid = targetPageObj.id;
+    const existingForPage = rulersByPageId[targetPid] || targetPageObj.ruler;
+    const pH = getPageLogicalHeight(targetPageObj);
+    const pageTopY = getPageTopOffset(activePageIndex);
+    const wsH = workspaceRef.current?.clientHeight || 820;
+    const viewCenterDocY = (-panRef.current.y + wsH * 0.5) / zoomRef.current;
+    const localCenterY = Math.max(
+      120,
+      Math.min(pH - 120, Math.round(viewCenterDocY - pageTopY))
+    );
+    const isNowVisible = !((rulersByPageId[targetPid] || targetPageObj.ruler)?.visible);
+    setRulerState(
+      (r) => ({
+        ...r,
+        visible: !r.visible,
+        y: !r.visible && !existingForPage ? localCenterY : r.y,
+        angle: !r.visible ? 90 : r.angle,
+        showMm: !r.visible ? true : r.showMm,
+      }),
+      targetPid
+    );
+    showToast(
+      isNowVisible
+        ? '📏 Ruler (Χάρακας) — R / Ρ: Εμφάνιση'
+        : '📏 Ruler (Χάρακας) — R / Ρ: Απόκρυψη'
+    );
+  }, [
+    activeNotebook.pages,
+    activePageIndex,
+    activePage,
+    rulersByPageId,
+    getPageTopOffset,
+    setRulerState,
+    showToast,
+  ]);
+
   // GLOBAL KEYBOARD SHORTCUTS (Works identically in both Greek [Ελληνικά] & English [Αγγλικά] keyboard layouts!)
   // P / Π -> Pencil/Pen ('pen')
   // E / Ε -> Eraser ('eraser')
@@ -46613,6 +46665,8 @@ export default function App() {
   // H / Η -> Highlighter ('highlighter')
   // T / Τ -> Text ('text')
   // O / Ο -> Objects / Shapes ('shape')
+  // I / Ι -> Images / Library (Συλλογή Εικόνων & Σχημάτων)
+  // R / Ρ -> Ruler (Χάρακας)
   useEffect(() => {
     if (viewMode !== 'editor') return;
 
@@ -47401,6 +47455,20 @@ export default function App() {
         showToast('✒️ Nodes (Κόμβοι) — N / Ν');
         return;
       }
+
+      // I / Ι -> Images / Library (Συλλογή Εικόνων & Σχημάτων)
+      if (code === 'KeyI' || key === 'i' || key === 'ι' || key === 'ί') {
+        e.preventDefault();
+        toggleImagesLibrary();
+        return;
+      }
+
+      // R / Ρ -> Ruler (Χάρακας)
+      if (code === 'KeyR' || key === 'r' || key === 'ρ') {
+        e.preventDefault();
+        toggleRuler();
+        return;
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -47452,6 +47520,8 @@ export default function App() {
     handleDuplicateSelected,
     zoomAroundViewportCenter,
     computeFitWidthZoom,
+    toggleImagesLibrary,
+    toggleRuler,
     showToast,
   ]);
 
@@ -55167,17 +55237,13 @@ export default function App() {
 
                   <button
                     data-popover-trigger="library"
-                    onClick={() => {
-                      setShowShapeLibraryPanel((v) => !v);
-                      setShowWidthPopover(false);
-                      setShowColorPopover(false);
-                    }}
+                    onClick={toggleImagesLibrary}
                     className={`relative p-2 rounded-full transition cursor-pointer ${
                       showShapeLibraryPanel
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="Συλλογή Εικόνων & Σχημάτων"
+                    title="Συλλογή Εικόνων & Σχημάτων (Images — I / Ι)"
                   >
                     <ImageIcon className="w-4 h-4" />
                     {shapeLibrary.length > 0 && (
@@ -55188,34 +55254,11 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={() => {
-                      const targetPageObj =
-                        activeNotebook.pages[activePageIndex] || activePage;
-                      const targetPid = targetPageObj.id;
-                      const existingForPage = rulersByPageId[targetPid] || targetPageObj.ruler;
-                      const pH = getPageLogicalHeight(targetPageObj);
-                      const pageTopY = getPageTopOffset(activePageIndex);
-                      const wsH = workspaceRef.current?.clientHeight || 820;
-                      const viewCenterDocY = (-panRef.current.y + wsH * 0.5) / zoomRef.current;
-                      const localCenterY = Math.max(
-                        120,
-                        Math.min(pH - 120, Math.round(viewCenterDocY - pageTopY))
-                      );
-                      setRulerState(
-                        (r) => ({
-                          ...r,
-                          visible: !r.visible,
-                          y: !r.visible && !existingForPage ? localCenterY : r.y,
-                          angle: !r.visible ? 90 : r.angle,
-                          showMm: !r.visible ? true : r.showMm,
-                        }),
-                        targetPid
-                      );
-                    }}
+                    onClick={toggleRuler}
                     className={`p-2 rounded-full transition cursor-pointer ${
                       rulerState.visible ? 'bg-[#234978] text-white shadow-xs' : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="Χάρακας (Ruler) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
+                    title="Χάρακας (Ruler — R / Ρ) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
                   >
                     <Ruler className="w-4 h-4" />
                   </button>
@@ -66122,7 +66165,7 @@ export default function App() {
                           setThumbModalScrollTop(targetScroll);
                         }
                       }}
-                      className="w-28 sm:w-40 accent-[#efebe3] cursor-pointer"
+                      className="w-28 sm:w-40 accent-[#234978] cursor-pointer"
                       title="Γρήγορη κύλιση σε οποιαδήποτε σελίδα"
                     />
                   </div>
@@ -66714,25 +66757,29 @@ export default function App() {
                   onClick={() =>
                     updateActivePage((page) => ({ ...page, orientation: 'portrait' }))
                   }
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition ${
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition flex items-center justify-center gap-1.5 ${
                     (activePage.orientation || 'portrait') === 'portrait'
                       ? 'bg-[#234978] border-[#234978] text-white shadow-xs'
                       : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
                   }`}
+                  title="Κάθετη Διάταξη Σελίδας (Portrait)"
                 >
-                  📄 Κάθετη (Portrait)
+                  <span className="inline-block w-2.5 h-3.5 border border-current rounded-xs shrink-0" />
+                  <span>Κάθετη (Portrait)</span>
                 </button>
                 <button
                   onClick={() =>
                     updateActivePage((page) => ({ ...page, orientation: 'landscape' }))
                   }
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition ${
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition flex items-center justify-center gap-1.5 ${
                     activePage.orientation === 'landscape'
                       ? 'bg-[#234978] border-[#234978] text-white shadow-xs'
                       : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
                   }`}
+                  title="Οριζόντια Διάταξη Σελίδας (Landscape)"
                 >
-                  🖼️ Οριζόντια (Landscape)
+                  <span className="inline-block w-3.5 h-2.5 border border-current rounded-xs shrink-0" />
+                  <span>Οριζόντια (Landscape)</span>
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -67063,6 +67110,8 @@ export default function App() {
                   { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'C / Ψ', label: 'Crop (Ξάκρισμα)', icon: <Scissors className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'N / Ν', label: 'Nodes (Κόμβοι)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'I / Ι', label: 'Images (Συλλογή)', icon: <ImageIcon className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'R / Ρ', label: 'Ruler (Χάρακας)', icon: <Ruler className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'G / Γ', label: 'Group (Ομαδοποίηση)', icon: <Layers className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
