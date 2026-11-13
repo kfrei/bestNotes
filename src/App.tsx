@@ -2888,12 +2888,23 @@ export default function App() {
     Boolean(initialSession?.simCircuitSwitchClosed)
   );
   const autoSwitchHitRef = useRef<{
+    simId?: string;
     x: number;
     yCenter: number;
     yTop: number;
     yBottom: number;
     closed: boolean;
   } | null>(null);
+  const autoSwitchHitsRef = useRef<
+    Array<{
+      simId: string;
+      x: number;
+      yCenter: number;
+      yTop: number;
+      yBottom: number;
+      closed: boolean;
+    }>
+  >([]);
   const [simShowElectrons, setSimShowElectrons] = useState<boolean>(() =>
     typeof initialSession?.simShowElectrons === 'boolean' ? initialSession.simShowElectrons : true
   );
@@ -2932,11 +2943,15 @@ export default function App() {
     componentStrokeIds: string[];
     topCompStrokeIds: string[];
     botCompStrokeIds: string[];
+    rightCompStrokeIds?: string[];
+    leftCompStrokeIds?: string[];
     spans: {
       id: string;
       kind: 'h-top' | 'h-bot' | 'v-left' | 'v-right';
       fixedX1?: number;
       fixedX2?: number;
+      fixedY1?: number;
+      fixedY2?: number;
       yOffset?: number;
       yOffset2?: number;
       existingStrokeId?: string;
@@ -10415,17 +10430,24 @@ export default function App() {
         }
       }
 
-      if (isSimulating && autoSwitchHitRef.current) {
-        const sw = autoSwitchHitRef.current;
-        const bladeTipX = sw.x + 25;
-        const bladeTipY = sw.yTop + 4;
-        const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
-        const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
-        if (
-          Math.hypot(ptX - knobX, ptY - knobY) <= 36 ||
-          (Math.abs(ptX - sw.x) <= 32 && ptY >= sw.yTop - 16 && ptY <= sw.yBottom + 16)
-        ) {
-          return true;
+      if (isSimulating) {
+        const hits =
+          autoSwitchHitsRef.current.length > 0
+            ? autoSwitchHitsRef.current
+            : autoSwitchHitRef.current
+            ? [autoSwitchHitRef.current]
+            : [];
+        for (const sw of hits) {
+          const bladeTipX = sw.x + 25;
+          const bladeTipY = sw.yTop + 4;
+          const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
+          const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
+          if (
+            Math.hypot(ptX - knobX, ptY - knobY) <= 36 ||
+            (Math.abs(ptX - sw.x) <= 32 && ptY >= sw.yTop - 16 && ptY <= sw.yBottom + 16)
+          ) {
+            return true;
+          }
         }
       }
 
@@ -11494,18 +11516,14 @@ export default function App() {
       const pageValidSims = (pageObj.circuitSims || []).filter((sim) =>
         sim.strokeIds.some((id) => strokeList.some((s) => s.id === id))
       );
-      const activePageSim =
-        pageValidSims.find((sim) => sim.id === pageObj.activeCircuitSimId) ||
-        pageValidSims[0] ||
-        null;
-      const activeSimBaseSet = new Set(activePageSim?.strokeIds || []);
-      const activeSimGroupIds = new Set(
+      const allSimBaseSet = new Set(pageValidSims.flatMap((sim) => sim.strokeIds));
+      const allSimGroupIds = new Set(
         strokeList
-          .filter((s) => activeSimBaseSet.has(s.id) && s.groupId)
+          .filter((s) => allSimBaseSet.has(s.id) && s.groupId)
           .map((s) => s.groupId!)
       );
-      const isStrokeInActiveSim = (s: StrokeObject) =>
-        activeSimBaseSet.has(s.id) || Boolean(s.groupId && activeSimGroupIds.has(s.groupId));
+      const isStrokeInAnySim = (s: StrokeObject) =>
+        allSimBaseSet.has(s.id) || Boolean(s.groupId && allSimGroupIds.has(s.groupId));
 
       const pageValidSpringSims = (pageObj.springSims || []).filter(
         (sm) =>
@@ -11746,11 +11764,11 @@ export default function App() {
           ) {
             continue;
           }
-          // While simulation is running, hide static Fan & Meter Needle strokes ONLY for the currently active simulated circuit!
+          // While simulation is running, hide static Fan & Meter Needle strokes for all running circuit simulations on the page!
           if (
             isCurrentActivePage &&
             isSimulating &&
-            isStrokeInActiveSim(s) &&
+            isStrokeInAnySim(s) &&
             (s.shapeType === 'fan' ||
               s.shapeType === 'fan-blade' ||
               s.shapeType === 'fan-hub' ||
@@ -11758,6 +11776,43 @@ export default function App() {
               s.shapeType === 'voltmeter-needle')
           ) {
             continue;
+          }
+
+          // If simulation is running and this stroke is a vertical wire passing straight through an automatic knife switch gap,
+          // clip it so the region between sw.yTop and sw.yBottom is completely clear paper (no black line behind the switch)!
+          if (
+            isCurrentActivePage &&
+            isSimulating &&
+            isStrokeInAnySim(s) &&
+            s.points.length >= 2
+          ) {
+            const hits =
+              autoSwitchHitsRef.current.length > 0
+                ? autoSwitchHitsRef.current
+                : autoSwitchHitRef.current
+                ? [autoSwitchHitRef.current]
+                : [];
+            const swHit = hits.find((sw) => {
+              const p0 = s.points[0];
+              const p1 = s.points[s.points.length - 1];
+              const isVert = Math.abs(p1.x - p0.x) <= 12 && Math.abs(p1.y - p0.y) >= 20;
+              if (!isVert) return false;
+              const midX = (p0.x + p1.x) / 2;
+              if (Math.abs(midX - sw.x) > 12) return false;
+              const yMin = Math.min(p0.y, p1.y);
+              const yMax = Math.max(p0.y, p1.y);
+              return yMin <= sw.yTop + 4 && yMax >= sw.yBottom - 4;
+            });
+            if (swHit) {
+              targetCtx.save();
+              targetCtx.beginPath();
+              targetCtx.rect(0, 0, pWidth, swHit.yTop);
+              targetCtx.rect(0, swHit.yBottom, pWidth, pHeight - swHit.yBottom);
+              targetCtx.clip();
+              drawStrokeOnContext(targetCtx, s, false);
+              targetCtx.restore();
+              continue;
+            }
           }
           // While a pendulum force simulation is active on the current page, hide the static rod & bob strokes so only the 60fps swinging pendulum renders on the overlay!
           if (isCurrentActivePage && showSimulationPanel && simActiveCategory === 'forces') {
@@ -13048,6 +13103,10 @@ export default function App() {
   const anyPageBottomVisibleRef = useRef<boolean>(false);
 
   const debouncedTransformCommitRef = useRef<number | null>(null);
+  const simScrollAnimRef = useRef<number | null>(null);
+  const checkScrollSpyActiveCircuitRef = useRef<
+    ((panY: number, zoom: number, wsH: number) => void) | null
+  >(null);
   const applyPaperTransformDirect = useCallback(
     (
       nextZoom: number,
@@ -13212,6 +13271,12 @@ export default function App() {
           activeDrawingPageIndexRef.current = bestIdx;
           setActivePageIndex(bestIdx);
         }
+      }
+
+      // Scroll-Spy: Automatically highlight the closest visible circuit in the dashboard
+      // and load its exact switch state, flow direction & settings as the user scrolls!
+      if (!keepActivePage && didScrollVertically && simScrollAnimRef.current === null) {
+        checkScrollSpyActiveCircuitRef.current?.(clampedPanY, clampedZoom, wsHeight);
       }
 
       const isTouchGestureActive = Boolean(
@@ -17942,6 +18007,40 @@ export default function App() {
     return valid.find((sim) => sim.id === page.activeCircuitSimId) || valid[0];
   };
 
+  // Sync circuit simulation controls (switch state, flow direction, electrons, speed, track) when active sim, page or file changes
+  const lastActiveCircuitSimKeyRef = useRef<string | null>(null);
+  const lastDetectedSimIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const curSim = getActiveCircuitSim(activePage);
+    const key = curSim
+      ? `${activeNotebook.id}:${activePage.id}:${curSim.id}`
+      : `${activeNotebook.id}:${activePage.id}:none`;
+    if (key !== lastActiveCircuitSimKeyRef.current) {
+      lastActiveCircuitSimKeyRef.current = key;
+      lastDetectedSimIdRef.current = curSim?.id || null;
+      if (curSim) {
+        setSimCircuitSwitchClosed(Boolean(curSim.switchClosed));
+        if (curSim.flowDirection) {
+          setSimFlowDirection(curSim.flowDirection);
+          setSimParticleStyle(
+            curSim.flowDirection === 'conventional' ? 'blue-electrons' : 'green-energy'
+          );
+        }
+        if (typeof curSim.showElectrons === 'boolean') {
+          setSimShowElectrons(curSim.showElectrons);
+        }
+        if (typeof curSim.speedMultiplier === 'number') {
+          setSimSpeedMultiplier(curSim.speedMultiplier);
+        }
+        if (typeof curSim.showDarkWireTrack === 'boolean') {
+          setSimShowDarkWireTrack(curSim.showDarkWireTrack);
+        }
+      } else {
+        setSimCircuitSwitchClosed(false);
+      }
+    }
+  }, [activeNotebook.id, activePage.id, activePage.activeCircuitSimId, activePage.circuitSims]);
+
   const getNextDefaultSimName = (page?: NotePage): string => {
     const allEntries = getAllNotebookCircuitSims(activeNotebook);
     const usedNames = new Set(allEntries.map((e) => e.sim.name.trim().toLowerCase()));
@@ -18007,7 +18106,141 @@ export default function App() {
     );
   }, [activeNotebook]);
 
-  const simScrollAnimRef = useRef<number | null>(null);
+  const checkScrollSpyActiveCircuit = useCallback(
+    (panY: number, zoom: number, wsH: number) => {
+      if (simScrollAnimRef.current !== null) return;
+      const nb = activeNotebookLiveRef.current;
+      const allSims = getAllNotebookCircuitSims(nb);
+      if (allSims.length === 0) return;
+
+      const screenCenterY = wsH * 0.46;
+      let closestEntry: { pageId: string; pageIdx: number; sim: CircuitSimConfig } | null = null;
+      let closestDist = Infinity;
+
+      for (const entry of allSims) {
+        const { sim, pageIdx } = entry;
+        const page = nb.pages[pageIdx];
+        if (!page) continue;
+        const pageTopY = getPageTopOffset(pageIdx, zoom);
+        const strokeIdSet = new Set(sim.strokeIds);
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const s of page.strokes) {
+          if (!strokeIdSet.has(s.id)) continue;
+          for (const p of s.points) {
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        const simCenterY = Number.isFinite(minY)
+          ? (minY + maxY) / 2
+          : getPageLogicalHeight(page) * 0.45;
+        const docSimCenterY = pageTopY + simCenterY;
+        const screenSimCenterY = docSimCenterY * zoom + panY;
+
+        const dist = Math.abs(screenSimCenterY - screenCenterY);
+        const isNearViewport = screenSimCenterY >= -120 && screenSimCenterY <= wsH + 120;
+        if (isNearViewport && dist < closestDist) {
+          closestDist = dist;
+          closestEntry = entry;
+        }
+      }
+
+      if (!closestEntry) return;
+
+      if (closestEntry.sim.id !== lastDetectedSimIdRef.current) {
+        lastDetectedSimIdRef.current = closestEntry.sim.id;
+        const targetSim = closestEntry.sim;
+        const targetPageId = closestEntry.pageId;
+        const curSim = getActiveCircuitSim(activePage);
+
+        setNotebooks((prev) =>
+          prev.map((n) =>
+            n.id !== nb.id
+              ? n
+              : {
+                  ...n,
+                  pages: n.pages.map((p) => {
+                    if (p.id !== targetPageId) return p;
+                    const updatedSims = (p.circuitSims || []).map((cs) => {
+                      if (curSim && cs.id === curSim.id) {
+                        return {
+                          ...cs,
+                          switchClosed: simCircuitSwitchClosed,
+                          flowDirection: simFlowDirection,
+                          showElectrons: simShowElectrons,
+                          speedMultiplier: simSpeedMultiplier,
+                          showDarkWireTrack: simShowDarkWireTrack,
+                        };
+                      }
+                      return cs;
+                    });
+                    return {
+                      ...p,
+                      circuitSims: updatedSims,
+                      activeCircuitSimId: targetSim.id,
+                    };
+                  }),
+                }
+          )
+        );
+
+        setSimCircuitSwitchClosed(Boolean(targetSim.switchClosed));
+        if (targetSim.flowDirection) {
+          setSimFlowDirection(targetSim.flowDirection);
+          setSimParticleStyle(
+            targetSim.flowDirection === 'conventional'
+              ? 'blue-electrons'
+              : 'green-energy'
+          );
+        }
+        if (typeof targetSim.showElectrons === 'boolean') {
+          setSimShowElectrons(targetSim.showElectrons);
+        }
+        if (typeof targetSim.speedMultiplier === 'number') {
+          setSimSpeedMultiplier(targetSim.speedMultiplier);
+        }
+        if (typeof targetSim.showDarkWireTrack === 'boolean') {
+          setSimShowDarkWireTrack(targetSim.showDarkWireTrack);
+        }
+      }
+    },
+    [
+      getAllNotebookCircuitSims,
+      getPageTopOffset,
+      activePage,
+      simCircuitSwitchClosed,
+      simFlowDirection,
+      simShowElectrons,
+      simSpeedMultiplier,
+      simShowDarkWireTrack,
+    ]
+  );
+  checkScrollSpyActiveCircuitRef.current = checkScrollSpyActiveCircuit;
+
+  const isCircuitSimVisibleInViewport = useCallback(
+    (targetPageIdx: number, sim: CircuitSimConfig): boolean => {
+      const page = activeNotebook.pages[targetPageIdx];
+      if (!page) return false;
+      const pageTopY = getPageTopOffset(targetPageIdx);
+      const idSet = new Set(sim.strokeIds);
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const s of page.strokes) {
+        if (!idSet.has(s.id)) continue;
+        for (const p of s.points) {
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      if (!Number.isFinite(minY)) return false;
+      const screenMinY = panRef.current.y + (pageTopY + minY) * zoomRef.current;
+      const screenMaxY = panRef.current.y + (pageTopY + maxY) * zoomRef.current;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+      return screenMinY >= 20 && screenMaxY <= wsHeight - 20;
+    },
+    [activeNotebook.pages, getPageTopOffset]
+  );
 
   const scrollToCircuitSim = useCallback(
     (targetPageIdx: number, sim: CircuitSimConfig) => {
@@ -18015,6 +18248,7 @@ export default function App() {
       const targetPage = activeNotebook.pages[clampedIdx];
       if (!targetPage) return;
 
+      lastDetectedSimIdRef.current = sim.id;
       setActivePageIndex(clampedIdx);
       activeDrawingPageIndexRef.current = clampedIdx;
 
@@ -18034,26 +18268,27 @@ export default function App() {
         : getPageLogicalHeight(targetPage) * 0.45;
       const docTargetY = pageTopY + simCenterY;
       const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
-      const targetPanY = Math.min(40, Math.round(wsHeight * 0.44 - docTargetY * zoomRef.current));
+      const targetPanY = Math.min(40, Math.round(wsHeight * 0.46 - docTargetY * zoomRef.current));
       const startPanY = panRef.current.y;
+      const curPanX = panRef.current.x;
 
       if (simScrollAnimRef.current !== null) {
         cancelAnimationFrame(simScrollAnimRef.current);
         simScrollAnimRef.current = null;
       }
 
-      if (Math.abs(targetPanY - startPanY) < 2) {
-        applyPaperTransformDirect(zoomRef.current, 0, targetPanY, true);
+      if (Math.abs(targetPanY - startPanY) < 3) {
+        applyPaperTransformDirect(zoomRef.current, curPanX, targetPanY, true, true);
         return;
       }
 
       const startTime = performance.now();
-      const duration = 420;
+      const duration = 400;
       const step = (now: number) => {
         const t = Math.min(1, (now - startTime) / duration);
         const ease = 1 - Math.pow(1 - t, 3);
         const curPanY = startPanY + (targetPanY - startPanY) * ease;
-        applyPaperTransformDirect(zoomRef.current, 0, curPanY, t >= 1);
+        applyPaperTransformDirect(zoomRef.current, curPanX, curPanY, t >= 1, true);
         if (t < 1) {
           simScrollAnimRef.current = requestAnimationFrame(step);
         } else {
@@ -23467,13 +23702,23 @@ export default function App() {
       return { x1, y1, x2, y2 };
     }
     if (span.kind === 'v-left') {
-      return { x1: prop.xLeft, y1: prop.yTop, x2: prop.xLeft, y2: prop.yBot };
+      const y1 = span.fixedY1 !== undefined ? span.fixedY1 : prop.yTop;
+      const y2 = span.fixedY2 !== undefined ? span.fixedY2 : prop.yBot;
+      return { x1: prop.xLeft, y1, x2: prop.xLeft, y2 };
     }
+    const y1 =
+      span.fixedY1 !== undefined
+        ? span.fixedY1
+        : prop.yTop + (prop.topRightYOffset || 0);
+    const y2 =
+      span.fixedY2 !== undefined
+        ? span.fixedY2
+        : prop.yBot + (prop.botRightYOffset || 0);
     return {
       x1: prop.xRight,
-      y1: prop.yTop + (prop.topRightYOffset || 0),
+      y1,
       x2: prop.xRight,
-      y2: prop.yBot + (prop.botRightYOffset || 0),
+      y2,
     };
   };
 
@@ -23648,27 +23893,102 @@ export default function App() {
     const voltmeterComps = hasNonSourceSeries ? comps.filter((c) => c.kind === 'voltmeter') : [];
     const baseLoopComps = seriesComps.length > 0 ? seriesComps : comps;
 
-    const minTermY = Math.min(...baseLoopComps.map((c) => c.leftTerm.y));
-    const maxTermY = Math.max(...baseLoopComps.map((c) => c.leftTerm.y));
+    const allX = baseLoopComps.map((c) => c.cx);
+    const allY = baseLoopComps.map((c) => c.cy);
+    const minAllX = Math.min(...allX);
+    const maxAllX = Math.max(...allX);
+    const minAllY = Math.min(...allY);
+    const maxAllY = Math.max(...allY);
+    const spanX = maxAllX - minAllX;
+    const spanY = maxAllY - minAllY;
+    const midX = (minAllX + maxAllX) / 2;
+    const midY = (minAllY + maxAllY) / 2;
+
+    const isRightComp = (c: (typeof baseLoopComps)[number]): boolean => {
+      if ((c.kind === 'battery' || c.kind === 'voltage-source') && baseLoopComps.length > 1) {
+        return false;
+      }
+      if (c.orientation === 'v' && c.cx >= midX - 24) {
+        return true;
+      }
+      if (
+        spanX >= 60 &&
+        spanY >= 50 &&
+        c.cx >= minAllX + spanX * 0.55 &&
+        c.cy >= minAllY + 28 &&
+        c.cy <= maxAllY - 28
+      ) {
+        return true;
+      }
+      const nearRightVert = rawExternalSegs.some(
+        (s) =>
+          s.orientation === 'v' &&
+          s.avgX > midX &&
+          Math.abs(s.avgX - c.cx) <= 50 &&
+          Math.min(s.y1, s.y2) <= c.cy + 50 &&
+          Math.max(s.y1, s.y2) >= c.cy - 50
+      );
+      if (nearRightVert && c.cy >= minAllY + 20 && c.cy <= maxAllY - 20) {
+        return true;
+      }
+      return false;
+    };
+
+    const isLeftComp = (c: (typeof baseLoopComps)[number]): boolean => {
+      if ((c.kind === 'battery' || c.kind === 'voltage-source') && baseLoopComps.length > 1) {
+        return false;
+      }
+      if (c.orientation === 'v' && c.cx < midX - 24) {
+        return true;
+      }
+      if (
+        spanX >= 60 &&
+        spanY >= 50 &&
+        c.cx <= maxAllX - spanX * 0.55 &&
+        c.cy >= minAllY + 28 &&
+        c.cy <= maxAllY - 28
+      ) {
+        return true;
+      }
+      const nearLeftVert = rawExternalSegs.some(
+        (s) =>
+          s.orientation === 'v' &&
+          s.avgX < midX &&
+          Math.abs(s.avgX - c.cx) <= 50 &&
+          Math.min(s.y1, s.y2) <= c.cy + 50 &&
+          Math.max(s.y1, s.y2) >= c.cy - 50
+      );
+      if (nearLeftVert && c.cy >= minAllY + 20 && c.cy <= maxAllY - 20) {
+        return true;
+      }
+      return false;
+    };
+
+    const rightCompsInit = baseLoopComps.filter(isRightComp).sort((a, b) => a.cy - b.cy);
+    const leftCompsInit = baseLoopComps.filter(isLeftComp).sort((a, b) => a.cy - b.cy);
+    const horizComps = baseLoopComps.filter((c) => !isRightComp(c) && !isLeftComp(c));
+
+    const minTermY = Math.min(...(horizComps.length > 0 ? horizComps : baseLoopComps).map((c) => c.leftTerm.y));
+    const maxTermY = Math.max(...(horizComps.length > 0 ? horizComps : baseLoopComps).map((c) => c.leftTerm.y));
     let topCompsInit: typeof comps = [];
     let botCompsInit: typeof comps = [];
 
-    if (baseLoopComps.length >= 2 && maxTermY - minTermY >= 35) {
-      const midY = (minTermY + maxTermY) / 2;
-      topCompsInit = baseLoopComps.filter((c) => c.leftTerm.y < midY).sort((a, b) => a.cx - b.cx);
-      botCompsInit = baseLoopComps.filter((c) => c.leftTerm.y >= midY).sort((a, b) => a.cx - b.cx);
+    if (horizComps.length >= 2 && maxTermY - minTermY >= 35) {
+      const midHorizY = (minTermY + maxTermY) / 2;
+      topCompsInit = horizComps.filter((c) => c.leftTerm.y < midHorizY).sort((a, b) => a.cx - b.cx);
+      botCompsInit = horizComps.filter((c) => c.leftTerm.y >= midHorizY).sort((a, b) => a.cx - b.cx);
     } else if (
-      baseLoopComps.some((c) => c.kind === 'battery' || c.kind === 'voltage-source') &&
-      baseLoopComps.some((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
+      horizComps.some((c) => c.kind === 'battery' || c.kind === 'voltage-source') &&
+      horizComps.some((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
     ) {
-      topCompsInit = baseLoopComps
+      topCompsInit = horizComps
         .filter((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
         .sort((a, b) => a.cx - b.cx);
-      botCompsInit = baseLoopComps
+      botCompsInit = horizComps
         .filter((c) => c.kind === 'battery' || c.kind === 'voltage-source')
         .sort((a, b) => a.cx - b.cx);
     } else {
-      topCompsInit = [...baseLoopComps].sort((a, b) => a.cx - b.cx);
+      topCompsInit = [...horizComps].sort((a, b) => a.cx - b.cx);
       botCompsInit = [];
     }
 
@@ -23686,6 +24006,8 @@ export default function App() {
       yTop =
         hSegsTop.length > 0
           ? Math.round(hSegsTop.reduce((a, b) => a + b.avgY, 0) / hSegsTop.length)
+          : rightCompsInit.length > 0
+          ? Math.max(40, Math.round(rightCompsInit[0].cy - 120))
           : Math.max(40, yBot - 165);
     }
     if (botCompsInit.length === 0) {
@@ -23693,6 +24015,8 @@ export default function App() {
       yBot =
         hSegsBot.length > 0
           ? Math.round(hSegsBot.reduce((a, b) => a + b.avgY, 0) / hSegsBot.length)
+          : rightCompsInit.length > 0
+          ? Math.round(rightCompsInit[rightCompsInit.length - 1].cy + 120)
           : yTop + 165;
     }
     if (voltmeterComps.length > 0 && yTop < 125) {
@@ -23775,6 +24099,12 @@ export default function App() {
     // Align all Top Row series components left-to-right (chaining any bulb's stepped rightTerm.y so meters/components sit dead-center on the wire!), and Bottom Row to yBot
     const topKeySet = new Set(topCompsInit.map((c) => c.key));
     const topSeedIdSet = new Set(topCompsInit.flatMap((c) => c.strokeIds));
+    const botKeySet = new Set(botCompsInit.map((c) => c.key));
+    const botSeedIdSet = new Set(botCompsInit.flatMap((c) => c.strokeIds));
+    const rightKeySet = new Set(rightCompsInit.map((c) => c.key));
+    const rightSeedIdSet = new Set(rightCompsInit.flatMap((c) => c.strokeIds));
+    const leftKeySet = new Set(leftCompsInit.map((c) => c.key));
+    const leftSeedIdSet = new Set(leftCompsInit.flatMap((c) => c.strokeIds));
     const dyByStrokeId = new Map<string, number>();
     const alignSeriesRowY = (rowList: typeof comps, startY: number) => {
       let curWireY = startY;
@@ -23904,11 +24234,29 @@ export default function App() {
     let finalMainComps = finalComps.filter(
       (c) => !parallelVmKeySet.has(c.key) && !c.strokeIds.some((sid) => parallelVmStrokeSet.has(sid))
     );
+    let rightComps = finalMainComps
+      .filter((c) => rightKeySet.has(c.key) || c.strokeIds.some((sid) => rightSeedIdSet.has(sid)))
+      .sort((a, b) => a.cy - b.cy);
+    let leftComps = finalMainComps
+      .filter((c) => leftKeySet.has(c.key) || c.strokeIds.some((sid) => leftSeedIdSet.has(sid)))
+      .sort((a, b) => a.cy - b.cy);
     let topComps = finalMainComps
-      .filter((c) => topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+      .filter(
+        (c) =>
+          !rightKeySet.has(c.key) &&
+          !leftKeySet.has(c.key) &&
+          !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+          (topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+      )
       .sort((a, b) => a.cx - b.cx);
     let botComps = finalMainComps
-      .filter((c) => !topKeySet.has(c.key) && !c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+      .filter(
+        (c) =>
+          !rightKeySet.has(c.key) &&
+          !leftKeySet.has(c.key) &&
+          !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+          (botKeySet.has(c.key) || c.strokeIds.some((sid) => botSeedIdSet.has(sid)))
+      )
       .sort((a, b) => a.cx - b.cx);
 
     let minCompLeftX = Math.round(Math.min(...finalComps.map((c) => c.leftTerm.x)));
@@ -24008,32 +24356,142 @@ export default function App() {
       });
     }
 
+    const minHorizCompLeftX = Math.round(
+      Math.min(
+        ...(topComps.length > 0 || botComps.length > 0
+          ? [...topComps, ...botComps]
+          : finalComps
+        ).map((c) => c.leftTerm.x)
+      )
+    );
+    const maxHorizCompRightX = Math.round(
+      Math.max(
+        ...(topComps.length > 0 || botComps.length > 0
+          ? [...topComps, ...botComps]
+          : finalComps
+        ).map((c) => c.rightTerm.x)
+      )
+    );
+
     const leftVertSegs = rawExternalSegs.filter(
-      (s) => s.orientation === 'v' && s.avgX < minCompLeftX - 10
+      (s) => s.orientation === 'v' && s.avgX < minHorizCompLeftX - 10
     );
     const rightVertSegs = rawExternalSegs.filter(
-      (s) => s.orientation === 'v' && s.avgX > maxCompRightX + 10
+      (s) => s.orientation === 'v' && s.avgX > maxHorizCompRightX + 10
     );
     const hOuterLeftXs = rawExternalSegs
-      .filter((s) => s.orientation === 'h' && Math.min(s.x1, s.x2) < minCompLeftX - 20)
+      .filter((s) => s.orientation === 'h' && Math.min(s.x1, s.x2) < minHorizCompLeftX - 20)
       .map((s) => Math.min(s.x1, s.x2));
     const hOuterRightXs = rawExternalSegs
-      .filter((s) => s.orientation === 'h' && Math.max(s.x1, s.x2) > maxCompRightX + 20)
+      .filter((s) => s.orientation === 'h' && Math.max(s.x1, s.x2) > maxHorizCompRightX + 20)
       .map((s) => Math.max(s.x1, s.x2));
 
-    const xLeft =
-      leftVertSegs.length > 0
-        ? Math.round(leftVertSegs.reduce((a, b) => a + b.avgX, 0) / leftVertSegs.length)
-        : hOuterLeftXs.length > 0
-        ? Math.round(Math.min(...hOuterLeftXs))
-        : Math.max(36, Math.round(minCompLeftX - 88));
+    let xLeft: number;
+    if (leftComps.length > 0) {
+      xLeft = Math.round(leftComps[0].circleCx ?? leftComps[0].cx);
+    } else {
+      xLeft =
+        leftVertSegs.length > 0
+          ? Math.round(leftVertSegs.reduce((a, b) => a + b.avgX, 0) / leftVertSegs.length)
+          : hOuterLeftXs.length > 0
+          ? Math.round(Math.min(...hOuterLeftXs))
+          : Math.max(36, Math.round(minHorizCompLeftX - 88));
+    }
+    xLeft = Math.min(xLeft, minHorizCompLeftX - 36);
 
-    const xRight =
-      rightVertSegs.length > 0
-        ? Math.round(rightVertSegs.reduce((a, b) => a + b.avgX, 0) / rightVertSegs.length)
-        : hOuterRightXs.length > 0
-        ? Math.round(Math.max(...hOuterRightXs))
-        : Math.round(maxCompRightX + 88);
+    let xRight: number;
+    if (rightComps.length > 0) {
+      const rightWireSeg = rawExternalSegs.find(
+        (s) =>
+          s.orientation === 'v' &&
+          Math.abs(s.avgX - (rightComps[0].circleCx ?? rightComps[0].cx)) <= 40
+      );
+      xRight = rightWireSeg
+        ? Math.round(rightWireSeg.avgX)
+        : Math.round(rightComps[0].circleCx ?? rightComps[0].cx);
+      if (hOuterRightXs.length > 0) {
+        xRight = Math.max(xRight, Math.round(Math.max(...hOuterRightXs)));
+      }
+    } else {
+      xRight =
+        rightVertSegs.length > 0
+          ? Math.round(rightVertSegs.reduce((a, b) => a + b.avgX, 0) / rightVertSegs.length)
+          : hOuterRightXs.length > 0
+          ? Math.round(Math.max(...hOuterRightXs))
+          : Math.round(maxHorizCompRightX + 88);
+    }
+    xRight = Math.max(xRight, maxHorizCompRightX + 36);
+
+    // Align Right and Left vertical branch components to xRight and xLeft
+    const vertCompDxMap = new Map<string, number>();
+    for (const rc of rightComps) {
+      const curX = rc.circleCx ?? rc.cx;
+      const dx = xRight - curX;
+      if (Math.abs(dx) >= 0.25) {
+        for (const sid of rc.strokeIds) vertCompDxMap.set(sid, dx);
+      }
+    }
+    for (const lc of leftComps) {
+      const curX = lc.circleCx ?? lc.cx;
+      const dx = xLeft - curX;
+      if (Math.abs(dx) >= 0.25) {
+        for (const sid of lc.strokeIds) vertCompDxMap.set(sid, dx);
+      }
+    }
+
+    if (vertCompDxMap.size > 0) {
+      shiftedCompStrokes = shiftedCompStrokes.map((s) => {
+        const dx = vertCompDxMap.get(s.id) || 0;
+        if (Math.abs(dx) < 0.25) return s;
+        return {
+          ...s,
+          circuitBox: s.circuitBox
+            ? { ...s.circuitBox, cx: s.circuitBox.cx + dx }
+            : undefined,
+          points: s.points.map((pt) => ({
+            ...pt,
+            x: pt.x + dx,
+            cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+          })),
+        };
+      });
+      finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
+      finalMainComps = finalComps.filter(
+        (c) =>
+          !parallelVmKeySet.has(c.key) &&
+          !c.strokeIds.some((sid) => parallelVmStrokeSet.has(sid))
+      );
+      rightComps = finalMainComps
+        .filter(
+          (c) =>
+            rightKeySet.has(c.key) || c.strokeIds.some((sid) => rightSeedIdSet.has(sid))
+        )
+        .sort((a, b) => a.cy - b.cy);
+      leftComps = finalMainComps
+        .filter(
+          (c) =>
+            leftKeySet.has(c.key) || c.strokeIds.some((sid) => leftSeedIdSet.has(sid))
+        )
+        .sort((a, b) => a.cy - b.cy);
+      topComps = finalMainComps
+        .filter(
+          (c) =>
+            !rightKeySet.has(c.key) &&
+            !leftKeySet.has(c.key) &&
+            !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+            (topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        )
+        .sort((a, b) => a.cx - b.cx);
+      botComps = finalMainComps
+        .filter(
+          (c) =>
+            !rightKeySet.has(c.key) &&
+            !leftKeySet.has(c.key) &&
+            !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+            (botKeySet.has(c.key) || c.strokeIds.some((sid) => botSeedIdSet.has(sid)))
+        )
+        .sort((a, b) => a.cx - b.cx);
+    }
 
     // Symmetrically center any series Ammeter / Voltmeter along its available horizontal wire span [boundL, boundR]!
     const seriesMeterSymDx = new Map<string, number>();
@@ -24124,13 +24582,37 @@ export default function App() {
       finalMainComps = finalComps.filter(
         (c) => !parallelVmKeySet.has(c.key) && !c.strokeIds.some((sid) => parallelVmStrokeSet.has(sid))
       );
+      rightComps = finalMainComps
+        .filter((c) => rightKeySet.has(c.key) || c.strokeIds.some((sid) => rightSeedIdSet.has(sid)))
+        .sort((a, b) => a.cy - b.cy);
+      leftComps = finalMainComps
+        .filter((c) => leftKeySet.has(c.key) || c.strokeIds.some((sid) => leftSeedIdSet.has(sid)))
+        .sort((a, b) => a.cy - b.cy);
       topComps = finalMainComps
-        .filter((c) => topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        .filter(
+          (c) =>
+            !rightKeySet.has(c.key) &&
+            !leftKeySet.has(c.key) &&
+            !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+            (topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        )
         .sort((a, b) => a.cx - b.cx);
       botComps = finalMainComps
-        .filter((c) => !topKeySet.has(c.key) && !c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        .filter(
+          (c) =>
+            !rightKeySet.has(c.key) &&
+            !leftKeySet.has(c.key) &&
+            !c.strokeIds.some((sid) => rightSeedIdSet.has(sid) || leftSeedIdSet.has(sid)) &&
+            (botKeySet.has(c.key) || c.strokeIds.some((sid) => botSeedIdSet.has(sid)))
+        )
         .sort((a, b) => a.cx - b.cx);
     }
+
+    const hasExplicitSwitchInCircuit = shiftedCompStrokes.some(
+      (s) =>
+        s.shapeType === 'switch' ||
+        Boolean(s.groupId && s.groupId.startsWith('switch-'))
+    );
 
     // Build parameterized rectangular circuit spans (preserving stepped rightTerm.y offset for 2-terminal bulbs!)
     const spans: NonNullable<typeof circuitProposal>['spans'] = [];
@@ -24195,8 +24677,109 @@ export default function App() {
       });
     }
 
-    spans.push({ id: 'v-left', kind: 'v-left' });
-    spans.push({ id: 'v-right', kind: 'v-right' });
+    // Build vertical branch spans (left and right)
+    if (leftComps.length === 0) {
+      if (!hasExplicitSwitchInCircuit) {
+        const swYCenter = (yTop + yBot) / 2;
+        const swHalfGap = Math.min(21, Math.max(14, Math.abs(yBot - yTop) * 0.18));
+        const swYTop = Math.round(swYCenter - swHalfGap);
+        const swYBot = Math.round(swYCenter + swHalfGap);
+        spans.push({
+          id: 'v-left-top',
+          kind: 'v-left',
+          fixedY2: swYTop,
+        });
+        spans.push({
+          id: 'v-left-bot',
+          kind: 'v-left',
+          fixedY1: swYBot,
+        });
+      } else {
+        spans.push({ id: 'v-left', kind: 'v-left' });
+      }
+    } else {
+      const firstLcTopY = Math.round(
+        leftComps[0].orientation === 'v'
+          ? Math.min(leftComps[0].leftTerm.y, leftComps[0].rightTerm.y)
+          : leftComps[0].cy - (leftComps[0].circleR ?? 20)
+      );
+      spans.push({
+        id: 'v-left-0',
+        kind: 'v-left',
+        fixedY2: firstLcTopY,
+      });
+      for (let i = 0; i < leftComps.length - 1; i++) {
+        const curBotY = Math.round(
+          leftComps[i].orientation === 'v'
+            ? Math.max(leftComps[i].leftTerm.y, leftComps[i].rightTerm.y)
+            : leftComps[i].cy + (leftComps[i].circleR ?? 20)
+        );
+        const nextTopY = Math.round(
+          leftComps[i + 1].orientation === 'v'
+            ? Math.min(leftComps[i + 1].leftTerm.y, leftComps[i + 1].rightTerm.y)
+            : leftComps[i + 1].cy - (leftComps[i + 1].circleR ?? 20)
+        );
+        spans.push({
+          id: `v-left-mid-${i}`,
+          kind: 'v-left',
+          fixedY1: curBotY,
+          fixedY2: nextTopY,
+        });
+      }
+      const lastLcBotY = Math.round(
+        leftComps[leftComps.length - 1].orientation === 'v'
+          ? Math.max(leftComps[leftComps.length - 1].leftTerm.y, leftComps[leftComps.length - 1].rightTerm.y)
+          : leftComps[leftComps.length - 1].cy + (leftComps[leftComps.length - 1].circleR ?? 20)
+      );
+      spans.push({
+        id: 'v-left-last',
+        kind: 'v-left',
+        fixedY1: lastLcBotY,
+      });
+    }
+
+    if (rightComps.length === 0) {
+      spans.push({ id: 'v-right', kind: 'v-right' });
+    } else {
+      const firstRcTopY = Math.round(
+        rightComps[0].orientation === 'v'
+          ? Math.min(rightComps[0].leftTerm.y, rightComps[0].rightTerm.y)
+          : rightComps[0].cy - (rightComps[0].circleR ?? 20)
+      );
+      spans.push({
+        id: 'v-right-0',
+        kind: 'v-right',
+        fixedY2: firstRcTopY,
+      });
+      for (let i = 0; i < rightComps.length - 1; i++) {
+        const curBotY = Math.round(
+          rightComps[i].orientation === 'v'
+            ? Math.max(rightComps[i].leftTerm.y, rightComps[i].rightTerm.y)
+            : rightComps[i].cy + (rightComps[i].circleR ?? 20)
+        );
+        const nextTopY = Math.round(
+          rightComps[i + 1].orientation === 'v'
+            ? Math.min(rightComps[i + 1].leftTerm.y, rightComps[i + 1].rightTerm.y)
+            : rightComps[i + 1].cy - (rightComps[i + 1].circleR ?? 20)
+        );
+        spans.push({
+          id: `v-right-mid-${i}`,
+          kind: 'v-right',
+          fixedY1: curBotY,
+          fixedY2: nextTopY,
+        });
+      }
+      const lastRcBotY = Math.round(
+        rightComps[rightComps.length - 1].orientation === 'v'
+          ? Math.max(rightComps[rightComps.length - 1].leftTerm.y, rightComps[rightComps.length - 1].rightTerm.y)
+          : rightComps[rightComps.length - 1].cy + (rightComps[rightComps.length - 1].circleR ?? 20)
+      );
+      spans.push({
+        id: 'v-right-last',
+        kind: 'v-right',
+        fixedY1: lastRcBotY,
+      });
+    }
 
     // Append parallel branch spans for each Voltmeter (vertical risers + horizontal leads to the circle perimeter!)
     computedParallelBranches.forEach((pb, vIdx) => {
@@ -24234,7 +24817,6 @@ export default function App() {
 
     const defaultLayerId = shiftedCompStrokes[0]?.layerId || activeLayerId;
     const matchedWireStrokes: StrokeObject[] = [];
-
     // Match existing solid wire segments to main loop spans and snap them cleanly
     for (const sp of spans) {
       if (sp.id.startsWith('par-vm-')) continue;
@@ -24254,12 +24836,17 @@ export default function App() {
               y2: yBot + (sp.yOffset || 0),
             }
           : sp.kind === 'v-left'
-          ? { x1: xLeft, y1: yTop, x2: xLeft, y2: yBot }
+          ? {
+              x1: xLeft,
+              y1: sp.fixedY1 !== undefined ? sp.fixedY1 : yTop,
+              x2: xLeft,
+              y2: sp.fixedY2 !== undefined ? sp.fixedY2 : yBot,
+            }
           : {
               x1: xRight,
-              y1: yTop + topRightYOffset,
+              y1: sp.fixedY1 !== undefined ? sp.fixedY1 : yTop + topRightYOffset,
               x2: xRight,
-              y2: yBot + botRightYOffset,
+              y2: sp.fixedY2 !== undefined ? sp.fixedY2 : yBot + botRightYOffset,
             };
 
       if (sp.kind === 'h-top' || sp.kind === 'h-bot') {
@@ -24325,30 +24912,84 @@ export default function App() {
 
         if (match) {
           match.used = true;
-          const wireId = `st-wire-ex-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`;
-          sp.existingStrokeId = wireId;
-          matchedWireStrokes.push({
-            id: wireId,
-            tool: 'pen',
-            penType: match.stroke.penType,
-            lineStyle: match.stroke.lineStyle || 'solid',
-            color: match.stroke.color || '#111827',
-            width: match.stroke.width || 2.0,
-            opacity: match.stroke.opacity ?? 1,
-            layerId: match.stroke.layerId || defaultLayerId,
-            isShape: true,
-            shapeType: 'line',
-            points: [
-              { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
-              {
-                x: targetCoords.x2,
-                y: targetCoords.y2,
-                cx: (targetCoords.x1 + targetCoords.x2) / 2,
-                cy: (targetCoords.y1 + targetCoords.y2) / 2,
-                pressure: 0.7,
-              },
-            ],
-          });
+          if (sp.kind === 'v-left' && !hasExplicitSwitchInCircuit) {
+            const swYCenter = (yTop + yBot) / 2;
+            const swHalfGap = Math.min(21, Math.max(14, Math.abs(yBot - yTop) * 0.18));
+            const swYTop = Math.round(swYCenter - swHalfGap);
+            const swYBot = Math.round(swYCenter + swHalfGap);
+            const wireIdTop = `st-wire-ex-${Date.now()}-${sp.id}-top-${Math.random().toString(36).slice(2, 5)}`;
+            const wireIdBot = `st-wire-ex-${Date.now()}-${sp.id}-bot-${Math.random().toString(36).slice(2, 5)}`;
+            sp.existingStrokeId = wireIdTop;
+            matchedWireStrokes.push({
+              id: wireIdTop,
+              tool: 'pen',
+              penType: match.stroke.penType,
+              lineStyle: match.stroke.lineStyle || 'solid',
+              color: match.stroke.color || '#111827',
+              width: match.stroke.width || 2.0,
+              opacity: match.stroke.opacity ?? 1,
+              layerId: match.stroke.layerId || defaultLayerId,
+              isShape: true,
+              shapeType: 'line',
+              points: [
+                { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
+                {
+                  x: targetCoords.x1,
+                  y: swYTop,
+                  cx: targetCoords.x1,
+                  cy: (targetCoords.y1 + swYTop) / 2,
+                  pressure: 0.7,
+                },
+              ],
+            });
+            matchedWireStrokes.push({
+              id: wireIdBot,
+              tool: 'pen',
+              penType: match.stroke.penType,
+              lineStyle: match.stroke.lineStyle || 'solid',
+              color: match.stroke.color || '#111827',
+              width: match.stroke.width || 2.0,
+              opacity: match.stroke.opacity ?? 1,
+              layerId: match.stroke.layerId || defaultLayerId,
+              isShape: true,
+              shapeType: 'line',
+              points: [
+                { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
+                {
+                  x: targetCoords.x2,
+                  y: targetCoords.y2,
+                  cx: targetCoords.x1,
+                  cy: (swYBot + targetCoords.y2) / 2,
+                  pressure: 0.7,
+                },
+              ],
+            });
+          } else {
+            const wireId = `st-wire-ex-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`;
+            sp.existingStrokeId = wireId;
+            matchedWireStrokes.push({
+              id: wireId,
+              tool: 'pen',
+              penType: match.stroke.penType,
+              lineStyle: match.stroke.lineStyle || 'solid',
+              color: match.stroke.color || '#111827',
+              width: match.stroke.width || 2.0,
+              opacity: match.stroke.opacity ?? 1,
+              layerId: match.stroke.layerId || defaultLayerId,
+              isShape: true,
+              shapeType: 'line',
+              points: [
+                { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
+                {
+                  x: targetCoords.x2,
+                  y: targetCoords.y2,
+                  cx: (targetCoords.x1 + targetCoords.x2) / 2,
+                  cy: (targetCoords.y1 + targetCoords.y2) / 2,
+                  pressure: 0.7,
+                },
+              ],
+            });
+          }
         }
       }
     }
@@ -24440,6 +25081,8 @@ export default function App() {
         ...botComps.flatMap((c) => c.strokeIds),
         ...computedParallelBranches.filter((pb) => !pb.isTopRow).flatMap((pb) => pb.vmStrokeIds),
       ],
+      rightCompStrokeIds: rightComps.flatMap((c) => c.strokeIds),
+      leftCompStrokeIds: leftComps.flatMap((c) => c.strokeIds),
       spans,
       layerId: defaultLayerId,
     });
@@ -24453,11 +25096,78 @@ export default function App() {
     if (!circuitProposal) return;
     const prop = circuitProposal;
 
+    const hasExplicitSwitch = prop.componentStrokeIds.some((id) => {
+      const st = activePage.strokes.find((s) => s.id === id);
+      return (
+        st?.shapeType === 'switch' ||
+        Boolean(st?.groupId && st.groupId.startsWith('switch-'))
+      );
+    });
+
     const createdWires: StrokeObject[] = [];
     for (const sp of prop.spans) {
       if (sp.existingStrokeId) continue;
       const c = evalCircuitProposalSpan(prop, sp);
       if (Math.hypot(c.x2 - c.x1, c.y2 - c.y1) < 4) continue;
+
+      if (sp.id === 'v-left' && !hasExplicitSwitch) {
+        const swYCenter = (prop.yTop + prop.yBot) / 2;
+        const swHalfGap = Math.min(21, Math.max(14, Math.abs(prop.yBot - prop.yTop) * 0.18));
+        const swYTop = Math.round(swYCenter - swHalfGap);
+        const swYBot = Math.round(swYCenter + swHalfGap);
+
+        if (swYTop - c.y1 >= 4) {
+          createdWires.push({
+            id: `st-wire-comp-${Date.now()}-${sp.id}-top-${Math.random().toString(36).slice(2, 5)}`,
+            tool: 'pen',
+            penType: prop.wirePenSubType,
+            lineStyle: prop.wireLineStyle || 'solid',
+            color: prop.wireColor || '#111827',
+            width: prop.wireWidth || 2.0,
+            opacity: prop.wireOpacity ?? 1,
+            layerId: prop.layerId,
+            isShape: true,
+            shapeType: 'line',
+            points: [
+              { x: Math.round(c.x1), y: Math.round(c.y1), pressure: 0.7 },
+              {
+                x: Math.round(c.x1),
+                y: swYTop,
+                cx: Math.round(c.x1),
+                cy: Math.round((c.y1 + swYTop) / 2),
+                pressure: 0.7,
+              },
+            ],
+          });
+        }
+
+        if (c.y2 - swYBot >= 4) {
+          createdWires.push({
+            id: `st-wire-comp-${Date.now()}-${sp.id}-bot-${Math.random().toString(36).slice(2, 5)}`,
+            tool: 'pen',
+            penType: prop.wirePenSubType,
+            lineStyle: prop.wireLineStyle || 'solid',
+            color: prop.wireColor || '#111827',
+            width: prop.wireWidth || 2.0,
+            opacity: prop.wireOpacity ?? 1,
+            layerId: prop.layerId,
+            isShape: true,
+            shapeType: 'line',
+            points: [
+              { x: Math.round(c.x1), y: swYBot, pressure: 0.7 },
+              {
+                x: Math.round(c.x2),
+                y: Math.round(c.y2),
+                cx: Math.round(c.x1),
+                cy: Math.round((swYBot + c.y2) / 2),
+                pressure: 0.7,
+              },
+            ],
+          });
+        }
+        continue;
+      }
+
       createdWires.push({
         id: `st-wire-comp-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`,
         tool: 'pen',
@@ -24572,17 +25282,42 @@ export default function App() {
         if (rawComps.length > 0) {
           const parallelSpanSet = prop.spans.filter((sp) => sp.id.startsWith('par-vm-'));
           const hasParallelSpans = parallelSpanSet.length > 0;
+          const propRightCompSet = new Set(prop.rightCompStrokeIds || []);
+          const propLeftCompSet = new Set(prop.leftCompStrokeIds || []);
+          const isRightComp = (c: typeof rawComps[0]) =>
+            c.strokeIds.some((sid) => propRightCompSet.has(sid)) ||
+            (Math.abs(c.cx - prop.xRight) < Math.abs(c.cx - (prop.xLeft + prop.xRight) / 2) &&
+              c.cy > prop.yTop + 20 &&
+              c.cy < prop.yBot - 20);
+          const isLeftComp = (c: typeof rawComps[0]) =>
+            c.strokeIds.some((sid) => propLeftCompSet.has(sid)) ||
+            (Math.abs(c.cx - prop.xLeft) < Math.abs(c.cx - (prop.xLeft + prop.xRight) / 2) &&
+              c.cy > prop.yTop + 20 &&
+              c.cy < prop.yBot - 20);
+
           const dyBySid = new Map<string, number>();
+          const dxBySid = new Map<string, number>();
           const topCompKeys = new Set<string>();
           const parallelVmKeys = new Set<string>();
           const topRawList: typeof rawComps = [];
           const botRawList: typeof rawComps = [];
+          const rightRawList: typeof rawComps = [];
+          const leftRawList: typeof rawComps = [];
+
           for (const c of rawComps) {
             if (hasParallelSpans && c.kind === 'voltmeter') {
               parallelVmKeys.add(c.key);
               const isTop =
                 Math.abs(c.cy - prop.yTop) <= Math.abs(c.cy - prop.yBot);
               if (isTop) topCompKeys.add(c.key);
+              continue;
+            }
+            if (isRightComp(c)) {
+              rightRawList.push(c);
+              continue;
+            }
+            if (isLeftComp(c)) {
+              leftRawList.push(c);
               continue;
             }
             const refY =
@@ -24600,6 +25335,9 @@ export default function App() {
           }
           topRawList.sort((a, b) => a.cx - b.cx);
           botRawList.sort((a, b) => a.cx - b.cx);
+          rightRawList.sort((a, b) => a.cy - b.cy);
+          leftRawList.sort((a, b) => a.cy - b.cy);
+
           const chainRowY = (list: typeof rawComps, startY: number) => {
             let curY = startY;
             for (const c of list) {
@@ -24615,16 +25353,32 @@ export default function App() {
           chainRowY(topRawList, prop.yTop);
           chainRowY(botRawList, prop.yBot);
 
+          for (const c of rightRawList) {
+            const dx = prop.xRight - c.cx;
+            for (const sid of c.strokeIds) dxBySid.set(sid, dx);
+          }
+          for (const c of leftRawList) {
+            const dx = prop.xLeft - c.cx;
+            for (const sid of c.strokeIds) dxBySid.set(sid, dx);
+          }
+
           const alignedCompStrokes = convertedOnly.map((s) => {
             const dy = dyBySid.get(s.id) || 0;
-            if (Math.abs(dy) < 0.25) return s;
+            const dx = dxBySid.get(s.id) || 0;
+            if (Math.abs(dy) < 0.25 && Math.abs(dx) < 0.25) return s;
             return {
               ...s,
               circuitBox: s.circuitBox
-                ? { ...s.circuitBox, termY: s.circuitBox.termY + dy }
+                ? {
+                    ...s.circuitBox,
+                    cx: s.circuitBox.cx + dx,
+                    termY: s.circuitBox.termY + dy,
+                  }
                 : undefined,
               points: s.points.map((pt) => ({
                 ...pt,
+                x: pt.x + dx,
+                cx: pt.cx !== undefined ? pt.cx + dx : undefined,
                 y: pt.y + dy,
                 cy: pt.cy !== undefined ? pt.cy + dy : undefined,
               })),
@@ -24633,11 +25387,19 @@ export default function App() {
 
           const finalComps = getCircuitComponentsWithTerminals(alignedCompStrokes);
           const finalMainComps = finalComps.filter((c) => !parallelVmKeys.has(c.key));
+          const rightCompKeys = new Set(rightRawList.map((c) => c.key));
+          const leftCompKeys = new Set(leftRawList.map((c) => c.key));
+          const rightComps = finalMainComps
+            .filter((c) => rightCompKeys.has(c.key))
+            .sort((a, b) => a.cy - b.cy);
+          const leftComps = finalMainComps
+            .filter((c) => leftCompKeys.has(c.key))
+            .sort((a, b) => a.cy - b.cy);
           const topComps = finalMainComps
-            .filter((c) => topCompKeys.has(c.key))
+            .filter((c) => topCompKeys.has(c.key) && !rightCompKeys.has(c.key) && !leftCompKeys.has(c.key))
             .sort((a, b) => a.cx - b.cx);
           const botComps = finalMainComps
-            .filter((c) => !topCompKeys.has(c.key))
+            .filter((c) => !topCompKeys.has(c.key) && !rightCompKeys.has(c.key) && !leftCompKeys.has(c.key))
             .sort((a, b) => a.cx - b.cx);
 
           const topRightYOffset =
@@ -24648,11 +25410,16 @@ export default function App() {
             botComps.length > 0
               ? Math.round(botComps[botComps.length - 1].rightTerm.y - prop.yBot)
               : 0;
+          const horizComps = [...topComps, ...botComps];
           const minCompLeftX = Math.round(
-            Math.min(...finalComps.map((c) => c.leftTerm.x))
+            horizComps.length > 0
+              ? Math.min(...horizComps.map((c) => c.leftTerm.x))
+              : prop.xLeft + 30
           );
           const maxCompRightX = Math.round(
-            Math.max(...finalComps.map((c) => c.rightTerm.x))
+            horizComps.length > 0
+              ? Math.max(...horizComps.map((c) => c.rightTerm.x))
+              : prop.xRight - 30
           );
 
           const oldSpanById = new Map(prop.spans.map((sp) => [sp.id, sp]));
@@ -24728,16 +25495,138 @@ export default function App() {
             });
           }
 
-          nextSpans.push({
-            id: 'v-left',
-            kind: 'v-left',
-            existingStrokeId: oldSpanById.get('v-left')?.existingStrokeId,
-          });
-          nextSpans.push({
-            id: 'v-right',
-            kind: 'v-right',
-            existingStrokeId: oldSpanById.get('v-right')?.existingStrokeId,
-          });
+          if (leftComps.length === 0) {
+            const hasExplicitSw = finalComps.some(
+              (c) =>
+                c.kind === 'switch' ||
+                c.strokeIds.some((id) => {
+                  const st = alignedCompStrokes.find((s) => s.id === id);
+                  return (
+                    st?.shapeType === 'switch' ||
+                    Boolean(st?.groupId && st.groupId.startsWith('switch-'))
+                  );
+                })
+            );
+            if (!hasExplicitSw) {
+              const swYCenter = (prop.yTop + prop.yBot) / 2;
+              const swHalfGap = Math.min(21, Math.max(14, Math.abs(prop.yBot - prop.yTop) * 0.18));
+              const swYTop = Math.round(swYCenter - swHalfGap);
+              const swYBot = Math.round(swYCenter + swHalfGap);
+              nextSpans.push({
+                id: 'v-left-top',
+                kind: 'v-left',
+                fixedY2: swYTop,
+                existingStrokeId: oldSpanById.get('v-left-top')?.existingStrokeId || oldSpanById.get('v-left')?.existingStrokeId,
+              });
+              nextSpans.push({
+                id: 'v-left-bot',
+                kind: 'v-left',
+                fixedY1: swYBot,
+                existingStrokeId: oldSpanById.get('v-left-bot')?.existingStrokeId,
+              });
+            } else {
+              nextSpans.push({
+                id: 'v-left',
+                kind: 'v-left',
+                existingStrokeId: oldSpanById.get('v-left')?.existingStrokeId,
+              });
+            }
+          } else {
+            const firstLcTopY = Math.round(
+              leftComps[0].orientation === 'v'
+                ? Math.min(leftComps[0].leftTerm.y, leftComps[0].rightTerm.y)
+                : leftComps[0].cy - (leftComps[0].circleR ?? 20)
+            );
+            nextSpans.push({
+              id: 'v-left-0',
+              kind: 'v-left',
+              fixedY2: firstLcTopY,
+              existingStrokeId: oldSpanById.get('v-left-0')?.existingStrokeId,
+            });
+            for (let i = 0; i < leftComps.length - 1; i++) {
+              const midId = `v-left-mid-${i}`;
+              const curBotY = Math.round(
+                leftComps[i].orientation === 'v'
+                  ? Math.max(leftComps[i].leftTerm.y, leftComps[i].rightTerm.y)
+                  : leftComps[i].cy + (leftComps[i].circleR ?? 20)
+              );
+              const nextTopY = Math.round(
+                leftComps[i + 1].orientation === 'v'
+                  ? Math.min(leftComps[i + 1].leftTerm.y, leftComps[i + 1].rightTerm.y)
+                  : leftComps[i + 1].cy - (leftComps[i + 1].circleR ?? 20)
+              );
+              nextSpans.push({
+                id: midId,
+                kind: 'v-left',
+                fixedY1: curBotY,
+                fixedY2: nextTopY,
+                existingStrokeId: oldSpanById.get(midId)?.existingStrokeId,
+              });
+            }
+            const lastLcBotY = Math.round(
+              leftComps[leftComps.length - 1].orientation === 'v'
+                ? Math.max(leftComps[leftComps.length - 1].leftTerm.y, leftComps[leftComps.length - 1].rightTerm.y)
+                : leftComps[leftComps.length - 1].cy + (leftComps[leftComps.length - 1].circleR ?? 20)
+            );
+            nextSpans.push({
+              id: 'v-left-last',
+              kind: 'v-left',
+              fixedY1: lastLcBotY,
+              existingStrokeId: oldSpanById.get('v-left-last')?.existingStrokeId,
+            });
+          }
+
+          if (rightComps.length === 0) {
+            nextSpans.push({
+              id: 'v-right',
+              kind: 'v-right',
+              existingStrokeId: oldSpanById.get('v-right')?.existingStrokeId,
+            });
+          } else {
+            const firstRcTopY = Math.round(
+              rightComps[0].orientation === 'v'
+                ? Math.min(rightComps[0].leftTerm.y, rightComps[0].rightTerm.y)
+                : rightComps[0].cy - (rightComps[0].circleR ?? 20)
+            );
+            nextSpans.push({
+              id: 'v-right-0',
+              kind: 'v-right',
+              fixedY2: firstRcTopY,
+              existingStrokeId: oldSpanById.get('v-right-0')?.existingStrokeId,
+            });
+            for (let i = 0; i < rightComps.length - 1; i++) {
+              const midId = `v-right-mid-${i}`;
+              const curBotY = Math.round(
+                rightComps[i].orientation === 'v'
+                  ? Math.max(rightComps[i].leftTerm.y, rightComps[i].rightTerm.y)
+                  : rightComps[i].cy + (rightComps[i].circleR ?? 20)
+              );
+              const nextTopY = Math.round(
+                rightComps[i + 1].orientation === 'v'
+                  ? Math.min(rightComps[i + 1].leftTerm.y, rightComps[i + 1].rightTerm.y)
+                  : rightComps[i + 1].cy - (rightComps[i + 1].circleR ?? 20)
+              );
+              nextSpans.push({
+                id: midId,
+                kind: 'v-right',
+                fixedY1: curBotY,
+                fixedY2: nextTopY,
+                existingStrokeId: oldSpanById.get(midId)?.existingStrokeId,
+              });
+            }
+            const lastRcBotY = Math.round(
+              rightComps[rightComps.length - 1].orientation === 'v'
+                ? Math.max(rightComps[rightComps.length - 1].leftTerm.y, rightComps[rightComps.length - 1].rightTerm.y)
+                : rightComps[rightComps.length - 1].cy + (rightComps[rightComps.length - 1].circleR ?? 20)
+            );
+            nextSpans.push({
+              id: 'v-right-last',
+              kind: 'v-right',
+              fixedY1: lastRcBotY,
+              existingStrokeId: oldSpanById.get('v-right-last')?.existingStrokeId,
+            });
+          }
+
           for (const psp of parallelSpanSet) {
             nextSpans.push({ ...psp });
           }
@@ -24753,8 +25642,10 @@ export default function App() {
               .filter((c) => topCompKeys.has(c.key))
               .flatMap((c) => c.strokeIds),
             botCompStrokeIds: finalComps
-              .filter((c) => !topCompKeys.has(c.key))
+              .filter((c) => !topCompKeys.has(c.key) && !rightCompKeys.has(c.key) && !leftCompKeys.has(c.key))
               .flatMap((c) => c.strokeIds),
+            rightCompStrokeIds: rightComps.flatMap((c) => c.strokeIds),
+            leftCompStrokeIds: leftComps.flatMap((c) => c.strokeIds),
             spans: nextSpans,
           };
 
@@ -24938,17 +25829,6 @@ export default function App() {
     const visibleStrokes = activePage.strokes.filter(
       (s) => visibleLayerIds.has(s.layerId) && activeSimSet.has(s.id)
     );
-    const simData = analyzeCircuitForSimulation(visibleStrokes, simCircuitSwitchClosed);
-    autoSwitchHitRef.current =
-      !hasProposal && isSimulating && simData.autoSwitch
-        ? {
-            x: simData.autoSwitch.x,
-            yCenter: simData.autoSwitch.yCenter,
-            yTop: simData.autoSwitch.yTop,
-            yBottom: simData.autoSwitch.yBottom,
-            closed: simData.autoSwitch.closed,
-          }
-        : null;
 
     // Pre-stitch connected active wire segments & resistor zig-zags into continuous chains
     // so charge carriers glide around corners and through resistors at 100% uniform period with zero jumps!
@@ -24961,135 +25841,230 @@ export default function App() {
       weightedSpeed: number;
       avgSpeed: number;
     };
-    const workChains: SimChainWork[] = [];
-    if (
-      simData.isCircuitClosed &&
-      (!simData.autoSwitch || simData.autoSwitch.closed) &&
-      simData.wireSegments.length > 0
-    ) {
-      for (const seg of simData.wireSegments) {
-        if (!seg.inClosedLoop || !seg.active || seg.currentSpeed <= 0.001) continue;
-        const polyPts =
-          seg.pathPoints && seg.pathPoints.length >= 2
-            ? seg.pathPoints
-            : [
-                { x: seg.x1, y: seg.y1 },
-                { x: seg.x2, y: seg.y2 },
-              ];
-        const actualLens: number[] = [];
-        let totalActual = 0;
-        for (let i = 0; i < polyPts.length - 1; i++) {
-          const d = Math.hypot(
-            polyPts[i + 1].x - polyPts[i].x,
-            polyPts[i + 1].y - polyPts[i].y
-          );
-          actualLens.push(d);
-          totalActual += d;
-        }
-        if (totalActual < 1) continue;
-        const isResistorZigZag = Boolean(seg.pathPoints && seg.pathPoints.length >= 8);
-        const startPt = polyPts[0];
-        const endPt = polyPts[polyPts.length - 1];
-        const horizSpan = Math.max(24, Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y));
-        const targetEffLen = isResistorZigZag ? horizSpan : totalActual;
-        const scale = targetEffLen / Math.max(1e-4, totalActual);
-        const subSegs: SimSubSeg[] = [];
-        for (let i = 0; i < polyPts.length - 1; i++) {
-          if (actualLens[i] < 1e-4) continue;
-          subSegs.push({
-            x1: polyPts[i].x,
-            y1: polyPts[i].y,
-            x2: polyPts[i + 1].x,
-            y2: polyPts[i + 1].y,
-            effLen: actualLens[i] * scale,
+    type PreparedParticleChain = {
+      subSegs: SimSubSeg[];
+      cumEffDist: number[];
+      totalEffLen: number;
+      count: number;
+      stepDist: number;
+      avgSpeed: number;
+    };
+
+    const buildParticleChainsForSim = (
+      simData: ReturnType<typeof analyzeCircuitForSimulation>
+    ): PreparedParticleChain[] => {
+      const workChains: SimChainWork[] = [];
+      if (
+        simData.isCircuitClosed &&
+        (!simData.autoSwitch || simData.autoSwitch.closed) &&
+        simData.wireSegments.length > 0
+      ) {
+        for (const seg of simData.wireSegments) {
+          if (!seg.inClosedLoop || !seg.active || seg.currentSpeed <= 0.001) continue;
+          const polyPts =
+            seg.pathPoints && seg.pathPoints.length >= 2
+              ? seg.pathPoints
+              : [
+                  { x: seg.x1, y: seg.y1 },
+                  { x: seg.x2, y: seg.y2 },
+                ];
+          const actualLens: number[] = [];
+          let totalActual = 0;
+          for (let i = 0; i < polyPts.length - 1; i++) {
+            const d = Math.hypot(
+              polyPts[i + 1].x - polyPts[i].x,
+              polyPts[i + 1].y - polyPts[i].y
+            );
+            actualLens.push(d);
+            totalActual += d;
+          }
+          if (totalActual < 1) continue;
+          const isResistorZigZag = Boolean(seg.pathPoints && seg.pathPoints.length >= 8);
+          const startPt = polyPts[0];
+          const endPt = polyPts[polyPts.length - 1];
+          const horizSpan = Math.max(24, Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y));
+          const targetEffLen = isResistorZigZag ? horizSpan : totalActual;
+          const scale = targetEffLen / Math.max(1e-4, totalActual);
+          const subSegs: SimSubSeg[] = [];
+          for (let i = 0; i < polyPts.length - 1; i++) {
+            if (actualLens[i] < 1e-4) continue;
+            subSegs.push({
+              x1: polyPts[i].x,
+              y1: polyPts[i].y,
+              x2: polyPts[i + 1].x,
+              y2: polyPts[i + 1].y,
+              effLen: actualLens[i] * scale,
+            });
+          }
+          if (subSegs.length === 0) continue;
+          workChains.push({
+            startPt: { x: startPt.x, y: startPt.y },
+            endPt: { x: endPt.x, y: endPt.y },
+            subSegs,
+            rawEffLen: targetEffLen,
+            weightedSpeed: targetEffLen * seg.currentSpeed,
+            avgSpeed: seg.currentSpeed,
           });
         }
-        if (subSegs.length === 0) continue;
-        workChains.push({
-          startPt: { x: startPt.x, y: startPt.y },
-          endPt: { x: endPt.x, y: endPt.y },
-          subSegs,
-          rawEffLen: targetEffLen,
-          weightedSpeed: targetEffLen * seg.currentSpeed,
-          avgSpeed: seg.currentSpeed,
-        });
-      }
 
-      const CHAIN_JOIN_TOL = 18;
-      let mergedChain = true;
-      while (mergedChain && workChains.length > 1) {
-        mergedChain = false;
-        // Pass 1: unique 1-to-1 connections (prevents wrong pairing at 3-way parallel T-junctions)
-        // Pass 2: any remaining connection within tolerance
-        for (let pass = 0; pass < 2 && !mergedChain; pass++) {
-          for (let i = 0; i < workChains.length && !mergedChain; i++) {
-            const a = workChains[i];
-            const outMatches: number[] = [];
-            for (let j = 0; j < workChains.length; j++) {
-              if (i === j) continue;
-              const b = workChains[j];
-              if (Math.abs(a.avgSpeed - b.avgSpeed) > 0.38) continue;
-              if (Math.hypot(a.endPt.x - b.startPt.x, a.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
-                outMatches.push(j);
-              }
-            }
-            if (outMatches.length === 0) continue;
-            if (pass === 0 && outMatches.length > 1) continue;
-            const j = outMatches[0];
-            const b = workChains[j];
-            if (pass === 0) {
-              let inCount = 0;
-              for (let k = 0; k < workChains.length; k++) {
-                if (k === j) continue;
-                const c = workChains[k];
-                if (Math.abs(c.avgSpeed - b.avgSpeed) > 0.38) continue;
-                if (Math.hypot(c.endPt.x - b.startPt.x, c.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
-                  inCount++;
+        const CHAIN_JOIN_TOL = 18;
+        let mergedChain = true;
+        while (mergedChain && workChains.length > 1) {
+          mergedChain = false;
+          // Pass 1: unique 1-to-1 connections (prevents wrong pairing at 3-way parallel T-junctions)
+          // Pass 2: any remaining connection within tolerance
+          for (let pass = 0; pass < 2 && !mergedChain; pass++) {
+            for (let i = 0; i < workChains.length && !mergedChain; i++) {
+              const a = workChains[i];
+              const outMatches: number[] = [];
+              for (let j = 0; j < workChains.length; j++) {
+                if (i === j) continue;
+                const b = workChains[j];
+                if (Math.abs(a.avgSpeed - b.avgSpeed) > 0.38) continue;
+                if (Math.hypot(a.endPt.x - b.startPt.x, a.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+                  outMatches.push(j);
                 }
               }
-              if (inCount > 1) continue;
+              if (outMatches.length === 0) continue;
+              if (pass === 0 && outMatches.length > 1) continue;
+              const j = outMatches[0];
+              const b = workChains[j];
+              if (pass === 0) {
+                let inCount = 0;
+                for (let k = 0; k < workChains.length; k++) {
+                  if (k === j) continue;
+                  const c = workChains[k];
+                  if (Math.abs(c.avgSpeed - b.avgSpeed) > 0.38) continue;
+                  if (Math.hypot(c.endPt.x - b.startPt.x, c.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+                    inCount++;
+                  }
+                }
+                if (inCount > 1) continue;
+              }
+              const gap = Math.hypot(b.startPt.x - a.endPt.x, b.startPt.y - a.endPt.y);
+              if (gap > 0.5) {
+                a.subSegs.push({
+                  x1: a.endPt.x,
+                  y1: a.endPt.y,
+                  x2: b.startPt.x,
+                  y2: b.startPt.y,
+                  effLen: gap,
+                });
+                a.rawEffLen += gap;
+                a.weightedSpeed += gap * ((a.avgSpeed + b.avgSpeed) * 0.5);
+              }
+              a.subSegs.push(...b.subSegs);
+              a.endPt = { ...b.endPt };
+              a.rawEffLen += b.rawEffLen;
+              a.weightedSpeed += b.weightedSpeed;
+              a.avgSpeed = a.weightedSpeed / Math.max(1, a.rawEffLen);
+              workChains.splice(j, 1);
+              mergedChain = true;
             }
-            const gap = Math.hypot(b.startPt.x - a.endPt.x, b.startPt.y - a.endPt.y);
-            if (gap > 0.5) {
-              a.subSegs.push({
-                x1: a.endPt.x,
-                y1: a.endPt.y,
-                x2: b.startPt.x,
-                y2: b.startPt.y,
-                effLen: gap,
-              });
-              a.rawEffLen += gap;
-              a.weightedSpeed += gap * ((a.avgSpeed + b.avgSpeed) * 0.5);
-            }
-            a.subSegs.push(...b.subSegs);
-            a.endPt = { ...b.endPt };
-            a.rawEffLen += b.rawEffLen;
-            a.weightedSpeed += b.weightedSpeed;
-            a.avgSpeed = a.weightedSpeed / Math.max(1, a.rawEffLen);
-            workChains.splice(j, 1);
-            mergedChain = true;
           }
         }
       }
+
+      return workChains.map((wc) => {
+        const cumEffDist: number[] = [0];
+        for (const ss of wc.subSegs) {
+          cumEffDist.push(cumEffDist[cumEffDist.length - 1] + ss.effLen);
+        }
+        const totalEffLen = Math.max(1, cumEffDist[cumEffDist.length - 1]);
+        const count = Math.max(1, Math.round(totalEffLen / 32));
+        const stepDist = totalEffLen / count;
+        return {
+          subSegs: wc.subSegs,
+          cumEffDist,
+          totalEffLen,
+          count,
+          stepDist,
+          avgSpeed: wc.avgSpeed,
+        };
+      });
+    };
+
+    const pageValidSims = getValidCircuitSims(activePage);
+    const simsToSimulate =
+      pageValidSims.length > 0 ? pageValidSims : activeSim ? [activeSim] : [];
+
+    interface PreparedCircuitSim {
+      sim: CircuitSimConfig;
+      isThisActive: boolean;
+      closed: boolean;
+      flowDirection: 'electrons' | 'conventional';
+      showElectrons: boolean;
+      speedMultiplier: number;
+      showDarkWireTrack: boolean;
+      simStrokes: StrokeObject[];
+      simData: ReturnType<typeof analyzeCircuitForSimulation>;
+      particleChains: PreparedParticleChain[];
     }
 
-    const simParticleChains = workChains.map((wc) => {
-      const cumEffDist: number[] = [0];
-      for (const ss of wc.subSegs) {
-        cumEffDist.push(cumEffDist[cumEffDist.length - 1] + ss.effLen);
+    const nextAutoSwitchHits: Array<{
+      simId: string;
+      x: number;
+      yCenter: number;
+      yTop: number;
+      yBottom: number;
+      closed: boolean;
+    }> = [];
+
+    const preparedCircuitSims: PreparedCircuitSim[] = [];
+    for (const s of simsToSimulate) {
+      const isThisActive = s.id === activeSim?.id;
+      const closed = isThisActive
+        ? simCircuitSwitchClosed
+        : Boolean(s.switchClosed);
+      const flowDirection = isThisActive
+        ? simFlowDirection
+        : (s.flowDirection || 'electrons');
+      const showElectrons = isThisActive
+        ? simShowElectrons
+        : (typeof s.showElectrons === 'boolean' ? s.showElectrons : true);
+      const speedMultiplier = isThisActive
+        ? simSpeedMultiplier
+        : (typeof s.speedMultiplier === 'number' ? s.speedMultiplier : 1.0);
+      const showDarkWireTrack = isThisActive
+        ? simShowDarkWireTrack
+        : Boolean(s.showDarkWireTrack);
+
+      const simSet = getSimExpandedStrokeSet(activePage, s);
+      const simStrokes = activePage.strokes.filter(
+        (st) => visibleLayerIds.has(st.layerId) && simSet.has(st.id)
+      );
+      const simData = analyzeCircuitForSimulation(simStrokes, closed);
+      if (!hasProposal && isSimulating && simData.autoSwitch) {
+        nextAutoSwitchHits.push({
+          simId: s.id,
+          x: simData.autoSwitch.x,
+          yCenter: simData.autoSwitch.yCenter,
+          yTop: simData.autoSwitch.yTop,
+          yBottom: simData.autoSwitch.yBottom,
+          closed: simData.autoSwitch.closed,
+        });
       }
-      const totalEffLen = Math.max(1, cumEffDist[cumEffDist.length - 1]);
-      const count = Math.max(1, Math.round(totalEffLen / 32));
-      const stepDist = totalEffLen / count;
-      return {
-        subSegs: wc.subSegs,
-        cumEffDist,
-        totalEffLen,
-        count,
-        stepDist,
-        avgSpeed: wc.avgSpeed,
-      };
-    });
+      const particleChains = buildParticleChainsForSim(simData);
+      preparedCircuitSims.push({
+        sim: s,
+        isThisActive,
+        closed,
+        flowDirection,
+        showElectrons,
+        speedMultiplier,
+        showDarkWireTrack,
+        simStrokes,
+        simData,
+        particleChains,
+      });
+    }
+
+    autoSwitchHitsRef.current = nextAutoSwitchHits;
+    const activeHit =
+      nextAutoSwitchHits.find((h) => h.simId === activeSim?.id) ||
+      nextAutoSwitchHits[0] ||
+      null;
+    autoSwitchHitRef.current = activeHit;
 
     let rafId = 0;
 
@@ -25351,30 +26326,41 @@ export default function App() {
         proposalOverlayHitRef.current = null;
       }
 
-      if (isSimulating && activeSim) {
-        // 1. Optional PhET-style Dark Conductive Tube Track behind particles
-        if (simShowDarkWireTrack && simData.wireSegments.length > 0) {
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 11.5;
-        for (const seg of simData.wireSegments) {
-          if (!seg.inClosedLoop) continue;
-          ctx.beginPath();
-          if (seg.pathPoints && seg.pathPoints.length >= 2) {
-            ctx.moveTo(seg.pathPoints[0].x, seg.pathPoints[0].y);
-            for (let pIdx = 1; pIdx < seg.pathPoints.length; pIdx++) {
-              ctx.lineTo(seg.pathPoints[pIdx].x, seg.pathPoints[pIdx].y);
+      if (isSimulating && preparedCircuitSims.length > 0) {
+        for (const pcs of preparedCircuitSims) {
+          const {
+            simData,
+            particleChains,
+            flowDirection,
+            showElectrons,
+            speedMultiplier,
+            showDarkWireTrack,
+            simStrokes,
+          } = pcs;
+
+          // 1. Optional PhET-style Dark Conductive Tube Track behind particles
+          if (showDarkWireTrack && simData.wireSegments.length > 0) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 11.5;
+            for (const seg of simData.wireSegments) {
+              if (!seg.inClosedLoop) continue;
+              ctx.beginPath();
+              if (seg.pathPoints && seg.pathPoints.length >= 2) {
+                ctx.moveTo(seg.pathPoints[0].x, seg.pathPoints[0].y);
+                for (let pIdx = 1; pIdx < seg.pathPoints.length; pIdx++) {
+                  ctx.lineTo(seg.pathPoints[pIdx].x, seg.pathPoints[pIdx].y);
+                }
+              } else {
+                ctx.moveTo(seg.x1, seg.y1);
+                ctx.lineTo(seg.x2, seg.y2);
+              }
+              ctx.stroke();
             }
-          } else {
-            ctx.moveTo(seg.x1, seg.y1);
-            ctx.lineTo(seg.x2, seg.y2);
+            ctx.restore();
           }
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
 
       // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (Always active in simulation!)
       for (const cs of simData.components) {
@@ -25467,10 +26453,10 @@ export default function App() {
         const rHub = Math.max(5.5, rOuter * 0.22);
         const spinAng =
           cs.active && cs.powerFactor > 0.01
-            ? elapsedSec * 5.6 * cs.powerFactor * simSpeedMultiplier
+            ? elapsedSec * 5.6 * cs.powerFactor * speedMultiplier
             : 0;
 
-        const fanStrokes = visibleStrokes.filter((s) => f.strokeIds.includes(s.id));
+        const fanStrokes = simStrokes.filter((s) => f.strokeIds.includes(s.id));
         const ringStroke = fanStrokes.find((s) => s.shapeType === 'fan' && s.points.length > 2);
         const bladeStroke = fanStrokes.find((s) => s.shapeType === 'fan-blade');
         const ringPerimeterColor = ringStroke?.color || '#1e293b';
@@ -25561,7 +26547,7 @@ export default function App() {
           m.circleR ??
           Math.max(14, Math.min(m.maxX - m.minX, m.maxY - m.minY) * 0.36);
 
-        const meterStrokes = visibleStrokes.filter((s) => m.strokeIds.includes(s.id));
+        const meterStrokes = simStrokes.filter((s) => m.strokeIds.includes(s.id));
         const ringStroke = meterStrokes.find(
           (s) => s.shapeType === 'ammeter' || s.shapeType === 'voltmeter'
         );
@@ -25578,8 +26564,8 @@ export default function App() {
         const baseAng = -Math.PI / 4;
         const phaseSeed = mIdx * 1.37;
         const oscAng = cs.active
-          ? Math.sin(elapsedSec * 9.4 * simSpeedMultiplier + phaseSeed) * 0.052 +
-            Math.sin(elapsedSec * 16.3 * simSpeedMultiplier + phaseSeed + 0.85) * 0.021
+          ? Math.sin(elapsedSec * 9.4 * speedMultiplier + phaseSeed) * 0.052 +
+            Math.sin(elapsedSec * 16.3 * speedMultiplier + phaseSeed + 0.85) * 0.021
           : 0;
         const ang = baseAng + oscAng;
         const ux = Math.cos(ang);
@@ -25621,18 +26607,18 @@ export default function App() {
       }
 
       // 4. Moving Charge Carriers / Electrons along Continuous Circuit Chains (100% uniform period, speed & spacing!)
-      if (simShowElectrons && simParticleChains.length > 0) {
-        const dirSign = simFlowDirection === 'conventional' ? 1 : -1;
+      if (showElectrons && particleChains.length > 0) {
+        const dirSign = flowDirection === 'conventional' ? 1 : -1;
         const sw = simData.autoSwitch;
 
-        for (let cIdx = 0; cIdx < simParticleChains.length; cIdx++) {
-          const chain = simParticleChains[cIdx];
+        for (let cIdx = 0; cIdx < particleChains.length; cIdx++) {
+          const chain = particleChains[cIdx];
           const { subSegs, cumEffDist, count, stepDist, avgSpeed } = chain;
-          const speedPxPerSec = 64 * avgSpeed * simSpeedMultiplier * dirSign;
+          const speedPxPerSec = 64 * avgSpeed * speedMultiplier * dirSign;
           const rawOffset = ((elapsedSec * speedPxPerSec) % stepDist + stepDist) % stepDist;
 
           ctx.save();
-          if (simFlowDirection === 'electrons') {
+          if (flowDirection === 'electrons') {
             ctx.fillStyle = '#84cc16';
             ctx.shadowColor = '#4ade80';
             ctx.shadowBlur = 9;
@@ -25680,7 +26666,7 @@ export default function App() {
         // Mask the underlying vertical wire between yTop and yBottom so the switch gap is clearly visible!
         const paperBg = getEffectivePaperColor(activePage);
         ctx.strokeStyle = paperBg;
-        ctx.lineWidth = simShowDarkWireTrack ? 16 : 10;
+        ctx.lineWidth = showDarkWireTrack ? 16 : 10;
         ctx.lineCap = 'butt';
         ctx.beginPath();
         ctx.moveTo(sw.x, sw.yTop + 2);
@@ -25748,7 +26734,8 @@ export default function App() {
         }
         ctx.restore();
       }
-      } // end if (isSimulating && activeSim)
+      }
+      } // end if (isSimulating && preparedCircuitSims.length > 0)
 
       // ======================================================================
       // 6. SPRING & HARMONIC OSCILLATION OVERLAY (60fps Spring + Mass,
@@ -31774,6 +32761,8 @@ export default function App() {
     circuitAlignFlashStart,
     circuitProposal,
     simCircuitSwitchClosed,
+    activePage.circuitSims,
+    activePage.activeCircuitSimId,
     activePage.id,
     activePage.strokes,
     activePage.springSims,
@@ -35955,29 +36944,51 @@ export default function App() {
     }
 
     // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (or any manual switch)!
-    if (isSimulating && autoSwitchHitRef.current) {
-      const sw = autoSwitchHitRef.current;
-      const bladeTipX = sw.x + 25;
-      const bladeTipY = sw.yTop + 4;
-      const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
-      const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
-      if (
-        Math.hypot(pt.x - knobX, pt.y - knobY) <= 36 ||
-        (Math.abs(pt.x - sw.x) <= 32 && pt.y >= sw.yTop - 16 && pt.y <= sw.yBottom + 16)
-      ) {
-        setSimCircuitSwitchClosed((prev) => {
-          const next = !prev;
+    if (isSimulating) {
+      const activeCircuitSim = getActiveCircuitSim(targetPage);
+      const hits =
+        autoSwitchHitsRef.current.length > 0
+          ? autoSwitchHitsRef.current
+          : autoSwitchHitRef.current
+          ? [autoSwitchHitRef.current]
+          : [];
+      for (const sw of hits) {
+        const bladeTipX = sw.x + 25;
+        const bladeTipY = sw.yTop + 4;
+        const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
+        const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
+        if (
+          Math.hypot(pt.x - knobX, pt.y - knobY) <= 36 ||
+          (Math.abs(pt.x - sw.x) <= 32 && pt.y >= sw.yTop - 16 && pt.y <= sw.yBottom + 16)
+        ) {
+          const targetSimId = sw.simId;
+          const nextClosed = !sw.closed;
+          sw.closed = nextClosed;
+          if (!targetSimId || targetSimId === activeCircuitSim?.id) {
+            setSimCircuitSwitchClosed(nextClosed);
+          }
+          if (targetSimId) {
+            updateActivePage((page) => ({
+              ...page,
+              circuitSims: (page.circuitSims || []).map((cs) =>
+                cs.id === targetSimId ? { ...cs, switchClosed: nextClosed } : cs
+              ),
+            }));
+          }
+          const matchedSim = targetSimId
+            ? (targetPage.circuitSims || []).find((s) => s.id === targetSimId)
+            : activeCircuitSim;
+          const simLabel = matchedSim?.name ? ` [${matchedSim.name}]` : '';
           showToast(
-            next
-              ? '🟢 Ο διακόπτης έκλεισε (ON) — Ρέει ρεύμα σε όλους τους κλάδους!'
-              : '🔴 Ο διακόπτης άνοιξε (OFF) — Διακοπή ρεύματος!'
+            nextClosed
+              ? `🟢${simLabel} Ο διακόπτης έκλεισε (ON) — Ρέει ρεύμα!`
+              : `🔴${simLabel} Ο διακόπτης άνοιξε (OFF) — Διακοπή ρεύματος!`
           );
-          return next;
-        });
-        isDrawingRef.current = false;
-        activePointerIdRef.current = null;
-        activePointerTypeRef.current = null;
-        return;
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
       }
     }
     if (
@@ -39590,6 +40601,8 @@ export default function App() {
 
       const dyTop = nextYTop - prop.yTop;
       const dyBot = nextYBot - prop.yBot;
+      const dxLeft = nextXLeft - prop.xLeft;
+      const dxRight = nextXRight - prop.xRight;
 
       const nextProp = {
         ...prop,
@@ -39600,7 +40613,7 @@ export default function App() {
       };
       setCircuitProposal(nextProp);
 
-      // Update any existing solid wire strokes bound to the rectangle spans AND move top/bottom branch components up/down with their horizontal wire!
+      // Update any existing solid wire strokes bound to the rectangle spans AND move top/bottom/vertical branch components with their wire!
       const spanMap = new Map<string, { x1: number; y1: number; x2: number; y2: number }>();
       for (const sp of nextProp.spans) {
         if (sp.existingStrokeId) {
@@ -39609,8 +40622,10 @@ export default function App() {
       }
       const topCompSet = new Set(prop.topCompStrokeIds);
       const botCompSet = new Set(prop.botCompStrokeIds);
+      const rightCompSet = new Set(prop.rightCompStrokeIds || []);
+      const leftCompSet = new Set(prop.leftCompStrokeIds || []);
 
-      if (spanMap.size > 0 || dyTop !== 0 || dyBot !== 0) {
+      if (spanMap.size > 0 || dyTop !== 0 || dyBot !== 0 || dxLeft !== 0 || dxRight !== 0) {
         updateActivePage(
           (page) => ({
             ...page,
@@ -39636,14 +40651,25 @@ export default function App() {
                 : botCompSet.has(s.id)
                 ? dyBot
                 : 0;
-              if (compDy !== 0) {
+              const compDx = rightCompSet.has(s.id)
+                ? dxRight
+                : leftCompSet.has(s.id)
+                ? dxLeft
+                : 0;
+              if (compDy !== 0 || compDx !== 0) {
                 return {
                   ...s,
                   circuitBox: s.circuitBox
-                    ? { ...s.circuitBox, termY: s.circuitBox.termY + compDy }
+                    ? {
+                        ...s.circuitBox,
+                        cx: s.circuitBox.cx + compDx,
+                        termY: s.circuitBox.termY + compDy,
+                      }
                     : undefined,
                   points: s.points.map((pt) => ({
                     ...pt,
+                    x: pt.x + compDx,
+                    cx: pt.cx !== undefined ? pt.cx + compDx : undefined,
                     y: pt.y + compDy,
                     cy: pt.cy !== undefined ? pt.cy + compDy : undefined,
                   })),
@@ -59608,28 +60634,81 @@ export default function App() {
                                     <button
                                       type="button"
                                       onClick={() => {
+                                        lastDetectedSimIdRef.current = sim.id;
+                                        const curSim = getActiveCircuitSim(activePage);
                                         setNotebooks((prev) =>
                                           prev.map((nb) =>
                                             nb.id !== activeNotebook.id
                                               ? nb
                                               : {
                                                   ...nb,
-                                                  pages: nb.pages.map((p) =>
-                                                    p.id === simPageId
-                                                      ? { ...p, activeCircuitSimId: sim.id }
-                                                      : p
-                                                  ),
+                                                  pages: nb.pages.map((p) => {
+                                                    if (p.id !== simPageId) return p;
+                                                    const updatedSims = (p.circuitSims || []).map((cs) => {
+                                                      if (curSim && cs.id === curSim.id) {
+                                                        return {
+                                                          ...cs,
+                                                          switchClosed: simCircuitSwitchClosed,
+                                                          flowDirection: simFlowDirection,
+                                                          showElectrons: simShowElectrons,
+                                                          speedMultiplier: simSpeedMultiplier,
+                                                          showDarkWireTrack: simShowDarkWireTrack,
+                                                        };
+                                                      }
+                                                      return cs;
+                                                    });
+                                                    return {
+                                                      ...p,
+                                                      circuitSims: updatedSims,
+                                                      activeCircuitSimId: sim.id,
+                                                    };
+                                                  }),
                                                 }
                                           )
                                         );
                                         setSelectedStrokeIds([]);
-                                        setSimCircuitSwitchClosed(false);
+                                        setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
+                                        if (sim.flowDirection) {
+                                          setSimFlowDirection(sim.flowDirection);
+                                          setSimParticleStyle(
+                                            sim.flowDirection === 'conventional'
+                                              ? 'blue-electrons'
+                                              : 'green-energy'
+                                          );
+                                        }
+                                        if (typeof sim.showElectrons === 'boolean') {
+                                          setSimShowElectrons(sim.showElectrons);
+                                        }
+                                        if (typeof sim.speedMultiplier === 'number') {
+                                          setSimSpeedMultiplier(sim.speedMultiplier);
+                                        }
+                                        if (typeof sim.showDarkWireTrack === 'boolean') {
+                                          setSimShowDarkWireTrack(sim.showDarkWireTrack);
+                                        }
                                         setIsSimulating(true);
-                                        scrollToCircuitSim(simPageIdx, sim);
+                                        if (!isCircuitSimVisibleInViewport(simPageIdx, sim)) {
+                                          scrollToCircuitSim(simPageIdx, sim);
+                                        }
                                       }}
-                                      className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1"
-                                      title={`Μετάβαση & Ενεργοποίηση κυκλώματος "${sim.name}"`}
+                                      className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1.5"
+                                      title={`Μετάβαση & Ενεργοποίηση κυκλώματος "${sim.name}" (${
+                                        sim.switchClosed ? 'Κλειστό 🟢' : 'Ανοιχτό 🔴'
+                                      }, ${
+                                        sim.flowDirection === 'conventional'
+                                          ? 'Συμβατική φορά'
+                                          : 'Πραγματική φορά'
+                                      })`}
                                     >
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
+                                          sim.switchClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
+                                        }`}
+                                        title={
+                                          sim.switchClosed
+                                            ? 'Διακόπτης: Κλειστός (ON)'
+                                            : 'Διακόπτης: Ανοιχτός (OFF)'
+                                        }
+                                      />
                                       <span>{sim.name}</span>
                                     </button>
                                   )}
@@ -59723,7 +60802,7 @@ export default function App() {
                           showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
                           return;
                         }
-                        setSimCircuitSwitchClosed(false);
+                        setSimCircuitSwitchClosed(Boolean(activeSim.switchClosed));
                         setIsSimulating(true);
                         updateActivePage((page) =>
                           runScopedCircuitOperationOnPage(
@@ -59959,15 +61038,21 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => {
-                            setSimCircuitSwitchClosed((prev) => {
-                              const next = !prev;
-                              showToast(
-                                next
-                                  ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
-                                  : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
-                              );
-                              return next;
-                            });
+                            const next = !simCircuitSwitchClosed;
+                            setSimCircuitSwitchClosed(next);
+                            if (activeSim) {
+                              updateActivePage((page) => ({
+                                ...page,
+                                circuitSims: (page.circuitSims || []).map((s) =>
+                                  s.id === activeSim.id ? { ...s, switchClosed: next } : s
+                                ),
+                              }));
+                            }
+                            showToast(
+                              next
+                                ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
+                                : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
+                            );
                           }}
                           className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-2 border shadow-2xs transition cursor-pointer ${
                             simCircuitSwitchClosed
@@ -60056,74 +61141,126 @@ export default function App() {
                 </div>
 
                 {/* Simulation Visual Options */}
-                <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2 divide-y divide-[#e8e2d6]/70">
-                  <div className="space-y-1.5">
-                    <WarmStudioToggle
-                      checked={simShowElectrons}
-                      onChange={setSimShowElectrons}
-                      icon={<Zap className="w-3.5 h-3.5" />}
-                      label="Ηλεκτρόνια / Φορτία"
-                      className="w-full"
-                    />
+                {(() => {
+                  const activeSim = getActiveCircuitSim(activePage);
+                  return (
+                    <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2 divide-y divide-[#e8e2d6]/70">
+                      <div className="space-y-1.5">
+                        <WarmStudioToggle
+                          checked={simShowElectrons}
+                          onChange={(checked) => {
+                            setSimShowElectrons(checked);
+                            if (activeSim) {
+                              updateActivePage((page) => ({
+                                ...page,
+                                circuitSims: (page.circuitSims || []).map((s) =>
+                                  s.id === activeSim.id ? { ...s, showElectrons: checked } : s
+                                ),
+                              }));
+                            }
+                          }}
+                          icon={<Zap className="w-3.5 h-3.5" />}
+                          label="Ηλεκτρόνια / Φορτία"
+                          className="w-full"
+                        />
 
-                    {simShowElectrons && (
-                      <div className="grid grid-cols-2 gap-1 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSimFlowDirection('electrons');
-                            setSimParticleStyle('green-energy');
-                          }}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                            simFlowDirection === 'electrons'
-                              ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
-                              : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
-                          }`}
-                        >
-                          Πραγματική φορά
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSimFlowDirection('conventional');
-                            setSimParticleStyle('blue-electrons');
-                          }}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                            simFlowDirection === 'conventional'
-                              ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
-                              : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
-                          }`}
-                        >
-                          Συμβατική Φορά
-                        </button>
+                        {simShowElectrons && (
+                          <div className="grid grid-cols-2 gap-1 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimFlowDirection('electrons');
+                                setSimParticleStyle('green-energy');
+                                if (activeSim) {
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    circuitSims: (page.circuitSims || []).map((s) =>
+                                      s.id === activeSim.id ? { ...s, flowDirection: 'electrons' } : s
+                                    ),
+                                  }));
+                                }
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                simFlowDirection === 'electrons'
+                                  ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
+                                  : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                              }`}
+                            >
+                              Πραγματική φορά
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimFlowDirection('conventional');
+                                setSimParticleStyle('blue-electrons');
+                                if (activeSim) {
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    circuitSims: (page.circuitSims || []).map((s) =>
+                                      s.id === activeSim.id ? { ...s, flowDirection: 'conventional' } : s
+                                    ),
+                                  }));
+                                }
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                simFlowDirection === 'conventional'
+                                  ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
+                                  : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                              }`}
+                            >
+                              Συμβατική Φορά
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="pt-1.5">
-                    <WarmStudioToggle
-                      checked={simShowDarkWireTrack}
-                      onChange={setSimShowDarkWireTrack}
-                      label="Σκούρος Σωλήνας Καλωδίων"
-                      className="w-full"
-                    />
-                  </div>
+                      <div className="pt-1.5">
+                        <WarmStudioToggle
+                          checked={simShowDarkWireTrack}
+                          onChange={(checked) => {
+                            setSimShowDarkWireTrack(checked);
+                            if (activeSim) {
+                              updateActivePage((page) => ({
+                                ...page,
+                                circuitSims: (page.circuitSims || []).map((s) =>
+                                  s.id === activeSim.id ? { ...s, showDarkWireTrack: checked } : s
+                                ),
+                              }));
+                            }
+                          }}
+                          label="Σκούρος Σωλήνας Καλωδίων"
+                          className="w-full"
+                        />
+                      </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-2">
-                    <span className="text-[10.5px] font-semibold text-[#475569]">
-                      Ταχύτητα (<span className="text-[#234978] font-bold">{simSpeedMultiplier.toFixed(1)}x</span>):
-                    </span>
-                    <input
-                      type="range"
-                      min="0.4"
-                      max="2.4"
-                      step="0.2"
-                      value={simSpeedMultiplier}
-                      onChange={(e) => setSimSpeedMultiplier(parseFloat(e.target.value))}
-                      className="w-28 accent-[#234978] cursor-pointer"
-                    />
-                  </div>
-                </div>
+                      <div className="flex items-center justify-between gap-2 pt-2">
+                        <span className="text-[10.5px] font-semibold text-[#475569]">
+                          Ταχύτητα (<span className="text-[#234978] font-bold">{simSpeedMultiplier.toFixed(1)}x</span>):
+                        </span>
+                        <input
+                          type="range"
+                          min="0.4"
+                          max="2.4"
+                          step="0.2"
+                          value={simSpeedMultiplier}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setSimSpeedMultiplier(val);
+                            if (activeSim) {
+                              updateActivePage((page) => ({
+                                ...page,
+                                circuitSims: (page.circuitSims || []).map((s) =>
+                                  s.id === activeSim.id ? { ...s, speedMultiplier: val } : s
+                                ),
+                              }));
+                            }
+                          }}
+                          className="w-28 accent-[#234978] cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
                   </>
                 ) : simActiveCategory === 'springs' ? (
                   /* ==========================================================
@@ -61811,8 +62948,11 @@ export default function App() {
                             >
                               <div className="w-full flex items-center justify-center gap-1 my-auto">
                                 <div
-                                  className="flex flex-col items-end justify-center leading-none tracking-tight shrink-0 select-none gap-0.5"
-                                  style={{ fontSize: `${Math.max(6.0, 6.8 * ptScale).toFixed(1)}px` }}
+                                  className="flex flex-col items-end justify-center leading-none tracking-tight shrink-0 select-none"
+                                  style={{
+                                    fontSize: `${Math.max(6.0, 6.8 * ptScale).toFixed(1)}px`,
+                                    gap: `${Math.max(2.5, 3.8 * ptScale).toFixed(1)}px`,
+                                  }}
                                 >
                                   <span
                                     className="text-slate-500 font-medium"
@@ -61828,11 +62968,11 @@ export default function App() {
                                   </span>
                                 </div>
                                 <div
-                                  className="font-extrabold leading-none tracking-tight text-center"
+                                  className="font-bold leading-none tracking-tight text-center transform scale-y-[1.08] inline-block origin-center"
                                   style={{
                                     fontSize: `${Math.max(
-                                      14,
-                                      (el.symbol.length === 1 ? 21 : 18.5) * ptScale
+                                      14.5,
+                                      (el.symbol.length === 1 ? 22.5 : 20.0) * ptScale
                                     ).toFixed(1)}px`,
                                   }}
                                 >

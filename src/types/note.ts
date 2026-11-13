@@ -248,6 +248,11 @@ export interface CircuitSimConfig {
   id: string;
   name: string; // e.g. 'sim01', 'sim02'
   strokeIds: string[]; // Strokes belonging to this circuit simulation
+  switchClosed?: boolean; // Individual knife switch state (open/closed)
+  flowDirection?: 'electrons' | 'conventional'; // Individual flow direction ('electrons' = real, 'conventional' = conventional)
+  showElectrons?: boolean; // Individual charge carrier visibility
+  speedMultiplier?: number; // Individual simulation speed multiplier
+  showDarkWireTrack?: boolean; // Individual dark tube style track
 }
 
 export interface SpringGraphBox {

@@ -6370,6 +6370,7 @@ export function getCircuitComponentsWithTerminals(
       const botPt = { x: circleCx, y: circleCy + circleR };
       const leftPt = { x: circleCx - circleR, y: circleCy };
       const rightPt = { x: circleCx + circleR, y: circleCy };
+      const snapTol = Math.max(52, circleR * 1.55);
 
       for (const ws of strokes) {
         if (entryIdSet.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) continue;
@@ -6382,31 +6383,72 @@ export function getCircuitComponentsWithTerminals(
           const sdx = Math.abs(b.x - a.x);
           const sdy = Math.abs(b.y - a.y);
           if (Math.hypot(sdx, sdy) < 8) continue;
-          const isH = sdy <= Math.max(18, sdx * 0.35);
-          const isV = sdx <= Math.max(18, sdy * 0.35);
+          const isH = sdy <= Math.max(20, sdx * 0.35);
+          const isV = sdx <= Math.max(20, sdy * 0.35);
           if (isH) {
             const dL = Math.min(distance(a, leftPt), distance(b, leftPt));
             const dR = Math.min(distance(a, rightPt), distance(b, rightPt));
-            if (dL <= 38) horizScore += 2;
-            if (dR <= 38) horizScore += 2;
+            if (dL <= snapTol) horizScore += 2;
+            if (dR <= snapTol) horizScore += 2;
             if (
               Math.min(a.x, b.x) < leftPt.x - 4 &&
               Math.max(a.x, b.x) > rightPt.x + 4 &&
-              Math.abs((a.y + b.y) / 2 - circleCy) <= circleR * 1.3
+              Math.abs((a.y + b.y) / 2 - circleCy) <= circleR * 1.35
             ) {
               horizScore += 3;
+            }
+            if (Math.abs((a.y + b.y) / 2 - circleCy) <= Math.max(34, circleR * 1.3)) {
+              if (Math.abs(Math.max(a.x, b.x) - leftPt.x) <= snapTol || Math.abs(Math.min(a.x, b.x) - rightPt.x) <= snapTol) {
+                horizScore += 2;
+              }
             }
           } else if (isV) {
             const dT = Math.min(distance(a, topPt), distance(b, topPt));
             const dB = Math.min(distance(a, botPt), distance(b, botPt));
-            if (dT <= 38) vertScore += 2;
-            if (dB <= 38) vertScore += 2;
+            if (dT <= snapTol) vertScore += 2;
+            if (dB <= snapTol) vertScore += 2;
             if (
               Math.min(a.y, b.y) < topPt.y - 4 &&
               Math.max(a.y, b.y) > botPt.y + 4 &&
-              Math.abs((a.x + b.x) / 2 - circleCx) <= circleR * 1.3
+              Math.abs((a.x + b.x) / 2 - circleCx) <= circleR * 1.35
             ) {
               vertScore += 3;
+            }
+            if (Math.abs((a.x + b.x) / 2 - circleCx) <= Math.max(34, circleR * 1.3)) {
+              if (Math.abs(Math.max(a.y, b.y) - topPt.y) <= snapTol || Math.abs(Math.min(a.y, b.y) - botPt.y) <= snapTol) {
+                vertScore += 2;
+              }
+            }
+          }
+        }
+      }
+
+      if (vertScore === 0 && horizScore === 0) {
+        // Fallback: check proximity to any external straight wire segment
+        for (const ws of strokes) {
+          if (entryIdSet.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) continue;
+          if (ws.tool === 'highlighter' || ws.points.length < 2) continue;
+          if (ws.shapeType && ws.shapeType !== 'line') continue;
+          for (let k = 0; k < ws.points.length - 1; k++) {
+            const a = ws.points[k];
+            const b = ws.points[k + 1];
+            const sdx = Math.abs(b.x - a.x);
+            const sdy = Math.abs(b.y - a.y);
+            if (Math.hypot(sdx, sdy) < 10) continue;
+            const isH = sdy <= Math.max(20, sdx * 0.35);
+            const isV = sdx <= Math.max(20, sdy * 0.35);
+            if (isV && Math.abs((a.x + b.x) / 2 - circleCx) <= Math.max(45, circleR * 1.6)) {
+              const segMinY = Math.min(a.y, b.y);
+              const segMaxY = Math.max(a.y, b.y);
+              if (segMaxY >= topPt.y - 70 && segMinY <= botPt.y + 70) {
+                vertScore += 2;
+              }
+            } else if (isH && Math.abs((a.y + b.y) / 2 - circleCy) <= Math.max(45, circleR * 1.6)) {
+              const segMinX = Math.min(a.x, b.x);
+              const segMaxX = Math.max(a.x, b.x);
+              if (segMaxX >= leftPt.x - 70 && segMinX <= rightPt.x + 70) {
+                horizScore += 2;
+              }
             }
           }
         }
@@ -10326,6 +10368,48 @@ export function autoAlignAndConnectCircuit(
       }
       continue;
     }
+
+    if (comp.kind === 'ammeter' || comp.kind === 'voltmeter') {
+      const refX = comp.circleCx ?? comp.cx;
+      const refY = comp.circleCy ?? comp.cy;
+      let minColDist = Infinity;
+      let closestCol: (typeof vCols)[number] | null = null;
+      for (const col of vCols) {
+        const d = Math.abs(col.xCol - refX);
+        if (d < minColDist) {
+          minColDist = d;
+          closestCol = col;
+        }
+      }
+      let minRowDist = Infinity;
+      for (const row of hRows) {
+        const d = Math.abs(row.yRow - refY);
+        if (d < minRowDist) minRowDist = d;
+      }
+      if (closestCol && minColDist <= maxRowAlignDist && minColDist < minRowDist) {
+        comp.orientation = 'v';
+        const rC = comp.circleR ?? Math.max(15, Math.min(comp.w, comp.h) * 0.33);
+        comp.leftTerm = { x: refX, y: refY - rC };
+        comp.rightTerm = { x: refX, y: refY + rC };
+        const dx = closestCol.xCol - refX;
+        if (Math.abs(dx) >= 0.5) {
+          const idSet = new Set(comp.strokeIds);
+          currentStrokes = currentStrokes.map((s) =>
+            !idSet.has(s.id)
+              ? s
+              : {
+                  ...s,
+                  points: s.points.map((p) => ({
+                    ...p,
+                    x: p.x + dx,
+                    cx: p.cx !== undefined ? p.cx + dx : undefined,
+                  })),
+                }
+          );
+        }
+        continue;
+      }
+    }
     const termY =
       comp.kind === 'ammeter' || comp.kind === 'voltmeter'
         ? (comp.circleCy ?? comp.cy)
@@ -11106,7 +11190,10 @@ export function autoAlignAndConnectCircuit(
         const vertCompBetween = colComps.some(
           (vc) => vc.cy >= vGapMin && vc.cy <= vGapMax
         );
-        if (seg.yT - prev.yB <= 38 && !vertCompBetween) {
+        const isSwitchGap = seg.yT - prev.yB >= 18 && seg.yT - prev.yB <= 55;
+        if (seg.yT - prev.yB <= 16 && !vertCompBetween) {
+          prev.yB = Math.max(prev.yB, seg.yB);
+        } else if (seg.yT - prev.yB <= 38 && !vertCompBetween && !isSwitchGap) {
           prev.yB = Math.max(prev.yB, seg.yB);
         } else {
           mergedV.push({ ...seg });
@@ -11843,6 +11930,90 @@ export function analyzeCircuitForSimulation(
     });
   }
 
+  // Detect if there is a vertical gap on the left conductor (Auto-Switch Gap between two collinear vertical wire segments)
+  let autoSwitchGap: {
+    uTop: number;
+    vBot: number;
+    x: number;
+    yTop: number;
+    yBottom: number;
+    yCenter: number;
+    topWireIdx: number;
+    botWireIdx: number;
+  } | null = null;
+
+  if (openSwitches.length === 0 && !comps.some((c) => c.kind === 'switch')) {
+    let bestX = Infinity;
+    for (let i = 0; i < wireNodes.length; i++) {
+      const wi = wireNodes[i].w;
+      const dxi = Math.abs(wi.x2 - wi.x1);
+      const dyi = Math.abs(wi.y2 - wi.y1);
+      if (dyi < 10 || dxi > 14) continue;
+      const xColI = (wi.x1 + wi.x2) / 2;
+      const yMinI = Math.min(wi.y1, wi.y2);
+      const yMaxI = Math.max(wi.y1, wi.y2);
+
+      for (let j = 0; j < wireNodes.length; j++) {
+        if (i === j) continue;
+        const wj = wireNodes[j].w;
+        const dxj = Math.abs(wj.x2 - wj.x1);
+        const dyj = Math.abs(wj.y2 - wj.y1);
+        if (dyj < 10 || dxj > 14) continue;
+        const xColJ = (wj.x1 + wj.x2) / 2;
+        if (Math.abs(xColI - xColJ) > 14) continue;
+
+        const yMinJ = Math.min(wj.y1, wj.y2);
+        const yMaxJ = Math.max(wj.y1, wj.y2);
+
+        if (yMinJ > yMaxI && yMinJ - yMaxI >= 14 && yMinJ - yMaxI <= 65) {
+          const compInGap = comps.some(
+            (c) =>
+              Math.abs(c.cx - xColI) <= 32 &&
+              c.cy >= yMaxI - 10 &&
+              c.cy <= yMinJ + 10
+          );
+          if (!compInGap && xColI < bestX) {
+            bestX = xColI;
+            const nodeTop =
+              Math.abs(wi.y1 - yMaxI) < Math.abs(wi.y2 - yMaxI)
+                ? wireNodes[i].u
+                : wireNodes[i].v;
+            const nodeBot =
+              Math.abs(wj.y1 - yMinJ) < Math.abs(wj.y2 - yMinJ)
+                ? wireNodes[j].u
+                : wireNodes[j].v;
+            autoSwitchGap = {
+              uTop: nodeTop,
+              vBot: nodeBot,
+              x: Math.round((xColI + xColJ) / 2),
+              yTop: yMaxI,
+              yBottom: yMinJ,
+              yCenter: Math.round((yMaxI + yMinJ) / 2),
+              topWireIdx: i,
+              botWireIdx: j,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // If autoSwitchGap exists and circuitSwitchClosed is TRUE, bridge the switch gap with a virtual switch edge in adj!
+  if (autoSwitchGap && circuitSwitchClosed) {
+    adj[autoSwitchGap.uTop].push({
+      to: autoSwitchGap.vBot,
+      type: 'closed-switch',
+      resistance: 0.02,
+      forwardFromU: true,
+    });
+    adj[autoSwitchGap.vBot].push({
+      to: autoSwitchGap.uTop,
+      type: 'closed-switch',
+      resistance: 0.02,
+      forwardFromU: false,
+    });
+  }
+
   for (const cn of compNodes) {
     if (
       cn.comp.kind === 'battery' ||
@@ -11967,12 +12138,12 @@ export function analyzeCircuitForSimulation(
   const wireHighEnergy = new Array<boolean>(wires.length).fill(false);
   const compPowerMap = new Map<string, number>();
   const compSignedFlowMap = new Map<string, number>();
+  const V = new Float64Array(nodeCenters.length).fill(0.5);
 
   if (anyClosedLoop) {
     const primarySourceNode = compNodes.find(
       (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
     )!;
-    const V = new Float64Array(nodeCenters.length).fill(0.5);
     const isFixed = new Uint8Array(nodeCenters.length);
     V[primarySourceNode.u] = 1.0;
     isFixed[primarySourceNode.u] = 1;
@@ -12034,9 +12205,18 @@ export function analyzeCircuitForSimulation(
     }
   }
 
-  // Detect the Left Vertical Conductor (among active closed-loop wires!) for the automatic interactive switch!
+  // Detect the Left Vertical Conductor for the automatic interactive switch!
   let autoSwitch: AutoVerticalSwitchInfo | null = null;
-  if (anyClosedLoop && wires.length > 0) {
+  if (autoSwitchGap) {
+    autoSwitch = {
+      x: autoSwitchGap.x,
+      yCenter: autoSwitchGap.yCenter,
+      yTop: autoSwitchGap.yTop,
+      yBottom: autoSwitchGap.yBottom,
+      wireIdx: -1,
+      closed: circuitSwitchClosed,
+    };
+  } else if (anyClosedLoop && wires.length > 0) {
     let minCircuitX = Infinity;
     let maxCircuitX = -Infinity;
     for (let i = 0; i < wires.length; i++) {
@@ -12432,6 +12612,26 @@ export function analyzeCircuitForSimulation(
           pathPoints: orderedPath,
         });
       }
+    }
+
+    if (autoSwitchGap && circuitSwitchClosed) {
+      const topFlow = wireFlowSum[autoSwitchGap.topWireIdx];
+      const botFlow = wireFlowSum[autoSwitchGap.botWireIdx];
+      const effFlow = Math.abs(topFlow) > 0.01 ? topFlow : botFlow;
+      const bladeSpeed = Math.min(2.2, Math.max(0.4, Math.abs(effFlow) || 1.0));
+      const dVBlade = V[autoSwitchGap.uTop] - V[autoSwitchGap.vBot];
+      const fromTopToBot = dVBlade >= 0;
+      simulatedWires.push({
+        x1: autoSwitchGap.x,
+        y1: fromTopToBot ? autoSwitchGap.yTop : autoSwitchGap.yBottom,
+        x2: autoSwitchGap.x,
+        y2: fromTopToBot ? autoSwitchGap.yBottom : autoSwitchGap.yTop,
+        length: Math.abs(autoSwitchGap.yBottom - autoSwitchGap.yTop),
+        inClosedLoop: true,
+        active: true,
+        currentSpeed: bladeSpeed,
+        highEnergy: (V[autoSwitchGap.uTop] + V[autoSwitchGap.vBot]) / 2 >= 0.5,
+      });
     }
 
     // Merge contiguous collinear horizontal segments that touch/overlap along the same row and flow in the same direction
