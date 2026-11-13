@@ -163,7 +163,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
 
   ctx.strokeStyle = isBulbInternalFilamentOrLead ? s.color || '#334155' : s.color;
   ctx.lineWidth = s.width;
-  ctx.lineCap = s.tool === 'highlighter' ? 'butt' : 'round';
+  ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
   if (s.lineStyle === 'dashed') {
@@ -712,7 +712,38 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     }
   }
 
-  ctx.stroke();
+  if (s.tool === 'highlighter') {
+    const baseAlpha = s.opacity ?? 0.38;
+    const W = s.width;
+
+    ctx.save();
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = Math.min(5, W * 0.22);
+    ctx.globalAlpha = baseAlpha * 0.28;
+    ctx.lineWidth = W * 1.04;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.42;
+    ctx.lineWidth = W * 0.76;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.46;
+    ctx.lineWidth = W * 0.46;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.stroke();
+  }
 
   if ((s.arrowStart || s.shapeType === 'double-arrow') && s.points.length >= 2) {
     const first = s.points[0];
