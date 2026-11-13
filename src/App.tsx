@@ -50624,7 +50624,7 @@ export default function App() {
                 type="button"
                 data-popover-trigger="share-menu"
                 onClick={(e) => toggleDownloadMenuForButton(e, activeNotebook.id)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-emerald-600 text-[11px] font-semibold text-emerald-200 hover:text-white transition cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] font-semibold text-sky-200 hover:text-white transition cursor-pointer"
                 title={`Λήψη PDF (.pdf) ή Πρωτοτύπου (.bestnotes) «${activeNotebook.title}»`}
               >
                 <Download className="w-3.5 h-3.5 text-emerald-300" />
@@ -50663,21 +50663,30 @@ export default function App() {
                     }
                     setShowLiveTvMenu((v) => !v);
                   }}
-                  className={`flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                    !isLiveTvBroadcasting
-                      ? 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
-                      : liveTvStatus.connected
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'bg-amber-500 text-slate-950 shadow-sm'
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                    isLiveTvBroadcasting
+                      ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
+                      : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
                   }`}
                   title="Έναρξη / Έλεγχος Live 16:9 Μετάδοσης από το iPad στον Διαδραστικό Πίνακα"
                 >
-                  <span>
-                    {!isLiveTvBroadcasting
-                      ? 'Live TV'
-                      : liveTvStatus.connected
-                      ? `Live TV${liveTvStatus.latencyMs ? ` • ${liveTvStatus.latencyMs}ms` : ''}`
-                      : 'Live TV...'}
+                  <span className="flex items-center gap-1">
+                    {isLiveTvBroadcasting && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          liveTvStatus.connected
+                            ? 'bg-emerald-400 animate-pulse'
+                            : 'bg-amber-400 animate-ping'
+                        }`}
+                      />
+                    )}
+                    <span>
+                      {!isLiveTvBroadcasting
+                        ? 'Live TV'
+                        : liveTvStatus.connected
+                        ? `Live TV${liveTvStatus.latencyMs ? ` • ${liveTvStatus.latencyMs}ms` : ''}`
+                        : 'Live TV...'}
+                    </span>
                   </span>
                 </button>
 
@@ -50857,7 +50866,7 @@ export default function App() {
                   setIsFullBleedWidth(true);
                   setViewMode('editor');
                 }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[11px] font-bold text-white shadow-xs transition cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] font-semibold text-sky-200 hover:text-white transition cursor-pointer"
                 title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
               >
                 <span>📺 Live 16:9</span>
