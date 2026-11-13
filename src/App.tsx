@@ -61581,7 +61581,7 @@ export default function App() {
                 ? Math.max(8, Math.min(window.innerWidth - 328, layersPanelPos.x))
                 : Math.max(16, window.innerWidth - 340);
               const effLayersY = layersPanelPos
-                ? Math.max(safeNavBottom, Math.min(window.innerHeight - 120, layersPanelPos.y))
+                ? Math.max(8, Math.min(window.innerHeight - 120, layersPanelPos.y))
                 : safeNavBottom + 6;
 
               return (
@@ -61620,9 +61620,8 @@ export default function App() {
                     e.stopPropagation();
                     const dx = e.clientX - layersPanelDragRef.current.startX;
                     const dy = e.clientY - layersPanelDragRef.current.startY;
-                    const minY = getStickyNavBottom();
                     const nextX = Math.max(8, Math.min(window.innerWidth - 328, layersPanelDragRef.current.origX + dx));
-                    const nextY = Math.max(minY, Math.min(window.innerHeight - 120, layersPanelDragRef.current.origY + dy));
+                    const nextY = Math.max(8, Math.min(window.innerHeight - 120, layersPanelDragRef.current.origY + dy));
                     setLayersPanelPos({ x: Math.round(nextX), y: Math.round(nextY) });
                   }}
                   onPointerUp={(e) => {
