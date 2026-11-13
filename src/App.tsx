@@ -15256,10 +15256,10 @@ export default function App() {
 
   const getTextShadowCss = (hasShadow?: boolean, fontSize: number = 20): string | undefined => {
     if (!hasShadow) return undefined;
-    const x = Math.max(0.7, fontSize * 0.035).toFixed(1);
-    const y = Math.max(1.1, fontSize * 0.055).toFixed(1);
-    const blur = Math.max(2.0, fontSize * 0.08).toFixed(1);
-    return `${x}px ${y}px ${blur}px rgba(71, 85, 105, 0.38)`;
+    const x = Math.max(1.1, Number((fontSize * 0.045).toFixed(1)));
+    const y = Math.max(1.5, Number((fontSize * 0.065).toFixed(1)));
+    const blur = Math.max(1.8, Number((fontSize * 0.075).toFixed(1)));
+    return `${x}px ${y}px ${blur}px rgba(15, 23, 42, 0.48)`;
   };
 
   const getTextFontCss = (fontFamily?: TextFontStyle, isBold?: boolean): React.CSSProperties => {
@@ -15486,7 +15486,7 @@ export default function App() {
           fontWeight={isBoldActive ? 700 : 500}
           stroke={isBoldActive ? tx.color : undefined}
           strokeWidth={isBoldActive ? 0.45 : undefined}
-          filter={tx.shadow ? 'drop-shadow(0.8px 1.2px 1.8px rgba(71,85,105,0.35))' : undefined}
+          filter={tx.shadow ? 'drop-shadow(1.1px 1.5px 1.8px rgba(15,23,42,0.48))' : undefined}
           paintOrder="stroke fill"
           textAnchor={textAnchor}
         >
@@ -55569,6 +55569,7 @@ export default function App() {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
                   const subStyle =
                     selTxt &&
+                    editingTextId === selTxt.id &&
                     !selTxt.isMath &&
                     activeTextRange?.textId === selTxt.id &&
                     activeTextRange.end > activeTextRange.start
@@ -55627,7 +55628,9 @@ export default function App() {
                   const applyShadow = (nextS: boolean) => {
                     setTextShadow(nextS);
                     if (selTxt) {
+                      const isEditing = editingTextId === selTxt.id;
                       if (
+                        isEditing &&
                         !selTxt.isMath &&
                         activeTextRange?.textId === selTxt.id &&
                         activeTextRange.end > activeTextRange.start
@@ -55652,7 +55655,13 @@ export default function App() {
                         updateActivePage((page) => ({
                           ...page,
                           texts: (page.texts || []).map((t) =>
-                            t.id === selTxt.id ? { ...t, shadow: nextS } : t
+                            t.id === selTxt.id
+                              ? {
+                                  ...t,
+                                  shadow: nextS,
+                                  spans: (t.spans || []).map((sp) => ({ ...sp, shadow: nextS })),
+                                }
+                              : t
                           ),
                         }));
                       }
@@ -63204,6 +63213,7 @@ export default function App() {
                           {(isSelectedTxt || isEditingTxt) &&
                             (() => {
                               const activeSubRange =
+                                isEditingTxt &&
                                 !txt.isMath &&
                                 activeTextRange?.textId === txt.id &&
                                 activeTextRange.end > activeTextRange.start
@@ -63418,11 +63428,13 @@ export default function App() {
                                       type="button"
                                       onMouseDown={(ev) => ev.preventDefault()}
                                       onClick={() => {
-                                        const liveRange = getActiveRangeForText(
-                                          txt.id,
-                                          (txt.text || '').length
-                                        );
-                                        if (liveRange) {
+                                        const liveRange = isEditingTxt
+                                          ? getActiveRangeForText(
+                                              txt.id,
+                                              (txt.text || '').length
+                                            )
+                                          : null;
+                                        if (liveRange && liveRange.end > liveRange.start) {
                                           const curSub = getRangeEffectiveStyle(
                                             txt,
                                             liveRange.start,
@@ -63437,7 +63449,6 @@ export default function App() {
                                           activeTextRangeRef.current = nextRng;
                                           setActiveTextRange(nextRng);
                                           setSelectedTextId(txt.id);
-                                          setEditingTextId(null);
                                           updateActivePage((page) => ({
                                             ...page,
                                             texts: (page.texts || []).map((t) =>
@@ -63476,6 +63487,7 @@ export default function App() {
                                               ...t,
                                               fontFamily: normFont,
                                               bold: nextB,
+                                              spans: (t.spans || []).map((sp) => ({ ...sp, bold: nextB })),
                                               boxWidth: nextBoxW,
                                               boxHeight: undefined,
                                             };
@@ -63497,11 +63509,13 @@ export default function App() {
                                       type="button"
                                       onMouseDown={(ev) => ev.preventDefault()}
                                       onClick={() => {
-                                        const liveRange = getActiveRangeForText(
-                                          txt.id,
-                                          (txt.text || '').length
-                                        );
-                                        if (liveRange) {
+                                        const liveRange = isEditingTxt
+                                          ? getActiveRangeForText(
+                                              txt.id,
+                                              (txt.text || '').length
+                                            )
+                                          : null;
+                                        if (liveRange && liveRange.end > liveRange.start) {
                                           const curSub = getRangeEffectiveStyle(
                                             txt,
                                             liveRange.start,
@@ -63516,7 +63530,6 @@ export default function App() {
                                           activeTextRangeRef.current = nextRng;
                                           setActiveTextRange(nextRng);
                                           setSelectedTextId(txt.id);
-                                          setEditingTextId(null);
                                           updateActivePage((page) => ({
                                             ...page,
                                             texts: (page.texts || []).map((t) =>
@@ -63544,6 +63557,7 @@ export default function App() {
                                             return {
                                               ...t,
                                               shadow: nextS,
+                                              spans: (t.spans || []).map((sp) => ({ ...sp, shadow: nextS })),
                                             };
                                           }),
                                         }));
@@ -64021,6 +64035,7 @@ export default function App() {
                                         fontWeight: txt.bold ? 700 : 500,
                                         textAlign: txt.textAlign || 'left',
                                         ...fontCss,
+                                        textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                                         lineHeight: effLineHeight,
                                         pointerEvents: 'none',
                                         userSelect: 'none',
@@ -64410,6 +64425,7 @@ export default function App() {
                                 color: txt.color,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,
+                                textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                               }}
                               className={`flex flex-col ${
                                 txt.textAlign === 'center'
@@ -64468,6 +64484,7 @@ export default function App() {
                                 fontWeight: txt.bold ? 700 : 500,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,
+                                textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                                 lineHeight: effLineHeight,
                               }}
                             >
@@ -64706,10 +64723,16 @@ export default function App() {
                                       </span>
                                     );
                                   }
-                                  return <span>{renderLineTokens(txt.text)}</span>;
+                                  return (
+                                    <span style={{ textShadow: getTextShadowCss(txt.shadow, txt.fontSize) }}>
+                                      {renderLineTokens(txt.text)}
+                                    </span>
+                                  );
                                 })()
                               ) : (
-                                txt.text || ''
+                                <span style={{ textShadow: getTextShadowCss(txt.shadow, txt.fontSize) }}>
+                                  {txt.text || ''}
+                                </span>
                               )}
                             </div>
                           ))}
