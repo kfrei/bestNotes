@@ -58741,6 +58741,55 @@ export default function App() {
                           </span>
                         </div>
 
+                        {/* Quick Color Selector for Monochrome Stickers & Icons */}
+                        <div className="flex items-center justify-between gap-1 mb-2 px-1 text-[11px] text-[#2c3e50] shrink-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-semibold text-slate-500">
+                              {isSketchesMode ? 'Χρώμα Σκίτσων:' : 'Χρώμα Εικονιδίων:'}
+                            </span>
+                            {[
+                              { label: 'Κόκκινο', color: '#dc2626' },
+                              { label: 'Μπλε', color: '#2563eb' },
+                              { label: 'Πράσινο', color: '#16a34a' },
+                              { label: 'Πορτοκαλί', color: '#ea580c' },
+                              { label: 'Μωβ', color: '#8b5cf6' },
+                              { label: 'Κίτρινο', color: '#eab308' },
+                              { label: 'Μαύρο', color: '#0f172a' },
+                            ].map((c) => {
+                              const active =
+                                (stickerCustomColor || strokeColor || '#0f172a').toLowerCase() ===
+                                c.color.toLowerCase();
+                              return (
+                                <button
+                                  key={c.color}
+                                  type="button"
+                                  onClick={() => {
+                                    setStickerCustomColor(c.color);
+                                    setStrokeColor(c.color);
+                                  }}
+                                  className={`w-3.5 h-3.5 rounded-full transition-transform cursor-pointer border ${
+                                    active
+                                      ? 'scale-125 ring-2 ring-offset-1 ring-[#234978] border-white shadow-2xs'
+                                      : 'border-black/15 hover:scale-110'
+                                  }`}
+                                  style={{ backgroundColor: c.color }}
+                                  title={`Χρώμα: ${c.label}`}
+                                />
+                              );
+                            })}
+                            {stickerCustomColor && (
+                              <button
+                                type="button"
+                                onClick={() => setStickerCustomColor(null)}
+                                className="text-[9px] text-slate-400 hover:text-[#234978] underline ml-1 cursor-pointer font-medium"
+                                title="Επαναφορά στο προεπιλεγμένο χρώμα μαρκαδόρου"
+                              >
+                                επαναφορά
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Stickers Results Grid */}
                         {combinedStickers.length === 0 ? (
                           <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-[#efebe3]/30 rounded-xl border border-dashed border-[#dfd8cb]">

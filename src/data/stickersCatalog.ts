@@ -42,30 +42,134 @@ export const STICKER_COLOR_STYLES: { id: StickerColorStyle; label: string }[] = 
 ];
 
 export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
+  // =========================================================================
+  // 0. ΘΑΥΜΑΣΤΙΚΑ & ΑΝΑΠΟΔΑ ΤΡΙΓΩΝΑ ΠΡΟΣΟΧΗΣ (Πλήρως Προσαρμόσιμο Χρώμα!)
+  // =========================================================================
   {
-    id: 'col-premium-planet-earth-3d-relief',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_planet_earth_3d_relief.png',
-    title: 'Πλανήτης Γη — Έγχρωμο Premium Ανάγλυφο 3D',
-    category: 'Σχήματα & 3D',
-    colorStyle: 'multicolor',
+    id: 'fx-excl-inverted-triangle-outline',
+    iconifyId: 'custom-svg:alert-inverted-triangle-outline:#dc2626:14',
+    title: 'Θαυμαστικό Ανάποδο Τρίγωνο (Περίγραμμα)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
     tags: [
-      'γη',
-      'πλανήτης',
-      'πλανήτης γη',
-      'υδρόγειος',
-      'premium',
-      'έγχρωμο',
-      'ανάγλυφο',
-      '3d',
-      'ήπειροι',
-      'ωκεανοί',
-      'χάρτης',
-      'γεωγραφία',
-      'αστρονομία',
-      'φυσική',
-      'earth',
-      'planet',
-      'globe',
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'ανάποδο τρίγωνο',
+      'τρίγωνο',
+      'προσοχή',
+      'κίνδυνος',
+      'sos',
+      'alert',
+      'warning',
+      'yield',
+      'caution',
+      'σημαντικό',
+      'σημείωση',
+      '!',
+    ],
+  },
+  {
+    id: 'fx-excl-inverted-triangle-solid',
+    iconifyId: 'custom-svg:alert-inverted-triangle-solid:#dc2626:14',
+    title: 'Θαυμαστικό Ανάποδο Τρίγωνο (Γεμάτο Badge)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
+    tags: [
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'ανάποδο τρίγωνο',
+      'γεμάτο',
+      'σήμα',
+      'badge',
+      'προσοχή',
+      'κίνδυνος',
+      'sos',
+      'alert',
+      'warning',
+      'yield',
+      'σημαντικό',
+      '!',
+    ],
+  },
+  {
+    id: 'fx-excl-wedge-triangle',
+    iconifyId: 'custom-svg:alert-wedge-exclamation:#dc2626:14',
+    title: 'Θαυμαστικό Σφήνα (Ανάποδο Τρίγωνο)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
+    tags: [
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'σφήνα',
+      'ανάποδο τρίγωνο',
+      'τρίγωνο',
+      'προσοχή',
+      'έντονο',
+      'sos',
+      'σημαντικό',
+      'alert',
+      'wedge',
+      '!',
+    ],
+  },
+  {
+    id: 'fx-excl-inverted-triangle-hazard',
+    iconifyId: 'custom-svg:alert-inverted-triangle-hazard:#dc2626:14',
+    title: 'Ανάποδο Τρίγωνο Επισήμανσης & SOS (Yield)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
+    tags: [
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'ανάποδο τρίγωνο',
+      'σήμα κινδύνου',
+      'προτεραιότητα',
+      'προσοχή',
+      'yield',
+      'hazard',
+      'sos',
+      'alert',
+      'warning',
+      '!',
+    ],
+  },
+  {
+    id: 'fx-excl-inverted-triangle-soft',
+    iconifyId: 'custom-svg:alert-inverted-triangle-soft:#dc2626:14',
+    title: 'Θαυμαστικό Ανάποδο Τρίγωνο (Smooth Rounded)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
+    tags: [
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'ανάποδο τρίγωνο',
+      'στρογγυλεμένο',
+      'smooth',
+      'προσοχή',
+      'sos',
+      'alert',
+      'warning',
+      '!',
+    ],
+  },
+  {
+    id: 'fx-excl-triangle-upright',
+    iconifyId: 'custom-svg:alert-triangle-upright:#dc2626:14',
+    title: 'Κλασικό Τρίγωνο Προσοχής (Όρθιο)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'monochrome',
+    tags: [
+      'θαυμαστικό',
+      'θαυμαστικά',
+      'τρίγωνο',
+      'όρθιο',
+      'προσοχή',
+      'κίνδυνος',
+      'sos',
+      'alert',
+      'warning',
+      'hazard',
+      '!',
     ],
   },
   {
@@ -4774,6 +4878,60 @@ export function buildCustomStickerSvgDataUrl(
       `;
       break;
     }
+    case 'alert-inverted-triangle-outline': {
+      // Clean modern inverted warning triangle outline with exclamation mark inside
+      innerSvg = `
+        <path d="M 44 46 L 212 46 L 128 214 Z" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 128 72 L 128 140" stroke="${c}" stroke-width="${Math.max(12, w * 0.95)}" stroke-linecap="round" />
+        <circle cx="128" cy="174" r="${Math.max(6, w * 0.48)}" fill="${c}" />
+      `;
+      break;
+    }
+    case 'alert-inverted-triangle-solid': {
+      // Solid filled inverted warning triangle badge with crisp cutout white exclamation mark
+      innerSvg = `
+        <path d="M 48 44 Q 34 44 40 58 L 120 216 Q 128 230 136 216 L 216 58 Q 222 44 208 44 Z" fill="${c}" />
+        <path d="M 128 74 L 128 142" stroke="#ffffff" stroke-width="15" stroke-linecap="round" />
+        <circle cx="128" cy="176" r="7.5" fill="#ffffff" />
+      `;
+      break;
+    }
+    case 'alert-wedge-exclamation': {
+      // Stylized wedge / downward tapering inverted triangle exclamation mark
+      innerSvg = `
+        <path d="M 82 34 Q 74 34 78 44 L 122 152 Q 128 164 134 152 L 178 44 Q 182 34 174 34 Z" fill="${c}" />
+        <circle cx="128" cy="204" r="18" fill="${c}" />
+      `;
+      break;
+    }
+    case 'alert-inverted-triangle-hazard': {
+      // Double-bordered Yield / Caution inverted hazard triangle with exclamation mark
+      innerSvg = `
+        <path d="M 40 44 L 216 44 L 128 220 Z" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 68 62 L 188 62 L 128 180 Z" fill="none" stroke="${c}" stroke-width="${Math.max(3, w * 0.35)}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.65" />
+        <path d="M 128 82 L 128 132" stroke="${c}" stroke-width="${Math.max(10, w * 0.85)}" stroke-linecap="round" />
+        <circle cx="128" cy="156" r="${Math.max(5, w * 0.42)}" fill="${c}" />
+      `;
+      break;
+    }
+    case 'alert-inverted-triangle-soft': {
+      // Smooth iPadOS-style rounded inverted triangle with exclamation mark
+      innerSvg = `
+        <path d="M 64 52 L 192 52 Q 212 52 200 72 L 140 188 Q 128 210 116 188 L 56 72 Q 44 52 64 52 Z" fill="none" stroke="${c}" stroke-width="${w * 1.1}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 128 80 L 128 134" stroke="${c}" stroke-width="${Math.max(12, w)}" stroke-linecap="round" />
+        <circle cx="128" cy="168" r="${Math.max(6, w * 0.5)}" fill="${c}" />
+      `;
+      break;
+    }
+    case 'alert-triangle-upright': {
+      // Classic upright warning triangle with customizable stroke & exclamation mark
+      innerSvg = `
+        <path d="M 128 42 L 216 208 L 40 208 Z" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 128 102 L 128 160" stroke="${c}" stroke-width="${Math.max(12, w * 0.95)}" stroke-linecap="round" />
+        <circle cx="128" cy="186" r="${Math.max(6, w * 0.48)}" fill="${c}" />
+      `;
+      break;
+    }
     default: {
       innerSvg = `
         <path d="M 224 166 Q 134 118 36 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
@@ -4947,9 +5105,12 @@ export function getIconifySvgUrl(
     const shapeKind = parts[1] || 'sketch-curve-left';
     const defaultColor = parts[2] || '#dc2626';
     const defaultWidth = Number(parts[3]) || 12;
+    const effectiveColor =
+      overrideCustomColor ||
+      (colorStyle === 'monochrome' ? (customHexColor || defaultColor) : defaultColor);
     return buildCustomStickerSvgDataUrl(
       shapeKind,
-      overrideCustomColor || defaultColor,
+      effectiveColor,
       overrideCustomWidth || defaultWidth
     );
   }
