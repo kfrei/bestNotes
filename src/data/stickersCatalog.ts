@@ -5223,6 +5223,82 @@ export async function searchOnlineIconifyStickers(
  * and rasterizes it onto a crisp 512x512 transparent PNG data URL so it works offline,
  * syncs to Firestore, exports to PDF, and supports all Lasso/Crop/Mirror tools.
  */
+/**
+ * Automatically trims transparent borders/padding around visible pixels in a canvas,
+ * returning a snugly-cropped canvas with a small specified padding cushion.
+ */
+export function autoTrimCanvasToVisibleBounds(
+  canvas: HTMLCanvasElement,
+  padding = 6,
+  alphaThreshold = 6
+): HTMLCanvasElement {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  if (w <= 2 || h <= 2) return canvas;
+
+  try {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < h; y++) {
+      const rowOffset = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const a = d[rowOffset + x * 4 + 3];
+        if (a > alphaThreshold) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    // Completely transparent canvas or no pixels above threshold
+    if (maxX === -1 || maxY === -1) {
+      return canvas;
+    }
+
+    // Check if the image already touches the borders (within padding)
+    if (
+      minX <= padding &&
+      minY <= padding &&
+      maxX >= w - 1 - padding &&
+      maxY >= h - 1 - padding
+    ) {
+      return canvas;
+    }
+
+    const cropX = Math.max(0, minX - padding);
+    const cropY = Math.max(0, minY - padding);
+    const rightX = Math.min(w, maxX + 1 + padding);
+    const bottomY = Math.min(h, maxY + 1 + padding);
+    const cropW = Math.max(1, rightX - cropX);
+    const cropH = Math.max(1, bottomY - cropY);
+
+    // If change is tiny (less than 4px on each side), don't recreate
+    if (cropW >= w - 4 && cropH >= h - 4) {
+      return canvas;
+    }
+
+    const trimmed = document.createElement('canvas');
+    trimmed.width = cropW;
+    trimmed.height = cropH;
+    const tCtx = trimmed.getContext('2d');
+    if (!tCtx) return canvas;
+
+    tCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return trimmed;
+  } catch {
+    return canvas;
+  }
+}
+
 export async function tintMonochromeSketchDataUrl(
   sourceUrl: string,
   targetHexColor: string
@@ -5282,8 +5358,9 @@ export async function tintMonochromeSketchDataUrl(
         d[i + 3] = d[i + 3] > 246 ? 255 : (d[i + 3] + 7) & 0xf0;
       }
       ctx.putImageData(imgData, 0, 0);
-      const webpUrl = canvas.toDataURL('image/webp', 0.86);
-      const pngUrl = canvas.toDataURL('image/png');
+      const trimmed = autoTrimCanvasToVisibleBounds(canvas, 6);
+      const webpUrl = trimmed.toDataURL('image/webp', 0.86);
+      const pngUrl = trimmed.toDataURL('image/png');
       resolve(
         webpUrl.startsWith('data:image/webp') && webpUrl.length < pngUrl.length ? webpUrl : pngUrl
       );
@@ -5349,7 +5426,8 @@ export async function rasterizeStickerUrlToPngDataUrl(
         }
         const pad = isCustomFullBleed ? 0 : 24;
         ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
-        resolve(canvas.toDataURL('image/png'));
+        const trimmed = autoTrimCanvasToVisibleBounds(canvas, 6);
+        resolve(trimmed.toDataURL('image/png'));
       };
       img.onerror = reject;
       img.src = effectiveUrl;
@@ -5381,7 +5459,8 @@ export async function rasterizeStickerUrlToPngDataUrl(
         }
         const pad = 24;
         ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
-        resolve(canvas.toDataURL('image/png'));
+        const trimmed = autoTrimCanvasToVisibleBounds(canvas, 6);
+        resolve(trimmed.toDataURL('image/png'));
       };
       img.onerror = reject;
       img.src = blobUrl;

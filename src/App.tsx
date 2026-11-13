@@ -320,6 +320,7 @@ import {
   searchOnlineIconifyStickers,
   rasterizeStickerUrlToPngDataUrl,
   tintMonochromeSketchDataUrl,
+  autoTrimCanvasToVisibleBounds,
   type StickerCategory,
   type StickerColorStyle,
   type StickerCatalogItem,
@@ -14531,37 +14532,48 @@ export default function App() {
   const insertImageDataUrlOnPage = useCallback(
     (dataUrl: string, customToast?: string) => {
       const img = new Image();
-      if (dataUrl.startsWith('http')) {
+      if (dataUrl.startsWith('http') || dataUrl.startsWith('/')) {
         img.crossOrigin = 'anonymous';
       }
       img.onload = () => {
         const rawNatW = Math.max(1, img.naturalWidth || img.width || 360);
         const rawNatH = Math.max(1, img.naturalHeight || img.height || 260);
 
-        // Automatically compress large clipboard/uploaded data: URLs (e.g. 3-6 MB macOS clipboard PNGs -> ~120 KB WebP/JPEG/Quantized PNG)
+        // Automatically auto-trim transparent padding and compress large clipboard/uploaded images
         let finalDataUrl = dataUrl;
         let natW = rawNatW;
         let natH = rawNatH;
-        if (dataUrl.startsWith('data:') && (dataUrl.length > 160000 || rawNatW > 1350 || rawNatH > 1350)) {
-          try {
-            const maxDim = 1350;
-            const optScale = Math.min(1, maxDim / Math.max(1, rawNatW, rawNatH));
-            natW = Math.max(1, Math.round(rawNatW * optScale));
-            natH = Math.max(1, Math.round(rawNatH * optScale));
-            const optCanvas = document.createElement('canvas');
-            optCanvas.width = natW;
-            optCanvas.height = natH;
-            const optCtx = optCanvas.getContext('2d');
-            if (optCtx) {
-              optCtx.drawImage(img, 0, 0, natW, natH);
-              const candidateUrl = encodeCanvasOptimizedDataUrl(optCanvas);
+
+        try {
+          const maxDim = 1350;
+          const optScale = Math.min(1, maxDim / Math.max(1, rawNatW, rawNatH));
+          const scanW = Math.max(1, Math.round(rawNatW * optScale));
+          const scanH = Math.max(1, Math.round(rawNatH * optScale));
+          const testCanvas = document.createElement('canvas');
+          testCanvas.width = scanW;
+          testCanvas.height = scanH;
+          const tCtx = testCanvas.getContext('2d');
+          if (tCtx) {
+            tCtx.drawImage(img, 0, 0, scanW, scanH);
+            const trimmedCanvas = autoTrimCanvasToVisibleBounds(testCanvas, 6);
+            if (trimmedCanvas.width < scanW || trimmedCanvas.height < scanH) {
+              natW = trimmedCanvas.width;
+              natH = trimmedCanvas.height;
+              finalDataUrl = encodeCanvasOptimizedDataUrl(trimmedCanvas);
+            } else if (
+              dataUrl.startsWith('data:') &&
+              (dataUrl.length > 160000 || rawNatW > 1350 || rawNatH > 1350)
+            ) {
+              const candidateUrl = encodeCanvasOptimizedDataUrl(testCanvas);
               if (candidateUrl.length < dataUrl.length) {
+                natW = scanW;
+                natH = scanH;
                 finalDataUrl = candidateUrl;
               }
             }
-          } catch {
-            // fallback to original dataUrl
           }
+        } catch {
+          // If cross-origin or canvas read error, fallback to original dataUrl & dimensions
         }
 
         const preloaded = new Image();
