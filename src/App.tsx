@@ -6628,16 +6628,28 @@ export default function App() {
       }
 
       if (!token) {
-        setSyncStatus('syncing');
-        window.setTimeout(() => {
+        if (showFeedback) {
+          try {
+            showToast(`🔄 Σύνδεση με το Google Drive (${hintEmail || ''})...`);
+            const refreshed = await signInToGoogleDrive(
+              hintEmail,
+              driveNeedsFullScopeConsentRef.current
+            );
+            driveNeedsFullScopeConsentRef.current = false;
+            token = refreshed.accessToken;
+            saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+          } catch (authErr: any) {
+            showToast(`⚠️ Google Drive: Απαιτείται έγκριση (${authErr?.message || 'Ακυρώθηκε'})`);
+            setSyncStatus('dirty');
+            return;
+          }
+        } else {
+          performCloudFirestoreSyncNow();
           setSyncStatus('synced');
           setIsDirty(false);
           setSecondsToNextSync(20);
-          if (showFeedback) {
-            showToast('☁️ Cloud Sync: Συγχρονίστηκαν όλες οι σημειώσεις σε πραγματικό χρόνο (Mac & iPad)!');
-          }
-        }, 250);
-        return;
+          return;
+        }
       }
 
       setSyncStatus('syncing');
@@ -6799,7 +6811,40 @@ export default function App() {
           setIsDirty(false);
           setSecondsToNextSync(20);
           if (showFeedback) {
-            showToast('☁️ Cloud Sync: Συγχρονίστηκαν όλες οι σημειώσεις! (Η άδεια Google Drive PDF έληξε — μπορείς να την ανανεώσεις από το μενού του Cloud)');
+            try {
+              const refreshed = await signInToGoogleDrive(
+                hintEmail,
+                err?.message === 'DRIVE_SCOPE_MISSING'
+              );
+              driveNeedsFullScopeConsentRef.current = false;
+              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+              let retryRes: Awaited<ReturnType<typeof syncNotebookPdfToGoogleDrive>> | null = null;
+              for (const nbItem of targetsToSync) {
+                setActiveDriveUploadingNbId(nbItem.id);
+                retryRes = await syncNotebookPdfToGoogleDrive(
+                  refreshed.accessToken,
+                  nbItem,
+                  nbItem.id === activeNotebook.id ? pdfExportOpts : { ...pdfExportOpts, liveSimCanvas: null },
+                  driveBasePath
+                );
+                markNotebookDriveSynced(nbItem, driveBasePath);
+              }
+              setActiveDriveUploadingNbId(null);
+              setSyncStatus('synced');
+              setIsDirty(false);
+              setSecondsToNextSync(20);
+              secondsToNextDrivePdfSyncRef.current = 120;
+              hasPendingDrivePdfSyncRef.current = false;
+              if (retryRes?.folderWebViewLink) setLastDrivePdfLink(retryRes.folderWebViewLink);
+              showToast(
+                targetsToSync.length === 1
+                  ? `☁️ Google Drive: Συγχρονίστηκε το PDF «${targetsToSync[0].title}»!`
+                  : `☁️ Google Drive: Συγχρονίστηκαν ${targetsToSync.length} αρχεία PDF!`
+              );
+              return;
+            } catch {
+              showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+            }
           }
           return;
         } else {
@@ -6854,12 +6899,28 @@ export default function App() {
       }
 
       if (!token) {
-        performCloudFirestoreSyncNow();
-        setSyncStatus('synced');
         if (!silentBackground) {
-          showToast('☁️ Cloud Sync: Όλες οι σημειώσεις είναι συγχρονισμένες στο Cloud (Mac & iPad)!');
+          try {
+            showToast(`🔄 Σύνδεση με το Google Drive (${hintEmail || ''})...`);
+            const refreshed = await signInToGoogleDrive(
+              hintEmail,
+              driveNeedsFullScopeConsentRef.current
+            );
+            driveNeedsFullScopeConsentRef.current = false;
+            token = refreshed.accessToken;
+            saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+          } catch (authErr: any) {
+            showToast(`⚠️ Google Drive: Απαιτείται έγκριση (${authErr?.message || 'Ακυρώθηκε'})`);
+            setSyncStatus('dirty');
+            setDriveSyncingAll(false);
+            return;
+          }
+        } else {
+          performCloudFirestoreSyncNow();
+          setSyncStatus('synced');
+          setDriveSyncingAll(false);
+          return;
         }
-        return;
       }
       setDriveSyncingAll(true);
       setSyncStatus('syncing');
@@ -6959,9 +7020,22 @@ export default function App() {
               }
               invalidateDriveToken(token);
               if (!silentBackground) {
-                showToast('☁️ Cloud Sync: Οι σημειώσεις αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
+                try {
+                  const refreshed = await signInToGoogleDrive(
+                    hintEmail,
+                    innerErr?.message === 'DRIVE_SCOPE_MISSING'
+                  );
+                  driveNeedsFullScopeConsentRef.current = false;
+                  token = refreshed.accessToken;
+                  saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+                  res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
+                } catch {
+                  showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+                  break;
+                }
+              } else {
+                break;
               }
-              break;
             } else {
               console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
               continue;
@@ -7087,11 +7161,21 @@ export default function App() {
           setSyncingDriveFolderPath(null);
           return;
         }
-        performCloudFirestoreSyncNow();
-        setSyncStatus('synced');
-        showToast(`☁️ Cloud Sync: Ο φάκελος «${folderShortName}» είναι αποθηκευμένος στο Cloud (Mac & iPad)!`);
-        setSyncingDriveFolderPath(null);
-        return;
+        try {
+          showToast(`🔄 Σύνδεση με το Google Drive (${hintEmail || ''})...`);
+          const refreshed = await signInToGoogleDrive(
+            hintEmail,
+            driveNeedsFullScopeConsentRef.current
+          );
+          driveNeedsFullScopeConsentRef.current = false;
+          token = refreshed.accessToken;
+          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+        } catch (authErr: any) {
+          console.warn('Google Drive auth error:', authErr);
+          showToast(`⚠️ Google Drive: Απαιτείται έγκριση (${authErr?.message || 'Ακυρώθηκε'})`);
+          setSyncingDriveFolderPath(null);
+          return;
+        }
       }
 
       const deletedPaths = new Set<string>(
@@ -7244,8 +7328,19 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              showToast('☁️ Cloud Sync: Οι φάκελοι αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
-              break;
+              try {
+                const refreshed = await signInToGoogleDrive(
+                  hintEmail,
+                  innerErr?.message === 'DRIVE_SCOPE_MISSING'
+                );
+                driveNeedsFullScopeConsentRef.current = false;
+                token = refreshed.accessToken;
+                saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+                folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+              } catch {
+                showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+                break;
+              }
             } else {
               throw innerErr;
             }
@@ -7310,8 +7405,32 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              showToast('☁️ Cloud Sync: Οι σημειώσεις αποθηκεύτηκαν στο Cloud! (Η άδεια Google Drive PDF έληξε)');
-              break;
+              try {
+                const refreshed = await signInToGoogleDrive(
+                  hintEmail,
+                  innerErr?.message === 'DRIVE_SCOPE_MISSING'
+                );
+                driveNeedsFullScopeConsentRef.current = false;
+                token = refreshed.accessToken;
+                saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+                const retryRes = await syncNotebookPdfToGoogleDrive(
+                  token,
+                  nb,
+                  nb.id === activeNotebook.id ? batchPdfOpts : { ...batchPdfOpts, liveSimCanvas: null },
+                  driveBasePath
+                );
+                if (!rootDriveFolderLink && retryRes?.folderWebViewLink) {
+                  rootDriveFolderLink = retryRes.folderWebViewLink;
+                  rootTargetPathDisplay = retryRes.targetPathDisplay;
+                }
+                markNotebookDriveSynced(nb, driveBasePath);
+                completedNotebookIdsSet.add(nb.id);
+                persistCheckpoint();
+                syncedNotesCount++;
+              } catch {
+                showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+                break;
+              }
             } else {
               console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
             }
