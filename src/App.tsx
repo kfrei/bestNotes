@@ -61570,9 +61570,9 @@ export default function App() {
             {/* Draggable & Corner-Resizable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
             {showPeriodicTableModal && (() => {
               const ptScale = periodicTableWidth / 940;
-              const cellH = Math.round(55 * ptScale);
+              const cellH = Math.round(56 * ptScale);
               const gridGap = Math.max(2, Math.round(4 * ptScale));
-              const cellPad = Math.max(2, Math.round(3.5 * ptScale));
+              const cellPad = Math.max(2, Math.round(2.5 * ptScale));
               const startCornerResize = (
                 e: React.PointerEvent<HTMLDivElement>,
                 corner: 'nw' | 'ne' | 'sw' | 'se'
@@ -61811,17 +61811,17 @@ export default function App() {
                             >
                               <div className="w-full flex items-center justify-center gap-1 my-auto">
                                 <div
-                                  className="flex flex-col items-end justify-center font-medium leading-[1.05] tracking-tight shrink-0 select-none"
-                                  style={{ fontSize: `${Math.max(6.5, 7.5 * ptScale).toFixed(1)}px` }}
+                                  className="flex flex-col items-end justify-center leading-none tracking-tight shrink-0 select-none gap-0.5"
+                                  style={{ fontSize: `${Math.max(6.0, 6.8 * ptScale).toFixed(1)}px` }}
                                 >
                                   <span
-                                    className="text-slate-500"
+                                    className="text-slate-500 font-medium"
                                     title={`Μαζικός Αριθμός A: ${el.a}`}
                                   >
                                     {el.a}
                                   </span>
                                   <span
-                                    className="text-indigo-700"
+                                    className="text-indigo-700 font-bold"
                                     title={`Ατομικός Αριθμός Z: ${el.z}`}
                                   >
                                     {el.z}
@@ -61829,7 +61829,12 @@ export default function App() {
                                 </div>
                                 <div
                                   className="font-extrabold leading-none tracking-tight text-center"
-                                  style={{ fontSize: `${Math.max(13, 16.5 * ptScale).toFixed(1)}px` }}
+                                  style={{
+                                    fontSize: `${Math.max(
+                                      14,
+                                      (el.symbol.length === 1 ? 21 : 18.5) * ptScale
+                                    ).toFixed(1)}px`,
+                                  }}
                                 >
                                   {el.symbol}
                                 </div>
@@ -61838,8 +61843,8 @@ export default function App() {
                                 className="font-semibold leading-tight truncate w-full text-center opacity-95 tracking-tight"
                                 style={{
                                   fontSize: `${Math.max(
-                                    7.5,
-                                    (el.nameEl.length > 9 ? 8.2 : 9.4) * ptScale
+                                    7.0,
+                                    (el.nameEl.length > 7 ? 7.6 : 8.8) * ptScale
                                   ).toFixed(1)}px`,
                                 }}
                               >
