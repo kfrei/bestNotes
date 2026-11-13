@@ -61562,9 +61562,9 @@ export default function App() {
             {/* Draggable & Corner-Resizable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
             {showPeriodicTableModal && (() => {
               const ptScale = periodicTableWidth / 940;
-              const cellH = Math.round(52 * ptScale);
+              const cellH = Math.round(55 * ptScale);
               const gridGap = Math.max(2, Math.round(4 * ptScale));
-              const cellPad = Math.max(2, Math.round(4 * ptScale));
+              const cellPad = Math.max(2, Math.round(3.5 * ptScale));
               const startCornerResize = (
                 e: React.PointerEvent<HTMLDivElement>,
                 corner: 'nw' | 'ne' | 'sw' | 'se'
@@ -61801,26 +61801,39 @@ export default function App() {
                                   : ''
                               }`}
                             >
-                              <div
-                                className="w-full flex items-center justify-between font-bold leading-none"
-                                style={{ fontSize: `${(8.5 * ptScale).toFixed(1)}px` }}
-                              >
-                                <span className="text-indigo-700" title="Ατομικός Αριθμός Z">
-                                  {el.z}
-                                </span>
-                                <span className="text-slate-500" title="Μαζικός Αριθμός A">
-                                  {el.a}
-                                </span>
+                              <div className="w-full flex items-center justify-center gap-1 my-auto">
+                                <div
+                                  className="flex flex-col items-end justify-center font-medium leading-[1.05] tracking-tight shrink-0 select-none"
+                                  style={{ fontSize: `${Math.max(6.5, 7.5 * ptScale).toFixed(1)}px` }}
+                                >
+                                  <span
+                                    className="text-slate-500"
+                                    title={`Μαζικός Αριθμός A: ${el.a}`}
+                                  >
+                                    {el.a}
+                                  </span>
+                                  <span
+                                    className="text-indigo-700"
+                                    title={`Ατομικός Αριθμός Z: ${el.z}`}
+                                  >
+                                    {el.z}
+                                  </span>
+                                </div>
+                                <div
+                                  className="font-extrabold leading-none tracking-tight text-center"
+                                  style={{ fontSize: `${Math.max(13, 16.5 * ptScale).toFixed(1)}px` }}
+                                >
+                                  {el.symbol}
+                                </div>
                               </div>
                               <div
-                                className="font-extrabold leading-none text-center"
-                                style={{ fontSize: `${(12.5 * ptScale).toFixed(1)}px` }}
-                              >
-                                {el.symbol}
-                              </div>
-                              <div
-                                className="font-semibold leading-tight truncate w-full text-center opacity-90"
-                                style={{ fontSize: `${(7.5 * ptScale).toFixed(1)}px` }}
+                                className="font-semibold leading-tight truncate w-full text-center opacity-95 tracking-tight"
+                                style={{
+                                  fontSize: `${Math.max(
+                                    7.5,
+                                    (el.nameEl.length > 9 ? 8.2 : 9.4) * ptScale
+                                  ).toFixed(1)}px`,
+                                }}
                               >
                                 {el.nameEl}
                               </div>
