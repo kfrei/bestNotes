@@ -18176,68 +18176,33 @@ export default function App() {
         lastDetectedSimIdRef.current = closestEntry.sim.id;
         const targetSim = closestEntry.sim;
         const targetPageId = closestEntry.pageId;
-        const curSim = getActiveCircuitSim(activePage);
 
-        setNotebooks((prev) =>
-          prev.map((n) =>
+        setNotebooks((prev) => {
+          const nextNbs = prev.map((n) =>
             n.id !== nb.id
               ? n
               : {
                   ...n,
-                  pages: n.pages.map((p) => {
-                    if (p.id !== targetPageId) return p;
-                    const updatedSims = (p.circuitSims || []).map((cs) => {
-                      if (curSim && cs.id === curSim.id) {
-                        return {
-                          ...cs,
-                          switchClosed: simCircuitSwitchClosed,
-                          flowDirection: simFlowDirection,
-                          showElectrons: simShowElectrons,
-                          speedMultiplier: simSpeedMultiplier,
-                          showDarkWireTrack: simShowDarkWireTrack,
-                        };
-                      }
-                      return cs;
-                    });
-                    return {
-                      ...p,
-                      circuitSims: updatedSims,
-                      activeCircuitSimId: targetSim.id,
-                    };
-                  }),
+                  pages: n.pages.map((p) =>
+                    p.id !== targetPageId
+                      ? p
+                      : {
+                          ...p,
+                          activeCircuitSimId: targetSim.id,
+                        }
+                  ),
                 }
-          )
-        );
-
-        setSimCircuitSwitchClosed(Boolean(targetSim.switchClosed));
-        if (targetSim.flowDirection) {
-          setSimFlowDirection(targetSim.flowDirection);
-          setSimParticleStyle(
-            targetSim.flowDirection === 'conventional'
-              ? 'blue-electrons'
-              : 'green-energy'
           );
-        }
-        if (typeof targetSim.showElectrons === 'boolean') {
-          setSimShowElectrons(targetSim.showElectrons);
-        }
-        if (typeof targetSim.speedMultiplier === 'number') {
-          setSimSpeedMultiplier(targetSim.speedMultiplier);
-        }
-        if (typeof targetSim.showDarkWireTrack === 'boolean') {
-          setSimShowDarkWireTrack(targetSim.showDarkWireTrack);
-        }
+          notebooksRef.current = nextNbs;
+          const updatedNb = nextNbs.find((n) => n.id === nb.id);
+          if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+          return nextNbs;
+        });
       }
     },
     [
       getAllNotebookCircuitSims,
       getPageTopOffset,
-      activePage,
-      simCircuitSwitchClosed,
-      simFlowDirection,
-      simShowElectrons,
-      simSpeedMultiplier,
-      simShowDarkWireTrack,
     ]
   );
   checkScrollSpyActiveCircuitRef.current = checkScrollSpyActiveCircuit;
@@ -36880,16 +36845,15 @@ export default function App() {
           const targetSimId = sw.simId;
           const nextClosed = !sw.closed;
           sw.closed = nextClosed;
-          if (!targetSimId || targetSimId === activeCircuitSim?.id) {
-            setSimCircuitSwitchClosed(nextClosed);
-          }
           if (targetSimId) {
             updateActivePage((page) => ({
               ...page,
               circuitSims: (page.circuitSims || []).map((cs) =>
                 cs.id === targetSimId ? { ...cs, switchClosed: nextClosed } : cs
               ),
+              activeCircuitSimId: targetSimId,
             }));
+            setSimCircuitSwitchClosed(nextClosed);
           }
           const matchedSim = targetSimId
             ? (targetPage.circuitSims || []).find((s) => s.id === targetSimId)
@@ -60344,7 +60308,7 @@ export default function App() {
                       if (nextCat === 'circuits' && !isSimulating) {
                         const existingCircuitSim = getActiveCircuitSim(activePage);
                         if (existingCircuitSim) {
-                          setSimCircuitSwitchClosed(false);
+                          setSimCircuitSwitchClosed(Boolean(existingCircuitSim.switchClosed));
                           setIsSimulating(true);
                           updateActivePage((page) =>
                             runScopedCircuitOperationOnPage(
@@ -60385,7 +60349,10 @@ export default function App() {
                                 return {
                                   ...page,
                                   strokes: nextStrokes,
-                                  circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
+                                  circuitSims: [
+                                    ...(page.circuitSims || []).filter((s) => s.id !== seedSim.id),
+                                    { id: seedSim.id, name: seedSim.name, strokeIds: alignedIds, switchClosed: false }
+                                  ],
                                   activeCircuitSimId: seedSim.id,
                                 };
                               });
@@ -60500,8 +60467,10 @@ export default function App() {
                               const isEditingThis = editingSimId === sim.id;
                               const commitSimName = () => {
                                 const trimmed = editingSimName.trim() || sim.name;
-                                setNotebooks((prev) =>
-                                  prev.map((nb) =>
+                                userEditedInSessionRef.current.add(activeNotebook.id);
+                                saveUserEditedSessionIds(userEditedInSessionRef.current);
+                                setNotebooks((prev) => {
+                                  const nextNbs = prev.map((nb) =>
                                     nb.id !== activeNotebook.id
                                       ? nb
                                       : {
@@ -60517,8 +60486,12 @@ export default function App() {
                                                 }
                                           ),
                                         }
-                                  )
-                                );
+                                  );
+                                  notebooksRef.current = nextNbs;
+                                  const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                                  if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                                  return nextNbs;
+                                });
                                 setEditingSimId(null);
                               };
                               return (
@@ -60553,56 +60526,30 @@ export default function App() {
                                       type="button"
                                       onClick={() => {
                                         lastDetectedSimIdRef.current = sim.id;
-                                        const curSim = getActiveCircuitSim(activePage);
-                                        setNotebooks((prev) =>
-                                          prev.map((nb) =>
+                                        setNotebooks((prev) => {
+                                          const nextNbs = prev.map((nb) =>
                                             nb.id !== activeNotebook.id
                                               ? nb
                                               : {
                                                   ...nb,
-                                                  pages: nb.pages.map((p) => {
-                                                    if (p.id !== simPageId) return p;
-                                                    const updatedSims = (p.circuitSims || []).map((cs) => {
-                                                      if (curSim && cs.id === curSim.id) {
-                                                        return {
-                                                          ...cs,
-                                                          switchClosed: simCircuitSwitchClosed,
-                                                          flowDirection: simFlowDirection,
-                                                          showElectrons: simShowElectrons,
-                                                          speedMultiplier: simSpeedMultiplier,
-                                                          showDarkWireTrack: simShowDarkWireTrack,
-                                                        };
-                                                      }
-                                                      return cs;
-                                                    });
-                                                    return {
-                                                      ...p,
-                                                      circuitSims: updatedSims,
-                                                      activeCircuitSimId: sim.id,
-                                                    };
-                                                  }),
+                                                  pages: nb.pages.map((p) =>
+                                                    p.id !== simPageId
+                                                      ? p
+                                                      : {
+                                                          ...p,
+                                                          activeCircuitSimId: sim.id,
+                                                        }
+                                                  ),
                                                 }
-                                          )
-                                        );
-                                        setSelectedStrokeIds([]);
-                                        setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
-                                        if (sim.flowDirection) {
-                                          setSimFlowDirection(sim.flowDirection);
-                                          setSimParticleStyle(
-                                            sim.flowDirection === 'conventional'
-                                              ? 'blue-electrons'
-                                              : 'green-energy'
                                           );
-                                        }
-                                        if (typeof sim.showElectrons === 'boolean') {
-                                          setSimShowElectrons(sim.showElectrons);
-                                        }
-                                        if (typeof sim.speedMultiplier === 'number') {
-                                          setSimSpeedMultiplier(sim.speedMultiplier);
-                                        }
-                                        if (typeof sim.showDarkWireTrack === 'boolean') {
-                                          setSimShowDarkWireTrack(sim.showDarkWireTrack);
-                                        }
+                                          notebooksRef.current = nextNbs;
+                                          const updatedNb = nextNbs.find(
+                                            (n) => n.id === activeNotebook.id
+                                          );
+                                          if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                                          return nextNbs;
+                                        });
+                                        setSelectedStrokeIds([]);
                                         setIsSimulating(true);
                                         if (!isCircuitSimVisibleInViewport(simPageIdx, sim)) {
                                           scrollToCircuitSim(simPageIdx, sim);
@@ -60653,8 +60600,8 @@ export default function App() {
                                     onClick={() => {
                                       userEditedInSessionRef.current.add(activeNotebook.id);
                                       saveUserEditedSessionIds(userEditedInSessionRef.current);
-                                      setNotebooks((prev) =>
-                                        prev.map((nb) => {
+                                      setNotebooks((prev) => {
+                                        const nextNbs = prev.map((nb) => {
                                           if (nb.id !== activeNotebook.id) return nb;
                                           const nextPages = nb.pages.map((p) => {
                                             if (p.id !== simPageId) return p;
@@ -60682,8 +60629,12 @@ export default function App() {
                                             updatedAt: getMonotonicIsoTimestamp(),
                                             pages: nextPages,
                                           };
-                                        })
-                                      );
+                                        });
+                                        notebooksRef.current = nextNbs;
+                                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                                        return nextNbs;
+                                      });
                                       showToast(
                                         `🗑️ Το κύκλωμα "${sim.name}" αφαιρέθηκε. Το σχέδιο παραμένει ως απλό σκίτσο!`
                                       );
