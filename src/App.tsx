@@ -820,8 +820,56 @@ function saveCustomFoldersToLocalAndIdb(uid: string, folders: CustomFolderMeta[]
   }
 }
 
+const LIBRARY_CACHE_STORAGE_KEY = 'bestnotes_lib_shelf_cache_v2';
+
+function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
+  return {
+    ...nb,
+    pages: (nb.pages || []).map((p, idx) => {
+      if (idx === 0) {
+        return {
+          ...p,
+          backgroundDataUrl:
+            p.backgroundDataUrl && p.backgroundDataUrl.length < 250_000
+              ? p.backgroundDataUrl
+              : undefined,
+          strokes: (p.strokes || []).slice(0, 400),
+          texts: (p.texts || []).slice(0, 80),
+          images: (p.images || []).slice(0, 5),
+        };
+      }
+      return {
+        ...p,
+        strokes: [],
+        shapes: [],
+        texts: [],
+        images: [],
+        tapes: [],
+        backgroundDataUrl: undefined,
+      };
+    }),
+  };
+}
+
+function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
+  if (!uid || !Array.isArray(nbs) || nbs.length === 0) return;
+  try {
+    const valid = nbs.filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0));
+    if (valid.length === 0) return;
+    const cached = valid.map(cleanNotebookForLibraryCache);
+    const serialized = JSON.stringify(cached);
+    if (serialized.length <= 1_800_000) {
+      localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_${uid}`, serialized);
+      localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`, serialized);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
   void saveNotebooksToIndexedDB(uid, nbs);
+  saveLibraryShelfCache(uid, nbs);
   try {
     // 1. Always cache the currently active notebook in localStorage if it fits (up to 1.8MB)
     // so on page refresh, the active notebook is ready SYNCHRONOUSLY on the very first frame!
@@ -1754,39 +1802,6 @@ export default function App() {
     return null;
   })();
 
-  const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
-    try {
-      const authUid = initialAuthUid;
-      // 1. Try full collection from localStorage if available
-      if (authUid) {
-        const saved = localStorage.getItem(`${STORAGE_KEY}_${authUid}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed
-              .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
-              .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
-          }
-        }
-      }
-      // 2. Fast-path cache for instant refresh without library flash:
-      // Load the active notebook synchronously so frame 0 already has the open file!
-      const activeRaw =
-        (authUid ? localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${authUid}`) : null) ||
-        localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
-      if (activeRaw) {
-        const parsed = JSON.parse(activeRaw);
-        if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
-          const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
-          return [repaired];
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return createDefaultBlankNotebooks();
-  });
-
   const initialSession = (() => {
     try {
       const raw =
@@ -1854,6 +1869,53 @@ export default function App() {
     }
     return null;
   })();
+
+  const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
+    try {
+      const authUid = initialAuthUid;
+      // 1. Try full collection from localStorage if available
+      if (authUid) {
+        const saved = localStorage.getItem(`${STORAGE_KEY}_${authUid}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed
+              .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+              .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
+          }
+        }
+      }
+      // 2. Try library shelf cache (preserves ALL notes with thumbnails for instant library shelf display!)
+      const libRaw =
+        (authUid ? localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_${authUid}`) : null) ||
+        localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`);
+      if (libRaw) {
+        const parsed = JSON.parse(libRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+            .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+            .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
+        }
+      }
+      // 3. Fast-path cache for instant refresh without editor flash (ONLY when in editor mode!)
+      const targetView = initialSession?.viewMode || (initialAuthUid ? 'library' : 'landing');
+      if (targetView === 'editor') {
+        const activeRaw =
+          (authUid ? localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${authUid}`) : null) ||
+          localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
+        if (activeRaw) {
+          const parsed = JSON.parse(activeRaw);
+          if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+            const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
+            return [repaired];
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return createDefaultBlankNotebooks();
+  });
 
   const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>(() => {
     try {
@@ -1969,20 +2031,40 @@ export default function App() {
           if (loadedNbs && loadedNbs.length > 0) {
             setNotebooks(loadedNbs);
           } else {
-            // If full collection not in localStorage, preserve any fast-cached active notebook
-            // instead of resetting notebooks to [] while IndexedDB loads in background!
-            const activeRaw =
-              localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${user.uid}`) ||
-              localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
-            if (activeRaw) {
+            // Also check library shelf cache before single active notebook
+            const libRaw =
+              localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_${user.uid}`) ||
+              localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`);
+            if (libRaw) {
               try {
-                const parsed = JSON.parse(activeRaw);
-                if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
-                  const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
-                  setNotebooks((prev) => (prev.length > 0 ? prev : [repaired]));
+                const parsed = JSON.parse(libRaw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  const cleaned = parsed
+                    .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+                    .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
+                  if (cleaned.length > 0) {
+                    setNotebooks((prev) => (prev.length > cleaned.length ? prev : cleaned));
+                    loadedNbs = cleaned;
+                  }
                 }
               } catch {
                 // ignore
+              }
+            }
+            if (!loadedNbs && initialSession?.viewMode === 'editor') {
+              const activeRaw =
+                localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${user.uid}`) ||
+                localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
+              if (activeRaw) {
+                try {
+                  const parsed = JSON.parse(activeRaw);
+                  if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+                    const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
+                    setNotebooks((prev) => (prev.length > 1 ? prev : [repaired]));
+                  }
+                } catch {
+                  // ignore
+                }
               }
             }
           }
@@ -2064,6 +2146,7 @@ export default function App() {
                 .filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
                 .map((n) => repairNotebookPagesAndMetrisiMazas(n).nb);
               if (cleanIdb.length === 0) return;
+              saveLibraryShelfCache(user.uid, cleanIdb);
               setNotebooks((prev) => {
                 const map = new Map<string, Notebook>();
                 for (const n of prev) map.set(n.id, n);
@@ -2109,7 +2192,11 @@ export default function App() {
                     }
                   }
                 }
-                return changed ? Array.from(map.values()) : prev;
+                const result = changed ? Array.from(map.values()) : prev;
+                if (result.length > 0) {
+                  saveLibraryShelfCache(user.uid, result);
+                }
+                return result;
               });
             })
             .finally(() => {
@@ -4208,6 +4295,9 @@ export default function App() {
           localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
         }
         if (notebooks.length > 0) {
+          if (uid) {
+            saveLibraryShelfCache(uid, notebooks);
+          }
           const curActive =
             notebooks.find((n) => n.id === activeNotebookId) ||
             notebooks[0];
@@ -50241,6 +50331,9 @@ export default function App() {
                 localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
                 if (uid) {
                   localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
+                }
+                if (uid && notebooksRef.current.length > 0) {
+                  saveLibraryShelfCache(uid, notebooksRef.current);
                 }
               } catch {
                 // ignore
