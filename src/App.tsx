@@ -56430,32 +56430,36 @@ export default function App() {
                       <span>Pixel</span>
                     </button>
 
-                    <div className="h-4 w-px bg-[#dfd8cb] mx-1 shrink-0" />
-                    <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
-                      {(
-                        [
-                          { id: 'small', label: 'Μικρή' },
-                          { id: 'medium', label: 'Μεσαία' },
-                          { id: 'large', label: 'Μεγάλη' },
-                        ] as const
-                      ).map((sz) => {
-                        const activeSz = eraserSize === sz.id;
-                        return (
-                          <button
-                            key={sz.id}
-                            onClick={() => setEraserSize(sz.id)}
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
-                              activeSz
-                                ? 'bg-[#234978] text-white shadow-xs'
-                                : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
-                            }`}
-                            title={`Μέγεθος Σβήστρας (${sz.label})`}
-                          >
-                            {sz.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {eraserSubType === 'precision' && (
+                      <>
+                        <div className="h-4 w-px bg-[#dfd8cb] mx-1 shrink-0" />
+                        <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                          {(
+                            [
+                              { id: 'small', label: 'Μικρή' },
+                              { id: 'medium', label: 'Μεσαία' },
+                              { id: 'large', label: 'Μεγάλη' },
+                            ] as const
+                          ).map((sz) => {
+                            const activeSz = eraserSize === sz.id;
+                            return (
+                              <button
+                                key={sz.id}
+                                onClick={() => setEraserSize(sz.id)}
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                                  activeSz
+                                    ? 'bg-[#234978] text-white shadow-xs'
+                                    : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
+                                }`}
+                                title={`Μέγεθος Σβήστρας (${sz.label})`}
+                              >
+                                {sz.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
