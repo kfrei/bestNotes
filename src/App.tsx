@@ -11289,31 +11289,17 @@ export default function App() {
     if (s.tool === 'highlighter') {
       const baseAlpha = s.opacity ?? 0.42;
       const W = effectiveLineWidth;
+      const blur = Math.max(2, Math.min(6, W * 0.08));
 
-      // Pass 1: Outer soft feathered spray halo (απαλή διαβάθμιση προς τις πλευρές)
       ctx.save();
-      ctx.shadowColor = s.color;
-      ctx.shadowBlur = Math.min(5, W * 0.22);
-      ctx.globalAlpha = baseAlpha * 0.28;
-      ctx.lineWidth = W * 1.04;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-      ctx.restore();
-
-      // Pass 2: Mid-body soft gradient
-      ctx.save();
-      ctx.globalAlpha = baseAlpha * 0.42;
-      ctx.lineWidth = W * 0.76;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-      ctx.restore();
-
-      // Pass 3: Saturated core
-      ctx.save();
-      ctx.globalAlpha = baseAlpha * 0.46;
-      ctx.lineWidth = W * 0.46;
+      if (typeof (ctx as any).filter === 'string') {
+        ctx.filter = `blur(${blur}px)`;
+      } else {
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = blur;
+      }
+      ctx.globalAlpha = baseAlpha * 0.88;
+      ctx.lineWidth = W;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
@@ -11574,16 +11560,32 @@ export default function App() {
       });
 
       strokeList.forEach((s, idx) => {
-        const defaultZ = imgList.length + idx + 1 + (s.tool === 'highlighter' ? -0.25 : 0);
+        const isHighlighter = s.tool === 'highlighter';
+        const defaultZ = isHighlighter
+          ? -100000 + idx
+          : imgList.length + idx + 1;
         entries.push({
           kind: 'stroke',
           layerRank: layerRankMap.get(s.layerId) ?? 1,
-          z: s.zOrder ?? defaultZ,
+          z:
+            s.zOrder !== undefined && s.zOrder < 0
+              ? s.zOrder
+              : isHighlighter
+              ? -100000 + idx
+              : s.zOrder ?? defaultZ,
           stroke: s,
         });
       });
 
       entries.sort((a, b) => {
+        // Highlighters always render at the very bottom / back behind all handwriting, shapes, and images
+        // so that they never obscure handwriting, stencils, or shapes!
+        const aIsHl = Boolean(a.kind === 'stroke' && a.stroke.tool === 'highlighter');
+        const bIsHl = Boolean(b.kind === 'stroke' && b.stroke.tool === 'highlighter');
+        if (aIsHl !== bIsHl) {
+          return aIsHl ? -1 : 1;
+        }
+
         if (a.layerRank !== b.layerRank) return a.layerRank - b.layerRank;
         return a.z - b.z;
       });
@@ -32404,11 +32406,25 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    const isHl = activeTool === 'highlighter';
+    const W = isHl ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    ctx.lineWidth = W;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+    if (isHl) {
+      const blur = Math.max(2, Math.min(6, W * 0.08));
+      if (typeof (ctx as any).filter === 'string') {
+        ctx.filter = `blur(${blur}px)`;
+      } else {
+        ctx.shadowColor = strokeColor;
+        ctx.shadowBlur = blur;
+      }
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.38;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
 
     ctx.beginPath();
     ctx.moveTo(pt.x, pt.y);
@@ -32425,11 +32441,25 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    const isHl = activeTool === 'highlighter';
+    const W = isHl ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    ctx.lineWidth = W;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+    if (isHl) {
+      const blur = Math.max(2, Math.min(6, W * 0.08));
+      if (typeof (ctx as any).filter === 'string') {
+        ctx.filter = `blur(${blur}px)`;
+      } else {
+        ctx.shadowColor = strokeColor;
+        ctx.shadowBlur = blur;
+      }
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.38;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
 
     const midX = (p0.x + p1.x) / 2;
     const midY = (p0.y + p1.y) / 2;
@@ -32448,11 +32478,25 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    const isHl = activeTool === 'highlighter';
+    const W = isHl ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
+    ctx.lineWidth = W;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+    if (isHl) {
+      const blur = Math.max(2, Math.min(6, W * 0.08));
+      if (typeof (ctx as any).filter === 'string') {
+        ctx.filter = `blur(${blur}px)`;
+      } else {
+        ctx.shadowColor = strokeColor;
+        ctx.shadowBlur = blur;
+      }
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.38;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
 
     const mid1X = (pPrev2.x + pPrev1.x) / 2;
     const mid1Y = (pPrev2.y + pPrev1.y) / 2;
@@ -44983,13 +45027,20 @@ export default function App() {
         sCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         drawStrokeOnContext(sCtx, newStroke);
       }
+    } else {
+      // Highlighters are placed in the background layer behind shapes, text & handwriting: trigger instant re-render!
+      scheduleCoalescedStaticRender();
     }
     clearActiveOverlay();
 
     // Never run hand-drawn battery/circuit guessing live on pen/pencil strokes!
     // Hand-drawn circuit recognition ONLY runs when explicitly triggered inside Simulation -> Circuits ("Κυκλώματα").
     updateActivePage((page) => {
-      const combined = [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }];
+      const isHighlighter = newStroke.tool === 'highlighter';
+      const strokeZ = isHighlighter
+        ? -10000 + (page.strokes || []).filter((s) => s.tool === 'highlighter').length
+        : getNextPageZOrder(page);
+      const combined = [...page.strokes, { ...newStroke, zOrder: strokeZ }];
       if (newStroke.shapeType === 'resistor') {
         return splitWiresAndSyncPageSims(page, combined, [newStroke.id]);
       }
@@ -62786,6 +62837,7 @@ export default function App() {
                       style={{
                         width: pW,
                         height: pH,
+                        mixBlendMode: activeTool === 'highlighter' ? 'multiply' : 'normal',
                         WebkitTouchCallout: 'none',
                         WebkitUserSelect: 'none',
                         userSelect: 'none',
