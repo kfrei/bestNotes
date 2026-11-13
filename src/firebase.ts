@@ -69,17 +69,54 @@ export async function signInToGoogleDrive(
   } else {
     googleDriveProvider.setCustomParameters({ prompt: 'select_account' });
   }
-  const result = await signInWithPopup(driveAuth, googleDriveProvider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  const accessToken = credential?.accessToken;
-  if (!accessToken) {
-    throw new Error('Δεν ελήφθη Google Drive Access Token.');
+
+  // If we already know the user's email, position the popup window off-screen & tiny
+  // so the user does NOT see a white blank popup flashing on their screen
+  const shouldHidePopup = !forceAccountSelect && Boolean(hintEmail && hintEmail.includes('@'));
+  const originalOpen = typeof window !== 'undefined' ? window.open : null;
+  let popupHandle: Window | null = null;
+
+  if (shouldHidePopup && originalOpen) {
+    try {
+      window.open = function (url?: string | URL, target?: string, features?: string) {
+        const hiddenFeatures =
+          'width=10,height=10,left=12000,top=12000,menubar=no,toolbar=no,location=no,status=no,resizable=no';
+        popupHandle = originalOpen.call(window, url, target, hiddenFeatures);
+        try {
+          if (popupHandle) {
+            popupHandle.resizeTo(1, 1);
+            popupHandle.moveTo(
+              (window.screen?.availWidth || 2000) + 1000,
+              (window.screen?.availHeight || 2000) + 1000
+            );
+          }
+        } catch {
+          // ignore
+        }
+        return popupHandle;
+      };
+    } catch {
+      // ignore
+    }
   }
-  return {
-    accessToken,
-    email: result.user.email || '',
-    displayName: result.user.displayName || result.user.email || 'Google Drive',
-  };
+
+  try {
+    const result = await signInWithPopup(driveAuth, googleDriveProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    if (!accessToken) {
+      throw new Error('Δεν ελήφθη Google Drive Access Token.');
+    }
+    return {
+      accessToken,
+      email: result.user.email || '',
+      displayName: result.user.displayName || result.user.email || 'Google Drive',
+    };
+  } finally {
+    if (shouldHidePopup && originalOpen && typeof window !== 'undefined') {
+      window.open = originalOpen;
+    }
+  }
 }
 
 export {

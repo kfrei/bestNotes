@@ -3548,7 +3548,9 @@ export async function verifyDriveAccessToken(
       return { valid: false, hasFullDriveScope: false };
     }
     const scopes = String(data.scope || '').split(/\s+/);
-    const hasFullDriveScope = scopes.includes('https://www.googleapis.com/auth/drive');
+    const hasFullDriveScope =
+      scopes.includes('https://www.googleapis.com/auth/drive') ||
+      scopes.includes('https://www.googleapis.com/auth/drive.file');
     const result = { valid: true, hasFullDriveScope };
     verifiedTokenScopeCache.set(accessToken, { ...result, checkedAt: Date.now() });
     return result;

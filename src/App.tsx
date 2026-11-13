@@ -3498,15 +3498,7 @@ export default function App() {
       const savedToken =
         localStorage.getItem('bestnotes_drive_token_v3') ||
         localStorage.getItem('bestnotes_drive_token_v1');
-      const savedTime = Number(
-        localStorage.getItem('bestnotes_drive_token_time_v3') ||
-        localStorage.getItem('bestnotes_drive_token_time_v1') ||
-        '0'
-      );
-      if (savedToken && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
-        return null;
-      }
-      return savedToken;
+      return savedToken || null;
     } catch {
       return null;
     }
@@ -3534,9 +3526,10 @@ export default function App() {
   const hasResumedPendingFolderSyncRef = useRef<boolean>(false);
   const [syncingDriveFolderPath, setSyncingDriveFolderPath] = useState<string | null>(() => {
     try {
-      const savedToken = localStorage.getItem('bestnotes_drive_token_v3');
-      const savedTokenTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
-      if (!savedToken || (savedTokenTime > 0 && Date.now() - savedTokenTime > 50 * 60 * 1000)) {
+      const savedToken =
+        localStorage.getItem('bestnotes_drive_token_v3') ||
+        localStorage.getItem('bestnotes_drive_token_v1');
+      if (!savedToken) {
         localStorage.removeItem('bestnotes_pending_drive_folder_sync_v1');
         return null;
       }
@@ -3936,23 +3929,22 @@ export default function App() {
     }
   }, [currentUser, driveEmail]);
 
-  // Proactively verify Google Drive OAuth token validity & full `drive` scope so expired/limited tokens are cleared before user clicks Sync (preventing popup-blocker issues)
+  // Verify Google Drive OAuth token scope in background without aggressively deleting the token
   useEffect(() => {
     if (!driveAccessToken) return;
     let cancelled = false;
     void verifyDriveAccessToken(driveAccessToken).then((check) => {
       if (cancelled) return;
-      if (!check.valid || !check.hasFullDriveScope) {
-        driveNeedsFullScopeConsentRef.current = !check.hasFullDriveScope;
-        invalidateDriveToken(driveAccessToken);
-      } else {
+      if (check.valid && !check.hasFullDriveScope) {
+        driveNeedsFullScopeConsentRef.current = true;
+      } else if (check.valid && check.hasFullDriveScope) {
         driveNeedsFullScopeConsentRef.current = false;
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [driveAccessToken, invalidateDriveToken]);
+  }, [driveAccessToken]);
 
   // Library ("Σημειώσεις") View Controls: Icons vs List, Sort (Alpha vs Date), Search, Folders
   const [libraryLayoutMode, setLibraryLayoutMode] = useState<'grid' | 'list'>(() => {
@@ -6218,9 +6210,7 @@ export default function App() {
       if (
         typeof data.driveAccessTokenV3 === 'string' &&
         data.driveAccessTokenV3.length > 0 &&
-        !rejectedDriveTokensRef.current.has(data.driveAccessTokenV3) &&
-        typeof data.driveTokenIssuedAtV3 === 'number' &&
-        Date.now() - data.driveTokenIssuedAtV3 < 50 * 60 * 1000
+        !rejectedDriveTokensRef.current.has(data.driveAccessTokenV3)
       ) {
         setDriveAccessToken((prev) => {
           if (prev === data.driveAccessTokenV3) return prev;
@@ -6607,25 +6597,21 @@ export default function App() {
       performCloudFirestoreSyncNow();
 
       let token = overrideToken ?? driveAccessToken;
+      if (!token) {
+        try {
+          token =
+            localStorage.getItem('bestnotes_drive_token_v3') ||
+            localStorage.getItem('bestnotes_drive_token_v1') ||
+            null;
+        } catch {
+          // ignore
+        }
+      }
       if (token && rejectedDriveTokensRef.current.has(token)) {
         token = null;
       }
       const targetNb = overrideNotebook ?? activeNotebook;
       const hintEmail = driveEmail || currentUser.email || null;
-
-      // Check token age synchronously before any await
-      try {
-        const savedTime = Number(
-          localStorage.getItem('bestnotes_drive_token_time_v3') ||
-          localStorage.getItem('bestnotes_drive_token_time_v1') ||
-          '0'
-        );
-        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
-          token = null;
-        }
-      } catch {
-        // ignore
-      }
 
       if (!token) {
         if (showFeedback) {
@@ -6879,24 +6865,20 @@ export default function App() {
   const performAllNotebooksDrivePdfSync = useCallback(
     async (overrideToken?: string, silentBackground = false) => {
       let token = overrideToken ?? driveAccessToken;
+      if (!token) {
+        try {
+          token =
+            localStorage.getItem('bestnotes_drive_token_v3') ||
+            localStorage.getItem('bestnotes_drive_token_v1') ||
+            null;
+        } catch {
+          // ignore
+        }
+      }
       if (token && rejectedDriveTokensRef.current.has(token)) {
         token = null;
       }
       const hintEmail = driveEmail || currentUser?.email || null;
-
-      // Check token age synchronously
-      try {
-        const savedTime = Number(
-          localStorage.getItem('bestnotes_drive_token_time_v3') ||
-          localStorage.getItem('bestnotes_drive_token_time_v1') ||
-          '0'
-        );
-        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
-          token = null;
-        }
-      } catch {
-        // ignore
-      }
 
       if (!token) {
         if (!silentBackground) {
@@ -7132,24 +7114,20 @@ export default function App() {
       if ((syncingDriveFolderPath && !isAutoResume) || driveSyncingAll) return;
 
       let token = driveAccessToken;
+      if (!token) {
+        try {
+          token =
+            localStorage.getItem('bestnotes_drive_token_v3') ||
+            localStorage.getItem('bestnotes_drive_token_v1') ||
+            null;
+        } catch {
+          // ignore
+        }
+      }
       if (token && rejectedDriveTokensRef.current.has(token)) {
         token = null;
       }
       const hintEmail = driveEmail || currentUser?.email || null;
-
-      // Check token age synchronously
-      try {
-        const savedTime = Number(
-          localStorage.getItem('bestnotes_drive_token_time_v3') ||
-          localStorage.getItem('bestnotes_drive_token_time_v1') ||
-          '0'
-        );
-        if (token && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
-          token = null;
-        }
-      } catch {
-        // ignore
-      }
 
       if (!token) {
         if (isAutoResume) {
