@@ -23289,114 +23289,6 @@ export default function App() {
     return out;
   };
 
-  const dismissedSimStrokeIdsRef = useRef<Set<string>>(new Set());
-
-  // Automatically discover and register any closed circuit (with a battery/voltage-source) on any page of the active notebook
-  // that is not yet in page.circuitSims, assigning it the next sequential name (sim01, sim02, sim03, ...)!
-  useEffect(() => {
-    if (circuitProposal) return;
-
-    const usedNames = new Set<string>();
-    for (const p of activeNotebook.pages) {
-      for (const s of getValidCircuitSims(p)) {
-        usedNames.add(s.name.trim().toLowerCase());
-      }
-    }
-
-    const pagesToAppend = new Map<string, CircuitSimConfig[]>();
-
-    for (const p of activeNotebook.pages) {
-      const validSims = getValidCircuitSims(p);
-      const registeredIds = new Set<string>();
-      for (const vs of validSims) {
-        for (const sid of getSimExpandedStrokeSet(p, vs)) {
-          registeredIds.add(sid);
-        }
-      }
-
-      const unregisteredEligible = p.strokes.filter(
-        (s) =>
-          isCircuitEligibleStroke(s) &&
-          !registeredIds.has(s.id) &&
-          !dismissedSimStrokeIdsRef.current.has(s.id)
-      );
-      if (unregisteredEligible.length === 0) continue;
-
-      const visited = new Uint8Array(unregisteredEligible.length);
-      for (let i = 0; i < unregisteredEligible.length; i++) {
-        if (visited[i]) continue;
-        visited[i] = 1;
-        const cluster: StrokeObject[] = [unregisteredEligible[i]];
-        let changed = true;
-        while (changed) {
-          changed = false;
-          for (let j = 0; j < unregisteredEligible.length; j++) {
-            if (visited[j]) continue;
-            const cand = unregisteredEligible[j];
-            const sameGrp =
-              Boolean(cand.groupId) &&
-              cluster.some((m) => m.groupId === cand.groupId);
-            if (
-              sameGrp ||
-              cluster.some((m) => areStrokesWithinCircuitTol(cand, m, 44))
-            ) {
-              visited[j] = 1;
-              cluster.push(cand);
-              changed = true;
-            }
-          }
-        }
-
-        const hasSource = cluster.some(
-          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-        );
-        if (!hasSource) continue;
-        const simCheck = analyzeCircuitForSimulation(cluster, true);
-        if (!simCheck.isCircuitClosed) continue;
-
-        let nextName = `sim${usedNames.size + 1}`;
-        for (let k = 1; k <= 99; k++) {
-          const candName = `sim${String(k).padStart(2, '0')}`;
-          if (!usedNames.has(candName)) {
-            nextName = candName;
-            break;
-          }
-        }
-        usedNames.add(nextName);
-        const newSim: CircuitSimConfig = {
-          id: `sim-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          name: nextName,
-          strokeIds: cluster.map((s) => s.id),
-        };
-        const arr = pagesToAppend.get(p.id) || [];
-        arr.push(newSim);
-        pagesToAppend.set(p.id, arr);
-      }
-    }
-
-    if (pagesToAppend.size === 0) return;
-
-    setNotebooks((prev) =>
-      prev.map((nb) => {
-        if (nb.id !== activeNotebook.id) return nb;
-        return {
-          ...nb,
-          pages: nb.pages.map((p) => {
-            const added = pagesToAppend.get(p.id);
-            if (!added || added.length === 0) return p;
-            const curValid = getValidCircuitSims(p);
-            const nextSims = [...curValid, ...added];
-            return {
-              ...p,
-              circuitSims: nextSims,
-              activeCircuitSimId: p.activeCircuitSimId || added[added.length - 1].id,
-            };
-          }),
-        };
-      })
-    );
-  }, [activeNotebook, circuitProposal]);
-
   const runScopedCircuitOperationOnPage = (
     page: NotePage,
     op: (subStrokes: StrokeObject[]) => StrokeObject[],
@@ -60733,9 +60625,7 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      for (const sid of sim.strokeIds) {
-                                        dismissedSimStrokeIdsRef.current.add(sid);
-                                      }
+                                      userEditedInSessionRef.current.add(activeNotebook.id);
                                       setNotebooks((prev) =>
                                         prev.map((nb) => {
                                           if (nb.id !== activeNotebook.id) return nb;
@@ -60760,8 +60650,15 @@ export default function App() {
                                           if (!anyLeft) {
                                             setIsSimulating(false);
                                           }
-                                          return { ...nb, pages: nextPages };
+                                          return {
+                                            ...nb,
+                                            updatedAt: getMonotonicIsoTimestamp(),
+                                            pages: nextPages,
+                                          };
                                         })
+                                      );
+                                      showToast(
+                                        `🗑️ Το κύκλωμα "${sim.name}" αφαιρέθηκε. Το σχέδιο παραμένει ως απλό σκίτσο!`
                                       );
                                     }}
                                     className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
