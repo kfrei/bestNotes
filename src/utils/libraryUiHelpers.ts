@@ -157,6 +157,34 @@ function normalizeTagToken(raw: string): string {
 }
 
 /**
+ * Canonical tag reduction and deduplication rule.
+ * 1. Circuit consolidation: any tag with "κυκλωμ" (e.g. "ηλεκτρικό κύκλωμα", "κλειστό κύκλωμα", "κυκλώματα")
+ *    is unified strictly to the core canonical tag "κύκλωμα" (#κύκλωμα).
+ * 2. Multi-word modifier stripping: removes unnecessary adjective prefixes ("ηλεκτρικό", "απλό")
+ *    when the core noun already identifies the concept unambiguously.
+ */
+export function canonicalizeTag(raw: string): { norm: string; label: string } | null {
+  const cleanDisplay = raw.replace(/^#+/, '').trim();
+  const norm = normalizeTagToken(raw);
+  if (!norm || GENERIC_PLACEHOLDER_TAGS.has(norm)) return null;
+
+  // Rule 1: Circuit consolidation -> strictly keep #κύκλωμα
+  if (norm === 'κυκλωμα' || norm.includes('κυκλωμ')) {
+    return { norm: 'κυκλωμα', label: '#κύκλωμα' };
+  }
+
+  // Rule 2: Compound prefix reduction (e.g. "ηλεκτρική αντίσταση" -> "αντίσταση")
+  if (norm === 'ηλεκτρικη αντισταση' || norm === 'αντιστασεις') {
+    return { norm: 'αντισταση', label: '#αντίσταση' };
+  }
+  if (norm === 'ηλεκτρικο ρευμα' || norm === 'ενταση ρευματος') {
+    return { norm: 'ρευμα', label: '#ρεύμα' };
+  }
+
+  return { norm, label: `#${cleanDisplay}` };
+}
+
+/**
  * Resolves the filter category keys (subjects + explicit custom #tags) associated with a notebook.
  * Explicit user/AI #tags always take priority over title/content keyword inference.
  */
@@ -175,9 +203,9 @@ export function resolveNotebookFilterCategories(nb: Notebook): {
   const seenCustom = new Set<string>();
 
   for (const raw of rawTags) {
-    const cleanDisplay = raw.replace(/^#+/, '').trim();
-    const norm = normalizeTagToken(raw);
-    if (!norm || GENERIC_PLACEHOLDER_TAGS.has(norm)) continue;
+    const canonical = canonicalizeTag(raw);
+    if (!canonical) continue;
+    const { norm, label } = canonical;
 
     const subj = SUBJECT_DEFS.find((def) =>
       def.explicitTags.some((alias) => norm === alias || norm.includes(alias))
@@ -186,7 +214,7 @@ export function resolveNotebookFilterCategories(nb: Notebook): {
       matchedSubjects.set(subj.key, subj);
     } else if (!seenCustom.has(norm)) {
       seenCustom.add(norm);
-      customTags.push({ key: `tag:${norm}`, label: `#${cleanDisplay}` });
+      customTags.push({ key: `tag:${norm}`, label });
     }
   }
 
@@ -250,8 +278,20 @@ export function buildLibraryFilterChips(
 
   const allChips = Array.from(chipCounts.values()).filter((c) => c.count >= minCount);
   const subjects = allChips.filter((c) => c.isSubject).sort((a, b) => b.count - a.count);
-  const custom = allChips
-    .filter((c) => !c.isSubject)
+
+  // Constraint: filter out any compound/longer tags that contain a shorter core tag already present
+  const customRaw = allChips.filter((c) => !c.isSubject);
+  const customFiltered = customRaw.filter((chip) => {
+    const rawKey = chip.key.replace(/^tag:/, '');
+    const hasShorterBase = customRaw.some((other) => {
+      if (other.key === chip.key) return false;
+      const otherKey = other.key.replace(/^tag:/, '');
+      return rawKey.length > otherKey.length && rawKey.includes(otherKey);
+    });
+    return !hasShorterBase;
+  });
+
+  const custom = customFiltered
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'el'))
     .slice(0, 6);
 

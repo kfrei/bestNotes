@@ -664,7 +664,7 @@ export function buildElectricCircuitNotebook(folder = "Γενικά"): Notebook 
     folder: folder || "Γενικά",
     tags: [
       "φυσική",
-      "ηλεκτρικό κύκλωμα",
+      "κύκλωμα",
       "κλειστό κύκλωμα",
       "ανοιχτό κύκλωμα",
       "ηλεκτρική πηγή",
@@ -684,7 +684,7 @@ export function buildElectricCircuitNotebook(folder = "Γενικά"): Notebook 
         id: "page-electric-circuit-1",
         title: "Τα Βασικά του Ηλεκτρικού Κυκλώματος",
         tags: [
-          "ηλεκτρικό κύκλωμα",
+          "κύκλωμα",
           "κλειστό κύκλωμα",
           "ανοιχτό κύκλωμα",
           "ηλεκτρική πηγή",
