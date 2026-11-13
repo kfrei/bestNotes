@@ -37,6 +37,7 @@ import {
   Bandage,
   Sticker,
   X,
+  Check,
   ZoomIn,
   ZoomOut,
   Scissors,
@@ -2372,7 +2373,7 @@ export default function App() {
   }, [activeTool]);
   const [penSubType, setPenSubType] = useState<PenSubType>(() => initialSession?.penSubType || 'fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>(() => initialSession?.eraserSubType || 'stroke');
-  const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>(() => initialSession?.eraserSize || 'medium');
+  const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>(() => initialSession?.eraserSize || 'small');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>(() => initialSession?.shapePreset || 'sine');
   const [waveGuideColor, setWaveGuideColor] = useState<string>(() => initialSession?.waveGuideColor || '#2563eb');
   const [strokeColor, setStrokeColor] = useState<string>(() => initialSession?.strokeColor || '#111827');
@@ -2475,6 +2476,12 @@ export default function App() {
   );
   const [showWidthPopover, setShowWidthPopover] = useState<boolean>(false);
   const [openLassoOcrMenu, setOpenLassoOcrMenu] = useState<'math' | 'chem' | null>(null);
+  const [showPixelSizeDropdown, setShowPixelSizeDropdown] = useState<boolean>(false);
+  useEffect(() => {
+    if (activeTool !== 'eraser') {
+      setShowPixelSizeDropdown(false);
+    }
+  }, [activeTool]);
   const [lineStyle, setLineStyle] = useState<LineStyleType>(() => initialSession?.lineStyle || 'solid');
   const [arrowEnd, setArrowEnd] = useState<boolean>(() => Boolean(initialSession?.arrowEnd));
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(() =>
@@ -8119,6 +8126,7 @@ export default function App() {
       !showUserDropdown &&
       !showTagsPopover &&
       !openLassoOcrMenu &&
+      !showPixelSizeDropdown &&
       !libraryTagEditorNbId &&
       !folderPickerNbId &&
       !shareMenuTarget
@@ -8149,6 +8157,7 @@ export default function App() {
         if (triggerType !== 'user') setShowUserDropdown(false);
         if (triggerType !== 'tags') setShowTagsPopover(false);
         if (triggerType !== 'lasso-ocr') setOpenLassoOcrMenu(null);
+        if (triggerType !== 'pixel-size') setShowPixelSizeDropdown(false);
         if (triggerType !== 'lib-tags') setLibraryTagEditorNbId(null);
         if (triggerType !== 'lib-folder') setFolderPickerNbId(null);
         if (triggerType !== 'share-menu') setShareMenuTarget(null);
@@ -8166,6 +8175,7 @@ export default function App() {
       setShowUserDropdown(false);
       setShowTagsPopover(false);
       setOpenLassoOcrMenu(null);
+      setShowPixelSizeDropdown(false);
       setLibraryTagEditorNbId(null);
       setFolderPickerNbId(null);
       setShareMenuTarget(null);
@@ -8183,6 +8193,7 @@ export default function App() {
         setShowUserDropdown(false);
         setShowTagsPopover(false);
         setOpenLassoOcrMenu(null);
+        setShowPixelSizeDropdown(false);
         setLibraryTagEditorNbId(null);
         setFolderPickerNbId(null);
         setShareMenuTarget(null);
@@ -8206,6 +8217,7 @@ export default function App() {
     showUserDropdown,
     showTagsPopover,
     openLassoOcrMenu,
+    showPixelSizeDropdown,
     libraryTagEditorNbId,
     folderPickerNbId,
     shareMenuTarget,
@@ -56401,7 +56413,10 @@ export default function App() {
                       both 'precision' (Pixel) and 'stroke' (Stroke) erasers now naturally erase highlighter strokes too.
                     */}
                     <button
-                      onClick={() => setEraserSubType('stroke')}
+                      onClick={() => {
+                        setEraserSubType('stroke');
+                        setShowPixelSizeDropdown(false);
+                      }}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
                         eraserSubType === 'stroke'
                           ? 'bg-[#234978] text-white shadow-xs'
@@ -56413,61 +56428,102 @@ export default function App() {
                       <span>Stroke</span>
                     </button>
 
-                    <button
-                      onClick={() => setEraserSubType('precision')}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
-                        eraserSubType === 'precision'
-                          ? 'bg-[#234978] text-white shadow-xs'
-                          : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
-                      }`}
-                      title="Pixel Σβήστρα (σβήνει ακριβώς το σημείο όπου ακουμπάει, και σε γραμμές και σε μαρκαδόρο)"
-                    >
-                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 18 18" fill="none">
-                        <circle
-                          cx="9"
-                          cy="9"
-                          r="6.5"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeDasharray="2.2 2"
-                          fill="currentColor"
-                          fillOpacity="0.14"
+                    <div className="relative inline-flex items-center">
+                      <button
+                        data-popover-trigger="pixel-size"
+                        onClick={() => {
+                          setEraserSubType('precision');
+                          setShowPixelSizeDropdown((prev) => !prev);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
+                          eraserSubType === 'precision'
+                            ? 'bg-[#234978] text-white shadow-xs'
+                            : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
+                        }`}
+                        title="Pixel Σβήστρα (Επιλογή μεγέθους: Μικρή, Μεσαία, Μεγάλη)"
+                      >
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 18 18" fill="none">
+                          <circle
+                            cx="9"
+                            cy="9"
+                            r="6.5"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeDasharray="2.2 2"
+                            fill="currentColor"
+                            fillOpacity="0.14"
+                          />
+                          <circle cx="9" cy="9" r="1.6" fill="currentColor" />
+                        </svg>
+                        <span>
+                          Pixel ({eraserSize === 'small' ? 'Μικρή' : eraserSize === 'medium' ? 'Μεσαία' : 'Μεγάλη'})
+                        </span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                            showPixelSizeDropdown ? 'rotate-180' : ''
+                          }`}
                         />
-                        <circle cx="9" cy="9" r="1.6" fill="currentColor" />
-                      </svg>
-                      <span>Pixel</span>
-                    </button>
+                      </button>
 
-                    {eraserSubType === 'precision' && (
-                      <>
-                        <div className="h-4 w-px bg-[#dfd8cb] mx-1 shrink-0" />
-                        <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                      {showPixelSizeDropdown && (
+                        <div
+                          data-ui-panel="true"
+                          data-popover-panel="pixel-size"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="absolute top-full left-0 mt-1.5 z-50 min-w-[170px] ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.18),0_4px_16px_-2px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-1.5 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100"
+                        >
+                          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                            Μέγεθος Pixel Σβήστρας
+                          </div>
                           {(
                             [
-                              { id: 'small', label: 'Μικρή' },
-                              { id: 'medium', label: 'Μεσαία' },
-                              { id: 'large', label: 'Μεγάλη' },
+                              { id: 'small', label: 'Μικρή', desc: 'Λεπτή (6px)', dotSize: 5 },
+                              { id: 'medium', label: 'Μεσαία', desc: 'Κανονική (13px)', dotSize: 8 },
+                              { id: 'large', label: 'Μεγάλη', desc: 'Ευρεία (46px)', dotSize: 12 },
                             ] as const
                           ).map((sz) => {
-                            const activeSz = eraserSize === sz.id;
+                            const isSelected = eraserSize === sz.id;
                             return (
                               <button
                                 key={sz.id}
-                                onClick={() => setEraserSize(sz.id)}
-                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
-                                  activeSz
-                                    ? 'bg-[#234978] text-white shadow-xs'
-                                    : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
+                                onClick={() => {
+                                  setEraserSize(sz.id);
+                                  setEraserSubType('precision');
+                                  setShowPixelSizeDropdown(false);
+                                }}
+                                className={`flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-left text-xs font-semibold transition cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-[#234978] text-white shadow-2xs'
+                                    : 'text-[#2c3e50] hover:bg-[#efebe3]'
                                 }`}
-                                title={`Μέγεθος Σβήστρας (${sz.label})`}
+                                title={`${sz.label} Pixel Σβήστρα — ${sz.desc}`}
                               >
-                                {sz.label}
+                                <div className="flex items-center gap-2.5">
+                                  <span
+                                    className={`rounded-full shrink-0 ${
+                                      isSelected ? 'bg-white' : 'bg-[#234978]'
+                                    }`}
+                                    style={{
+                                      width: sz.dotSize,
+                                      height: sz.dotSize,
+                                    }}
+                                  />
+                                  <span>{sz.label}</span>
+                                  <span
+                                    className={`text-[10px] font-normal ${
+                                      isSelected ? 'text-white/80' : 'text-[#64748b]'
+                                    }`}
+                                  >
+                                    ({sz.desc})
+                                  </span>
+                                </div>
+                                {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-2" />}
                               </button>
                             );
                           })}
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
 
