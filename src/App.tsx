@@ -51106,7 +51106,7 @@ export default function App() {
             {showUserDropdown && (
               <div
                 data-popover-panel="user"
-                className="absolute right-0 top-full mt-2 w-72 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-3.5 z-50 space-y-3"
+                className="absolute right-0 top-full mt-2 w-72 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-3.5 z-50 space-y-3"
               >
                 {/* 1. User Account Info (Name + Email) & Logout */}
                 <div className="space-y-2">
@@ -53439,7 +53439,7 @@ export default function App() {
                                         <div
                                           data-popover-panel="lib-folder"
                                           onClick={(e) => e.stopPropagation()}
-                                          className="absolute left-0 bottom-full mb-1.5 w-48 max-h-56 overflow-y-auto ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-1.5 z-50 space-y-1 text-left"
+                                          className="absolute left-0 bottom-full mb-1.5 w-48 max-h-56 overflow-y-auto ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-1.5 z-50 space-y-1 text-left"
                                         >
                                           <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                             Μετακίνηση σε Φάκελο
@@ -53644,7 +53644,7 @@ export default function App() {
                                   <div
                                     data-popover-panel="lib-tags"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="mt-1.5 w-48 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 space-y-1.5 z-30"
+                                    className="mt-1.5 w-48 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 space-y-1.5 z-30"
                                   >
                                     <div className="flex items-center gap-1">
                                       <input
@@ -54308,7 +54308,7 @@ export default function App() {
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 rounded-3xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
+                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
                       >
                         {/* Header with Live Preview + Favorite Star + Close */}
                         <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#dfd8cb]">
@@ -54700,7 +54700,7 @@ export default function App() {
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-sm ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 rounded-3xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-150"
+                        className="w-full max-w-sm ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-150"
                       >
                         <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-rose-600 mb-4 shadow-2xs">
                           <Trash2 className="w-7 h-7" />
@@ -55571,7 +55571,7 @@ export default function App() {
                     top: fillTransPopoverPos.top,
                     left: fillTransPopoverPos.left,
                   }}
-                  className="fixed z-50 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 px-3.5 py-3 flex flex-col gap-2 w-[252px]"
+                  className="fixed z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 px-3.5 py-3 flex flex-col gap-2 w-[252px]"
                 >
                   <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
                     <div className="flex items-center gap-1.5">
@@ -55629,7 +55629,7 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="width"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-20 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-4 flex flex-col gap-3 w-72"
+              className="fixed right-20 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-4 flex flex-col gap-3 w-72"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#234978]">
                 <span>Πάχος Γραμμής (12 Επιλογές)</span>
@@ -55705,7 +55705,7 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="color"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-6 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
+              className="fixed right-6 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#234978]">
                 <span>Παλέτα Χρωμάτων</span>
@@ -56740,7 +56740,7 @@ export default function App() {
                               data-ui-panel="true"
                               data-popover-panel="lasso-ocr"
                               onPointerDown={(e) => e.stopPropagation()}
-                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
                             >
                               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                 Math · Μαθηματικά & Γεωμετρία
@@ -56816,7 +56816,7 @@ export default function App() {
                               data-ui-panel="true"
                               data-popover-panel="lasso-ocr"
                               onPointerDown={(e) => e.stopPropagation()}
-                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
                             >
                               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                 Chem · Χημεία & Άτομα
@@ -57553,7 +57553,7 @@ export default function App() {
                 }
                 className={`fixed ${
                   shapeLibPos ? '' : 'right-4 sm:right-12'
-                } z-50 w-[360px] sm:w-[465px] rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-4 text-[#2c3e50] flex flex-col max-h-[78vh]`}
+                } z-50 w-[360px] sm:w-[465px] rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-4 text-[#2c3e50] flex flex-col max-h-[78vh]`}
               >
                 {(() => {
                   const skHex = (stickerCustomColor || '#1d4ed8').replace('#', '');
@@ -59063,7 +59063,7 @@ export default function App() {
                 style={{ left: simPanelPos.x, top: simPanelPos.y }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50] space-y-2.5 select-none"
+                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50] space-y-2.5 select-none"
               >
                 {/* Compact Draggable Header ("Προσομοίωση") */}
                 <div
@@ -61404,7 +61404,7 @@ export default function App() {
                     periodicTableDragRef.current = null;
                   }}
                   onWheel={(e) => e.stopPropagation()}
-                  className="fixed z-50 overflow-auto rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 text-[#2c3e50] select-none cursor-grab active:cursor-grabbing"
+                  className="fixed z-50 overflow-auto rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 text-[#2c3e50] select-none cursor-grab active:cursor-grabbing"
                   title="Σύρε από οποιοδήποτε σημείο για μετακίνηση ή από τις γωνίες για αυξομείωση μεγέθους"
                 >
                   {/* 4 Γωνίες Αυξομείωσης Μεγέθους (Corner Resize Handles) */}
@@ -61594,7 +61594,7 @@ export default function App() {
                   left: `${effLayersX}px`,
                   top: `${effLayersY}px`,
                 }}
-                className="fixed z-50 w-80 rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50]"
+                className="fixed z-50 w-80 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50]"
               >
                 <div
                   style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
@@ -63515,7 +63515,7 @@ export default function App() {
                                     letterSpacing: 'normal',
                                     WebkitTextStroke: '0px',
                                   }}
-                                  className="absolute flex items-center gap-1 ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 ring-1 ring-black/5 text-[#2c3e50] px-2.5 py-1.5 rounded-2xl shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                                  className="absolute flex items-center gap-1 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 ring-1 ring-black/5 text-[#2c3e50] px-2.5 py-1.5 rounded-2xl shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                                 >
                                   <span
                                     className="px-1 py-0.5 text-[#333333]/75 text-[12.5px] font-normal select-none"
@@ -65856,7 +65856,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             style={{ width: '94vw', maxWidth: '1024px', height: '85vh' }}
-            className="rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 overflow-hidden flex flex-col"
+            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 overflow-hidden flex flex-col"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-3.5 bg-[#234978] text-white shrink-0 flex-wrap gap-2">
@@ -66136,7 +66136,7 @@ export default function App() {
             data-popover-panel="math"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] border border-white/80 p-6 w-full max-w-lg shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
+            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-lg shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 id="mathDialogTitle" className="text-lg font-bold text-[#234978] flex items-center gap-2">
@@ -66392,7 +66392,7 @@ export default function App() {
             data-popover-panel="settings"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] border border-white/80 p-6 w-full max-w-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
+            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#234978]">
@@ -66798,7 +66798,7 @@ export default function App() {
           <div
             data-ui-panel="true"
             onClick={(e) => e.stopPropagation()}
-            className="rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] border border-white/80 p-6 w-full max-w-sm shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4 text-center"
+            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-sm shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4 text-center"
           >
             <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#234978]">
               <Share2 className="w-6 h-6" />
@@ -66857,7 +66857,7 @@ export default function App() {
           onClick={() => setWaveDiagramPrompt(null)}
         >
           <div
-            className="w-full max-w-md rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-3.5 text-[#2c3e50]"
+            className="w-full max-w-md rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-3.5 text-[#2c3e50]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -66954,7 +66954,7 @@ export default function App() {
             data-ui-panel="true"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 text-[#2c3e50] border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-4"
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-4"
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
@@ -67206,7 +67206,7 @@ export default function App() {
                   : undefined,
                 width: 224,
               }}
-              className="ipados-liquid-glass bg-[#fdfbf7]/52 backdrop-blur-2xl backdrop-saturate-190 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[9999] space-y-1 text-left"
+              className="ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[9999] space-y-1 text-left"
             >
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b] truncate">
                 Λήψη «{targetNb.title}»
