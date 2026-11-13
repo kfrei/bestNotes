@@ -54691,10 +54691,18 @@ export default function App() {
                           >
                             <span className="flex items-center gap-2 min-w-0 truncate">
                               <span className="text-[#64748b] font-semibold">Μετακίνηση σε:</span>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[#234978] font-bold truncate">
-                                {editingFolderModal.parentPath
-                                  ? `📁 ${editingFolderModal.parentPath.replace(/\//g, ' › ')}`
-                                  : '🏠 Βιβλιοθήκη (Αρχικός)'}
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[#234978] font-bold truncate">
+                                {editingFolderModal.parentPath ? (
+                                  <>
+                                    <Folder className="w-3.5 h-3.5 shrink-0 text-[#234978]" />
+                                    <span className="truncate">{editingFolderModal.parentPath.replace(/\//g, ' › ')}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Home className="w-3.5 h-3.5 shrink-0 text-[#234978]" />
+                                    <span>Βιβλιοθήκη (Αρχικός)</span>
+                                  </>
+                                )}
                               </span>
                             </span>
                             <span className="text-[11px] font-semibold text-[#64748b] shrink-0">
