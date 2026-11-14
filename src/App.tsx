@@ -18233,6 +18233,14 @@ export default function App() {
           if (updatedNb) activeNotebookLiveRef.current = updatedNb;
           return nextNbs;
         });
+
+        // Synchronize the panel controls to reflect the newly scrolled circuit's own saved parameters!
+        setSimCircuitSwitchClosed(Boolean(targetSim.switchClosed));
+        setSimFlowDirection(targetSim.flowDirection || 'electrons');
+        setSimShowElectrons(typeof targetSim.showElectrons === 'boolean' ? targetSim.showElectrons : true);
+        setSimSpeedMultiplier(typeof targetSim.speedMultiplier === 'number' ? targetSim.speedMultiplier : 1.0);
+        setSimShowDarkWireTrack(typeof targetSim.showDarkWireTrack === 'boolean' ? targetSim.showDarkWireTrack : false);
+        setSimParticleStyle(targetSim.flowDirection === 'conventional' ? 'blue-electrons' : 'green-energy');
       }
     },
     [
@@ -23574,15 +23582,37 @@ export default function App() {
         matchingExisting?.rawStrokesBackup ||
         rawSelStrokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) }));
       const currentValid = getValidCircuitSims(page);
-      const nextSims = matchingExisting
+      const nextSims: CircuitSimConfig[] = matchingExisting
         ? currentValid.map((sim) =>
             sim.id === matchingExisting.id
-              ? { ...sim, name: targetSimName, strokeIds: alignedIds, rawStrokesBackup: rawBackup }
+              ? {
+                  ...sim,
+                  name: targetSimName,
+                  strokeIds: alignedIds,
+                  switchClosed: typeof sim.switchClosed === 'boolean' ? sim.switchClosed : false,
+                  flowDirection: sim.flowDirection || (simFlowDirection as 'electrons' | 'conventional') || 'electrons',
+                  showElectrons: typeof sim.showElectrons === 'boolean' ? sim.showElectrons : (simShowElectrons ?? true),
+                  speedMultiplier: typeof sim.speedMultiplier === 'number' ? sim.speedMultiplier : (simSpeedMultiplier || 1.0),
+                  showDarkWireTrack: typeof sim.showDarkWireTrack === 'boolean' ? sim.showDarkWireTrack : (simShowDarkWireTrack || false),
+                  componentMode: sim.componentMode || 'pictorial',
+                  rawStrokesBackup: rawBackup,
+                }
               : sim
           )
         : [
             ...currentValid,
-            { id: targetSimId, name: targetSimName, strokeIds: alignedIds, rawStrokesBackup: rawBackup },
+            {
+              id: targetSimId,
+              name: targetSimName,
+              strokeIds: alignedIds,
+              switchClosed: false,
+              flowDirection: (simFlowDirection as 'electrons' | 'conventional') || 'electrons',
+              showElectrons: simShowElectrons ?? true,
+              speedMultiplier: simSpeedMultiplier || 1.0,
+              showDarkWireTrack: simShowDarkWireTrack || false,
+              componentMode: 'pictorial',
+              rawStrokesBackup: rawBackup,
+            },
           ];
 
       return {
@@ -25272,13 +25302,18 @@ export default function App() {
 
       const curValid = getValidCircuitSims(page);
       const exists = curValid.some((s) => s.id === prop.simId);
-      const nextSims = exists
+      const nextSims: CircuitSimConfig[] = exists
         ? curValid.map((s) =>
             s.id === prop.simId
               ? {
                   ...s,
                   strokeIds: alignedIds,
                   switchClosed: typeof s.switchClosed === 'boolean' ? s.switchClosed : false,
+                  flowDirection: s.flowDirection || 'electrons',
+                  showElectrons: typeof s.showElectrons === 'boolean' ? s.showElectrons : true,
+                  speedMultiplier: typeof s.speedMultiplier === 'number' ? s.speedMultiplier : 1.0,
+                  showDarkWireTrack: typeof s.showDarkWireTrack === 'boolean' ? s.showDarkWireTrack : false,
+                  componentMode: s.componentMode || 'pictorial',
                   rawStrokesBackup: prop.rawStrokesBackup || s.rawStrokesBackup,
                 }
               : s
@@ -25290,6 +25325,11 @@ export default function App() {
               name: prop.simName,
               strokeIds: alignedIds,
               switchClosed: false,
+              flowDirection: 'electrons',
+              showElectrons: true,
+              speedMultiplier: 1.0,
+              showDarkWireTrack: false,
+              componentMode: 'pictorial',
               rawStrokesBackup: prop.rawStrokesBackup,
             },
           ];
@@ -25759,7 +25799,7 @@ export default function App() {
             }
             const curValid = getValidCircuitSims(page);
             const nextSims = curValid.map((sim) =>
-              sim.id === prop.simId ? { ...sim, strokeIds: newSimStrokeIds } : sim
+              sim.id === prop.simId ? { ...sim, strokeIds: newSimStrokeIds, componentMode: targetMode } : sim
             );
             return {
               ...page,
@@ -25780,13 +25820,19 @@ export default function App() {
       }
     }
 
-    updateActivePage((page) =>
-      runScopedCircuitOperationOnPage(
+    updateActivePage((page) => {
+      const updatedPage = runScopedCircuitOperationOnPage(
         page,
         (sub) => convertCircuitComponents(sub, undefined, targetMode).strokes,
         activeSim.id
-      )
-    );
+      );
+      return {
+        ...updatedPage,
+        circuitSims: (updatedPage.circuitSims || []).map((cs) =>
+          cs.id === activeSim.id ? { ...cs, componentMode: targetMode } : cs
+        ),
+      };
+    });
     setSelectedStrokeIds([]);
     showToast(
       targetMode === 'pictorial'
@@ -60984,7 +61030,7 @@ export default function App() {
                           }
                           if (!inserted) nextStrokes.push(...alignedSubset);
                           const currentValid = getValidCircuitSims(page);
-                          const nextSims = matchingSim
+                          const nextSims: CircuitSimConfig[] = matchingSim
                             ? currentValid.map((sim) =>
                                 sim.id === matchingSim.id
                                   ? {
@@ -60994,6 +61040,11 @@ export default function App() {
                                         typeof sim.switchClosed === 'boolean'
                                           ? sim.switchClosed
                                           : false,
+                                      flowDirection: sim.flowDirection || 'electrons',
+                                      showElectrons: typeof sim.showElectrons === 'boolean' ? sim.showElectrons : true,
+                                      speedMultiplier: typeof sim.speedMultiplier === 'number' ? sim.speedMultiplier : 1.0,
+                                      showDarkWireTrack: typeof sim.showDarkWireTrack === 'boolean' ? sim.showDarkWireTrack : false,
+                                      componentMode: sim.componentMode || 'pictorial',
                                     }
                                   : sim
                               )
@@ -61004,6 +61055,11 @@ export default function App() {
                                   name: targetSimName,
                                   strokeIds: alignedIds,
                                   switchClosed: false,
+                                  flowDirection: 'electrons',
+                                  showElectrons: true,
+                                  speedMultiplier: 1.0,
+                                  showDarkWireTrack: false,
+                                  componentMode: 'pictorial',
                                 },
                               ];
                           return {
@@ -61152,57 +61208,84 @@ export default function App() {
                 </div>
 
                 {/* 1-Click Scoped Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleConvertActiveCircuitMode('pictorial')}
-                    className="px-2 py-2 rounded-xl bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[11px] font-bold text-[#2c3e50] shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
-                    title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
-                  >
-                    <svg
-                      viewBox="0 0 28 18"
-                      className="w-7 h-4.5 shrink-0 text-[#234978]"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M 2 6.2 H 6.5 V 2.4 H 26 V 15.6 H 6.5 V 11.8 H 2 Z" />
-                    </svg>
-                    <span>Σχήματα</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleConvertActiveCircuitMode('schematic')}
-                    className="px-2 py-2 rounded-xl bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[11px] font-bold text-[#2c3e50] shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
-                    title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
-                  >
-                    <svg
-                      viewBox="0 0 28 18"
-                      className="w-7 h-4.5 shrink-0 text-[#234978]"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M 1 9 H 4.2 L 6.2 2.2 L 9.4 15.8 L 12.6 2.2 L 15.8 15.8 L 19 2.2 L 22.2 15.8 L 24.2 9 H 27" />
-                    </svg>
-                    <span>Σύμβολα</span>
-                  </button>
-                </div>
+                {(() => {
+                  const activeSim = getActiveCircuitSim(activePage);
+                  const activeSimStrokes = activeSim
+                    ? activePage.strokes.filter((s) => activeSim.strokeIds.includes(s.id))
+                    : [];
+                  const detectedMode =
+                    activeSim?.componentMode ||
+                    (activeSimStrokes.some((s) => s.shapeType === 'resistor' || s.shapeType === 'voltage-source')
+                      ? 'schematic'
+                      : 'pictorial');
+
+                  return (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleConvertActiveCircuitMode('pictorial')}
+                        className={`px-2 py-2 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                          detectedMode === 'pictorial'
+                            ? 'bg-[#234978] text-white border border-[#234978]'
+                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
+                        }`}
+                        title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
+                      >
+                        <svg
+                          viewBox="0 0 28 18"
+                          className={`w-7 h-4.5 shrink-0 ${detectedMode === 'pictorial' ? 'text-white' : 'text-[#234978]'}`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M 2 6.2 H 6.5 V 2.4 H 26 V 15.6 H 6.5 V 11.8 H 2 Z" />
+                        </svg>
+                        <span>Σχήματα</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleConvertActiveCircuitMode('schematic')}
+                        className={`px-2 py-2 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                          detectedMode === 'schematic'
+                            ? 'bg-[#234978] text-white border border-[#234978]'
+                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
+                        }`}
+                        title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
+                      >
+                        <svg
+                          viewBox="0 0 28 18"
+                          className={`w-7 h-4.5 shrink-0 ${detectedMode === 'schematic' ? 'text-white' : 'text-[#234978]'}`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M 1 9 H 4.2 L 6.2 2.2 L 9.4 15.8 L 12.6 2.2 L 15.8 15.8 L 19 2.2 L 22.2 15.8 L 24.2 9 H 27" />
+                        </svg>
+                        <span>Σύμβολα</span>
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* Simulation Visual Options */}
                 {(() => {
                   const activeSim = getActiveCircuitSim(activePage);
+                  const curShowElectrons = typeof activeSim?.showElectrons === 'boolean' ? activeSim.showElectrons : simShowElectrons;
+                  const curFlowDirection = activeSim?.flowDirection || simFlowDirection;
+                  const curDarkWireTrack = typeof activeSim?.showDarkWireTrack === 'boolean' ? activeSim.showDarkWireTrack : simShowDarkWireTrack;
+                  const curSpeedMultiplier = typeof activeSim?.speedMultiplier === 'number' ? activeSim.speedMultiplier : simSpeedMultiplier;
+
                   return (
                     <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2 divide-y divide-[#e8e2d6]/70">
                       <div className="space-y-1.5">
                         <WarmStudioToggle
-                          checked={simShowElectrons}
+                          checked={curShowElectrons}
                           onChange={(checked) => {
                             setSimShowElectrons(checked);
                             if (activeSim) {
@@ -61219,7 +61302,7 @@ export default function App() {
                           className="w-full"
                         />
 
-                        {simShowElectrons && (
+                        {curShowElectrons && (
                           <div className="grid grid-cols-2 gap-1 pt-0.5">
                             <button
                               type="button"
@@ -61236,7 +61319,7 @@ export default function App() {
                                 }
                               }}
                               className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                simFlowDirection === 'electrons'
+                                curFlowDirection === 'electrons'
                                   ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
                                   : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                               }`}
@@ -61258,7 +61341,7 @@ export default function App() {
                                 }
                               }}
                               className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                simFlowDirection === 'conventional'
+                                curFlowDirection === 'conventional'
                                   ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
                                   : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
                               }`}
@@ -61271,7 +61354,7 @@ export default function App() {
 
                       <div className="pt-1.5">
                         <WarmStudioToggle
-                          checked={simShowDarkWireTrack}
+                          checked={curDarkWireTrack}
                           onChange={(checked) => {
                             setSimShowDarkWireTrack(checked);
                             if (activeSim) {
@@ -61290,14 +61373,14 @@ export default function App() {
 
                       <div className="flex items-center justify-between gap-2 pt-2">
                         <span className="text-[10.5px] font-semibold text-[#475569]">
-                          Ταχύτητα (<span className="text-[#234978] font-bold">{simSpeedMultiplier.toFixed(1)}x</span>):
+                          Ταχύτητα (<span className="text-[#234978] font-bold">{curSpeedMultiplier.toFixed(1)}x</span>):
                         </span>
                         <input
                           type="range"
                           min="0.4"
                           max="2.4"
                           step="0.2"
-                          value={simSpeedMultiplier}
+                          value={curSpeedMultiplier}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value);
                             setSimSpeedMultiplier(val);
