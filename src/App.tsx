@@ -54783,6 +54783,8 @@ export default function App() {
                             new Date(rNb.updatedAt || 0).getTime() || 0
                           );
                           const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
+                          const rNbBytes = getNotebookSizeBytes(rNb);
+                          const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
                           return (
                             <div
                               key={`recent-${rNb.id}`}
@@ -54819,6 +54821,9 @@ export default function App() {
                                   </p>
                                   <p className="text-[11px] text-slate-500 mt-1">
                                     {formatRecentRelativeLabel(recentTs || rNb.updatedAt)}
+                                  </p>
+                                  <p className="text-[10.5px] font-semibold text-slate-400 mt-0.5 tabular-nums">
+                                    {rNbSizeLabel}
                                   </p>
                                 </div>
                                 <span className="inline-block self-start max-w-full truncate px-2 py-0.5 rounded-md bg-indigo-50/90 text-[#234978] text-[10.5px] font-semibold mt-2">
