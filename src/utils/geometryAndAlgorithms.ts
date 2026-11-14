@@ -6178,6 +6178,8 @@ export interface CircuitComponentInfo {
   h: number;
   leftTerm: { x: number; y: number };
   rightTerm: { x: number; y: number };
+  topTerm?: { x: number; y: number };
+  bottomTerm?: { x: number; y: number };
   circleCx?: number;
   circleCy?: number;
   circleR?: number;
@@ -6328,6 +6330,8 @@ export function getCircuitComponentsWithTerminals(
 
     let leftTerm = { x: minX, y: cy };
     let rightTerm = { x: maxX, y: cy };
+    let topTerm: { x: number; y: number } | undefined;
+    let bottomTerm: { x: number; y: number } | undefined;
     let circleCx: number | undefined;
     let circleCy: number | undefined;
     let circleR: number | undefined;
@@ -6377,14 +6381,57 @@ export function getCircuitComponentsWithTerminals(
         if (ws.tool === 'highlighter' || ws.points.length < 2) continue;
         if (ws.shapeType && ws.shapeType !== 'line') continue;
         if (ws.points[0]?.twist === 999) continue;
-        for (let k = 0; k < ws.points.length - 1; k++) {
+
+        // 1. Check overall wire stroke endpoints and orientation (handles both straight lines & freehand strokes)
+        const pStart = ws.points[0];
+        const pEnd = ws.points[ws.points.length - 1];
+        const overallDx = Math.abs(pEnd.x - pStart.x);
+        const overallDy = Math.abs(pEnd.y - pStart.y);
+        const isOverallV = overallDy >= Math.max(16, overallDx * 1.15);
+        const isOverallH = overallDx >= Math.max(16, overallDy * 1.15);
+
+        if (isOverallV) {
+          const dStartT = distance(pStart, topPt);
+          const dEndT = distance(pEnd, topPt);
+          const dStartB = distance(pStart, botPt);
+          const dEndB = distance(pEnd, botPt);
+          if (Math.min(dStartT, dEndT) <= snapTol) vertScore += 3;
+          if (Math.min(dStartB, dEndB) <= snapTol) vertScore += 3;
+          const strokeMidX = (pStart.x + pEnd.x) / 2;
+          if (Math.abs(strokeMidX - circleCx) <= Math.max(45, circleR * 1.6)) {
+            const segMinY = Math.min(pStart.y, pEnd.y);
+            const segMaxY = Math.max(pStart.y, pEnd.y);
+            if (segMaxY >= topPt.y - 45 && segMinY <= botPt.y + 45) {
+              vertScore += 3;
+            }
+          }
+        } else if (isOverallH) {
+          const dStartL = distance(pStart, leftPt);
+          const dEndL = distance(pEnd, leftPt);
+          const dStartR = distance(pStart, rightPt);
+          const dEndR = distance(pEnd, rightPt);
+          if (Math.min(dStartL, dEndL) <= snapTol) horizScore += 3;
+          if (Math.min(dStartR, dEndR) <= snapTol) horizScore += 3;
+          const strokeMidY = (pStart.y + pEnd.y) / 2;
+          if (Math.abs(strokeMidY - circleCy) <= Math.max(45, circleR * 1.6)) {
+            const segMinX = Math.min(pStart.x, pEnd.x);
+            const segMaxX = Math.max(pStart.x, pEnd.x);
+            if (segMaxX >= leftPt.x - 45 && segMinX <= rightPt.x + 45) {
+              horizScore += 3;
+            }
+          }
+        }
+
+        // 2. Also sample segments along the stroke with step size adapted to freehand point density
+        const ptStep = Math.max(1, Math.min(6, Math.floor(ws.points.length / 8)));
+        for (let k = 0; k < ws.points.length - ptStep; k += ptStep) {
           const a = ws.points[k];
-          const b = ws.points[k + 1];
+          const b = ws.points[k + ptStep];
           const sdx = Math.abs(b.x - a.x);
           const sdy = Math.abs(b.y - a.y);
-          if (Math.hypot(sdx, sdy) < 8) continue;
-          const isH = sdy <= Math.max(20, sdx * 0.35);
-          const isV = sdx <= Math.max(20, sdy * 0.35);
+          if (Math.hypot(sdx, sdy) < 5) continue;
+          const isH = sdy <= Math.max(20, sdx * 0.4);
+          const isV = sdx <= Math.max(20, sdy * 0.4);
           if (isH) {
             const dL = Math.min(distance(a, leftPt), distance(b, leftPt));
             const dR = Math.min(distance(a, rightPt), distance(b, rightPt));
@@ -6429,31 +6476,30 @@ export function getCircuitComponentsWithTerminals(
           if (entryIdSet.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) continue;
           if (ws.tool === 'highlighter' || ws.points.length < 2) continue;
           if (ws.shapeType && ws.shapeType !== 'line') continue;
-          for (let k = 0; k < ws.points.length - 1; k++) {
-            const a = ws.points[k];
-            const b = ws.points[k + 1];
-            const sdx = Math.abs(b.x - a.x);
-            const sdy = Math.abs(b.y - a.y);
-            if (Math.hypot(sdx, sdy) < 10) continue;
-            const isH = sdy <= Math.max(20, sdx * 0.35);
-            const isV = sdx <= Math.max(20, sdy * 0.35);
-            if (isV && Math.abs((a.x + b.x) / 2 - circleCx) <= Math.max(45, circleR * 1.6)) {
-              const segMinY = Math.min(a.y, b.y);
-              const segMaxY = Math.max(a.y, b.y);
-              if (segMaxY >= topPt.y - 70 && segMinY <= botPt.y + 70) {
-                vertScore += 2;
-              }
-            } else if (isH && Math.abs((a.y + b.y) / 2 - circleCy) <= Math.max(45, circleR * 1.6)) {
-              const segMinX = Math.min(a.x, b.x);
-              const segMaxX = Math.max(a.x, b.x);
-              if (segMaxX >= leftPt.x - 70 && segMinX <= rightPt.x + 70) {
-                horizScore += 2;
-              }
+          const pStart = ws.points[0];
+          const pEnd = ws.points[ws.points.length - 1];
+          const sdx = Math.abs(pEnd.x - pStart.x);
+          const sdy = Math.abs(pEnd.y - pStart.y);
+          const isH = sdy <= Math.max(20, sdx * 0.35);
+          const isV = sdx <= Math.max(20, sdy * 0.35);
+          if (isV && Math.abs((pStart.x + pEnd.x) / 2 - circleCx) <= Math.max(45, circleR * 1.6)) {
+            const segMinY = Math.min(pStart.y, pEnd.y);
+            const segMaxY = Math.max(pStart.y, pEnd.y);
+            if (segMaxY >= topPt.y - 70 && segMinY <= botPt.y + 70) {
+              vertScore += 2;
+            }
+          } else if (isH && Math.abs((pStart.y + pEnd.y) / 2 - circleCy) <= Math.max(45, circleR * 1.6)) {
+            const segMinX = Math.min(pStart.x, pEnd.x);
+            const segMaxX = Math.max(pStart.x, pEnd.x);
+            if (segMaxX >= leftPt.x - 70 && segMinX <= rightPt.x + 70) {
+              horizScore += 2;
             }
           }
         }
       }
 
+      topTerm = topPt;
+      bottomTerm = botPt;
       if (vertScore > horizScore && vertScore > 0) {
         orientation = 'v';
         leftTerm = topPt;
@@ -6521,6 +6567,8 @@ export function getCircuitComponentsWithTerminals(
       h,
       leftTerm,
       rightTerm,
+      topTerm,
+      bottomTerm,
       circleCx,
       circleCy,
       circleR,
@@ -11148,28 +11196,20 @@ export function autoAlignAndConnectCircuit(
       if (yB - yT < 6) continue;
       let pieces = [{ yT, yB, stroke: w.stroke }];
       for (const vc of colComps) {
+        const compTop = Math.min(vc.leftTerm.y, vc.rightTerm.y);
+        const compBot = Math.max(vc.leftTerm.y, vc.rightTerm.y);
         const nextPieces: typeof pieces = [];
         for (const p of pieces) {
-          if (p.yT < vc.leftTerm.y - 2 && p.yB > vc.rightTerm.y + 2) {
-            nextPieces.push({ yT: p.yT, yB: vc.leftTerm.y, stroke: p.stroke });
-            nextPieces.push({ yT: vc.rightTerm.y, yB: p.yB, stroke: p.stroke });
+          if (p.yB <= compTop) {
+            nextPieces.push(p);
+          } else if (p.yT >= compBot) {
+            nextPieces.push(p);
           } else {
-            let pyT = p.yT;
-            let pyB = p.yB;
-            if (
-              Math.abs(pyB - vc.leftTerm.y) <= TERM_SNAP_TOL &&
-              pyT < vc.leftTerm.y - 4
-            ) {
-              pyB = vc.leftTerm.y;
+            if (p.yT < compTop && compTop - p.yT >= 6) {
+              nextPieces.push({ yT: p.yT, yB: compTop, stroke: p.stroke });
             }
-            if (
-              Math.abs(pyT - vc.rightTerm.y) <= TERM_SNAP_TOL &&
-              pyB > vc.rightTerm.y + 4
-            ) {
-              pyT = vc.rightTerm.y;
-            }
-            if (!(pyT >= vc.leftTerm.y - 4 && pyB <= vc.rightTerm.y + 4) && pyB - pyT >= 6) {
-              nextPieces.push({ yT: pyT, yB: pyB, stroke: p.stroke });
+            if (p.yB > compBot && p.yB - compBot >= 6) {
+              nextPieces.push({ yT: compBot, yB: p.yB, stroke: p.stroke });
             }
           }
         }
@@ -11204,21 +11244,32 @@ export function autoAlignAndConnectCircuit(
     // For the leftmost vertical conductor (cIdx === 0), if there is no explicit switch anywhere in the circuit
     // and no vertical components on this column, ensure the knife switch gap is physically split and preserved!
     const hasAnyExplicitSwitch = alignedComps.some((c) => c.kind === 'switch');
-    if (cIdx === 0 && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length === 1) {
-      const singleV = mergedV[0];
-      const totalH = singleV.yB - singleV.yT;
+    if (cIdx === 0 && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length > 0) {
+      const minY = Math.min(...mergedV.map((v) => v.yT));
+      const maxY = Math.max(...mergedV.map((v) => v.yB));
+      const totalH = maxY - minY;
       if (totalH >= 50) {
-        const swYCenter = (singleV.yT + singleV.yB) / 2;
+        const swYCenter = (minY + maxY) / 2;
         const swHalfGap = Math.min(21, Math.max(14, totalH * 0.18));
         const swYTop = Math.round(swYCenter - swHalfGap);
         const swYBot = Math.round(swYCenter + swHalfGap);
+        const nextMergedV: typeof mergedV = [];
+        for (const seg of mergedV) {
+          if (seg.yB <= swYTop) {
+            nextMergedV.push(seg);
+          } else if (seg.yT >= swYBot) {
+            nextMergedV.push(seg);
+          } else {
+            if (seg.yT < swYTop && swYTop - seg.yT >= 6) {
+              nextMergedV.push({ yT: seg.yT, yB: swYTop, stroke: seg.stroke });
+            }
+            if (seg.yB > swYBot && seg.yB - swYBot >= 6) {
+              nextMergedV.push({ yT: swYBot, yB: seg.yB, stroke: seg.stroke });
+            }
+          }
+        }
         mergedV.length = 0;
-        if (swYTop - singleV.yT >= 6) {
-          mergedV.push({ yT: singleV.yT, yB: swYTop, stroke: singleV.stroke });
-        }
-        if (singleV.yB - swYBot >= 6) {
-          mergedV.push({ yT: swYBot, yB: singleV.yB, stroke: singleV.stroke });
-        }
+        mergedV.push(...nextMergedV);
       }
     }
 

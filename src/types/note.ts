@@ -253,6 +253,7 @@ export interface CircuitSimConfig {
   showElectrons?: boolean; // Individual charge carrier visibility
   speedMultiplier?: number; // Individual simulation speed multiplier
   showDarkWireTrack?: boolean; // Individual dark tube style track
+  rawStrokesBackup?: StrokeObject[]; // Original hand-drawn strokes preserved before auto-alignment
 }
 
 export interface SpringGraphBox {
