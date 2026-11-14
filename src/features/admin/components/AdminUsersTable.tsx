@@ -11,7 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { UserProfileStats } from '../types';
-import { formatBytes, formatMinutesLabel } from '../services/userStatsService';
+import { formatBytes, formatMinutesLabel, ADMIN_EMAIL } from '../services/userStatsService';
 
 export interface AdminUsersTableProps {
   users: UserProfileStats[];
@@ -236,10 +236,15 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                       })
                     : '—';
 
+                  const isAdminUser = u.email === ADMIN_EMAIL;
                   return (
                     <tr
                       key={u.uid}
-                      className="hover:bg-white/60 transition-colors text-[#2c3e50]"
+                      className={`transition-colors text-[#2c3e50] ${
+                        isAdminUser
+                          ? 'bg-[#eef3f8]/90 hover:bg-[#eef3f8] border-l-4 border-l-[#1b2a4a] shadow-2xs'
+                          : 'hover:bg-white/60'
+                      }`}
                     >
                       {/* User Info (Avatar + Name + Email) */}
                       <td className="py-3 px-4">
@@ -248,17 +253,28 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                             <img
                               src={u.photoURL}
                               alt=""
-                              className="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0"
+                              className={`w-8 h-8 rounded-full object-cover shrink-0 ${
+                                isAdminUser ? 'ring-2 ring-[#1b2a4a] border border-white' : 'border border-slate-200'
+                              }`}
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
+                              isAdminUser ? 'bg-[#1b2a4a] text-white ring-2 ring-[#1b2a4a]/40' : 'bg-slate-700 text-white'
+                            }`}>
                               {(u.displayName || u.email || 'U')[0].toUpperCase()}
                             </div>
                           )}
                           <div className="min-w-0">
-                            <p className="font-bold text-[#1b2a4a] truncate">
-                              {u.displayName || 'Χρήστης'}
-                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-extrabold text-[#1b2a4a] truncate">
+                                {u.displayName || 'Χρήστης'}
+                              </p>
+                              {isAdminUser && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-[#1b2a4a] text-white text-[9.5px] font-black uppercase tracking-wider shrink-0 shadow-2xs">
+                                  Admin (Εσύ)
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-500 truncate" title={u.email}>
                               {u.email}
                             </p>
@@ -273,15 +289,28 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
 
                       {/* Saved Notebooks Count */}
                       <td className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[#eef3f8] border border-[#1b2a4a]/20 text-[#1b2a4a] font-extrabold tabular-nums">
-                          <FileText className="w-3 h-3 text-[#1b2a4a]" />
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-extrabold tabular-nums border ${
+                          isAdminUser
+                            ? 'bg-[#1b2a4a] border-[#1b2a4a] text-white shadow-2xs'
+                            : 'bg-[#eef3f8] border border-[#1b2a4a]/20 text-[#1b2a4a]'
+                        }`}>
+                          <FileText className={`w-3 h-3 ${isAdminUser ? 'text-white' : 'text-[#1b2a4a]'}`} />
                           <span>{u.notebooksCount || 0}</span>
                         </span>
                       </td>
 
                       {/* Storage Occupied */}
-                      <td className="py-3 px-4 whitespace-nowrap font-bold text-[#1b2a4a] tabular-nums">
-                        {formatBytes(u.totalSizeBytes)}
+                      <td className="py-3 px-4 whitespace-nowrap tabular-nums">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-extrabold ${isAdminUser ? 'text-[#1b2a4a]' : 'text-slate-800'}`}>
+                            {formatBytes(u.totalSizeBytes)}
+                          </span>
+                          {isAdminUser && (
+                            <span className="text-[10px] font-bold text-[#1b2a4a]/70">
+                              (Admin)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Average Daily Time */}

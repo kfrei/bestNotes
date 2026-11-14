@@ -57,4 +57,10 @@ export interface AdminAggregateMetrics {
   totalSizeBytes: number;
   avgDailyMinutesAll: number;
   activeTodayCount: number;
+  // Admin-specific vs other users breakdown
+  adminNotebooksCount: number;
+  otherUsersNotebooksCount: number;
+  adminSizeBytes: number;
+  otherUsersSizeBytes: number;
+  adminActiveMinutes: number;
 }

@@ -260,11 +260,20 @@ export function computeAdminMetrics(users: UserProfileStats[]): AdminAggregateMe
   let totalNotebooks = 0;
   let totalSizeBytes = 0;
   let totalDailyMinutes = 0;
+  let adminNotebooksCount = 0;
+  let adminSizeBytes = 0;
+  let adminActiveMinutes = 0;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   let activeTodayCount = 0;
 
   for (const u of users) {
+    const isAdm = u.email === ADMIN_EMAIL;
+    if (isAdm) {
+      adminNotebooksCount += u.notebooksCount || 0;
+      adminSizeBytes += u.totalSizeBytes || 0;
+      adminActiveMinutes += u.avgDailyMinutes || 0;
+    }
     totalNotebooks += u.notebooksCount || 0;
     totalSizeBytes += u.totalSizeBytes || 0;
     totalDailyMinutes += u.avgDailyMinutes || 0;
@@ -273,6 +282,8 @@ export function computeAdminMetrics(users: UserProfileStats[]): AdminAggregateMe
     }
   }
 
+  const otherUsersNotebooksCount = Math.max(0, totalNotebooks - adminNotebooksCount);
+  const otherUsersSizeBytes = Math.max(0, totalSizeBytes - adminSizeBytes);
   const avgDailyMinutesAll = totalUsers > 0 ? Math.round(totalDailyMinutes / totalUsers) : 0;
 
   return {
@@ -281,6 +292,11 @@ export function computeAdminMetrics(users: UserProfileStats[]): AdminAggregateMe
     totalSizeBytes,
     avgDailyMinutesAll,
     activeTodayCount,
+    adminNotebooksCount,
+    otherUsersNotebooksCount,
+    adminSizeBytes,
+    otherUsersSizeBytes,
+    adminActiveMinutes,
   };
 }
 

@@ -307,6 +307,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Global KPI Cards */}
         <AdminKpiCards metrics={metrics} />
 
+        {/* Admin vs Other Users Split Pill */}
+        <div className="p-3.5 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/90 backdrop-blur-2xl border border-white/85 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#1b2a4a] ring-2 ring-[#1b2a4a]/30 shrink-0" />
+            <div>
+              <span className="text-xs font-bold text-[#1b2a4a]">
+                Διαχωρισμός Δεδομένων: Admin vs Υπόλοιποι Χρήστες
+              </span>
+              <span className="text-[10.5px] font-semibold text-slate-500 ml-1.5">
+                ({ADMIN_EMAIL})
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#dfd8cb] shadow-2xs">
+              <span className="text-slate-500 text-[11px] font-semibold">Αρχεία:</span>
+              <span className="font-extrabold text-[#1b2a4a] bg-[#1b2a4a]/10 px-2 py-0.5 rounded text-[11px]">
+                Εσύ: {metrics.adminNotebooksCount}
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="font-bold text-slate-700 text-[11px]">
+                Άλλοι: {metrics.otherUsersNotebooksCount}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#dfd8cb] shadow-2xs">
+              <span className="text-slate-500 text-[11px] font-semibold">Χώρος:</span>
+              <span className="font-extrabold text-[#1b2a4a] bg-[#1b2a4a]/10 px-2 py-0.5 rounded text-[11px]">
+                Εσύ: {formatBytes(metrics.adminSizeBytes)}
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="font-bold text-slate-700 text-[11px]">
+                Άλλοι: {formatBytes(metrics.otherUsersSizeBytes)}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Error Alert if any */}
         {errorMsg && (
           <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
@@ -385,23 +424,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Συνολικός χώρος σημειώσεων, εικόνων και σχεδίων στο Cloud Firestore: <span className="font-bold text-[#1b2a4a]">{formatBytes(metrics.totalSizeBytes)}</span>.
               </p>
 
+              {/* Comparative Storage Bar: Admin vs Others */}
+              <div className="p-3.5 rounded-2xl bg-white border border-[#dfd8cb] shadow-2xs space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1.5">
+                  <span className="font-extrabold text-[#1b2a4a] flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" />
+                    <span>Δικά σου (Admin): {formatBytes(metrics.adminSizeBytes)} ({metrics.totalSizeBytes > 0 ? ((metrics.adminSizeBytes / metrics.totalSizeBytes) * 100).toFixed(1) : 0}%)</span>
+                  </span>
+                  <span className="font-bold text-slate-600 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#64748b]" />
+                    <span>Υπόλοιποι Χρήστες: {formatBytes(metrics.otherUsersSizeBytes)} ({metrics.totalSizeBytes > 0 ? ((metrics.otherUsersSizeBytes / metrics.totalSizeBytes) * 100).toFixed(1) : 0}%)</span>
+                  </span>
+                </div>
+                <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden flex">
+                  <div
+                    style={{ width: `${metrics.totalSizeBytes > 0 ? (metrics.adminSizeBytes / metrics.totalSizeBytes) * 100 : 0}%` }}
+                    className="h-full bg-[#1b2a4a] transition-all duration-500"
+                    title={`Admin: ${formatBytes(metrics.adminSizeBytes)}`}
+                  />
+                  <div
+                    style={{ width: `${metrics.totalSizeBytes > 0 ? (metrics.otherUsersSizeBytes / metrics.totalSizeBytes) * 100 : 0}%` }}
+                    className="h-full bg-[#64748b] transition-all duration-500"
+                    title={`Άλλοι χρήστες: ${formatBytes(metrics.otherUsersSizeBytes)}`}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-3 pt-2">
                 {users.slice(0, 10).map((u) => {
+                  const isAdminUser = u.email === ADMIN_EMAIL;
                   const pct = metrics.totalSizeBytes > 0
                     ? Math.min(100, (u.totalSizeBytes / metrics.totalSizeBytes) * 100)
                     : 0;
                   return (
-                    <div key={u.uid} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#1b2a4a]">{u.displayName} ({u.email})</span>
-                        <span className="font-extrabold text-[#1b2a4a] tabular-nums">
+                    <div
+                      key={u.uid}
+                      className={`p-3 rounded-xl transition ${
+                        isAdminUser
+                          ? 'bg-[#eef3f8] border border-[#1b2a4a]/25 shadow-2xs'
+                          : 'bg-white/50 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`font-bold truncate ${isAdminUser ? 'text-[#1b2a4a] font-extrabold' : 'text-slate-800'}`}>
+                            {u.displayName} ({u.email})
+                          </span>
+                          {isAdminUser && (
+                            <span className="px-1.5 py-0.5 rounded bg-[#1b2a4a] text-white text-[9px] font-black uppercase shrink-0">
+                              Admin (Εσύ)
+                            </span>
+                          )}
+                        </div>
+                        <span className={`tabular-nums ${isAdminUser ? 'font-black text-[#1b2a4a]' : 'font-bold text-slate-600'}`}>
                           {formatBytes(u.totalSizeBytes)} ({pct.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="w-full h-2 rounded-full bg-slate-200/70 overflow-hidden">
                         <div
                           style={{ width: `${pct}%` }}
-                          className="h-full bg-[#1b2a4a] rounded-full transition-all duration-500"
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isAdminUser ? 'bg-[#1b2a4a]' : 'bg-[#64748b]'
+                          }`}
                         />
                       </div>
                     </div>
@@ -429,31 +513,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   .slice()
                   .sort((a, b) => b.avgDailyMinutes - a.avgDailyMinutes)
                   .slice(0, 10)
-                  .map((u, i) => (
-                    <div
-                      key={u.uid}
-                      className="flex items-center justify-between p-3 rounded-xl bg-white/70 border border-[#dfd8cb]/60"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center text-xs font-bold shrink-0">
-                          {i + 1}
-                        </span>
-                        <div>
-                          <p className="text-xs font-bold text-[#1b2a4a]">{u.displayName}</p>
-                          <p className="text-[11px] text-slate-500">{u.email}</p>
+                  .map((u, i) => {
+                    const isAdminUser = u.email === ADMIN_EMAIL;
+                    return (
+                      <div
+                        key={u.uid}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition ${
+                          isAdminUser
+                            ? 'bg-[#eef3f8] border-[#1b2a4a]/25 shadow-2xs'
+                            : 'bg-white/70 border-[#dfd8cb]/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isAdminUser ? 'bg-[#1b2a4a] text-white' : 'bg-slate-600 text-white'
+                          }`}>
+                            {i + 1}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <p className={`text-xs font-bold ${isAdminUser ? 'text-[#1b2a4a] font-extrabold' : 'text-slate-800'}`}>
+                                {u.displayName}
+                              </p>
+                              {isAdminUser && (
+                                <span className="px-1.5 py-0.5 rounded bg-[#1b2a4a] text-white text-[9px] font-black uppercase shrink-0">
+                                  Admin (Εσύ)
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500">{u.email}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className={`text-xs font-extrabold tabular-nums ${isAdminUser ? 'text-[#1b2a4a]' : 'text-slate-700'}`}>
+                            {formatMinutesLabel(u.avgDailyMinutes)}
+                          </p>
+                          <p className="text-[10.5px] text-slate-400 font-semibold">
+                            σε {u.activeDaysCount || 1} ημέρες
+                          </p>
                         </div>
                       </div>
-
-                      <div className="text-right">
-                        <p className="text-xs font-extrabold text-[#1b2a4a] tabular-nums">
-                          {formatMinutesLabel(u.avgDailyMinutes)}
-                        </p>
-                        <p className="text-[10.5px] text-slate-400 font-semibold">
-                          σε {u.activeDaysCount || 1} ημέρες
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </div>
