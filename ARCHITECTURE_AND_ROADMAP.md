@@ -559,3 +559,40 @@ sequenceDiagram
    - **Ανενεργές Υπο-κάρτες / Layer Rows:** `bg-white/55 backdrop-blur-md border border-white/80 rounded-2xl shadow-2xs`.
    - **Ενεργή Επιλογή:** `bg-white/85 backdrop-blur-md border-[#0066ff] text-[#0066ff] ring-2 ring-[#0066ff]/25 shadow-xs`.
 
+---
+
+## 12. 🏛️ Αρχιτεκτονική Αποσύνθεσης & Ευρετήριο Κώδικα (Modular Architecture & Code Index)
+
+> [!NOTE]
+> Για τον πλήρη πίνακα συμβόλων και αρχείων, βλέπε το αναλυτικό έγγραφο **[CODEBASE_INDEX.md](file:///Users/freiderikosk/Downloads/BestNotes/docs/CODEBASE_INDEX.md)**.
+
+Με την εξέλιξη του BestNotes, ο μονολιθικός κώδικας του `src/App.tsx` διασπάστηκε σε **4 αυτοτελείς πυλώνες (Domain Folders)**, καθένας με το δικό του **Master Facade (`index.ts`)**:
+
+### 12.1 Οι 4 Αυτοτελείς Πυλώνες (Domains)
+
+1. **`src/simulations/` (Προσομοιώσεις & Physics):**
+   - **Core Engine:** `PhysicsMath.ts` (καθαρή διανυσματική άλγεβρα 2D), `UniversalStopwatchBridge.ts` (Pub/Sub για χρονόμετρο & προσομοιώσεις), `VirtualPencilAnimator.ts` (αυτόματο μολύβι).
+   - **Registry:** `SimulationRegistry.ts` (Plug-and-play εγγραφή και ανάκτηση προσομοιώσεων).
+   - **Modules:** `modules/mechanics/pendulum/` (`PendulumModule.ts` & `pendulumPhysics.ts`).
+   - **UI Widgets:** `StopwatchWidget.tsx` (χρονόμετρο με αμφίπλευρο resize), `FullscreenLaserCanvas.tsx` (δείκτης laser με presentation lock).
+   - **Facade:** `src/simulations/index.ts`.
+
+2. **`src/stem-engines/` (STEM, Χημεία, Μαθηματικά & OCR):**
+   - **Prompts:** `OcrPrompts.ts` (χειρόγραφα Ελληνικά, LaTeX, Χημικές αντιδράσεις, 3D μόρια).
+   - **Catalogs:** `periodicTableData.ts`, `physicsEquationsLibrary.ts`.
+   - **UI:** `LassoOcrButtons.tsx` (η τριπλή κορδέλα εργαλείων OCR στο Λάσο: `Text OCR`, `Σ Math ▾`, `⚗ Chem ▾`).
+   - **Facade:** `src/stem-engines/index.ts`.
+
+3. **`src/canvas-tools/` (Εργαλεία Σχεδίασης, Χρώματα, Πάχη & Γεωμετρία):**
+   - **Types:** `ToolType`, `PenSubType`, `EraserSubType`, `ShapePresetType`, `ToolCategory`.
+   - **Palette & Colors:** `PRESET_COLORS`, `DEFAULT_COLOR_SLOTS`, `THICKNESS_PRESETS`, `APP_NAVY`, `parseHexColor`, `areColorsSimilar`.
+   - **Catalog:** `toolCatalog.ts` (περιγραφή και συντομεύσεις όλων των εργαλείων).
+   - **Geometry Facade:** `geometry/index.ts` (καμπύλες Bezier, εξομάλυνση, δημιουργία γραφημάτων).
+   - **Facade:** `src/canvas-tools/index.ts`.
+
+4. **`src/features/library/` (Βιβλιοθήκη Σημειώσεων, Φάκελοι & Modals):**
+   - **Presets:** `FOLDER_PRESET_COLORS` (12 χρώματα), `FOLDER_PRESET_ICONS` (30 εικονίδια), `renderFolderCustomIcon`.
+   - **Components:** `RecentlyOpenedStrip.tsx` (πρόσφατα ανοιγμένες σημειώσεις με μέγεθος αρχείου), `LibraryDeleteModal.tsx` (διάλογος διαγραφής), `FolderEditModal.tsx` (επεξεργασία φακέλου & δέντρο μετακίνησης).
+   - **Facade:** `src/features/library/index.ts`.
+
+

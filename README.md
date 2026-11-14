@@ -20,7 +20,9 @@
 
 ## 📚 Αρχεία Τεκμηρίωσης (Documentation)
 
-* 📘 **[`ARCHITECTURE_AND_ROADMAP.md`](./ARCHITECTURE_AND_ROADMAP.md):** Πλήρης τεχνική αρχιτεκτονική, Κανόνας Σχεδίασης **Premium Minimalist Monochrome UI**, Reverse Engineering του `.goodnotes`, μαθηματικοί/διανυσματικοί αλγόριθμοι, αναλυτικός απολογισμός **`v0.98 (mainFixes)`**, τι εκκρεμεί από τα αρχικά ζητούμενα και το **Roadmap `v0.98–v1.0`**.
+* 🗺️ **[`docs/CODEBASE_INDEX.md`](./docs/CODEBASE_INDEX.md):** **Master Code Index & Χάρτης Αρχιτεκτονικής** των 4 αυτοτελών πυλώνων (`simulations/`, `stem-engines/`, `canvas-tools/`, `features/library/`) και πλοήγησης στο `src/App.tsx`.
+* 📘 **[`ARCHITECTURE_AND_ROADMAP.md`](./ARCHITECTURE_AND_ROADMAP.md):** Πλήρης τεχνική αρχιτεκτονική, Κανόνας Σχεδίασης **Premium Minimalist Monochrome UI**, Reverse Engineering του `.goodnotes`, μαθηματικοί/διανυσματικοί αλγόριθμοι, αναλυτικός απολογισμός **`v0.99`**, τι εκκρεμεί από τα αρχικά ζητούμενα και το **Roadmap `v0.99–v1.0`**.
+* 🕰️ **[`docs/SIMULATIONS_GUIDE.md`](./docs/SIMULATIONS_GUIDE.md):** Οδηγός προδιαγραφών και ελέγχου των ζωντανών προσομοιώσεων Φυσικής (Εκκρεμές, Ελατήριο, Κυκλώματα, Χρονόμετρο).
 * ⌨️ **[`SHORTCUTS.md`](./SHORTCUTS.md):** Πλήρης οδηγός συντομεύσεων πληκτρολογίου που λειτουργούν ταυτόχρονα σε **Ελληνικά (GR)** και **Αγγλικά (EN)** (συμπεριλαμβανομένου του διπλού `S` για εναλλαγή Rectangular Selection ↔ Freehand Lasso και των βελών `↑ ↓ ← →` για μικρο-κινήσεις ακριβείας).
 
 ---

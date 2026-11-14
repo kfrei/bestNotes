@@ -288,6 +288,21 @@ import { WarmStudioToggle } from './components/WarmStudioToggle';
 import { StopwatchWidget, FullscreenLaserCanvas } from './simulations';
 import { LassoOcrButtons } from './stem-engines';
 import {
+  RecentlyOpenedStrip,
+  LibraryDeleteModal,
+  FolderEditModal,
+} from './features/library';
+import {
+  PRESET_COLORS,
+  DEFAULT_COLOR_SLOTS,
+  THICKNESS_PRESETS,
+  APP_NAVY,
+  APP_NAVY_HOVER,
+  parseHexColor,
+  areColorsSimilar,
+} from './canvas-tools';
+export { APP_NAVY, APP_NAVY_HOVER };
+import {
   buildLibraryFilterChips,
   formatRecentRelativeLabel,
 } from './utils/libraryUiHelpers';
@@ -1549,64 +1564,8 @@ function mergeCustomFoldersNewest(
 
   return result;
 }
-const PRESET_COLORS = [
-  '#111827',
-  '#dc2626',
-  '#2563eb',
-  '#16a34a',
-  '#9333ea',
-  '#ea580c',
-  '#0284c7',
-  '#eab308',
-  '#db2777',
-  '#0d9488',
-  '#4f46e5',
-  '#64748b',
-];
-// 5 Primary Color Memories (indices 0..4) + 5 Most Recent Colors (indices 5..9, revealed on horizontal scroll)
-const DEFAULT_COLOR_SLOTS = [
-  '#111827',
-  '#dc2626',
-  '#2563eb',
-  '#16a34a',
-  '#9333ea',
-  '#ea580c',
-  '#0284c7',
-  '#eab308',
-  '#db2777',
-  '#0d9488',
-];
 
-function parseHexColor(hex: string): [number, number, number] {
-  let clean = (hex || '').trim().replace(/^#/, '');
-  if (clean.length === 3) {
-    clean = clean.split('').map((ch) => ch + ch).join('');
-  }
-  const n = parseInt(clean, 16);
-  if (isNaN(n) || clean.length < 6) return [0, 0, 0];
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function areColorsSimilar(c1: string, c2: string, threshold = 26): boolean {
-  if (!c1 || !c2) return false;
-  if (c1.toLowerCase() === c2.toLowerCase()) return true;
-  const [r1, g1, b1] = parseHexColor(c1);
-  const [r2, g2, b2] = parseHexColor(c2);
-  const rMean = (r1 + r2) / 2;
-  const dr = r1 - r2;
-  const dg = g1 - g2;
-  const db = b1 - b2;
-  const dist = Math.sqrt(
-    (2 + rMean / 256) * dr * dr +
-    4 * dg * dg +
-    (2 + (255 - rMean) / 256) * db * db
-  );
-  return dist < threshold;
-}
-const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
-// Central Navy Blue Theme Tokens
-export const APP_NAVY = '#234978';
-export const APP_NAVY_HOVER = '#1c3c63';
+// Canvas Colors, Palettes, and Similarity (sourced from src/canvas-tools)
 const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
 const PAGE_GAP = 44; // Vertical gap (px) between pages in Word-style continuous multi-page scroll
 
@@ -54773,71 +54732,18 @@ export default function App() {
                   </div>
 
                   {/* Recently Opened Strip on Home Screen (Larger Vertical Thumbnails for 1-Tap Resume) */}
-                  {recentlyOpenedNotebooks.length > 0 && (
-                    <div>
-                      <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
-                        Πρόσφατα Ανοιγμένα
-                      </h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                        {recentlyOpenedNotebooks.map((rNb) => {
-                          const recentTs = Math.max(
-                            recentOpenedAtMap[rNb.id] || 0,
-                            new Date(rNb.updatedAt || 0).getTime() || 0
-                          );
-                          const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
-                          const rNbBytes = getNotebookSizeBytes(rNb);
-                          const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
-                          return (
-                            <div
-                              key={`recent-${rNb.id}`}
-                              onPointerDown={(e) => {
-                                clearLibraryThumbHoverPreview();
-                                startLibraryNotebookPointerDrag(e, rNb);
-                              }}
-                              onClick={() => openNotebookDirectly(rNb)}
-                              className="group bg-white/95 hover:bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 p-3 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition flex items-center gap-3.5 cursor-pointer select-none"
-                            >
-                              <div
-                                onPointerEnter={(e) => handleLibraryThumbPointerEnter(e, rNb.id)}
-                                onPointerLeave={() => clearLibraryThumbHoverPreview(rNb.id)}
-                                className="shrink-0"
-                              >
-                                <LibraryNoteMiniThumb
-                                  notebookId={rNb.id}
-                                  title={rNb.title}
-                                  updatedAt={rNb.updatedAt}
-                                  coverColor={rNb.coverColor}
-                                  firstPage={rNb.pages[0]}
-                                  p0BgUrl={p0Url}
-                                  variant="recent"
-                                  className="group-hover:shadow-sm transition"
-                                />
-                              </div>
-                              <div
-                                className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-0.5"
-                                title={`Άνοιγμα «${rNb.title}»`}
-                              >
-                                <div>
-                                  <p className="text-[13px] font-bold text-[#0f172a] group-hover:text-[#234978] line-clamp-2 leading-snug">
-                                    {rNb.title}
-                                  </p>
-                                  <p className="text-[11px] text-slate-500 mt-1">
-                                    {formatRecentRelativeLabel(recentTs || rNb.updatedAt)}
-                                  </p>
-                                  <p className="text-[10.5px] font-semibold text-slate-400 mt-0.5 tabular-nums">
-                                    {rNbSizeLabel}
-                                  </p>
-                                </div>
-                                <span className="inline-block self-start max-w-full truncate px-2 py-0.5 rounded-md bg-indigo-50/90 text-[#234978] text-[10.5px] font-semibold mt-2">
-                                  {rNb.folder || 'Βιβλιοθήκη'}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  <RecentlyOpenedStrip
+                    recentlyOpenedNotebooks={recentlyOpenedNotebooks}
+                    recentOpenedAtMap={recentOpenedAtMap}
+                    resolvePageBackgroundUrl={resolvePageBackgroundUrl}
+                    getNotebookSizeBytes={getNotebookSizeBytes}
+                    formatNotebookSizeLabel={formatNotebookSizeLabel}
+                    formatRecentRelativeLabel={formatRecentRelativeLabel}
+                    onOpenNotebook={openNotebookDirectly}
+                    onNotebookPointerDrag={startLibraryNotebookPointerDrag}
+                    onThumbPointerEnter={handleLibraryThumbPointerEnter}
+                    onClearThumbHover={clearLibraryThumbHoverPreview}
+                  />
 
                   {/* =================================================================
                       MODE A: ICONS VIEW (GRID) — Folder Icons & 1st-Page Note Thumbnails
@@ -56334,452 +56240,20 @@ export default function App() {
                   )}
 
                   {/* Edit Folder Modal (Name + 12 Preset Names + 10 Colors + 20 Icons + Parent Folder Move + Favorite Star) */}
-                  {editingFolderModal && (
-                    <div
-                      onClick={() => setEditingFolderModal(null)}
-                      className="fixed inset-0 z-[220] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
-                    >
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
-                      >
-                        {/* Header with Live Preview + Favorite Star + Close */}
-                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#dfd8cb]">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div
-                              style={{
-                                backgroundColor: `${editingFolderModal.color}1f`,
-                                borderColor: `${editingFolderModal.color}55`,
-                              }}
-                              className="w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0"
-                            >
-                              {renderFolderCustomIcon(
-                                editingFolderModal.icon,
-                                editingFolderModal.color,
-                                'w-7 h-7'
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <h3 className="text-base font-extrabold text-[#234978] truncate">
-                                Επεξεργασία Φακέλου
-                              </h3>
-                              <p className="text-xs text-[#64748b] truncate">
-                                {editingFolderModal.parentPath
-                                  ? `Βιβλιοθήκη › ${editingFolderModal.parentPath.replace(
-                                      /\//g,
-                                      ' › '
-                                    )} › `
-                                  : 'Βιβλιοθήκη › '}
-                                <span className="font-bold text-[#234978]">
-                                  {editingFolderModal.name || 'Φάκελος'}
-                                </span>
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEditingFolderModal((prev) =>
-                                  prev ? { ...prev, favorite: !prev.favorite } : null
-                                )
-                              }
-                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer focus:outline-none ${
-                                editingFolderModal.favorite
-                                  ? 'bg-amber-50 border-amber-300 text-amber-700'
-                                  : 'bg-[#efebe3] border-[#dfd8cb] text-[#64748b] hover:text-amber-600'
-                              }`}
-                              title="Προσθήκη / Αφαίρεση από τα Αγαπημένα"
-                            >
-                              <Star
-                                className={`w-4 h-4 ${
-                                  editingFolderModal.favorite
-                                    ? 'fill-amber-400 text-amber-500'
-                                    : ''
-                                }`}
-                              />
-                              <span>Αγαπημένο</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingFolderModal(null)}
-                              className="p-1.5 rounded-xl text-[#a8a29e] hover:text-[#234978] hover:bg-[#efebe3] cursor-pointer transition"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 1. Folder Name Input */}
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[#234978]">
-                            Όνομα Φακέλου
-                          </label>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={editingFolderModal.name}
-                            onChange={(e) =>
-                              setEditingFolderModal((prev) =>
-                                prev ? { ...prev, name: e.target.value } : null
-                              )
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                saveOrMoveFolderHierarchy(
-                                  editingFolderModal.originalPath,
-                                  editingFolderModal.name,
-                                  editingFolderModal.parentPath,
-                                  editingFolderModal.color,
-                                  editingFolderModal.icon,
-                                  editingFolderModal.favorite
-                                );
-                                setEditingFolderModal(null);
-                              } else if (e.key === 'Escape') {
-                                setEditingFolderModal(null);
-                              }
-                            }}
-                            placeholder="Πληκτρολόγησε όνομα φακέλου..."
-                            className="w-full px-3 py-2 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-sm font-bold text-[#234978] focus:outline-none focus:border-[#234978] focus:ring-1 focus:ring-[#234978]/30"
-                          />
-                        </div>
-
-                        {/* 2. Folder Color (12 Two-Tone Colors matching the Folder Card) */}
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[#234978]">
-                            Χρώμα Φακέλου
-                          </label>
-                          <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
-                            {FOLDER_PRESET_COLORS.map((col) => {
-                              const isSelectedColor =
-                                editingFolderModal.color.toLowerCase() === col.hex.toLowerCase();
-                              return (
-                                <button
-                                  key={col.hex}
-                                  type="button"
-                                  onClick={() =>
-                                    setEditingFolderModal((prev) =>
-                                      prev ? { ...prev, color: col.hex } : null
-                                    )
-                                  }
-                                  style={{ borderColor: `${col.hex}88` }}
-                                  className={`relative w-full h-8 rounded-md bg-white border overflow-hidden flex flex-col transition cursor-pointer focus:outline-none ${
-                                    isSelectedColor
-                                      ? 'ring-2 ring-[#234978] scale-105 shadow-md'
-                                      : 'opacity-90 hover:opacity-100 hover:scale-105'
-                                  }`}
-                                  title={col.label}
-                                >
-                                  {/* Small darker stripe at top (~26% height, matching the folder's back flap) */}
-                                  <span
-                                    style={{ backgroundColor: col.hex, opacity: 0.68 }}
-                                    className="w-full h-2 shrink-0 border-b border-black/5"
-                                  />
-                                  {/* Larger lighter body (~74% height, matching the folder's front pocket) */}
-                                  <span
-                                    style={{ backgroundColor: col.hex, opacity: 0.28 }}
-                                    className="w-full flex-1"
-                                  />
-                                  {isSelectedColor && (
-                                    <span
-                                      style={{ backgroundColor: col.hex }}
-                                      className="absolute inset-0 m-auto w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-xs"
-                                    />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* 3. Folder Icon (30 Ready-Made Icons) */}
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-[#234978]">
-                            Εικονίδιο Φακέλου
-                          </label>
-                          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                            {FOLDER_PRESET_ICONS.map((ic) => {
-                              const isSelectedIcon = editingFolderModal.icon === ic.id;
-                              return (
-                                <button
-                                  key={ic.id}
-                                  type="button"
-                                  onClick={() =>
-                                    setEditingFolderModal((prev) =>
-                                      prev ? { ...prev, icon: ic.id } : null
-                                    )
-                                  }
-                                  className={`h-10 rounded-xl border flex items-center justify-center transition cursor-pointer focus:outline-none ${
-                                    isSelectedIcon
-                                      ? 'bg-[#efebe3] border-[#234978] ring-2 ring-[#234978]/30 scale-105 shadow-xs'
-                                      : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb]'
-                                  }`}
-                                  title={ic.label}
-                                >
-                                  {renderFolderCustomIcon(
-                                    ic.id,
-                                    editingFolderModal.color,
-                                    'w-5 h-5'
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* 4. Move Folder Dropdown (Collapsible Hierarchical Folder Tree) */}
-                        <div className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditingFolderModal((prev) =>
-                                prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
-                              )
-                            }
-                            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-xs font-bold text-[#234978] transition cursor-pointer focus:outline-none"
-                          >
-                            <span className="flex items-center gap-2 min-w-0 truncate">
-                              <span className="text-[#64748b] font-semibold">Μετακίνηση σε:</span>
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[#234978] font-bold truncate">
-                                {editingFolderModal.parentPath ? (
-                                  <>
-                                    <Folder className="w-3.5 h-3.5 shrink-0 text-[#234978]" />
-                                    <span className="truncate">{editingFolderModal.parentPath.replace(/\//g, ' › ')}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Home className="w-3.5 h-3.5 shrink-0 text-[#234978]" />
-                                    <span>Βιβλιοθήκη (Αρχικός)</span>
-                                  </>
-                                )}
-                              </span>
-                            </span>
-                            <span className="text-[11px] font-semibold text-[#64748b] shrink-0">
-                              {editingFolderModal.showMoveTree ? 'Κλείσιμο ▴' : 'Δέντρο ▾'}
-                            </span>
-                          </button>
-
-                          {editingFolderModal.showMoveTree &&
-                            (() => {
-                              type TreeItem = {
-                                path: string;
-                                name: string;
-                                parentPath: string;
-                                depth: number;
-                                isLastSibling: boolean;
-                                color?: string;
-                                icon?: string;
-                              };
-                              // Only include external folders where the edited folder can actually be placed
-                              // (exclude the edited folder itself and its inner subfolders)
-                              const externalFolders = Array.from(folderMap.values()).filter(
-                                (f) =>
-                                  f.path !== editingFolderModal.originalPath &&
-                                  !f.path.startsWith(`${editingFolderModal.originalPath}/`)
-                              );
-                              const childrenByParent = new Map<string, typeof externalFolders>();
-                              for (const f of externalFolders) {
-                                const pKey = f.parentPath || '';
-                                const arr = childrenByParent.get(pKey) || [];
-                                arr.push(f);
-                                childrenByParent.set(pKey, arr);
-                              }
-                              for (const arr of childrenByParent.values()) {
-                                arr.sort((a, b) => a.name.localeCompare(b.name, 'el'));
-                              }
-                              const treeRows: TreeItem[] = [];
-                              const buildTreeDfs = (parentKey: string, depth: number) => {
-                                const kids = childrenByParent.get(parentKey) || [];
-                                kids.forEach((kid, idx) => {
-                                  treeRows.push({
-                                    path: kid.path,
-                                    name: kid.name,
-                                    parentPath: kid.parentPath,
-                                    depth,
-                                    isLastSibling: idx === kids.length - 1,
-                                    color: kid.color,
-                                    icon: kid.icon,
-                                  });
-                                  buildTreeDfs(kid.path, depth + 1);
-                                });
-                              };
-                              buildTreeDfs('', 0);
-
-                              const isRootSelected = editingFolderModal.parentPath === '';
-                              return (
-                                <div className="max-h-56 overflow-y-auto p-2 bg-[#efebe3]/40 rounded-2xl border border-[#dfd8cb] space-y-1">
-                                  {/* Root Node: Βιβλιοθήκη */}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setEditingFolderModal((prev) =>
-                                        prev ? { ...prev, parentPath: '' } : null
-                                      )
-                                    }
-                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none ${
-                                      isRootSelected
-                                        ? 'bg-[#234978] text-white shadow-2xs'
-                                        : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-2">
-                                      <Home
-                                        className={`w-4 h-4 ${
-                                          isRootSelected ? 'text-white' : 'text-[#234978]'
-                                        }`}
-                                      />
-                                      <span>Βιβλιοθήκη (Αρχικός Φάκελος)</span>
-                                    </span>
-                                    {isRootSelected ? (
-                                      <span className="text-[10px] font-semibold bg-white/20 text-white px-1.5 py-0.5 rounded-md">
-                                        Επιλεγμένο
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] font-semibold text-[#234978] opacity-85">
-                                        Μετακίνηση εδώ
-                                      </span>
-                                    )}
-                                  </button>
-
-                                  {/* External Hierarchical Folder Tree Nodes */}
-                                  {treeRows.map((node) => {
-                                    const isSelectedParent =
-                                      editingFolderModal.parentPath === node.path;
-                                    return (
-                                      <button
-                                        key={node.path}
-                                        type="button"
-                                        onClick={() =>
-                                          setEditingFolderModal((prev) =>
-                                            prev
-                                              ? {
-                                                  ...prev,
-                                                  parentPath: node.path,
-                                                }
-                                              : null
-                                          )
-                                        }
-                                        style={{ paddingLeft: `${(node.depth + 1) * 18 + 8}px` }}
-                                        className={`w-full flex items-center justify-between pr-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer focus:outline-none ${
-                                          isSelectedParent
-                                            ? 'bg-[#234978] text-white shadow-2xs'
-                                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
-                                        }`}
-                                      >
-                                        <span className="flex items-center gap-1.5 min-w-0 truncate">
-                                          <span
-                                            className={`font-mono text-[11px] select-none ${
-                                              isSelectedParent ? 'text-white/70' : 'text-[#a8a29e]'
-                                            }`}
-                                          >
-                                            {node.isLastSibling ? '└─' : '├─'}
-                                          </span>
-                                          <span className="shrink-0">
-                                            {renderFolderCustomIcon(
-                                              node.icon,
-                                              node.color || '#f59e0b',
-                                              'w-4 h-4'
-                                            )}
-                                          </span>
-                                          <span className="truncate font-bold">{node.name}</span>
-                                        </span>
-                                        {isSelectedParent ? (
-                                          <span className="text-[10px] font-semibold bg-white/20 text-white px-1.5 py-0.5 rounded-md shrink-0 ml-2">
-                                            Επιλεγμένο
-                                          </span>
-                                        ) : (
-                                          <span className="text-[10px] font-semibold text-[#234978] opacity-85 shrink-0 ml-2">
-                                            Μετακίνηση εδώ
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()}
-                        </div>
-
-                        {/* Footer Actions */}
-                        <div className="pt-2 grid grid-cols-2 gap-2.5">
-                          <button
-                            type="button"
-                            onClick={() => setEditingFolderModal(null)}
-                            className="px-4 py-2.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] text-xs font-bold transition cursor-pointer"
-                          >
-                            Ακύρωση
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              saveOrMoveFolderHierarchy(
-                                editingFolderModal.originalPath,
-                                editingFolderModal.name,
-                                editingFolderModal.parentPath,
-                                editingFolderModal.color,
-                                editingFolderModal.icon,
-                                editingFolderModal.favorite
-                              );
-                              setEditingFolderModal(null);
-                            }}
-                            className="px-4 py-2.5 rounded-xl bg-[#234978] hover:bg-[#1c3c63] text-white text-xs font-bold shadow-xs transition cursor-pointer"
-                          >
-                            Αποθήκευση
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <FolderEditModal
+                    editingFolderModal={editingFolderModal}
+                    folderMap={folderMap}
+                    onClose={() => setEditingFolderModal(null)}
+                    onUpdateModal={setEditingFolderModal}
+                    onSave={saveOrMoveFolderHierarchy}
+                  />
 
                   {/* Delete Notebook Confirmation Modal */}
-                  {pendingDeleteNotebook && (
-                    <div
-                      onClick={() => setPendingDeleteNotebook(null)}
-                      className="fixed inset-0 z-[220] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
-                    >
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-sm ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-150"
-                      >
-                        <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-rose-600 mb-4 shadow-2xs">
-                          <Trash2 className="w-7 h-7" />
-                        </div>
-
-                        <h3 className="text-base font-extrabold text-[#1b2a4a]">
-                          Διαγραφή Σημείωσης;
-                        </h3>
-
-                        <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                          Είσαι σίγουρος ότι θέλεις να διαγράψεις τη σημείωση{' '}
-                          <span className="font-bold text-[#1b2a4a]">
-                            «{pendingDeleteNotebook.title}»
-                          </span>{' '}
-                          ({pendingDeleteNotebook.pages.length}{' '}
-                          {pendingDeleteNotebook.pages.length === 1 ? 'σελίδα' : 'σελίδες'});
-                        </p>
-
-                        <div className="mt-6 grid grid-cols-2 gap-2.5 w-full">
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteNotebook(null)}
-                            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
-                          >
-                            Ακύρωση
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => confirmDeleteNotebook(pendingDeleteNotebook)}
-                            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 transition cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Διαγραφή</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <LibraryDeleteModal
+                    pendingDeleteNotebook={pendingDeleteNotebook}
+                    onCancel={() => setPendingDeleteNotebook(null)}
+                    onConfirm={confirmDeleteNotebook}
+                  />
                 </>
               );
             })()}
