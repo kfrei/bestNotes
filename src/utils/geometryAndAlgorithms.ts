@@ -6774,58 +6774,78 @@ export function splitWiresUnderCircuitComponent(
             }
           }
 
-          if (isV && segLen > rC * 2.15) {
+          if (isV && segLen > rC * 1.2) {
             const wireX = (pStart.x + pEnd.x) / 2;
-            if (
-              Math.min(pStart.y, pEnd.y) < topTerm.y - 4 &&
-              Math.max(pStart.y, pEnd.y) > botTerm.y + 4 &&
-              Math.abs(wireX - ccx) <= Math.max(28, rC * 1.2)
-            ) {
-              const topEndPt = pStart.y <= pEnd.y ? pStart : pEnd;
-              const botEndPt = pStart.y <= pEnd.y ? pEnd : pStart;
-              meterNext.push(
-                {
+            const wMinY = Math.min(pStart.y, pEnd.y);
+            const wMaxY = Math.max(pStart.y, pEnd.y);
+            if (Math.abs(wireX - ccx) <= Math.max(28, rC * 1.2)) {
+              if (wMinY < topTerm.y - 4 && wMaxY > botTerm.y + 4) {
+                const topEndPt = pStart.y <= pEnd.y ? pStart : pEnd;
+                const botEndPt = pStart.y <= pEnd.y ? pEnd : pStart;
+                meterNext.push(
+                  {
+                    ...s,
+                    id: `st-${Date.now()}-mvw1-${Math.random().toString(36).slice(2, 5)}`,
+                    fillStyle: 'none',
+                    fillColor: undefined,
+                    isShape: true,
+                    shapeType: 'line',
+                    points: [
+                      { x: ccx, y: topEndPt.y, pressure: 0.7 },
+                      {
+                        x: ccx,
+                        y: topTerm.y,
+                        cx: ccx,
+                        cy: (topEndPt.y + topTerm.y) / 2,
+                        pressure: 0.7,
+                      },
+                    ],
+                  },
+                  {
+                    ...s,
+                    id: `st-${Date.now()}-mvw2-${Math.random().toString(36).slice(2, 5)}`,
+                    fillStyle: 'none',
+                    fillColor: undefined,
+                    isShape: true,
+                    shapeType: 'line',
+                    points: [
+                      { x: ccx, y: botTerm.y, pressure: 0.7 },
+                      {
+                        x: ccx,
+                        y: botEndPt.y,
+                        cx: ccx,
+                        cy: (botTerm.y + botEndPt.y) / 2,
+                        pressure: 0.7,
+                      },
+                    ],
+                  }
+                );
+                continue;
+              } else if (wMinY < topTerm.y - 4 && wMaxY > topTerm.y - 2) {
+                const topEndPt = pStart.y <= pEnd.y ? pStart : pEnd;
+                meterNext.push({
                   ...s,
-                  id: `st-${Date.now()}-mvw1-${Math.random().toString(36).slice(2, 5)}`,
-                  fillStyle: 'none',
-                  fillColor: undefined,
-                  isShape: true,
-                  shapeType: 'line',
                   points: [
                     { x: ccx, y: topEndPt.y, pressure: 0.7 },
-                    {
-                      x: ccx,
-                      y: topTerm.y,
-                      cx: ccx,
-                      cy: (topEndPt.y + topTerm.y) / 2,
-                      pressure: 0.7,
-                    },
+                    { x: ccx, y: topTerm.y, cx: ccx, cy: (topEndPt.y + topTerm.y) / 2, pressure: 0.7 },
                   ],
-                },
-                {
+                });
+                continue;
+              } else if (wMaxY > botTerm.y + 4 && wMinY < botTerm.y + 2) {
+                const botEndPt = pStart.y >= pEnd.y ? pStart : pEnd;
+                meterNext.push({
                   ...s,
-                  id: `st-${Date.now()}-mvw2-${Math.random().toString(36).slice(2, 5)}`,
-                  fillStyle: 'none',
-                  fillColor: undefined,
-                  isShape: true,
-                  shapeType: 'line',
                   points: [
                     { x: ccx, y: botTerm.y, pressure: 0.7 },
-                    {
-                      x: ccx,
-                      y: botEndPt.y,
-                      cx: ccx,
-                      cy: (botTerm.y + botEndPt.y) / 2,
-                      pressure: 0.7,
-                    },
+                    { x: ccx, y: botEndPt.y, cx: ccx, cy: (botTerm.y + botEndPt.y) / 2, pressure: 0.7 },
                   ],
-                }
-              );
-              continue;
+                });
+                continue;
+              }
             }
           }
 
-          if (isH && s.points.length === 2 && bestSnapAxis !== 'v') {
+          if (isH && s.points.length === 2) {
             const dSL = distance(pStart, leftTerm);
             const dSR = distance(pStart, rightTerm);
             const dEL = distance(pEnd, leftTerm);
@@ -6858,7 +6878,7 @@ export function splitWiresUnderCircuitComponent(
             }
           }
 
-          if (isV && s.points.length === 2 && bestSnapAxis !== 'h') {
+          if (isV && s.points.length === 2) {
             const dST = distance(pStart, topTerm);
             const dSB = distance(pStart, botTerm);
             const dET = distance(pEnd, topTerm);
@@ -10327,29 +10347,18 @@ export function autoAlignAndConnectCircuit(
 
   if (wireRefs.length === 0) return currentStrokes;
 
-  // 2. Cluster horizontal rows (within 36px, normalizing stepped right-of-bulb wires to leftTerm.y) & vertical columns (within 36px)
+  // 2. Cluster horizontal rows (within 36px) & vertical columns (within 36px)
   const hRows: { yValues: number[]; yRow: number; wireIndices: number[] }[] = [];
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'h') continue;
-    let wEffY = w.avgY;
-    for (const ic of initialComps) {
-      if (ic.kind === 'bulb' && w.avgX > ic.cx) {
-        const dRight = Math.abs(w.avgY - ic.rightTerm.y);
-        const dLeft = Math.abs(w.avgY - ic.leftTerm.y);
-        if (dRight <= 36 && dRight < dLeft) {
-          wEffY = w.avgY - (ic.rightTerm.y - ic.leftTerm.y);
-          break;
-        }
-      }
-    }
-    const row = hRows.find((r) => Math.abs(r.yRow - wEffY) <= 36);
+    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 36);
     if (row) {
-      row.yValues.push(wEffY);
+      row.yValues.push(w.avgY);
       row.yRow = row.yValues.reduce((a, b) => a + b, 0) / row.yValues.length;
       row.wireIndices.push(i);
     } else {
-      hRows.push({ yValues: [wEffY], yRow: wEffY, wireIndices: [i] });
+      hRows.push({ yValues: [w.avgY], yRow: w.avgY, wireIndices: [i] });
     }
   }
 
@@ -10430,16 +10439,29 @@ export function autoAlignAndConnectCircuit(
           closestCol = col;
         }
       }
-      let minRowDist = Infinity;
-      for (const row of hRows) {
-        const d = Math.abs(row.yRow - refY);
-        if (d < minRowDist) minRowDist = d;
-      }
-      if (closestCol && minColDist <= maxRowAlignDist && minColDist < minRowDist) {
+      const hasVertWiresNearby = wireRefs.some(
+        (w) =>
+          w.orientation === 'v' &&
+          Math.abs(w.avgX - refX) <= Math.max(38, maxRowAlignDist) &&
+          Math.min(w.y1, w.y2) <= refY + 50 &&
+          Math.max(w.y1, w.y2) >= refY - 50
+      );
+      const hasRightHWire = wireRefs.some(
+        (w) =>
+          w.orientation === 'h' &&
+          w.avgX > refX + 20 &&
+          Math.abs(w.avgY - refY) <= 36
+      );
+      const isVertBranchMeter =
+        Boolean(closestCol && minColDist <= maxRowAlignDist && (hasVertWiresNearby || !hasRightHWire));
+
+      if (isVertBranchMeter && closestCol) {
         comp.orientation = 'v';
         const rC = comp.circleR ?? Math.max(15, Math.min(comp.w, comp.h) * 0.33);
-        comp.leftTerm = { x: refX, y: refY - rC };
-        comp.rightTerm = { x: refX, y: refY + rC };
+        comp.leftTerm = { x: closestCol.xCol, y: refY - rC };
+        comp.rightTerm = { x: closestCol.xCol, y: refY + rC };
+        comp.topTerm = { x: closestCol.xCol, y: refY - rC };
+        comp.bottomTerm = { x: closestCol.xCol, y: refY + rC };
         const dx = closestCol.xCol - refX;
         if (Math.abs(dx) >= 0.5) {
           const idSet = new Set(comp.strokeIds);
@@ -10534,7 +10556,6 @@ export function autoAlignAndConnectCircuit(
           };
         });
       }
-      curWireY += comp.rightTerm.y - comp.leftTerm.y;
     }
   }
 
@@ -10875,21 +10896,8 @@ export function autoAlignAndConnectCircuit(
       )
       .sort((a, b) => a.cx - b.cx);
 
-    // Helper: preserve stepped height difference (υψομετρική διαφορά) across every component on this row
-    // so horizontal wires always enter & exit meters symmetrically at the exact middle of the circle!
-    const getRowSegY = (segXL: number, segXR: number): number => {
-      if (rowComps.length === 0) return yRow;
-      const segMidX = (segXL + segXR) / 2;
-      let leftNeighbor: (typeof rowComps)[number] | null = null;
-      let rightNeighbor: (typeof rowComps)[number] | null = null;
-      for (const rc of rowComps) {
-        if (rc.cx <= segMidX) leftNeighbor = rc;
-        else if (!rightNeighbor) rightNeighbor = rc;
-      }
-      if (leftNeighbor) return Math.round(leftNeighbor.rightTerm.y);
-      if (rightNeighbor) return Math.round(rightNeighbor.leftTerm.y);
-      return yRow;
-    };
+    // Keep horizontal wires straight at yRow so there is zero stepped jog across bulbs or components!
+    const getRowSegY = (_segXL: number, _segXR: number): number => yRow;
 
     // Identify vertical columns that connect to this row
     const activeRowCols = vCols
@@ -11242,10 +11250,11 @@ export function autoAlignAndConnectCircuit(
       }
     }
 
-    // For the leftmost vertical conductor (cIdx === 0), if there is no explicit switch anywhere in the circuit
+    // For the leftmost vertical conductor (cIdx === 0 or lowest xCol), if there is no explicit switch anywhere in this circuit
     // and no vertical components on this column, ensure the knife switch gap is physically split and preserved!
     const hasAnyExplicitSwitch = alignedComps.some((c) => c.kind === 'switch');
-    if (cIdx === 0 && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length > 0) {
+    const isLeftmostCol = cIdx === 0 || xCol <= Math.min(...vCols.map((c) => c.xCol)) + 12;
+    if (isLeftmostCol && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length > 0) {
       const minY = Math.min(...mergedV.map((v) => v.yT));
       const maxY = Math.max(...mergedV.map((v) => v.yB));
       const totalH = maxY - minY;

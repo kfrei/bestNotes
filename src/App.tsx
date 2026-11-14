@@ -11841,10 +11841,12 @@ export default function App() {
             const swHit = hits.find((sw) => {
               const p0 = s.points[0];
               const p1 = s.points[s.points.length - 1];
-              const isVert = Math.abs(p1.x - p0.x) <= 18 && Math.abs(p1.y - p0.y) >= 12;
+              const isVert = Math.abs(p1.y - p0.y) >= 12;
               if (!isVert) return false;
-              const midX = (p0.x + p1.x) / 2;
-              if (Math.abs(midX - sw.x) > 18) return false;
+              const allX = s.points.map((p) => p.x);
+              const minX = Math.min(...allX);
+              const maxX = Math.max(...allX);
+              if (sw.x < minX - 28 || sw.x > maxX + 28) return false;
               const yMin = Math.min(p0.y, p1.y);
               const yMax = Math.max(p0.y, p1.y);
               return (
@@ -26381,7 +26383,7 @@ export default function App() {
         proposalOverlayHitRef.current = null;
       }
 
-      if (isSimulating && preparedCircuitSims.length > 0) {
+      if ((isSimulating || showSimulationPanel) && preparedCircuitSims.length > 0) {
         for (const pcs of preparedCircuitSims) {
           const {
             simData,
@@ -26662,7 +26664,7 @@ export default function App() {
       }
 
       // 4. Moving Charge Carriers / Electrons along Continuous Circuit Chains (100% uniform period, speed & spacing!)
-      if (showElectrons && particleChains.length > 0) {
+      if (isSimulating && showElectrons && particleChains.length > 0) {
         const dirSign = flowDirection === 'conventional' ? 1 : -1;
         const sw = simData.autoSwitch;
 
@@ -60985,12 +60987,24 @@ export default function App() {
                           const nextSims = matchingSim
                             ? currentValid.map((sim) =>
                                 sim.id === matchingSim.id
-                                  ? { ...sim, strokeIds: alignedIds }
+                                  ? {
+                                      ...sim,
+                                      strokeIds: alignedIds,
+                                      switchClosed:
+                                        typeof sim.switchClosed === 'boolean'
+                                          ? sim.switchClosed
+                                          : false,
+                                    }
                                   : sim
                               )
                             : [
                                 ...currentValid,
-                                { id: targetSimId, name: targetSimName, strokeIds: alignedIds },
+                                {
+                                  id: targetSimId,
+                                  name: targetSimName,
+                                  strokeIds: alignedIds,
+                                  switchClosed: false,
+                                },
                               ];
                           return {
                             ...page,
@@ -61005,6 +61019,7 @@ export default function App() {
                         });
                         setSelectedStrokeIds([]);
                         setCircuitAlignFlashStart(performance.now());
+                        setIsSimulating(true);
                         showToast(`📐 [${targetSimName}] Τα στοιχεία αναγνωρίστηκαν & οι αγωγοί ενώθηκαν!`);
                         return;
                       }
@@ -61021,6 +61036,7 @@ export default function App() {
                       );
                       setSelectedStrokeIds([]);
                       setCircuitAlignFlashStart(performance.now());
+                      setIsSimulating(true);
                       showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
                     className="flex-1 h-8 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center transition cursor-pointer"
@@ -61069,11 +61085,14 @@ export default function App() {
                           </div>
                         );
                       }
+                      const curClosed = typeof activeSim.switchClosed === 'boolean'
+                        ? activeSim.switchClosed
+                        : simCircuitSwitchClosed;
                       return (
                         <button
                           type="button"
                           onClick={() => {
-                            const next = !simCircuitSwitchClosed;
+                            const next = !curClosed;
                             setSimCircuitSwitchClosed(next);
                             if (activeSim) {
                               updateActivePage((page) => ({
@@ -61083,6 +61102,7 @@ export default function App() {
                                 ),
                               }));
                             }
+                            setIsSimulating(true);
                             showToast(
                               next
                                 ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
@@ -61090,7 +61110,7 @@ export default function App() {
                             );
                           }}
                           className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-2 border shadow-2xs transition cursor-pointer ${
-                            simCircuitSwitchClosed
+                            curClosed
                               ? 'bg-[#f1f6f3] border-[#c8dfd0] text-[#15803d] hover:bg-[#e7f0eb]'
                               : 'bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#fae8e8]'
                           }`}
@@ -61098,11 +61118,11 @@ export default function App() {
                         >
                           <span
                             className={`w-2 h-2 rounded-full ${
-                              simCircuitSwitchClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
+                              curClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
                             }`}
                           />
                           <span>
-                            {simCircuitSwitchClosed
+                            {curClosed
                               ? 'Διακόπτης: Κλειστός'
                               : 'Διακόπτης: Ανοιχτός'}
                           </span>
