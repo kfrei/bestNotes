@@ -60164,8 +60164,8 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Top-Level Physics & Chemistry Simulation Category Switcher: "Κυκλώματα" | "Ελατήρια" | "Δυνάμεις" | "Άτομο" | "Θερμότητα" */}
-                <div className="grid grid-cols-5 gap-1 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner">
+                {/* Top-Level Physics & Chemistry Simulation Category Switcher (Horizontal Swipeable / Scrollable) */}
+                <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x">
                   <button
                     type="button"
                     onClick={() => {
@@ -60179,7 +60179,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60192,7 +60192,7 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60203,13 +60203,30 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
+                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
+                      setSimActiveCategory(nextCat);
+                      if (nextCat === 'heat') {
+                        heatSim.ensureActiveHeatSim(activePage);
+                      }
+                    }}
+                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                      simActiveCategory === 'heat'
+                        ? 'bg-[#234978] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
+                    }`}
+                  >
+                    <span>Θερμότητα</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       const nextCat = simActiveCategory === 'forces' ? null : 'forces';
                       setSimActiveCategory(nextCat);
                       if (nextCat === 'forces' && selectedStrokeIds.length > 0) {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'forces'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60226,30 +60243,13 @@ export default function App() {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-bold flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
                     }`}
                   >
                     <span>Άτομο</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'heat') {
-                        heatSim.ensureActiveHeatSim(activePage);
-                      }
-                    }}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold flex items-center justify-center transition cursor-pointer ${
-                      simActiveCategory === 'heat'
-                        ? 'bg-[#234978] text-white shadow-xs'
-                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
-                    }`}
-                  >
-                    <span>Θερμότητα</span>
                   </button>
                 </div>
 
