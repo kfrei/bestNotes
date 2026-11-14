@@ -28,6 +28,8 @@ export interface LiveTvInkPacket {
   pts: BezierPoint[];
   laserPaths?: BezierPoint[][];
   laserAlpha?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
   ts: number;
 }
 

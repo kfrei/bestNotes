@@ -4487,6 +4487,9 @@ export default function App() {
   const laserStrokesRef = useRef<BezierPoint[][]>([]);
   const laserClearTimerRef = useRef<number | null>(null);
   const laserFadeRafRef = useRef<number | null>(null);
+  const globalLaserCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const globalLaserCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const isLaserDrawingRef = useRef<boolean>(false);
   const lastEraserPtRef = useRef<{ x: number; y: number } | null>(null);
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
@@ -18018,13 +18021,32 @@ export default function App() {
     }
   };
 
-  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 0.8s after lifting, then gently fades out over 0.28s — 20% faster!)
+  const clearGlobalLaserCanvas = () => {
+    const c = globalLaserCanvasRef.current;
+    if (!c) return;
+    const ctx = globalLaserCtxRef.current || c.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || CANVAS_DPR || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  };
+
+  // Render Persistent Red Laser Pointer Strokes on Fullscreen Viewport Canvas
+  // (Works everywhere across entire browser, over all dashboards & stopwatch, stays while drawing + for 0.8s after lifting, then fades out over 0.28s)
   const renderLaserOverlay = (alpha = 1) => {
-    const c = activeCanvasRef.current;
-    const ctx = activeCtxRef.current;
-    if (!c || !ctx) return;
-    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-    ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+    const c = globalLaserCanvasRef.current;
+    if (!c) return;
+    const ctx = globalLaserCtxRef.current || c.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || CANVAS_DPR || 1;
+    const targetW = Math.round(window.innerWidth * dpr);
+    const targetH = Math.round(window.innerHeight * dpr);
+    if (c.width !== targetW || c.height !== targetH) {
+      c.width = targetW;
+      c.height = targetH;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
     const allLaserPaths = [
       ...laserStrokesRef.current,
@@ -18090,10 +18112,93 @@ export default function App() {
           pts: currentStrokePtsRef.current.slice(-180),
           laserPaths: laserStrokesRef.current.slice(-10).map((p) => p.slice(-180)),
           laserAlpha: alpha,
-        });
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        } as any);
       }
     }
   };
+
+  const handleGlobalLaserPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'laser') return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    cancelLaserTimers();
+    isLaserDrawingRef.current = true;
+    currentStrokePtsRef.current = [{ x: e.clientX, y: e.clientY }];
+    renderLaserOverlay(1);
+  };
+
+  const handleGlobalLaserPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'laser' || !isLaserDrawingRef.current) return;
+    e.preventDefault();
+    cancelLaserTimers();
+    const nativeEv = e.nativeEvent;
+    const coalesced =
+      typeof nativeEv.getCoalescedEvents === 'function'
+        ? nativeEv.getCoalescedEvents()
+        : [nativeEv];
+    const pts = currentStrokePtsRef.current;
+    for (const ce of coalesced) {
+      const pt = { x: ce.clientX, y: ce.clientY };
+      if (pts.length === 0 || distance(pts[pts.length - 1], pt) >= 1.0) {
+        pts.push(pt);
+      }
+    }
+    renderLaserOverlay(1);
+  };
+
+  const handleGlobalLaserPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'laser') return;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+    isLaserDrawingRef.current = false;
+    if (currentStrokePtsRef.current.length > 0) {
+      laserStrokesRef.current.push([...currentStrokePtsRef.current]);
+      currentStrokePtsRef.current = [];
+    }
+    cancelLaserTimers();
+    renderLaserOverlay(1);
+    laserClearTimerRef.current = window.setTimeout(() => {
+      laserClearTimerRef.current = null;
+      if (isLaserDrawingRef.current) return;
+      const fadeStart = performance.now();
+      const fadeDurationMs = 280;
+      const stepFade = (now: number) => {
+        if (isLaserDrawingRef.current) {
+          laserFadeRafRef.current = null;
+          return;
+        }
+        const t = Math.min(1, (now - fadeStart) / fadeDurationMs);
+        if (t < 1) {
+          const alpha = Math.pow(1 - t, 1.4);
+          renderLaserOverlay(alpha);
+          laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
+        } else {
+          laserFadeRafRef.current = null;
+          laserStrokesRef.current = [];
+          clearGlobalLaserCanvas();
+        }
+      };
+      laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
+    }, 800);
+  };
+
+  // Reset & clean global laser canvas whenever user leaves laser tool
+  useEffect(() => {
+    if (activeTool !== 'laser') {
+      cancelLaserTimers();
+      isLaserDrawingRef.current = false;
+      laserStrokesRef.current = [];
+      currentStrokePtsRef.current = [];
+      clearGlobalLaserCanvas();
+    }
+  }, [activeTool]);
 
   // ============================================================================
   // NAMED LASSO CIRCUIT SIMULATION HELPERS (sim01, sim02, ... — 1 Active at a Time)
@@ -33474,6 +33579,7 @@ export default function App() {
           if (!packet.active) {
             laserStrokesRef.current = [];
             currentStrokePtsRef.current = [];
+            clearGlobalLaserCanvas();
             const c = activeCanvasRef.current;
             const ctx = activeCtxRef.current;
             if (c && ctx) {
@@ -33481,8 +33587,27 @@ export default function App() {
               ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
             }
           } else if (packet.isLaser) {
-            laserStrokesRef.current = packet.laserPaths || [];
-            currentStrokePtsRef.current = packet.pts || [];
+            const vw = packet.viewportWidth;
+            const vh = packet.viewportHeight;
+            if (
+              vw &&
+              vh &&
+              (vw !== window.innerWidth || vh !== window.innerHeight)
+            ) {
+              const sx = window.innerWidth / vw;
+              const sy = window.innerHeight / vh;
+              laserStrokesRef.current = (packet.laserPaths || []).map((path: any[]) =>
+                path.map((p: any) => ({ ...p, x: p.x * sx, y: p.y * sy }))
+              );
+              currentStrokePtsRef.current = (packet.pts || []).map((p: any) => ({
+                ...p,
+                x: p.x * sx,
+                y: p.y * sy,
+              }));
+            } else {
+              laserStrokesRef.current = packet.laserPaths || [];
+              currentStrokePtsRef.current = packet.pts || [];
+            }
             renderLaserOverlay(packet.laserAlpha ?? 1);
           } else if (packet.pts && packet.pts.length > 0) {
             const c = activeCanvasRef.current;
@@ -44981,11 +45106,11 @@ export default function App() {
       return;
     }
 
-    // 5. Laser Pointer on overlay canvas (stays visible while holding pencil + 1s after lifting, then fades out smoothly in 0.35s!)
+    // 5. Laser Pointer on overlay canvas
     if (activeTool === 'laser') {
       cancelLaserTimers();
       for (const ce of coalesced) {
-        const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+        const rawPt = { x: ce.clientX, y: ce.clientY };
         const pts = currentStrokePtsRef.current;
         if (pts.length === 0 || distance(pts[pts.length - 1], rawPt) >= 1.0) {
           pts.push(rawPt);
@@ -45652,6 +45777,7 @@ export default function App() {
             laserFadeRafRef.current = null;
             laserStrokesRef.current = [];
             clearActiveOverlay();
+            clearGlobalLaserCanvas();
           }
         };
         laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
@@ -56589,7 +56715,7 @@ export default function App() {
           {isLivePdfMode && (
             <div
               data-sticky-app-nav="true"
-              style={{ touchAction: 'manipulation' }}
+              style={{ touchAction: 'manipulation', zIndex: 100002 }}
               className="sticky top-0 z-30 flex items-center justify-between px-4 py-2 bg-[#0f172a] text-white border-b border-slate-700 shadow-md shrink-0 gap-3 overflow-x-auto"
             >
               <div className="flex items-center gap-2 text-xs">
@@ -56663,7 +56789,7 @@ export default function App() {
              ========================================================================= */}
           <div
             data-sticky-app-nav="true"
-            style={{ touchAction: 'manipulation' }}
+            style={{ touchAction: 'manipulation', zIndex: 100002 }}
             className={`${
               isCleanProjectorMode || isLivePdfMode ? 'hidden' : 'sticky top-0 z-30 flex'
             } items-center justify-between px-4 py-1.5 bg-[#f7f5f0] border-b border-[#dfd8cb] shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain`}
@@ -69901,6 +70027,53 @@ export default function App() {
         onSuccess={() => {
           setShowAuthModal(false);
           showToast('🎉 Συνδέθηκες επιτυχώς στο BestNotes Cloud!');
+        }}
+      />
+
+      {/* Viewport-Level Global Red Laser Pointer Canvas (Active everywhere across entire browser, over all dashboards & modals) */}
+      <canvas
+        ref={(el) => {
+          globalLaserCanvasRef.current = el;
+          if (el) {
+            const ctx =
+              (el.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) ||
+              el.getContext('2d');
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              globalLaserCtxRef.current = ctx;
+            }
+          } else {
+            globalLaserCtxRef.current = null;
+          }
+        }}
+        width={
+          typeof window !== 'undefined'
+            ? Math.round(window.innerWidth * (window.devicePixelRatio || CANVAS_DPR || 1))
+            : 1920
+        }
+        height={
+          typeof window !== 'undefined'
+            ? Math.round(window.innerHeight * (window.devicePixelRatio || CANVAS_DPR || 1))
+            : 1080
+        }
+        onPointerDown={handleGlobalLaserPointerDown}
+        onPointerMove={handleGlobalLaserPointerMove}
+        onPointerUp={handleGlobalLaserPointerUp}
+        onPointerCancel={handleGlobalLaserPointerUp}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 100000,
+          pointerEvents: activeTool === 'laser' ? 'auto' : 'none',
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          cursor: activeTool === 'laser' ? 'crosshair' : 'default',
         }}
       />
     </div>
