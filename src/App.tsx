@@ -2565,6 +2565,44 @@ export default function App() {
     simId: string;
     startTime: number;
   } | null>(null);
+
+  // Digital Stopwatch State (⏱️) for Physics Experiments (WarmStudio Beige & Dark Navy)
+  const [showStopwatch, setShowStopwatch] = useState<boolean>(false);
+  const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => ({
+    x: typeof window !== 'undefined' ? Math.max(16, window.innerWidth - 240) : 340,
+    y: 120,
+  }));
+  const [stopwatchRunning, setStopwatchRunning] = useState<boolean>(false);
+  const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState<number>(0);
+  const stopwatchDragRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!stopwatchRunning) return;
+    let animId: number;
+    let lastTime = performance.now();
+    const loop = (now: number) => {
+      const delta = now - lastTime;
+      lastTime = now;
+      setStopwatchElapsedMs((prev) => prev + delta);
+      animId = requestAnimationFrame(loop);
+    };
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [stopwatchRunning]);
+
+  const formatStopwatch = (ms: number): string => {
+    const totalSec = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    const tenths = Math.floor((ms % 1000) / 100);
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+  };
+
   const mathGraphHandImgObjRef = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
     const preloadImg = new Image();
@@ -2676,6 +2714,7 @@ export default function App() {
         av: number;
         lastTime: number;
         trajectory: { x: number; y: number }[];
+        maxAngleRad?: number;
       }
     >
   >({});
@@ -20142,6 +20181,129 @@ export default function App() {
         false
       );
       triggerForceSimStep(sim.id, 1, undefined, 620);
+    } else if (action === 'toggle-stopwatch') {
+      setShowStopwatch((s) => !s);
+    } else if (action.startsWith('set-rod-length:')) {
+      const newL = Number(action.slice('set-rod-length:'.length));
+      if (!isNaN(newL) && newL >= 69 && newL <= 690 && sim) {
+        const curAng = sim.pendulumAngleRad || 0;
+        const px = sim.originX;
+        const py = sim.originY;
+        const bx = px + newL * Math.sin(curAng);
+        const by = py + newL * Math.cos(curAng);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes.map((st) => {
+              if (st.id === sim.primaryStrokeId) {
+                return {
+                  ...st,
+                  points: [
+                    { x: px, y: py, pressure: 0.7 },
+                    { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                  ],
+                };
+              }
+              if (st.id === sim.secondaryStrokeId && st.points.length >= 4) {
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                for (const pt of st.points) {
+                  if (pt.x < minX) minX = pt.x;
+                  if (pt.x > maxX) maxX = pt.x;
+                  if (pt.y < minY) minY = pt.y;
+                  if (pt.y > maxY) maxY = pt.y;
+                }
+                const oldCx = (minX + maxX) / 2;
+                const oldCy = (minY + maxY) / 2;
+                const dx = bx - oldCx;
+                const dy = by - oldCy;
+                return {
+                  ...st,
+                  points: st.points.map((pt) => ({
+                    ...pt,
+                    x: pt.x + dx,
+                    y: pt.y + dy,
+                    ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                    ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                  })),
+                };
+              }
+              return st;
+            }),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === sim.id ? { ...s, rodLengthPx: newL } : s
+            ),
+          }),
+          false
+        );
+      }
+    } else if (action.startsWith('set-pendulum-angle:')) {
+      const newAng = Number(action.slice('set-pendulum-angle:'.length));
+      if (!isNaN(newAng) && sim) {
+        const pState = pendulumPhysRef.current[sim.id];
+        if (pState) {
+          pState.ang = newAng;
+          pState.av = 0;
+          pState.maxAngleRad = Math.abs(newAng);
+          pState.lastTime = performance.now();
+        }
+        const px = sim.originX;
+        const py = sim.originY;
+        const rodL = sim.rodLengthPx || 230;
+        const bx = px + rodL * Math.sin(newAng);
+        const by = py + rodL * Math.cos(newAng);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes.map((st) => {
+              if (st.id === sim.primaryStrokeId) {
+                return {
+                  ...st,
+                  points: [
+                    { x: px, y: py, pressure: 0.7 },
+                    { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                  ],
+                };
+              }
+              if (st.id === sim.secondaryStrokeId && st.points.length >= 4) {
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                for (const pt of st.points) {
+                  if (pt.x < minX) minX = pt.x;
+                  if (pt.x > maxX) maxX = pt.x;
+                  if (pt.y < minY) minY = pt.y;
+                  if (pt.y > maxY) maxY = pt.y;
+                }
+                const oldCx = (minX + maxX) / 2;
+                const oldCy = (minY + maxY) / 2;
+                const dx = bx - oldCx;
+                const dy = by - oldCy;
+                return {
+                  ...st,
+                  points: st.points.map((pt) => ({
+                    ...pt,
+                    x: pt.x + dx,
+                    y: pt.y + dy,
+                    ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                    ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                  })),
+                };
+              }
+              return st;
+            }),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    isPaused: false,
+                    pendulumAngleRad: newAng,
+                    pendulumMaxAngleRad: Math.abs(newAng),
+                    angleDeg: Math.round((Math.abs(newAng) * 180) / Math.PI),
+                  }
+                : s
+            ),
+          }),
+          false
+        );
+      }
     }
   };
 
@@ -26026,10 +26188,12 @@ export default function App() {
     const activeSpringSim = getActiveSpringSim(activePage);
     const activeForceSim = getActiveForceSim(activePage);
     const pageAtomSims = getValidAtomSims(activePage);
+    const isSimModeActive = showSimulationPanel || isSimulating || isSpringSimulating;
     const hasAtomOverlay =
-      pageAtomSims.length > 0 ||
-      atomReactionAnim !== null ||
-      draggingAtomHandleRef.current !== null;
+      (isSimModeActive || atomReactionAnim !== null || draggingAtomHandleRef.current !== null) &&
+      (pageAtomSims.length > 0 ||
+        atomReactionAnim !== null ||
+        draggingAtomHandleRef.current !== null);
     const allPageForceVectors = activePage.strokes.filter(
       (st) =>
         (st.shapeType === 'spring-pointer' ||
@@ -26045,31 +26209,21 @@ export default function App() {
         )
     );
     const hasForceOverlay =
-      Boolean(activeForceSim) ||
-      (allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
-      forceSimAnim !== null ||
-      draggingForceHandleRef.current !== null;
+      (isSimModeActive || forceSimAnim !== null || draggingForceHandleRef.current !== null) &&
+      (Boolean(activeForceSim) ||
+        (allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
+        forceSimAnim !== null ||
+        draggingForceHandleRef.current !== null);
     const hasSpringOverlay =
-      Boolean(springSettleAnim?.springStrokeId) ||
-      (Boolean(activeSpringSim) &&
-        (isSpringSimulating ||
-          springSettleAnim !== null ||
-          springPhaseShiftAnim !== null ||
-          showSimulationPanel ||
-          (activeSpringSim!.initialPhaseMode !== 'eq' &&
-            activeSpringSim!.initialPhaseMode !== 'eqDown') ||
-          Boolean(activeSpringSim!.showPositionScale) ||
-          activeSpringSim!.showAmplitudeLines ||
-          activeSpringSim!.showForceVectors ||
-          Boolean(activeSpringSim!.showHookeCanvasTable) ||
-          Boolean(activeSpringSim!.graphs.hooke?.visible) ||
-          activeSpringSim!.graphs.xt.visible ||
-          activeSpringSim!.graphs.vt.visible ||
-          activeSpringSim!.graphs.at.visible ||
-          draggingSpringMassRef.current !== null ||
-          draggingSpringAmpHandleRef.current !== null ||
-          draggingSpringGraphResizeRef.current !== null ||
-          draggingSpringGraphRef.current !== null));
+      (isSimModeActive ||
+        Boolean(springSettleAnim?.springStrokeId) ||
+        springSettleAnim !== null ||
+        springPhaseShiftAnim !== null ||
+        draggingSpringMassRef.current !== null ||
+        draggingSpringAmpHandleRef.current !== null ||
+        draggingSpringGraphResizeRef.current !== null ||
+        draggingSpringGraphRef.current !== null) &&
+      (Boolean(springSettleAnim?.springStrokeId) || Boolean(activeSpringSim));
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
     const hasAnySimInLivePdf =
@@ -29982,14 +30136,14 @@ export default function App() {
 
           if (!fSim.isPaused && !isDraggingBob) {
             const dt = Math.min(0.05, Math.max(0.001, (now - pState.lastTime) / 1000));
-            const subSteps = 4;
-            const subDt = (dt * 60) / subSteps;
-            const G = 0.4;
-            const TS = 0.1;
+            const subSteps = 8;
+            const subDt = dt / subSteps;
+            const L_m = Math.max(0.2, L / 230); // 10 grid squares (230px) = 1.0 meter!
+            const G = 9.81; // Earth gravity m/s^2
             for (let k = 0; k < subSteps; k++) {
-              const aa = ((-1 * G) / L) * Math.sin(pState.ang) * 100;
-              pState.av += aa * TS * subDt;
-              pState.ang += pState.av * TS * subDt;
+              const aa = (-G / L_m) * Math.sin(pState.ang);
+              pState.av += aa * subDt;
+              pState.ang += pState.av * subDt;
             }
           }
           pState.lastTime = now;
@@ -30008,13 +30162,66 @@ export default function App() {
           ctx.lineTo(PX, PY + L + 16);
           ctx.stroke();
           ctx.restore();
-          drawHaloLabel(
-            'Θ.Ι.',
-            PX,
-            PY + L + 28,
-            '#64748b',
-            '600 10.5px system-ui, -apple-system, sans-serif'
-          );
+
+          if (isDraggingBob && Math.abs(ang) < 0.02) {
+            drawHaloLabel(
+              `🔒 Θ.Ι. (L = ${(L / 230).toFixed(2)}m • ${Math.round(L / 23)} κουτάκια)`,
+              PX,
+              PY + L + 30,
+              '#0066ff',
+              'bold 11px system-ui, sans-serif'
+            );
+          } else {
+            drawHaloLabel(
+              'Θ.Ι.',
+              PX,
+              PY + L + 28,
+              '#64748b',
+              '600 10.5px system-ui, -apple-system, sans-serif'
+            );
+          }
+
+          // Visual Retention of Maximum Angle / Amplitude (θmax)
+          const maxA = fSim.pendulumMaxAngleRad || pState.maxAngleRad || 0;
+          if (maxA > 0.05) {
+            const maxBxL = PX - L * Math.sin(maxA);
+            const maxByL = PY + L * Math.cos(maxA);
+            const maxBxR = PX + L * Math.sin(maxA);
+            const maxByR = PY + L * Math.cos(maxA);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(100, 116, 139, 0.35)';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([3, 3]);
+
+            // Ghost bobs at extreme amplitude positions
+            ctx.beginPath();
+            ctx.arc(maxBxL, maxByL, 19, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(maxBxR, maxByR, 19, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Swing amplitude limit lines from pivot
+            ctx.beginPath();
+            ctx.moveTo(PX, PY);
+            ctx.lineTo(maxBxL, maxByL);
+            ctx.moveTo(PX, PY);
+            ctx.lineTo(maxBxR, maxByR);
+            ctx.stroke();
+
+            ctx.restore();
+
+            const degMax = Math.round((maxA * 180) / Math.PI);
+            drawHaloLabel(
+              showNums ? `θmax = ${degMax}° (Πλάτος)` : `θmax = ${degMax}°`,
+              PX + (L * 0.42 + 20) * Math.sin(maxA),
+              PY + (L * 0.42 + 20) * Math.cos(maxA),
+              '#0066ff',
+              'bold 11px system-ui, sans-serif'
+            );
+          }
 
           if (Math.abs(ang) > 0.04) {
             const arcR = Math.min(48, Math.max(30, L * 0.22));
@@ -30063,7 +30270,7 @@ export default function App() {
             ctx.restore();
           }
 
-          // Draw Rod + Pivot + Bob
+          // Draw Rod + Pivot + Bob (Clean ink outline when paused, cyan ONLY when actively dragged!)
           ctx.save();
           ctx.strokeStyle = '#0f172a';
           ctx.lineWidth = 2.2;
@@ -30081,8 +30288,8 @@ export default function App() {
           ctx.shadowBlur = 8;
           ctx.shadowOffsetY = 3;
           ctx.fillStyle = '#1e293b';
-          ctx.strokeStyle = fSim.isPaused || isDraggingBob ? '#38bdf8' : '#0f172a';
-          ctx.lineWidth = fSim.isPaused || isDraggingBob ? 2.4 : 1.8;
+          ctx.strokeStyle = isDraggingBob ? '#38bdf8' : '#0f172a';
+          ctx.lineWidth = isDraggingBob ? 2.4 : 1.8;
           ctx.beginPath();
           ctx.arc(bx, by, 19, 0, Math.PI * 2);
           ctx.fill();
@@ -30395,6 +30602,17 @@ export default function App() {
               64,
               21,
               fSim.showForces ? '#dc3545' : '#334155',
+              '#fff'
+            ) + 5;
+          curBx +=
+            drawPillButton(
+              showStopwatch ? '⏱️ Χρονόμετρο (ON)' : '⏱️ Χρονόμετρο',
+              'toggle-stopwatch',
+              curBx,
+              barY,
+              showStopwatch ? 104 : 88,
+              21,
+              showStopwatch ? '#234978' : '#334155',
               '#fff'
             ) + 5;
           if (fSim.showForces) {
@@ -40612,20 +40830,44 @@ export default function App() {
       if (dragF.kind === 'pendulum-bob') {
         const curForceSim = getActiveForceSim(activePage);
         if (curForceSim && curForceSim.id === dragF.simId) {
-          const dx = latestPt.x - curForceSim.originX;
-          const dy = Math.max(20, latestPt.y - curForceSim.originY);
-          const nextAng = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, Math.atan2(dx, dy)));
+          const px = curForceSim.originX;
+          const py = curForceSim.originY;
+          const dx = latestPt.x - px;
+          const dy = Math.max(20, latestPt.y - py);
+          const rawAng = Math.atan2(dx, dy);
+
+          // When in pause, snap & lock to vertical, and allow dragging up/down to adjust length L!
+          const isPaused = Boolean(curForceSim.isPaused);
+          const isNearVertical = isPaused && (Math.abs(dx) <= 24 || Math.abs(rawAng) < 0.12);
+
+          let nextAng: number;
+          let nextRodL: number = curForceSim.rodLengthPx || 230;
+
+          if (isNearVertical) {
+            // Snapped and magnetically locked to vertical equilibrium axis!
+            nextAng = 0;
+            // Dragging vertically alters length: 10 grid squares (230px) = 1.0m!
+            const rawLen = Math.max(69, Math.min(690, dy));
+            const nearestGrid = Math.round(rawLen / 23) * 23;
+            nextRodL = Math.abs(rawLen - nearestGrid) <= 8 ? nearestGrid : rawLen;
+          } else {
+            nextAng = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, rawAng));
+          }
+
           pendulumPhysRef.current[curForceSim.id] = {
             ang: nextAng,
             av: 0,
             lastTime: performance.now(),
             trajectory: [],
+            maxAngleRad:
+              Math.abs(nextAng) > 0.04
+                ? Math.abs(nextAng)
+                : pendulumPhysRef.current[curForceSim.id]?.maxAngleRad ?? 0,
           };
-          const px = curForceSim.originX;
-          const py = curForceSim.originY;
-          const rodL = curForceSim.rodLengthPx || 230;
-          const bx = px + rodL * Math.sin(nextAng);
-          const by = py + rodL * Math.cos(nextAng);
+
+          const bx = px + nextRodL * Math.sin(nextAng);
+          const by = py + nextRodL * Math.cos(nextAng);
+
           updateActivePage(
             (page) => ({
               ...page,
@@ -40669,7 +40911,15 @@ export default function App() {
               }),
               forceSims: (page.forceSims || []).map((s) =>
                 s.id === dragF.simId
-                  ? { ...s, pendulumAngleRad: nextAng, anMode: 'none', step: 0 }
+                  ? {
+                      ...s,
+                      rodLengthPx: nextRodL,
+                      pendulumAngleRad: nextAng,
+                      pendulumMaxAngleRad:
+                        Math.abs(nextAng) > 0.04 ? Math.abs(nextAng) : s.pendulumMaxAngleRad,
+                      anMode: 'none',
+                      step: 0,
+                    }
                   : s
               ),
             }),
@@ -45201,20 +45451,53 @@ export default function App() {
       if (finishedForceDrag.kind === 'pendulum-bob') {
         const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
         const pState = pendulumPhysRef.current[finishedForceDrag.simId];
-        if (fSim && pState && Math.abs(pState.ang) > 0.03 && (!fSim.anMode || fSim.anMode === 'none')) {
+        if (fSim && pState) {
+          const curA = pState.ang;
+          const absA = Math.abs(curA);
           pState.av = 0;
           pState.lastTime = performance.now();
-          updateActivePage(
-            (p) => ({
-              ...p,
-              forceSims: (p.forceSims || []).map((f) =>
-                f.id === fSim.id
-                  ? { ...f, isPaused: false, angleDeg: Math.round((pState.ang * 180) / Math.PI) }
-                  : f
-              ),
-            }),
-            false
-          );
+          if (absA > 0.04 && (!fSim.anMode || fSim.anMode === 'none')) {
+            pState.maxAngleRad = absA;
+            updateActivePage(
+              (p) => ({
+                ...p,
+                forceSims: (p.forceSims || []).map((f) =>
+                  f.id === fSim.id
+                    ? {
+                        ...f,
+                        isPaused: false,
+                        pendulumAngleRad: curA,
+                        pendulumMaxAngleRad: absA,
+                        angleDeg: Math.round((absA * 180) / Math.PI),
+                      }
+                    : f
+                ),
+              }),
+              false
+            );
+          } else {
+            // Snapped and locked at vertical equilibrium (θ = 0)
+            pState.ang = 0;
+            pState.av = 0;
+            pState.maxAngleRad = 0;
+            updateActivePage(
+              (p) => ({
+                ...p,
+                forceSims: (p.forceSims || []).map((f) =>
+                  f.id === fSim.id
+                    ? {
+                        ...f,
+                        isPaused: true,
+                        pendulumAngleRad: 0,
+                        pendulumMaxAngleRad: 0,
+                        angleDeg: 0,
+                      }
+                    : f
+                ),
+              }),
+              false
+            );
+          }
         }
       }
       renderStaticSceneRef.current();
@@ -56718,7 +57001,24 @@ export default function App() {
 
                       setShowSimulationPanel((v) => {
                         const next = !v;
-                        setSimActiveCategory(null);
+                        if (next) {
+                          if (activePage.forceSims && activePage.forceSims.length > 0) {
+                            setSimActiveCategory('forces');
+                            if (activePage.forceSims.some((s) => s.mode === 'pendulum')) {
+                              setForceSimSubTab('pendulum');
+                            }
+                          } else if (getValidCircuitSims(activePage).length > 0) {
+                            setSimActiveCategory('circuits');
+                          } else if (getValidSpringSims(activePage).length > 0) {
+                            setSimActiveCategory('springs');
+                          } else if ((activePage.atomSims || []).length > 0) {
+                            setSimActiveCategory('atoms');
+                          } else {
+                            setSimActiveCategory(null);
+                          }
+                        } else {
+                          setSimActiveCategory(null);
+                        }
                         return next;
                       });
                     }}
@@ -63010,6 +63310,99 @@ export default function App() {
                     );
                   })()
                 ) : null}
+              </div>
+            )}
+
+            {/* Draggable Digital Stopwatch Widget (⏱️) */}
+            {showStopwatch && (
+              <div
+                data-ui-panel="true"
+                style={{ left: stopwatchPos.x, top: stopwatchPos.y }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="fixed z-45 w-52 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_16px_36px_-6px_rgba(0,0,0,0.18),0_4px_12px_-2px_rgba(0,0,0,0.06)] p-3 select-none text-[#1e293b] space-y-2.5"
+              >
+                {/* Drag Header */}
+                <div
+                  onPointerDown={(e) => {
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    stopwatchDragRef.current = {
+                      startClientX: e.clientX,
+                      startClientY: e.clientY,
+                      origX: stopwatchPos.x,
+                      origY: stopwatchPos.y,
+                    };
+                  }}
+                  onPointerMove={(e) => {
+                    const drag = stopwatchDragRef.current;
+                    if (!drag) return;
+                    const nextX = Math.max(
+                      8,
+                      Math.min(window.innerWidth - 220, drag.origX + (e.clientX - drag.startClientX))
+                    );
+                    const nextY = Math.max(
+                      8,
+                      Math.min(window.innerHeight - 140, drag.origY + (e.clientY - drag.startClientY))
+                    );
+                    setStopwatchPos({ x: nextX, y: nextY });
+                  }}
+                  onPointerUp={(e) => {
+                    stopwatchDragRef.current = null;
+                    try {
+                      e.currentTarget.releasePointerCapture(e.pointerId);
+                    } catch {}
+                  }}
+                  className="flex items-center justify-between cursor-grab active:cursor-grabbing pb-1 border-b border-[#dfd8cb]/60"
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#1e293b]">
+                    <span className="text-sm">⏱️</span>
+                    <span>Χρονόμετρο</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowStopwatch(false)}
+                    className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] text-xs font-bold transition cursor-pointer"
+                    title="Κλείσιμο χρονομέτρου"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* LCD Screen: Dark Blue Navy Background with crisp white digital time (MM:SS.s) */}
+                <div className="bg-[#1e293b] rounded-xl px-3 py-2 border border-[#334155] shadow-inner text-center">
+                  <span className="font-mono font-black text-2xl tracking-widest text-white drop-shadow-xs">
+                    {formatStopwatch(stopwatchElapsedMs)}
+                  </span>
+                  <div className="text-[9px] text-[#94a3b8] font-mono tracking-wider mt-0.5">
+                    ΛΕΠ : ΔΕΥΤ . ΔΕΚ
+                  </div>
+                </div>
+
+                {/* Buttons: Play/Pause (same button) and Reset */}
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setStopwatchRunning((r) => !r)}
+                    className={`py-1.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer ${
+                      stopwatchRunning
+                        ? 'bg-[#dc2626] hover:bg-[#b91c1c] text-white'
+                        : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+                    }`}
+                  >
+                    {stopwatchRunning ? '❚❚ Παύση' : '▶ Έναρξη'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStopwatchRunning(false);
+                      setStopwatchElapsedMs(0);
+                    }}
+                    className="py-1.5 px-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer"
+                  >
+                    ↺ Μηδεν.
+                  </button>
+                </div>
               </div>
             )}
 

@@ -338,6 +338,7 @@ export interface ForceSimConfig {
   // Mode 4: 'pendulum' (Εκκρεμές)
   rodLengthPx?: number; // default 230
   pendulumAngleRad?: number; // default Math.PI / 4
+  pendulumMaxAngleRad?: number; // Maximum release angle / amplitude (rad)
   pendulumAngVel?: number; // default 0
   isPaused?: boolean; // default false (swinging)
   showTrajectory?: boolean; // default false
