@@ -63010,7 +63010,7 @@ export default function App() {
                               {(!activeForce.isPaused || curMaxDeg >= 5) && (
                                 <div className="bg-[#fdfbf7]/90 rounded-xl p-2.5 border border-[#dfd8cb] flex items-center justify-between text-[11px]">
                                   <span className="font-bold text-[#1e293b]">Πλάτος Ταλάντωσης:</span>
-                                  <span className="font-mono font-bold text-[#0284c7] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
+                                  <span className="font-mono font-bold text-[#234978] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
                                     θmax = {curMaxDeg}°
                                   </span>
                                 </div>
