@@ -57522,6 +57522,7 @@ export default function App() {
                           id: 'resistor',
                           title: 'Αντιστάτης (Ηλεκτρικά Κυκλώματα)',
                           isSimItem: true,
+                          isFirstCircuitItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.95" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="2,11 6.5,11 8.5,4.5 12.2,17.5 15.9,4.5 19.6,17.5 23.3,4.5 26.5,17.5 28.5,11 32,11" />
@@ -57702,6 +57703,7 @@ export default function App() {
                     ).map((sp) => {
                       const isSim = 'isSimItem' in sp && sp.isSimItem;
                       const isFirstSim = 'isFirstSimItem' in sp && sp.isFirstSimItem;
+                      const isFirstCircuit = 'isFirstCircuitItem' in sp && sp.isFirstCircuitItem;
                       const isFirstHeat = 'isFirstHeatItem' in sp && sp.isFirstHeatItem;
                       const isSelected =
                         shapePreset === sp.id ||
@@ -57711,7 +57713,13 @@ export default function App() {
                           {isFirstSim && (
                             <div
                               className="h-5 w-px bg-[#dfd8cb] ml-2.5 mr-1 shrink-0"
-                              title="Αντικείμενα Προσομοιώσεων Φυσικής"
+                              title="Αντικείμενα Μηχανικής & Ελατηρίων"
+                            />
+                          )}
+                          {isFirstCircuit && (
+                            <div
+                              className="h-5 w-px bg-[#dfd8cb] ml-2.5 mr-1 shrink-0"
+                              title="Αντικείμενα Ηλεκτρικών Κυκλωμάτων"
                             />
                           )}
                           {isFirstHeat && (
