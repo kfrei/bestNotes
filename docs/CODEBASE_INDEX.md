@@ -73,6 +73,7 @@ graph TD
 | | `src/simulations/modules/mechanics/pendulum/` | `PendulumModule.ts` & `pendulumPhysics.ts` ($T = 2\pi\sqrt{L/g}$, τάση νήματος, συντεταγμένες) | Φυσική και παραμετροποίηση εκκρεμούς |
 | | `src/simulations/ui/StopwatchWidget.tsx` | Αυτόνομο widget χρονομέτρου με αμφίπλευρη αλλαγή μεγέθους, WarmStudio look & persistence | ~280 γραμμές inline JSX |
 | | `src/simulations/ui/FullscreenLaserCanvas.tsx` | Ανεξάρτητος καμβάς laser pointer (`z-[100000]`) με presentation lock | ~50 γραμμές inline JSX |
+| | `src/simulations/ui/SimulationObjectRibbon.tsx` | Επαναχρησιμοποιήσιμη swipeable μπάρα αντικειμένων προσομοίωσης (μπαταρίες, λάμπες, δοχεία, θερμόμετρα) | Νέα στρατηγική UI |
 | **STEM & OCR** | `src/stem-engines/index.ts` | Master Facade export για STEM, Χημεία, Φυσική & OCR | Ενοποιημένο import |
 | | `src/stem-engines/types.ts` | `StemDomain`, `OcrTaskKind`, `OcrResult`, `ChemicalReactionAnalysis` | Τύποι STEM & OCR |
 | | `src/stem-engines/ocr/OcrPrompts.ts` | System prompts για Ελληνικό χειρόγραφο, LaTeX, Χημικές Εξισώσεις, 3D Μόρια | Inline prompts |

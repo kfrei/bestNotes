@@ -21,6 +21,7 @@ export * from './modules/mechanics/pendulum/PendulumModule';
 // UI Components
 export * from './ui/StopwatchWidget';
 export * from './ui/FullscreenLaserCanvas';
+export * from './ui/SimulationObjectRibbon';
 
 // Auto-register built-in simulation modules
 import { SimulationRegistry } from './registry/SimulationRegistry';

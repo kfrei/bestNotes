@@ -27,6 +27,29 @@ export const PendulumModule: ISimulationModule<PendulumState, PendulumParams> = 
   category: 'mechanics',
   descriptionEl: 'Προσομοίωση απλού εκκρεμούς με ακριβή φυσική ταλάντωσης και τάσης νήματος.',
   version: '0.99',
+  objects: [
+    {
+      id: 'pendulum-bob',
+      nameEl: 'Σφαιρίδιο & Νήμα',
+      category: 'mechanics',
+      shapePreset: 'circle',
+      handwritingHintEl: 'Σχεδίασε ευθύγραμμο τμήμα με κύκλο στο κάτω άκρο',
+    },
+    {
+      id: 'ruler-scale',
+      nameEl: 'Χάρακας Μήκους',
+      category: 'mechanics',
+      shapePreset: 'ruler',
+      handwritingHintEl: 'Κατακόρυφος χάρακας 0.3m – 2.0m',
+    },
+    {
+      id: 'stopwatch',
+      nameEl: 'Χρονόμετρο',
+      category: 'mechanics',
+      shapePreset: 'stopwatch',
+      handwritingHintEl: 'Ψηφιακό χρονόμετρο μετρήσεων περιόδου T',
+    },
+  ],
 
   initState: (params?: Partial<PendulumParams>): PendulumState => {
     const lengthM = params?.lengthM ?? 1.0;

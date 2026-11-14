@@ -8,6 +8,8 @@ export type SimulationCategory =
   | 'electricity'
   | 'springs'
   | 'atoms'
+  | 'thermodynamics'
+  | 'heat'
   | 'fluids'
   | 'waves'
   | 'chemistry'
@@ -27,6 +29,15 @@ export interface SimulationBoundingBox {
   maxY: number;
 }
 
+export interface SimulationObjectItem {
+  id: string;
+  nameEl: string;
+  category: SimulationCategory;
+  iconName?: string;
+  shapePreset?: string;
+  handwritingHintEl?: string;
+}
+
 /**
  * Common configuration for any simulation module.
  */
@@ -38,6 +49,7 @@ export interface ISimulationMeta {
   descriptionEl: string;
   iconSvg?: string;
   version: string;
+  objects?: readonly SimulationObjectItem[];
 }
 
 /**
