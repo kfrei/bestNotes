@@ -30258,7 +30258,7 @@ export default function App() {
             const wTipX = bx;
             const wTipY = by + wm_vis;
             const yax1 = { x: bx + axLen * s, y: by + axLen * c };
-            const yax2 = { x: bx - 160 * s, y: by - 160 * c };
+            const yax2 = { x: PX, y: PY };
             const p1 = { x: bx - axLen * c, y: by + axLen * s };
             const p2 = { x: bx + axLen * c, y: by - axLen * s };
             const xax1 = isLeft ? (p1.x < p2.x ? p1 : p2) : p1.x > p2.x ? p1 : p2;
@@ -40750,8 +40750,6 @@ export default function App() {
                       pendulumAngleRad: nextAng,
                       pendulumMaxAngleRad:
                         Math.abs(nextAng) > 0.04 ? Math.abs(nextAng) : s.pendulumMaxAngleRad,
-                      anMode: 'none',
-                      step: 0,
                     }
                   : s
               ),
@@ -45352,7 +45350,10 @@ export default function App() {
           const absA = Math.abs(curA);
           pState.av = 0;
           pState.lastTime = performance.now();
-          if (absA > 0.04 && (!fSim.anMode || fSim.anMode === 'none')) {
+          const shouldStayPaused = Boolean(
+            fSim.isPaused || (fSim.anMode && fSim.anMode !== 'none')
+          );
+          if (absA > 0.04) {
             pState.maxAngleRad = absA;
             updateActivePage(
               (p) => ({
@@ -45361,7 +45362,7 @@ export default function App() {
                   f.id === fSim.id
                     ? {
                         ...f,
-                        isPaused: false,
+                        isPaused: shouldStayPaused ? true : false,
                         pendulumAngleRad: curA,
                         pendulumMaxAngleRad: absA,
                         angleDeg: Math.round((absA * 180) / Math.PI),
