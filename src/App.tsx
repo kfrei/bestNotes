@@ -19021,7 +19021,7 @@ export default function App() {
         }
       }
 
-      const rodLen = Math.max(70, Math.round(Math.hypot(freePt.x - pivotPt.x, freePt.y - pivotPt.y)));
+      const rodLen = Math.max(69, Math.min(460, Math.round(Math.hypot(freePt.x - pivotPt.x, freePt.y - pivotPt.y))));
       let initAng = Math.atan2(freePt.x - pivotPt.x, Math.max(10, freePt.y - pivotPt.y));
       if (Math.abs(initAng) < 0.06) {
         initAng = 0; // Snap near-vertical string to exact equilibrium (Θ.Ι., θ = 0°)
@@ -20507,7 +20507,7 @@ export default function App() {
       toggleStopwatchWithSmartPlacement();
     } else if (action.startsWith('set-rod-length:')) {
       const newL = Number(action.slice('set-rod-length:'.length));
-      if (!isNaN(newL) && newL >= 69 && newL <= 690 && sim) {
+      if (!isNaN(newL) && newL >= 69 && newL <= 460 && sim) {
         const curAng = sim.pendulumAngleRad || 0;
         const px = sim.originX;
         const py = sim.originY;
@@ -41000,7 +41000,7 @@ export default function App() {
 
           // When in pause, snap & lock to vertical, and allow dragging up/down to adjust length L!
           const isPaused = Boolean(curForceSim.isPaused);
-          const isNearVertical = isPaused && (Math.abs(dx) <= 24 || Math.abs(rawAng) < 0.12);
+          const isNearVertical = isPaused && (Math.abs(dx) <= 32 || Math.abs(rawAng) < 0.15);
 
           let nextAng: number;
           let nextRodL: number = curForceSim.rodLengthPx || 230;
@@ -41008,8 +41008,8 @@ export default function App() {
           if (isNearVertical) {
             // Snapped and magnetically locked to vertical equilibrium axis!
             nextAng = 0;
-            // Dragging vertically alters length: strictly 0.1m step (23px)!
-            const rawLen = Math.max(69, Math.min(575, dy));
+            // Dragging vertically alters length: strictly 0.1m step (23px) from 0.3m (69px) to 2.0m (460px)!
+            const rawLen = Math.max(69, Math.min(460, dy));
             const stepPx = 23; // 0.1m
             nextRodL = Math.round(rawLen / stepPx) * stepPx;
           } else {
@@ -63164,7 +63164,7 @@ export default function App() {
                         {activeForce && activeForce.mode === 'pendulum' && (() => {
                           const curLenM = Math.max(
                             0.3,
-                            Math.min(2.5, Math.round((activeForce.rodLengthPx || 230) / 23) * 0.1)
+                            Math.min(2.0, Math.round((activeForce.rodLengthPx || 230) / 23) * 0.1)
                           );
                           const curMaxRad =
                             activeForce.pendulumMaxAngleRad ||
@@ -63173,7 +63173,7 @@ export default function App() {
                           const curMaxDeg = Math.round((curMaxRad * 180) / Math.PI);
 
                           const setPendulumLen = (newM: number) => {
-                            const clampedM = Math.max(0.3, Math.min(2.5, Math.round(newM * 10) / 10));
+                            const clampedM = Math.max(0.3, Math.min(2.0, Math.round(newM * 10) / 10));
                             const nextPx = Math.round(clampedM * 230);
                             const px = activeForce.originX;
                             const py = activeForce.originY;
@@ -63319,7 +63319,7 @@ export default function App() {
                                 <input
                                   type="range"
                                   min="0.3"
-                                  max="2.5"
+                                  max="2.0"
                                   step="0.1"
                                   value={curLenM}
                                   onChange={(e) => setPendulumLen(parseFloat(e.target.value))}
