@@ -29466,56 +29466,6 @@ export default function App() {
               '#ff9800'
             );
           }
-
-          // Discreet On-Canvas Control Bar below origin (without Υπολογισμοί button)
-          const barY = Math.min(h - 32, Math.max(oy, ty) + 33);
-          let curBx = Math.max(16, ox - 6);
-          if (curStep === 0 && fSim.anMode !== 'F') {
-            curBx +=
-              drawPillButton('Ανάλυση', 'start-analysis', curBx, barY, 72, 21, '#16a34a', '#fff') +
-              6;
-            curBx +=
-              drawPillButton(
-                '+ Σύνθεση',
-                'convert-to-synthesis',
-                curBx,
-                barY,
-                82,
-                21,
-                '#2563eb',
-                '#fff'
-              ) + 6;
-            drawPillButton('✕', 'delete-sim', curBx, barY, 22, 21, '#64748b', '#fff');
-          } else {
-            curBx +=
-              drawPillButton('Επαναφορά', 'reset', curBx, barY, 74, 21, '#1976d2', '#fff') + 5;
-            curBx +=
-              drawPillButton(
-                '◀',
-                'prev-step',
-                curBx,
-                barY,
-                24,
-                21,
-                '#ea580c',
-                '#fff',
-                undefined,
-                curStep <= 0 || curAnim !== null
-              ) + 4;
-            curBx +=
-              drawPillButton(
-                '▶',
-                'next-step',
-                curBx,
-                barY,
-                24,
-                21,
-                '#ea580c',
-                '#fff',
-                undefined,
-                curStep >= 6 || curAnim !== null
-              ) + 5;
-          }
         }
 
         // ------------------------------------------------------------------
@@ -29810,66 +29760,6 @@ export default function App() {
               '#8e44ad'
             );
           }
-
-          // Discreet On-Canvas Control Bar (without Υπολογισμοί button)
-          const barY = Math.min(h - 32, Math.max(oy, p1y, p2y, ty) + 31);
-          let curBx = Math.max(16, ox - 20);
-          curBx +=
-            drawPillButton(
-              'Άμεση',
-              'mode-direct',
-              curBx,
-              barY,
-              52,
-              21,
-              !fSim.synthesisStepMode ? '#0f172a' : '#e2e8f0',
-              '#fff'
-            ) + 5;
-          curBx +=
-            drawPillButton(
-              'Βηματική',
-              'mode-step',
-              curBx,
-              barY,
-              64,
-              21,
-              fSim.synthesisStepMode ? '#0f172a' : '#e2e8f0',
-              '#fff'
-            ) + 6;
-          if (curStep === 0) {
-            drawPillButton('Σύνθεση', 'start-synthesis', curBx, barY, 64, 21, '#16a34a', '#fff');
-          } else {
-            if (fSim.synthesisStepMode) {
-              curBx +=
-                drawPillButton(
-                  '◀',
-                  'prev-step',
-                  curBx,
-                  barY,
-                  24,
-                  21,
-                  '#ea580c',
-                  '#fff',
-                  undefined,
-                  curStep <= 0 || curAnim !== null
-                ) + 4;
-              curBx +=
-                drawPillButton(
-                  '▶',
-                  'next-step',
-                  curBx,
-                  barY,
-                  24,
-                  21,
-                  '#ea580c',
-                  '#fff',
-                  undefined,
-                  curStep >= 3 || curAnim !== null
-                ) + 5;
-            }
-            curBx +=
-              drawPillButton('Επαναφορά', 'reset', curBx, barY, 72, 21, '#2563eb', '#fff') + 5;
-          }
         }
 
         // ------------------------------------------------------------------
@@ -30080,74 +29970,6 @@ export default function App() {
                   },
                 ],
                 '#16a34a'
-              );
-            }
-
-            // Discreet On-Canvas Control Bar below incline base
-            const barY = Math.min(h - 36, pStart.y + 18);
-            let curBx = Math.max(16, pStart.x + 8);
-            curBx +=
-              drawPillButton(
-                'Δυνάμεις',
-                'toggle-forces',
-                curBx,
-                barY,
-                64,
-                21,
-                fSim.showForces ? '#dc3545' : '#334155',
-                '#fff'
-              ) + 5;
-            if (fSim.showForces) {
-              if (fSim.anMode === 'B' && curStep > 0) {
-                curBx +=
-                  drawPillButton(
-                    '◀',
-                    'prev-step',
-                    curBx,
-                    barY,
-                    24,
-                    21,
-                    '#16a34a',
-                    '#fff',
-                    undefined,
-                    curAnim !== null
-                  ) + 4;
-              }
-              curBx +=
-                drawPillButton(
-                  'Ανάλυση B',
-                  'start-incline-an',
-                  curBx,
-                  barY,
-                  72,
-                  21,
-                  fSim.anMode === 'B' ? '#16a34a' : '#334155',
-                  '#fff'
-                ) + 5;
-              if (fSim.anMode === 'B' && curStep < 6) {
-                curBx +=
-                  drawPillButton(
-                    '▶',
-                    'next-step',
-                    curBx,
-                    barY,
-                    24,
-                    21,
-                    '#16a34a',
-                    '#fff',
-                    undefined,
-                    curAnim !== null
-                  ) + 5;
-              }
-              drawPillButton(
-                'Υπολογισμοί',
-                'toggle-calc',
-                curBx,
-                barY,
-                78,
-                21,
-                fSim.showCalc ? '#15803d' : '#475569',
-                '#fff'
               );
             }
           }
@@ -62760,15 +62582,63 @@ export default function App() {
                         </div>
 
                         {/* 3. Mode-Specific Interactive Controls */}
-                        {activeForce &&
-                          (activeForce.mode === 'analysis' || activeForce.mode === 'synthesis') && (
-                            <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs">
-                              {isForceSimAtIntegerValues(activeForce, activePage) ? (
+                        {activeForce && activeForce.mode === 'analysis' && (
+                          <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
+                            {curStep === 0 && activeForce.anMode !== 'F' ? (
+                              <div className="flex flex-col gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'start-analysis')}
+                                  className="w-full py-2 px-3 rounded-xl bg-[#234978] hover:bg-[#1c3c63] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition"
+                                >
+                                  <span>📐 Ανάλυση Δύναμης (Fx, Fy)</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'convert-to-synthesis')}
+                                  className="w-full py-1.5 px-3 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition"
+                                >
+                                  <span>➕ Μετατροπή σε Σύνθεση</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'prev-step')}
+                                    disabled={curStep <= 0}
+                                    className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
+                                  >
+                                    ◀ Προηγ.
+                                  </button>
+                                  <span className="text-[11px] font-bold text-[#234978]">
+                                    Βήμα {curStep}/6
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'next-step')}
+                                    disabled={curStep >= 6}
+                                    className="flex-1 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
+                                  >
+                                    Επόμ. ▶
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'reset')}
+                                  className="w-full py-1.5 px-3 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition"
+                                >
+                                  <span>↺ Επαναφορά</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {isForceSimAtIntegerValues(activeForce, activePage) ? (
+                              <div className="pt-1.5 border-t border-[#dfd8cb]/60">
                                 <WarmStudioToggle
                                   checked={Boolean(activeForce.showCalc)}
-                                  onChange={() =>
-                                    handleForceSimAction(activeForce, 'toggle-calc')
-                                  }
+                                  onChange={() => handleForceSimAction(activeForce, 'toggle-calc')}
                                   label="Υπολογισμοί"
                                   badge={
                                     <span className="text-[9.5px] font-semibold text-[#234978] bg-[#efebe3] border border-[#dfd8cb] px-1.5 py-0.5 rounded-full">
@@ -62777,13 +62647,107 @@ export default function App() {
                                   }
                                   className="w-full"
                                 />
-                              ) : (
-                                <div className="flex items-center justify-between text-[11px] font-medium text-[#94a3b8] select-none">
-                                  <span>Υπολογισμοί (απαιτούνται ακέραιες τιμές)</span>
-                                </div>
-                              )}
+                              </div>
+                            ) : (
+                              <div className="pt-1.5 border-t border-[#dfd8cb]/60 text-[10.5px] text-[#94a3b8] text-center select-none">
+                                Υπολογισμοί (απαιτούνται ακέραιες συνιστώσες)
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {activeForce && activeForce.mode === 'synthesis' && (
+                          <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
+                            {/* Mode selection: Direct vs Step-by-step */}
+                            <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-0.5 rounded-xl border border-[#dfd8cb]">
+                              <button
+                                type="button"
+                                onClick={() => handleForceSimAction(activeForce, 'mode-direct')}
+                                className={`py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                  !activeForce.synthesisStepMode
+                                    ? 'bg-[#234978] text-white shadow-2xs'
+                                    : 'text-[#475569] hover:text-[#0f172a]'
+                                }`}
+                              >
+                                Άμεση
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleForceSimAction(activeForce, 'mode-step')}
+                                className={`py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                  activeForce.synthesisStepMode
+                                    ? 'bg-[#234978] text-white shadow-2xs'
+                                    : 'text-[#475569] hover:text-[#0f172a]'
+                                }`}
+                              >
+                                Βηματική
+                              </button>
                             </div>
-                          )}
+
+                            {curStep === 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleForceSimAction(activeForce, 'start-synthesis')}
+                                className="w-full py-2 px-3 rounded-xl bg-[#234978] hover:bg-[#1c3c63] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition"
+                              >
+                                <span>➕ Σύνθεση Δυνάμεων (ΣF)</span>
+                              </button>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {activeForce.synthesisStepMode && (
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleForceSimAction(activeForce, 'prev-step')}
+                                      disabled={curStep <= 0}
+                                      className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
+                                    >
+                                      ◀ Προηγ.
+                                    </button>
+                                    <span className="text-[11px] font-bold text-[#234978]">
+                                      Βήμα {curStep}/3
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleForceSimAction(activeForce, 'next-step')}
+                                      disabled={curStep >= 3}
+                                      className="flex-1 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
+                                    >
+                                      Επόμ. ▶
+                                    </button>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'reset')}
+                                  className="w-full py-1.5 px-3 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition"
+                                >
+                                  <span>↺ Επαναφορά</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {isForceSimAtIntegerValues(activeForce, activePage) ? (
+                              <div className="pt-1.5 border-t border-[#dfd8cb]/60">
+                                <WarmStudioToggle
+                                  checked={Boolean(activeForce.showCalc)}
+                                  onChange={() => handleForceSimAction(activeForce, 'toggle-calc')}
+                                  label="Υπολογισμοί"
+                                  badge={
+                                    <span className="text-[9.5px] font-semibold text-[#234978] bg-[#efebe3] border border-[#dfd8cb] px-1.5 py-0.5 rounded-full">
+                                      🧲
+                                    </span>
+                                  }
+                                  className="w-full"
+                                />
+                              </div>
+                            ) : (
+                              <div className="pt-1.5 border-t border-[#dfd8cb]/60 text-[10.5px] text-[#94a3b8] text-center select-none">
+                                Υπολογισμοί (απαιτούνται ακέραιες συνιστώσες)
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {activeForce && activeForce.mode === 'incline' && (
                           <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
@@ -62843,6 +62807,14 @@ export default function App() {
                                 </button>
                               </div>
                             )}
+                            <div className="pt-1.5 border-t border-[#dfd8cb]/60">
+                              <WarmStudioToggle
+                                checked={Boolean(activeForce.showCalc)}
+                                onChange={() => handleForceSimAction(activeForce, 'toggle-calc')}
+                                label="Υπολογισμοί"
+                                className="w-full"
+                              />
+                            </div>
                           </div>
                         )}
 
