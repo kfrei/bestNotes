@@ -134,13 +134,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return (
       <div className="min-h-screen bg-[#f7f5f0] flex items-center justify-center p-4">
         <div className="max-w-md w-full ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl border border-white/85 rounded-3xl p-8 shadow-xl text-center space-y-6 text-[#2c3e50]">
-          <div className="w-16 h-16 mx-auto rounded-3xl bg-[#1b2a4a] text-white flex items-center justify-center shadow-md">
-            <ShieldCheck className="w-9 h-9 text-[#eef3f8]" />
-          </div>
+          <img
+            src="/explainboards-icon.png"
+            alt="ExplainBoards"
+            className="w-16 h-16 mx-auto rounded-3xl shadow-lg object-contain"
+          />
 
           <div>
-            <h1 className="text-xl font-extrabold text-[#1b2a4a]">
-              ExplainBoards Admin Portal
+            <h1 className="text-xl font-extrabold text-[#1b2a4a] tracking-tight">
+              <span>Explain</span>
+              <span className="bg-gradient-to-r from-[#e11d48] to-[#f43f5e] bg-clip-text text-transparent font-black">Boards</span>{' '}
+              <span className="text-slate-700">Admin Portal</span>
             </h1>
             <p className="mt-2 text-xs text-slate-500 leading-relaxed">
               Απαιτείται σύνδεση με το λογαριασμό Google του διαχειριστή{' '}

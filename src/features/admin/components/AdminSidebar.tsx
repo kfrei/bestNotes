@@ -62,12 +62,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Top Branding */}
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-2">
-          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-inner">
-            <ShieldCheck className="w-6 h-6 text-white" />
-          </div>
+          <img
+            src="/explainboards-icon.png"
+            alt="ExplainBoards"
+            className="w-10 h-10 rounded-2xl shadow-md shrink-0 object-contain"
+          />
           <div className="min-w-0">
-            <h1 className="text-sm font-extrabold tracking-wide uppercase text-white truncate">
-              ExplainBoards
+            <h1 className="text-base font-extrabold tracking-tight truncate leading-tight">
+              <span className="text-white">Explain</span>
+              <span className="bg-gradient-to-r from-[#e11d48] to-[#f43f5e] bg-clip-text text-transparent font-black">Boards</span>
             </h1>
             <p className="text-[11px] font-semibold text-slate-300 truncate">
               Admin Dashboard
