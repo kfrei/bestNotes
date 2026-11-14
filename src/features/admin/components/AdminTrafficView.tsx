@@ -45,8 +45,8 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
       {/* 1. Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-[#234978] flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-[#234978]" />
+          <h2 className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-[#1b2a4a]" />
             <span>Κίνηση Επισκεπτών & Δημιουργία Αρχείων (Daily Traffic)</span>
           </h2>
           <p className="text-xs text-[#64748b]">
@@ -58,7 +58,7 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
           type="button"
           onClick={() => exportTrafficToCsv(traffic)}
           disabled={traffic.length === 0}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#234978] text-white hover:bg-[#1a385c] disabled:opacity-40 text-xs font-semibold shadow-xs transition cursor-pointer"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1b2a4a] text-white hover:bg-[#152238] disabled:opacity-40 text-xs font-semibold shadow-xs transition cursor-pointer"
         >
           <Download className="w-4 h-4" />
           <span>Εξαγωγή CSV</span>
@@ -67,12 +67,12 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
 
       {/* 2. Informational Banner regarding Firebase & Guest tracking */}
       <div className="p-4 rounded-2xl bg-[#efebe3]/70 border border-[#dfd8cb] flex items-start gap-3 text-xs text-[#475569] leading-relaxed">
-        <Info className="w-4 h-4 text-[#234978] shrink-0 mt-0.5" />
+        <Info className="w-4 h-4 text-[#1b2a4a] shrink-0 mt-0.5" />
         <div>
-          <strong className="text-[#234978] font-bold">Πώς καταγράφονται τα δεδομένα:</strong>{' '}
+          <strong className="text-[#1b2a4a] font-bold">Πώς καταγράφονται τα δεδομένα:</strong>{' '}
           Επειδή το BestNotes είναι <em>Local-First</em>, οι απλοί επισκέπτες αποθηκεύουν τα αρχεία τους στον browser τους (IndexedDB). 
           Το σύστημα τηλεμετρίας καταγράφει αυτόματα κάθε νέα συνεδρία και κάθε νέο αρχείο που δημιουργεί ένας επισκέπτης στη συλλογή{' '}
-          <code className="px-1.5 py-0.5 rounded bg-white text-[#234978] font-mono text-[11px] font-semibold border border-[#dfd8cb]">
+          <code className="px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] font-mono text-[11px] font-semibold border border-[#dfd8cb]">
             daily_traffic
           </code>{' '}
           του Firestore. Παράλληλα, όταν παλιοί επισκέπτες επιστρέφουν στην εφαρμογή, τα αρχεία τους συγχρονίζονται αναδρομικά στις σωστές ημερομηνίες!
@@ -84,46 +84,46 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Συνολικές Επισκέψεις</span>
-            <TrendingUp className="w-4 h-4 text-[#234978]" />
+            <TrendingUp className="w-4 h-4 text-[#1b2a4a]" />
           </div>
-          <div className="text-xl font-black text-[#234978]">{totalAllVisits.toLocaleString()}</div>
+          <div className="text-xl font-black text-[#1b2a4a]">{totalAllVisits.toLocaleString()}</div>
           <div className="text-[10px] text-[#64748b] mt-0.5">καταγεγραμμένα sessions</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Επισκέπτες (Guests)</span>
-            <Users className="w-4 h-4 text-sky-600" />
+            <Users className="w-4 h-4 text-[#1b2a4a]" />
           </div>
-          <div className="text-xl font-black text-sky-600">{totalGuestVisits.toLocaleString()}</div>
-          <div className="text-[10px] text-sky-700/70 mt-0.5">{guestVisitsPercent}% του συνόλου</div>
+          <div className="text-xl font-black text-[#1b2a4a]">{totalGuestVisits.toLocaleString()}</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">{guestVisitsPercent}% του συνόλου</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Συνδεδεμένοι Χρήστες</span>
-            <UserCheck className="w-4 h-4 text-emerald-600" />
+            <UserCheck className="w-4 h-4 text-[#1b2a4a]" />
           </div>
-          <div className="text-xl font-black text-emerald-600">{totalRegVisits.toLocaleString()}</div>
-          <div className="text-[10px] text-emerald-700/70 mt-0.5">Google / Email logins</div>
+          <div className="text-xl font-black text-[#1b2a4a]">{totalRegVisits.toLocaleString()}</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">Google / Email logins</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Αρχεία από Guests</span>
-            <FilePlus className="w-4 h-4 text-amber-600" />
+            <FilePlus className="w-4 h-4 text-[#1b2a4a]" />
           </div>
-          <div className="text-xl font-black text-amber-600">{totalGuestFiles.toLocaleString()}</div>
-          <div className="text-[10px] text-amber-700/70 mt-0.5">χωρίς σύνδεση λογαριασμού</div>
+          <div className="text-xl font-black text-[#1b2a4a]">{totalGuestFiles.toLocaleString()}</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">χωρίς σύνδεση λογαριασμού</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs col-span-2 md:col-span-1">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Σύνολο Νέων Αρχείων</span>
-            <FileText className="w-4 h-4 text-indigo-600" />
+            <FileText className="w-4 h-4 text-[#1b2a4a]" />
           </div>
-          <div className="text-xl font-black text-indigo-600">{totalAllFiles.toLocaleString()}</div>
-          <div className="text-[10px] text-indigo-700/70 mt-0.5">τετράδια & σημειώσεις</div>
+          <div className="text-xl font-black text-[#1b2a4a]">{totalAllFiles.toLocaleString()}</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">τετράδια & σημειώσεις</div>
         </div>
       </div>
 
@@ -131,16 +131,16 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
       {traffic.length > 0 && (
         <div className="p-4 rounded-2xl bg-white/75 backdrop-blur-md border border-white/80 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-[#234978] flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-[#234978]" />
+            <h3 className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
               <span>Τελευταίες Ημέρες (Επισκέψεις & Δημιουργία Αρχείων)</span>
             </h3>
             <div className="flex items-center gap-3 text-[11px] text-[#64748b]">
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#234978]" /> Επισκέψεις
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Επισκέψεις
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> Αρχεία Guests
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]/40" /> Αρχεία Guests
               </span>
             </div>
           </div>
@@ -157,7 +157,7 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
                       {/* Visits Bar */}
                       <div
                         style={{ height: `${visitsHeight}%` }}
-                        className="w-2.5 sm:w-3.5 rounded-t-sm bg-[#234978] hover:bg-[#1a385c] transition-all relative"
+                        className="w-2.5 sm:w-3.5 rounded-t-sm bg-[#1b2a4a] hover:bg-[#152238] transition-all relative"
                         title={`${t.date}: ${t.totalVisits} επισκέψεις (${t.guestVisits} guests, ${t.registeredVisits} users)`}
                       />
                       {/* Guest Files Bar */}
@@ -166,12 +166,12 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
                           style={{
                             height: `${Math.max(8, Math.min(100, Math.round((t.guestFilesCreated / maxVisitsInChart) * 100)))}%`,
                           }}
-                          className="w-2.5 sm:w-3.5 rounded-t-sm bg-amber-500 hover:bg-amber-600 transition-all"
+                          className="w-2.5 sm:w-3.5 rounded-t-sm bg-[#1b2a4a]/40 hover:bg-[#1b2a4a]/60 transition-all"
                           title={`${t.date}: ${t.guestFilesCreated} αρχεία από επισκέπτες`}
                         />
                       )}
                     </div>
-                    <span className="text-[10px] text-[#64748b] group-hover:text-[#234978] group-hover:font-bold transition truncate max-w-full">
+                    <span className="text-[10px] text-[#64748b] group-hover:text-[#1b2a4a] group-hover:font-bold transition truncate max-w-full">
                       {t.date.slice(5)}
                     </span>
                   </div>
@@ -184,8 +184,8 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
       {/* 5. Detailed Daily Log Table */}
       <div className="bg-white/70 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs overflow-hidden">
         <div className="p-3.5 border-b border-[#efebe3] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="text-xs font-bold text-[#234978] flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#234978]" />
+          <div className="text-xs font-bold text-[#1b2a4a] flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#1b2a4a]" />
             <span>Ημερολόγιο Κίνησης ({filteredTraffic.length} ημέρες)</span>
           </div>
 
@@ -195,7 +195,7 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
               value={searchDate}
               onChange={(e) => setSearchDate(e.target.value)}
               placeholder="Αναζήτηση ημερομηνίας (π.χ. 2026-11)..."
-              className="w-full px-3 py-1.5 text-xs rounded-xl bg-white/90 border border-[#dfd8cb] focus:outline-none focus:ring-2 focus:ring-[#234978]/20 focus:border-[#234978] transition"
+              className="w-full px-3 py-1.5 text-xs rounded-xl bg-white/90 border border-[#dfd8cb] focus:outline-none focus:ring-2 focus:ring-[#1b2a4a]/20 focus:border-[#1b2a4a] transition"
             />
           </div>
         </div>
@@ -203,7 +203,7 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#efebe3]/60 text-[#234978] font-bold border-b border-[#dfd8cb]">
+              <tr className="bg-[#efebe3]/60 text-[#1b2a4a] font-bold border-b border-[#dfd8cb]">
                 <th className="py-2.5 px-3.5">Ημερομηνία</th>
                 <th className="py-2.5 px-3">Συνολικές Επισκέψεις</th>
                 <th className="py-2.5 px-3">Guests</th>
@@ -230,29 +230,29 @@ export const AdminTrafficView: React.FC<AdminTrafficViewProps> = ({
               ) : (
                 filteredTraffic.map((t) => (
                   <tr key={t.date} className="hover:bg-white/80 transition-colors">
-                    <td className="py-2.5 px-3.5 font-bold text-[#234978]">
+                    <td className="py-2.5 px-3.5 font-bold text-[#1b2a4a]">
                       {t.date}
                     </td>
                     <td className="py-2.5 px-3 font-semibold text-slate-800">
                       {t.totalVisits.toLocaleString()}
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-semibold text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full bg-[#eef3f8] text-[#1b2a4a] border border-[#1b2a4a]/20 font-semibold text-[11px]">
                         {t.guestVisits.toLocaleString()}
                       </span>
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full bg-[#1b2a4a]/8 text-[#1b2a4a] border border-[#1b2a4a]/20 font-semibold text-[11px]">
                         {t.registeredVisits.toLocaleString()}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 font-bold text-amber-600">
+                    <td className="py-2.5 px-3 font-bold text-[#1b2a4a]">
                       +{t.guestFilesCreated}
                     </td>
                     <td className="py-2.5 px-3 text-slate-600">
                       +{t.registeredFilesCreated}
                     </td>
-                    <td className="py-2.5 px-3 font-bold text-[#234978]">
+                    <td className="py-2.5 px-3 font-bold text-[#1b2a4a]">
                       {t.totalFilesCreated}
                     </td>
                     <td className="py-2.5 px-3 text-right text-[11px] text-[#64748b]">

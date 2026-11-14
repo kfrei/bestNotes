@@ -89,6 +89,7 @@ import {
   FlaskRound,
   Brain,
   HeartPulse,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   auth,
@@ -52650,10 +52651,11 @@ export default function App() {
                 setIsAdminViewOpen(true);
                 window.history.pushState({}, '', '?admin=true');
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
               title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
             >
-              <span>👑 Admin</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-white" />
+              <span>Admin</span>
             </button>
           )}
 
@@ -52663,7 +52665,7 @@ export default function App() {
               data-popover-trigger="user"
               onClick={() => setShowUserDropdown((v) => !v)}
               className={`relative p-1.5 rounded-lg transition cursor-pointer ${
-                showUserDropdown ? 'bg-[#234978] text-white shadow-xs' : 'hover:bg-white/10 text-slate-100'
+                showUserDropdown ? 'bg-[#1b2a4a] text-white shadow-xs' : 'hover:bg-white/10 text-slate-100'
               }`}
               title={
                 currentUser
@@ -52689,11 +52691,11 @@ export default function App() {
                 {/* 1. User Account Info (Name + Email) & Logout */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-[#234978] text-white flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center shrink-0">
                       <UserIcon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-[#234978] truncate">
+                      <div className="text-xs font-bold text-[#1b2a4a] truncate">
                         {currentUser
                           ? currentUser.displayName || currentUser.email?.split('@')[0] || 'Χρήστης BestNotes'
                           : isKnownAuthenticated
@@ -52716,9 +52718,10 @@ export default function App() {
                             setIsAdminViewOpen(true);
                             window.history.pushState({}, '', '?admin=true');
                           }}
-                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#234978] hover:bg-[#1a385c] text-amber-300 text-xs font-bold transition cursor-pointer border border-amber-300/30 shadow-xs active:scale-98"
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b2a4a] hover:bg-[#152238] text-white text-xs font-bold transition cursor-pointer border border-white/10 shadow-xs active:scale-98"
                         >
-                          <span>👑 Πίνακας Ελέγχου Admin</span>
+                          <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                          <span>Πίνακας Ελέγχου Admin</span>
                         </button>
                       )}
                       <button

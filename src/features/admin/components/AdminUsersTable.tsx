@@ -8,6 +8,7 @@ import {
   FileText,
   Clock,
   UserCheck,
+  RefreshCw,
 } from 'lucide-react';
 import type { UserProfileStats } from '../types';
 import { formatBytes, formatMinutesLabel } from '../services/userStatsService';
@@ -116,7 +117,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Αναζήτηση ονόματος, email..."
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#dfd8cb] text-xs font-bold text-[#234978] placeholder:text-slate-400 focus:outline-none focus:border-[#234978] focus:ring-1 focus:ring-[#234978]/20 transition"
+            className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#dfd8cb] text-xs font-bold text-[#1b2a4a] placeholder:text-slate-400 focus:outline-none focus:border-[#1b2a4a] focus:ring-1 focus:ring-[#1b2a4a]/20 transition"
           />
         </div>
 
@@ -125,14 +126,15 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
             type="button"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#dfd8cb] text-xs font-bold text-[#234978] hover:bg-[#efebe3] transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#dfd8cb] text-xs font-bold text-[#1b2a4a] hover:bg-[#efebe3] transition cursor-pointer"
           >
-            <span>{isRefreshing ? '⏳ Ανανέωση...' : '🔄 Ανανέωση'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-[#1b2a4a] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Ανανέωση...' : 'Ανανέωση'}</span>
           </button>
           <button
             type="button"
             onClick={exportCsv}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#234978] text-white text-xs font-bold hover:bg-[#1c3c63] shadow-xs transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1b2a4a] text-white text-xs font-bold hover:bg-[#152238] shadow-xs transition cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Εξαγωγή CSV</span>
@@ -150,7 +152,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('displayName')}
-                    className="flex items-center gap-1 hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Χρήστης</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -160,7 +162,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('createdAt')}
-                    className="flex items-center gap-1 hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Εγγραφή</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -170,7 +172,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('notebooksCount')}
-                    className="flex items-center gap-1 mx-auto hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 mx-auto hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Αρχεία</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -180,7 +182,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('totalSizeBytes')}
-                    className="flex items-center gap-1 hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Χώρος</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -190,7 +192,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('avgDailyMinutes')}
-                    className="flex items-center gap-1 hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Χρόνος / Ημέρα</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -200,7 +202,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSort('lastSeenAt')}
-                    className="flex items-center gap-1 hover:text-[#234978] cursor-pointer"
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Τελευταία Σύνδεση</span>
                     <ArrowUpDown className="w-3 h-3" />
@@ -249,7 +251,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                               className="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-[#234978] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                            <div className="w-8 h-8 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                               {(u.displayName || u.email || 'U')[0].toUpperCase()}
                             </div>
                           )}
@@ -271,8 +273,8 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
 
                       {/* Saved Notebooks Count */}
                       <td className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-indigo-50 border border-indigo-200/60 text-[#234978] font-extrabold tabular-nums">
-                          <FileText className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[#eef3f8] border border-[#1b2a4a]/20 text-[#1b2a4a] font-extrabold tabular-nums">
+                          <FileText className="w-3 h-3 text-[#1b2a4a]" />
                           <span>{u.notebooksCount || 0}</span>
                         </span>
                       </td>
@@ -283,9 +285,9 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                       </td>
 
                       {/* Average Daily Time */}
-                      <td className="py-3 px-4 whitespace-nowrap font-bold text-[#234978] tabular-nums">
+                      <td className="py-3 px-4 whitespace-nowrap font-bold text-[#1b2a4a] tabular-nums">
                         <span className="inline-flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <Clock className="w-3.5 h-3.5 text-[#1b2a4a]/60" />
                           <span>{formatMinutesLabel(u.avgDailyMinutes)}</span>
                         </span>
                       </td>

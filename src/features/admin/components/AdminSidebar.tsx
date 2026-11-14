@@ -58,18 +58,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 shrink-0 bg-[#234978] text-white flex flex-col justify-between p-4 shadow-xl select-none min-h-screen">
+    <aside className="w-64 shrink-0 bg-[#1b2a4a] text-white flex flex-col justify-between p-4 shadow-2xl select-none min-h-screen">
       {/* Top Branding */}
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-2">
           <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-inner">
-            <ShieldCheck className="w-6 h-6 text-sky-300" />
+            <ShieldCheck className="w-6 h-6 text-white" />
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-extrabold tracking-wide uppercase text-white truncate">
               ExplainBoards
             </h1>
-            <p className="text-[11px] font-semibold text-sky-200/80 truncate">
+            <p className="text-[11px] font-semibold text-slate-300 truncate">
               Admin Dashboard
             </p>
           </div>
@@ -86,11 +86,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#fdfbf7] text-[#234978] shadow-md shadow-black/10 scale-[1.02]'
+                    ? 'bg-[#fdfbf7] text-[#1b2a4a] shadow-md shadow-black/20 scale-[1.02]'
                     : 'text-white/80 hover:text-white hover:bg-white/10'
                 }`}
               >
-                <span className={isActive ? 'text-[#234978]' : 'text-white/70'}>
+                <span className={isActive ? 'text-[#1b2a4a]' : 'text-white/70'}>
                   {item.icon}
                 </span>
                 <span>{item.label}</span>
@@ -103,7 +103,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Bottom Profile & Back Action */}
       <div className="space-y-3 pt-4 border-t border-white/15">
         <div className="px-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-300/70">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Συνδεδεμένος Admin
           </p>
           <p className="text-xs font-bold text-white truncate mt-0.5" title={adminEmail}>
