@@ -1448,11 +1448,8 @@ export default function App() {
   // Telemetry: Synchronize user profile & notebook storage usage to Firestore `user_profiles/{uid}`
   useEffect(() => {
     if (!currentUser?.uid) return;
-    const timer = setTimeout(() => {
-      void syncCurrentUserProfileStats(currentUser, notebooks);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [currentUser, notebooks]);
+    void syncCurrentUserProfileStats(currentUser, notebooks);
+  }, [currentUser, notebooks.length]);
 
   // Visitor Telemetry: Record daily session visit (Guest / Registered) and backfill local guest notebooks
   useEffect(() => {
@@ -51815,6 +51812,7 @@ export default function App() {
       <>
         <AdminDashboard
           currentUser={currentUser}
+          notebooks={notebooks}
           onBackToNotes={() => {
             setIsAdminViewOpen(false);
             try {

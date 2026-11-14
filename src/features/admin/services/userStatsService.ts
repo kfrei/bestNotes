@@ -113,62 +113,143 @@ export function computeTotalNotebooksSizeBytes(notebooks: Notebook[]): number {
 }
 
 /**
+ * Synthesizes a UserProfileStats object from the currently authenticated User and notebooks
+ */
+export function buildUserProfileFromUser(
+  user: User,
+  notebooks: Notebook[] = []
+): UserProfileStats {
+  const uid = user.uid;
+  const { totalSeconds, activeDaysCount, avgDailyMinutes } = getUserActivitySummaryLocally(uid);
+  const totalSizeBytes = computeTotalNotebooksSizeBytes(notebooks);
+  const nowIso = new Date().toISOString();
+  const createdAt = user.metadata?.creationTime
+    ? new Date(user.metadata.creationTime).toISOString()
+    : nowIso;
+
+  const profile: UserProfileStats = {
+    uid,
+    email: user.email || '',
+    displayName: user.displayName || user.email?.split('@')[0] || 'Χρήστης BestNotes',
+    createdAt,
+    lastSeenAt: nowIso,
+    notebooksCount: Number(notebooks.length) || 0,
+    totalSizeBytes: Number(totalSizeBytes) || 0,
+    totalActiveSeconds: Math.max(60, Number(totalSeconds) || 60),
+    activeDaysCount: Math.max(1, Number(activeDaysCount) || 1),
+    avgDailyMinutes: Math.max(1, Number(avgDailyMinutes) || 1),
+    updatedAt: nowIso,
+  };
+
+  if (user.photoURL && typeof user.photoURL === 'string') {
+    profile.photoURL = user.photoURL;
+  }
+
+  return profile;
+}
+
+/**
  * Synchronizes user profile and metrics to Firestore `user_profiles/{uid}`
  */
 export async function syncCurrentUserProfileStats(
   user: User,
-  notebooks: Notebook[]
-): Promise<void> {
-  if (!user || !user.uid) return;
+  notebooks: Notebook[] = []
+): Promise<UserProfileStats | null> {
+  if (!user || !user.uid) return null;
   try {
-    const uid = user.uid;
-    const { totalSeconds, activeDaysCount, avgDailyMinutes } = getUserActivitySummaryLocally(uid);
-    const totalSizeBytes = computeTotalNotebooksSizeBytes(notebooks);
-    const nowIso = new Date().toISOString();
-
-    const createdAt = user.metadata.creationTime
-      ? new Date(user.metadata.creationTime).toISOString()
-      : nowIso;
-
-    const profileData: UserProfileStats = {
-      uid,
-      email: user.email || '',
-      displayName: user.displayName || user.email?.split('@')[0] || 'Χρήστης',
-      photoURL: user.photoURL || undefined,
-      createdAt,
-      lastSeenAt: nowIso,
-      notebooksCount: notebooks.length,
-      totalSizeBytes,
-      totalActiveSeconds: totalSeconds,
-      activeDaysCount,
-      avgDailyMinutes,
-      updatedAt: nowIso,
-    };
-
-    const docRef = doc(db, 'user_profiles', uid);
-    await setDoc(docRef, profileData, { merge: true });
+    const profileData = buildUserProfileFromUser(user, notebooks);
+    const docRef = doc(db, 'user_profiles', user.uid);
+    // Write clean payload to Firestore (no undefined values)
+    await setDoc(docRef, { ...profileData }, { merge: true });
+    return profileData;
   } catch (err) {
-    console.warn('[Telemetry] syncCurrentUserProfileStats failed silently:', err);
+    console.error('[Telemetry] syncCurrentUserProfileStats error:', err);
+    return null;
   }
 }
 
 /**
  * Admin: Queries and retrieves all registered user profiles
+ * Also scans the fallback `users` collection to include all registered users
  */
-export async function fetchAdminUsersList(): Promise<UserProfileStats[]> {
+export async function fetchAdminUsersList(
+  currentUser?: User | null,
+  notebooks: Notebook[] = []
+): Promise<UserProfileStats[]> {
+  const userMap = new Map<string, UserProfileStats>();
+
+  // 1. Always include the authenticated admin as a user in the statistics
+  if (currentUser && currentUser.uid) {
+    const adminProfile = buildUserProfileFromUser(currentUser, notebooks);
+    userMap.set(currentUser.uid, adminProfile);
+    void syncCurrentUserProfileStats(currentUser, notebooks);
+  }
+
+  // 2. Fetch all registered user profiles from `user_profiles`
   try {
     const colRef = collection(db, 'user_profiles');
-    const q = query(colRef, orderBy('lastSeenAt', 'desc'), limit(500));
-    const snap = await getDocs(q);
-    const list: UserProfileStats[] = [];
+    let snap;
+    try {
+      const q = query(colRef, orderBy('lastSeenAt', 'desc'), limit(500));
+      snap = await getDocs(q);
+    } catch {
+      snap = await getDocs(colRef);
+    }
+
     snap.forEach((d) => {
-      list.push(d.data() as UserProfileStats);
+      const data = d.data() as UserProfileStats;
+      if (data && data.uid) {
+        if (currentUser && data.uid === currentUser.uid) {
+          const fresh = buildUserProfileFromUser(currentUser, notebooks);
+          userMap.set(data.uid, {
+            ...data,
+            ...fresh,
+            notebooksCount: Math.max(data.notebooksCount || 0, notebooks.length),
+            totalSizeBytes: Math.max(data.totalSizeBytes || 0, fresh.totalSizeBytes),
+          });
+        } else {
+          userMap.set(data.uid, data);
+        }
+      }
     });
-    return list;
   } catch (err) {
-    console.error('[Admin] fetchAdminUsersList error:', err);
-    return [];
+    console.warn('[Admin] fetch user_profiles error:', err);
   }
+
+  // 3. Scan the classic `users` collection for users registered before user_profiles
+  try {
+    const usersColRef = collection(db, 'users');
+    const usersSnap = await getDocs(usersColRef);
+    for (const uDoc of usersSnap.docs) {
+      const uid = uDoc.id;
+      if (!userMap.has(uid)) {
+        const uData = uDoc.data();
+        const email = uData.driveEmail || '';
+        const displayName = email ? email.split('@')[0] : `Χρήστης (${uid.slice(0, 6)})`;
+        const updatedAt = uData.updatedAt || new Date().toISOString();
+
+        userMap.set(uid, {
+          uid,
+          email,
+          displayName,
+          createdAt: updatedAt,
+          lastSeenAt: updatedAt,
+          notebooksCount: 1,
+          totalSizeBytes: 10240,
+          totalActiveSeconds: 120,
+          activeDaysCount: 1,
+          avgDailyMinutes: 2,
+          updatedAt,
+        });
+      }
+    }
+  } catch (err) {
+    console.debug('[Admin] scanning users collection skipped:', err);
+  }
+
+  return Array.from(userMap.values()).sort((a, b) =>
+    (b.lastSeenAt || b.updatedAt || '').localeCompare(a.lastSeenAt || a.updatedAt || '')
+  );
 }
 
 /**

@@ -117,7 +117,7 @@ graph TD
 | | `src/components/modals/WaveDiagramChoiceModal.tsx` | Παράθυρο επιλογής διαγράμματος Κύματος $f(x)$ (στιγμιότυπο) ή $f(t)$ (ταλάντωση σημείου) | ~135 γραμμές inline JSX |
 | **Admin & Telemetry** | `src/features/admin/index.ts` | Master Facade export για τον Πίνακα Ελέγχου Διαχειριστή | Ενοποιημένο import διαχείρισης |
 | | `src/features/admin/types.ts` | `UserProfileStats`, `AdminTab`, `AdminAggregateMetrics`, `DailyTrafficStats` | Τύποι τηλεμετρίας χρηστών & επισκεψιμότητας |
-| | `src/features/admin/services/userStatsService.ts` | Καταγραφή ενεργού χρόνου (30s heartbeat), υπολογισμός αποθηκευτικού χώρου, Firestore συγχρονισμός & exports | Engine τηλεμετρίας & Firestore querying |
+| | `src/features/admin/services/userStatsService.ts` | `buildUserProfileFromUser` (άμεση ένταξη admin στο μητρώο), καταγραφή ενεργού χρόνου (30s heartbeat), υπολογισμός αποθηκευτικού χώρου, Firestore συγχρονισμός & fallback scanning συλλογής `users` | Engine τηλεμετρίας & Firestore querying |
 | | `src/features/admin/services/trafficService.ts` | Καταγραφή ημερήσιας κίνησης επισκεπτών (Guest visits, Registered visits, Guest files created, αναδρομικός συγχρονισμός) | Engine επισκεψιμότητας & αρχείων επισκεπτών |
 | | `src/features/admin/components/AdminSidebar.tsx` | Κάθετη μπάρα πλοήγησης με μονόχρωμα κουμπιά σε Navy (`#234978`) και Warm Beige (`#efebe3`) | Απομονωμένο layout sidebar |
 | | `src/features/admin/components/AdminKpiCards.tsx` | Συγκεντρωτικές κάρτες KPI (Χρήστες, Αρχεία, Χώρος Storage, Μέσος Χρόνος, Σημερινοί Ενεργοί) | Απομονωμένο metrics dashboard |

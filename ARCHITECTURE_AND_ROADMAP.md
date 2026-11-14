@@ -616,7 +616,7 @@ sequenceDiagram
 
 8. **`src/features/admin/` (Πίνακας Ελέγχου Admin, Τηλεμετρία Χρηστών, Επισκεψιμότητα, AI OCR & Storage Analytics):**
    - **Types & Schema:** `types.ts` (`UserProfileStats`, `AdminTab`, `AdminAggregateMetrics`, `DailyTrafficStats`, `DailyOcrSummary`).
-   - **Telemetry Engine:** `services/userStatsService.ts` (30s heartbeat ενεργού χρόνου, μέσος όρος λεπτών/ημέρα, υπολογισμός χωρητικότητας KB/MB ανά χρήστη, συγχρονισμός στο Firestore `user_profiles/{uid}`, CSV exporter).
+   - **Telemetry Engine:** `services/userStatsService.ts` (`buildUserProfileFromUser` για άμεση συμπερίληψη του διαχειριστή ως χρήστη, 30s heartbeat ενεργού χρόνου, μέσος όρος λεπτών/ημέρα, υπολογισμός χωρητικότητας KB/MB ανά χρήστη, συγχρονισμός στο Firestore `user_profiles/{uid}`, fallback scanning συλλογής `users`, CSV exporter).
    - **Visitor & Traffic Engine:** `services/trafficService.ts` (αυτόματη καταγραφή ημερήσιας κίνησης στο `daily_traffic/{YYYY-MM-DD}`, διαχωρισμός επισκέψεων Guest vs Logged-In, καταγραφή νέων αρχείων από επισκέπτες, αναδρομική άντληση αρχείων επισκεπτών από local storage, ενοποίηση με ιστορικό εγγεγραμμένων χρηστών από την έναρξη λειτουργίας της εφαρμογής).
    - **AI OCR & Gemini Quota Engine:** Καταγραφή κάθε OCR κλήσης ανά κατηγορία (`text`, `math`, `chem`), υπολογισμός ποσοστού κατανάλωσης του δωρεάν ορίου Google Gemini (1.500 αιτήματα/ημέρα), υπόλοιπο δωρεάν αιτημάτων και ημερήσιο ιστόγραμμα.
    - **UI Design System:** Dark Navy (`#234978`) & Warm Studio Beige (`#fdfbf7` / `#efebe3`) με Liquid Frosted Glass αισθητική.

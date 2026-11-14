@@ -11,9 +11,11 @@ import {
   Activity,
 } from 'lucide-react';
 import type { AdminTab, UserProfileStats, DailyTrafficStats } from './types';
+import type { Notebook } from '../../types/note';
 import {
   ADMIN_EMAIL,
   fetchAdminUsersList,
+  buildUserProfileFromUser,
   computeAdminMetrics,
   formatBytes,
   formatMinutesLabel,
@@ -27,17 +29,24 @@ import { AdminOcrAnalyticsView } from './components/AdminOcrAnalyticsView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
+  notebooks?: Notebook[];
   onBackToNotes: () => void;
   onSignInGoogle: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
+  notebooks = [],
   onBackToNotes,
   onSignInGoogle,
 }) => {
   const [currentTab, setCurrentTab] = useState<AdminTab>('overview');
-  const [users, setUsers] = useState<UserProfileStats[]>([]);
+  const [users, setUsers] = useState<UserProfileStats[]>(() => {
+    if (currentUser) {
+      return [buildUserProfileFromUser(currentUser, notebooks)];
+    }
+    return [];
+  });
   const [trafficHistory, setTrafficHistory] = useState<DailyTrafficStats[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isTrafficLoading, setIsTrafficLoading] = useState<boolean>(true);
@@ -52,7 +61,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setErrorMsg(null);
     try {
       const [userList, trafficList] = await Promise.all([
-        fetchAdminUsersList(),
+        fetchAdminUsersList(currentUser, notebooks),
         fetchDailyTrafficHistory(),
       ]);
       setUsers(userList);
