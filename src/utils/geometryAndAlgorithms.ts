@@ -10370,6 +10370,7 @@ export function autoAlignAndConnectCircuit(
   for (const row of hRows) {
     row.yRow = Math.round(row.yRow);
   }
+  vCols.sort((a, b) => a.xCol - b.xCol);
   for (const col of vCols) {
     col.xCol = Math.round(col.xCol);
     for (const wi of col.wireIndices) {
@@ -11230,8 +11231,8 @@ export function autoAlignAndConnectCircuit(
         const vertCompBetween = colComps.some(
           (vc) => vc.cy >= vGapMin && vc.cy <= vGapMax
         );
-        const isSwitchGap = seg.yT - prev.yB >= 18 && seg.yT - prev.yB <= 55;
-        if (seg.yT - prev.yB <= 16 && !vertCompBetween) {
+        const isSwitchGap = seg.yT - prev.yB >= 14 && seg.yT - prev.yB <= 65;
+        if (seg.yT - prev.yB <= 14 && !vertCompBetween) {
           prev.yB = Math.max(prev.yB, seg.yB);
         } else if (seg.yT - prev.yB <= 38 && !vertCompBetween && !isSwitchGap) {
           prev.yB = Math.max(prev.yB, seg.yB);
@@ -11250,7 +11251,7 @@ export function autoAlignAndConnectCircuit(
       const totalH = maxY - minY;
       if (totalH >= 50) {
         const swYCenter = (minY + maxY) / 2;
-        const swHalfGap = Math.min(21, Math.max(14, totalH * 0.18));
+        const swHalfGap = Math.min(22, Math.max(16, totalH * 0.18));
         const swYTop = Math.round(swYCenter - swHalfGap);
         const swYBot = Math.round(swYCenter + swHalfGap);
         const nextMergedV: typeof mergedV = [];

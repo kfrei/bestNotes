@@ -23864,14 +23864,33 @@ export default function App() {
       if (c.orientation === 'v' && c.cx >= midX - 24) {
         return true;
       }
-      // If circular meter (ammeter/voltmeter) is situated on the right side of the circuit loop
+      const nearRightVert = rawExternalSegs.some(
+        (s) =>
+          s.orientation === 'v' &&
+          s.avgX > midX &&
+          Math.abs(s.avgX - c.cx) <= 60 &&
+          Math.min(s.y1, s.y2) <= c.cy + 60 &&
+          Math.max(s.y1, s.y2) >= c.cy - 60
+      );
+      if (nearRightVert && c.cy > minAllY - 30 && c.cy < maxAllY + 30) {
+        return true;
+      }
       if (
         (c.kind === 'ammeter' || c.kind === 'voltmeter') &&
         c.cx > midX &&
-        (Math.abs(c.cx - maxAllX) <= Math.min(Math.abs(c.cy - minAllY), Math.abs(c.cy - maxAllY)) * 1.35 ||
-          c.cx >= minAllX + spanX * 0.52)
+        (c.cx >= maxAllX - 24 || (spanY >= 40 && c.cy >= minAllY + 28 && c.cy <= maxAllY - 28))
       ) {
-        return true;
+        // If it shares the horizontal line with another load (e.g. bulb on top row), keep it on that row!
+        const isSharingRowWithOther = baseLoopComps.some(
+          (other) =>
+            other.key !== c.key &&
+            other.kind !== 'battery' &&
+            other.kind !== 'voltage-source' &&
+            Math.abs(other.cy - c.cy) <= 24
+        );
+        if (!isSharingRowWithOther) {
+          return true;
+        }
       }
       if (
         spanX >= 60 &&
@@ -23880,17 +23899,6 @@ export default function App() {
         c.cy >= minAllY + 20 &&
         c.cy <= maxAllY - 20
       ) {
-        return true;
-      }
-      const nearRightVert = rawExternalSegs.some(
-        (s) =>
-          s.orientation === 'v' &&
-          s.avgX > midX &&
-          Math.abs(s.avgX - c.cx) <= 50 &&
-          Math.min(s.y1, s.y2) <= c.cy + 50 &&
-          Math.max(s.y1, s.y2) >= c.cy - 50
-      );
-      if (nearRightVert && c.cy >= minAllY + 16 && c.cy <= maxAllY - 16) {
         return true;
       }
       return false;
@@ -24388,9 +24396,6 @@ export default function App() {
       xRight = rightWireSeg
         ? Math.round(rightWireSeg.avgX)
         : Math.round(rightComps[0].circleCx ?? rightComps[0].cx);
-      if (hOuterRightXs.length > 0) {
-        xRight = Math.max(xRight, Math.round(Math.max(...hOuterRightXs)));
-      }
     } else {
       xRight =
         rightVertSegs.length > 0
@@ -24401,36 +24406,55 @@ export default function App() {
     }
     xRight = Math.max(xRight, maxHorizCompRightX + 36);
 
-    // Align Right and Left vertical branch components to xRight and xLeft
-    const vertCompDxMap = new Map<string, number>();
+    // Align Right and Left vertical branch components to xRight and xLeft, and center meters vertically
+    const vertCompDxMap = new Map<string, { dx: number; dy: number }>();
     for (const rc of rightComps) {
       const curX = rc.circleCx ?? rc.cx;
       const dx = xRight - curX;
-      if (Math.abs(dx) >= 0.25) {
-        for (const sid of rc.strokeIds) vertCompDxMap.set(sid, dx);
+      let dy = 0;
+      if (rc.kind === 'ammeter' || rc.kind === 'voltmeter') {
+        const targetCy = Math.round((yTop + yBot) / 2);
+        const curY = rc.circleCy ?? rc.cy;
+        dy = targetCy - curY;
+      }
+      if (Math.abs(dx) >= 0.25 || Math.abs(dy) >= 0.25) {
+        for (const sid of rc.strokeIds) vertCompDxMap.set(sid, { dx, dy });
       }
     }
     for (const lc of leftComps) {
       const curX = lc.circleCx ?? lc.cx;
       const dx = xLeft - curX;
-      if (Math.abs(dx) >= 0.25) {
-        for (const sid of lc.strokeIds) vertCompDxMap.set(sid, dx);
+      let dy = 0;
+      if (lc.kind === 'ammeter' || lc.kind === 'voltmeter') {
+        const targetCy = Math.round((yTop + yBot) / 2);
+        const curY = lc.circleCy ?? lc.cy;
+        dy = targetCy - curY;
+      }
+      if (Math.abs(dx) >= 0.25 || Math.abs(dy) >= 0.25) {
+        for (const sid of lc.strokeIds) vertCompDxMap.set(sid, { dx, dy });
       }
     }
 
     if (vertCompDxMap.size > 0) {
       shiftedCompStrokes = shiftedCompStrokes.map((s) => {
-        const dx = vertCompDxMap.get(s.id) || 0;
-        if (Math.abs(dx) < 0.25) return s;
+        const shift = vertCompDxMap.get(s.id);
+        if (!shift || (Math.abs(shift.dx) < 0.25 && Math.abs(shift.dy) < 0.25)) return s;
+        const { dx, dy } = shift;
         return {
           ...s,
           circuitBox: s.circuitBox
-            ? { ...s.circuitBox, cx: s.circuitBox.cx + dx }
+            ? {
+                ...s.circuitBox,
+                cx: s.circuitBox.cx + dx,
+                termY: s.circuitBox.termY + dy,
+              }
             : undefined,
           points: s.points.map((pt) => ({
             ...pt,
             x: pt.x + dx,
+            y: pt.y + dy,
             cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+            cy: pt.cy !== undefined ? pt.cy + dy : undefined,
           })),
         };
       });
@@ -25225,8 +25249,7 @@ export default function App() {
     updateActivePage((page) => {
       const combined = [...page.strokes, ...createdWires];
       const subStrokes = combined.filter((s) => circuitIdSet.has(s.id));
-      const alignedSubStrokes =
-        subStrokes.length > 0 ? autoAlignAndConnectCircuit(subStrokes) : subStrokes;
+      const alignedSubStrokes = subStrokes;
       const alignedIds = alignedSubStrokes.map((s) => s.id);
 
       const nextStrokes: StrokeObject[] = [];
@@ -60676,6 +60699,11 @@ export default function App() {
                                         });
                                         setSelectedStrokeIds([]);
                                         setIsSimulating(true);
+                                        setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
+                                        if (sim.flowDirection) setSimFlowDirection(sim.flowDirection);
+                                        if (typeof sim.showElectrons === 'boolean') setSimShowElectrons(sim.showElectrons);
+                                        if (typeof sim.speedMultiplier === 'number') setSimSpeedMultiplier(sim.speedMultiplier);
+                                        if (typeof sim.showDarkWireTrack === 'boolean') setSimShowDarkWireTrack(sim.showDarkWireTrack);
                                         if (!isCircuitSimVisibleInViewport(simPageIdx, sim)) {
                                           scrollToCircuitSim(simPageIdx, sim);
                                         }
