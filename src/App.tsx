@@ -2568,6 +2568,7 @@ export default function App() {
 
   // Digital Stopwatch State (⏱️) for Physics Experiments (WarmStudio Beige & Dark Navy)
   const [showStopwatch, setShowStopwatch] = useState<boolean>(false);
+  const [stopwatchWidth, setStopwatchWidth] = useState<number>(210);
   const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => ({
     x: typeof window !== 'undefined' ? Math.max(16, window.innerWidth - 240) : 340,
     y: 120,
@@ -2579,6 +2580,11 @@ export default function App() {
     startClientY: number;
     origX: number;
     origY: number;
+  } | null>(null);
+  const stopwatchResizeRef = useRef<{
+    startX: number;
+    startY: number;
+    origW: number;
   } | null>(null);
 
   useEffect(() => {
@@ -2714,6 +2720,7 @@ export default function App() {
         av: number;
         lastTime: number;
         trajectory: { x: number; y: number }[];
+        visitedSteps?: Set<number>;
         maxAngleRad?: number;
       }
     >
@@ -20054,6 +20061,7 @@ export default function App() {
       const pState = pendulumPhysRef.current[sim.id];
       if (pState) {
         pState.trajectory = [];
+        pState.visitedSteps?.clear();
         pState.lastTime = performance.now();
       }
       if (!nextPaused) {
@@ -20123,7 +20131,10 @@ export default function App() {
       );
     } else if (action === 'toggle-trajectory') {
       const pState = pendulumPhysRef.current[sim.id];
-      if (pState) pState.trajectory = [];
+      if (pState) {
+        pState.trajectory = [];
+        pState.visitedSteps?.clear();
+      }
       updateActivePage(
         (page) => ({
           ...page,
@@ -30193,23 +30204,13 @@ export default function App() {
           ctx.stroke();
           ctx.restore();
 
-          if (isDraggingBob && Math.abs(ang) < 0.02) {
-            drawHaloLabel(
-              `🔒 Θ.Ι. (L = ${(L / 230).toFixed(2)}m • ${Math.round(L / 23)} κουτάκια)`,
-              PX,
-              PY + L + 30,
-              '#0066ff',
-              'bold 11px system-ui, sans-serif'
-            );
-          } else {
-            drawHaloLabel(
-              'Θ.Ι.',
-              PX,
-              PY + L + 28,
-              '#64748b',
-              '600 10.5px system-ui, -apple-system, sans-serif'
-            );
-          }
+          drawHaloLabel(
+            isDraggingBob && Math.abs(ang) < 0.02 ? '🔒 Θ.Ι.' : 'Θ.Ι.',
+            PX,
+            PY + L + 28,
+            isDraggingBob && Math.abs(ang) < 0.02 ? '#0066ff' : '#64748b',
+            '600 11px system-ui, -apple-system, sans-serif'
+          );
 
           // Visual Retention of Maximum Angle / Amplitude (θmax)
           const maxA = fSim.pendulumMaxAngleRad || pState.maxAngleRad || 0;
@@ -30242,15 +30243,7 @@ export default function App() {
             ctx.stroke();
 
             ctx.restore();
-
-            const degMax = Math.round((maxA * 180) / Math.PI);
-            drawHaloLabel(
-              showNums ? `θmax = ${degMax}° (Πλάτος)` : `θmax = ${degMax}°`,
-              PX + (L * 0.42 + 20) * Math.sin(maxA),
-              PY + (L * 0.42 + 20) * Math.cos(maxA),
-              '#0066ff',
-              'bold 11px system-ui, sans-serif'
-            );
+            // Note: θmax label text is omitted from paper and displayed only in the Dashboard
           }
 
           if (Math.abs(ang) > 0.04) {
@@ -30270,32 +30263,37 @@ export default function App() {
             ctx.stroke();
             ctx.restore();
             const midA = Math.PI / 2 - ang / 2;
-            const degPend = Math.round((Math.abs(ang) * 180) / Math.PI);
+            // Draw only the Greek symbol 'θ', without dynamic numeric degrees
             drawHaloLabel(
-              showNums ? `θ = ${degPend}°` : 'θ',
-              PX + (arcR + 14) * Math.cos(midA),
-              PY + (arcR + 14) * Math.sin(midA),
+              'θ',
+              PX + (arcR + 12) * Math.cos(midA),
+              PY + (arcR + 12) * Math.sin(midA),
               '#334155',
-              showNums ? 'bold 11.5px system-ui, sans-serif' : 'italic bold 14px Georgia, serif'
+              'italic bold 13.5px Georgia, serif'
             );
           }
 
-          // Trajectory dots
+          // Trajectory dots: crisp discrete arc points that always fall on exact same coordinates
           if (fSim.showTrajectory && !fSim.isPaused && !isDraggingBob) {
-            const tr = pState.trajectory;
-            if (
-              tr.length === 0 ||
-              Math.hypot(bx - tr[tr.length - 1].x, by - tr[tr.length - 1].y) > 5.5
-            ) {
-              tr.push({ x: bx, y: by });
-              if (tr.length > 180) tr.shift();
+            if (!pState.visitedSteps) {
+              pState.visitedSteps = new Set<number>();
             }
+            const stepArcPx = 14; // Crisp 14px dot spacing
+            const stepRad = stepArcPx / L;
+            const curStepIdx = Math.round(ang / stepRad);
+            pState.visitedSteps.add(curStepIdx);
+
             ctx.save();
-            ctx.fillStyle = 'rgba(30, 41, 59, 0.48)';
-            for (const pt of tr) {
-              ctx.beginPath();
-              ctx.arc(pt.x, pt.y, 2.2, 0, Math.PI * 2);
-              ctx.fill();
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.45)';
+            for (const stepIdx of pState.visitedSteps) {
+              const dotAng = stepIdx * stepRad;
+              if (Math.abs(dotAng) <= (maxA > 0.05 ? maxA + 0.03 : Math.PI / 2)) {
+                const tx = PX + L * Math.sin(dotAng);
+                const ty = PY + L * Math.cos(dotAng);
+                ctx.beginPath();
+                ctx.arc(tx, ty, 2.0, 0, Math.PI * 2);
+                ctx.fill();
+              }
             }
             ctx.restore();
           }
@@ -30594,118 +30592,6 @@ export default function App() {
               );
             }
             drawSimVector(bx, by, bx + sx, by + sy, '#27a69a', 3.8, 1, 'ΣF');
-          }
-
-          // Discreet On-Canvas Control Bar below Pendulum swing
-          const barY = Math.min(h - 56, PY + L + (fSim.showForces ? wm_vis + 24 : 46));
-          let curBx = Math.max(16, PX - 135);
-          curBx +=
-            drawPillButton(
-              fSim.isPaused ? 'Συνέχεια' : 'Παύση',
-              'toggle-pause',
-              curBx,
-              barY,
-              64,
-              21,
-              fSim.isPaused ? '#dc3545' : '#0d6efd',
-              '#fff'
-            ) + 5;
-          if (!fSim.isPaused) {
-            curBx +=
-              drawPillButton(
-                'Τροχιά',
-                'toggle-trajectory',
-                curBx,
-                barY,
-                54,
-                21,
-                fSim.showTrajectory ? '#0284c7' : '#334155',
-                '#fff'
-              ) + 5;
-          }
-          curBx +=
-            drawPillButton(
-              'Δυνάμεις',
-              'toggle-forces',
-              curBx,
-              barY,
-              64,
-              21,
-              fSim.showForces ? '#dc3545' : '#334155',
-              '#fff'
-            ) + 5;
-          curBx +=
-            drawPillButton(
-              showStopwatch ? '⏱️ Χρονόμετρο (ON)' : '⏱️ Χρονόμετρο',
-              'toggle-stopwatch',
-              curBx,
-              barY,
-              showStopwatch ? 104 : 88,
-              21,
-              showStopwatch ? '#234978' : '#334155',
-              '#fff'
-            ) + 5;
-          if (fSim.showForces) {
-            curBx +=
-              drawPillButton(
-                'Συνισταμένη',
-                'toggle-resultant',
-                curBx,
-                barY,
-                76,
-                21,
-                fSim.showResultant ? '#0d9488' : '#334155',
-                '#fff'
-              ) + 5;
-            curBx +=
-              drawPillButton(
-                'Ανάλυση Τ',
-                'start-an-T',
-                curBx,
-                barY,
-                68,
-                21,
-                fSim.anMode === 'T' ? '#16a34a' : '#334155',
-                '#fff'
-              ) + 5;
-            curBx +=
-              drawPillButton(
-                'Ανάλυση B',
-                'start-an-B',
-                curBx,
-                barY,
-                68,
-                21,
-                fSim.anMode === 'B' ? '#16a34a' : '#334155',
-                '#fff'
-              ) + 5;
-          }
-          if (fSim.isPaused && fSim.showForces && (fSim.anMode === 'T' || fSim.anMode === 'B')) {
-            const navY = barY + 26;
-            const wPrev = drawPillButton(
-              '◀',
-              'prev-step',
-              PX - 28,
-              navY,
-              24,
-              21,
-              '#16a34a',
-              '#fff',
-              undefined,
-              curStep <= 0 || curAnim !== null
-            );
-            drawPillButton(
-              '▶',
-              'next-step',
-              PX - 28 + wPrev + 5,
-              navY,
-              24,
-              21,
-              '#16a34a',
-              '#fff',
-              undefined,
-              curStep >= 6 || curAnim !== null
-            );
           }
         }
 
@@ -40962,10 +40848,10 @@ export default function App() {
           if (isNearVertical) {
             // Snapped and magnetically locked to vertical equilibrium axis!
             nextAng = 0;
-            // Dragging vertically alters length: 10 grid squares (230px) = 1.0m!
-            const rawLen = Math.max(69, Math.min(690, dy));
-            const nearestGrid = Math.round(rawLen / 23) * 23;
-            nextRodL = Math.abs(rawLen - nearestGrid) <= 8 ? nearestGrid : rawLen;
+            // Dragging vertically alters length: strictly 0.1m step (23px)!
+            const rawLen = Math.max(69, Math.min(575, dy));
+            const stepPx = 23; // 0.1m
+            nextRodL = Math.round(rawLen / stepPx) * stepPx;
           } else {
             nextAng = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, rawAng));
           }
@@ -40975,6 +40861,7 @@ export default function App() {
             av: 0,
             lastTime: performance.now(),
             trajectory: [],
+            visitedSteps: new Set<number>(),
             maxAngleRad:
               Math.abs(nextAng) > 0.04
                 ? Math.abs(nextAng)
@@ -62822,17 +62709,8 @@ export default function App() {
                                           false
                                         );
                                       }}
-                                      className="px-2 py-1 flex items-center gap-1 cursor-pointer"
+                                      className="px-2.5 py-1 flex items-center cursor-pointer"
                                     >
-                                      <span>
-                                        {sim.mode === 'analysis'
-                                          ? '📐'
-                                          : sim.mode === 'synthesis'
-                                          ? '➕'
-                                          : sim.mode === 'incline'
-                                          ? '⛰️'
-                                          : '🕰️'}
-                                      </span>
                                       <span>{sim.name}</span>
                                     </button>
                                     <button
@@ -62973,127 +62851,284 @@ export default function App() {
                           </div>
                         )}
 
-                        {activeForce && activeForce.mode === 'pendulum' && (
-                          <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
-                            <div className="grid grid-cols-2 gap-1.5">
+                        {activeForce && activeForce.mode === 'pendulum' && (() => {
+                          const curLenM = Math.max(
+                            0.3,
+                            Math.min(2.5, Math.round((activeForce.rodLengthPx || 230) / 23) * 0.1)
+                          );
+                          const curMaxRad =
+                            activeForce.pendulumMaxAngleRad ||
+                            pendulumPhysRef.current[activeForce.id]?.maxAngleRad ||
+                            Math.PI / 4;
+                          const curMaxDeg = Math.round((curMaxRad * 180) / Math.PI);
+
+                          const setPendulumLen = (newM: number) => {
+                            const clampedM = Math.max(0.3, Math.min(2.5, Math.round(newM * 10) / 10));
+                            const nextPx = Math.round(clampedM * 230);
+                            const px = activeForce.originX;
+                            const py = activeForce.originY;
+                            const pState = pendulumPhysRef.current[activeForce.id];
+                            const curAng = pState ? pState.ang : (activeForce.pendulumAngleRad ?? 0);
+                            const bx = px + nextPx * Math.sin(curAng);
+                            const by = py + nextPx * Math.cos(curAng);
+                            if (pState) {
+                              pState.visitedSteps?.clear();
+                            }
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                strokes: page.strokes.map((st) => {
+                                  if (st.id === activeForce.primaryStrokeId) {
+                                    return {
+                                      ...st,
+                                      points: [
+                                        { x: px, y: py, pressure: 0.7 },
+                                        { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                                      ],
+                                    };
+                                  }
+                                  if (st.id === activeForce.secondaryStrokeId && st.points.length >= 4) {
+                                    let minX = Infinity,
+                                      maxX = -Infinity,
+                                      minY = Infinity,
+                                      maxY = -Infinity;
+                                    for (const pt of st.points) {
+                                      if (pt.x < minX) minX = pt.x;
+                                      if (pt.x > maxX) maxX = pt.x;
+                                      if (pt.y < minY) minY = pt.y;
+                                      if (pt.y > maxY) maxY = pt.y;
+                                    }
+                                    const oldCx = (minX + maxX) / 2;
+                                    const oldCy = (minY + maxY) / 2;
+                                    const sdx = bx - oldCx;
+                                    const sdy = by - oldCy;
+                                    return {
+                                      ...st,
+                                      points: st.points.map((pt) => ({
+                                        ...pt,
+                                        x: pt.x + sdx,
+                                        y: pt.y + sdy,
+                                        ...(pt.cx !== undefined ? { cx: pt.cx + sdx } : {}),
+                                        ...(pt.cy !== undefined ? { cy: pt.cy + sdy } : {}),
+                                      })),
+                                    };
+                                  }
+                                  return st;
+                                }),
+                                forceSims: (page.forceSims || []).map((s) =>
+                                  s.id === activeForce.id ? { ...s, rodLengthPx: nextPx } : s
+                                ),
+                              }),
+                              false
+                            );
+                          };
+
+                          const setPendulumAmp = (deg: number) => {
+                            const rad = (deg * Math.PI) / 180;
+                            const pState = pendulumPhysRef.current[activeForce.id];
+                            if (pState) {
+                              pState.maxAngleRad = rad;
+                              pState.visitedSteps?.clear();
+                            }
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                forceSims: (page.forceSims || []).map((s) =>
+                                  s.id === activeForce.id ? { ...s, pendulumMaxAngleRad: rad } : s
+                                ),
+                              }),
+                              false
+                            );
+                          };
+
+                          return (
+                            <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
+                              {/* 1. Play / Pause Control */}
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleForceSimAction(activeForce, 'toggle-pause')
-                                }
-                                className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
+                                onClick={() => handleForceSimAction(activeForce, 'toggle-pause')}
+                                className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
                                   activeForce.isPaused
-                                    ? 'bg-[#234978] text-white shadow-2xs'
-                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                    ? 'bg-[#234978] hover:bg-[#1c3c63] text-white shadow-xs'
+                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
                                 }`}
                               >
-                                {activeForce.isPaused ? '▶ Συνέχεια' : '❚❚ Παύση'}
+                                <span>{activeForce.isPaused ? '▶ Συνέχεια' : '❚❚ Παύση'}</span>
                               </button>
+
+                              {/* 2. Forces Button (Δυνάμεις Β, Τ) */}
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleForceSimAction(activeForce, 'toggle-forces')
-                                }
-                                className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
+                                onClick={() => handleForceSimAction(activeForce, 'toggle-forces')}
+                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
                                   activeForce.showForces
-                                    ? 'bg-[#234978] text-white shadow-2xs'
-                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                    ? 'bg-[#234978] text-white shadow-xs'
+                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
                                 }`}
                               >
-                                Δυνάμεις (B, T)
+                                <span>Δυνάμεις (Β, Τ)</span>
                               </button>
-                            </div>
-                            {!activeForce.isPaused && (
+
+                              {/* 3. Stopwatch Toggle (Χρονόμετρο) */}
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleForceSimAction(activeForce, 'toggle-trajectory')
-                                }
-                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
+                                onClick={() => setShowStopwatch((s) => !s)}
+                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
+                                  showStopwatch
+                                    ? 'bg-[#234978] text-white shadow-xs'
+                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                }`}
+                              >
+                                <span>⏱️ Χρονόμετρο {showStopwatch ? '(Ενεργό)' : ''}</span>
+                              </button>
+
+                              {/* 4. Trajectory Toggle (Διακεκομμένη Τροχιά) */}
+                              <button
+                                type="button"
+                                onClick={() => handleForceSimAction(activeForce, 'toggle-trajectory')}
+                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
                                   activeForce.showTrajectory
-                                    ? 'bg-[#234978] text-white shadow-2xs'
-                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                    ? 'bg-[#234978] text-white shadow-xs'
+                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
                                 }`}
                               >
-                                ⋯ Τροχιά Εκκρεμούς
+                                <span>⋯ Τροχιά Εκκρεμούς</span>
                               </button>
-                            )}
-                            {activeForce.showForces && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleForceSimAction(activeForce, 'toggle-resultant')
-                                }
-                                className={`w-full py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
-                                  activeForce.showResultant
-                                    ? 'bg-[#234978] text-white shadow-2xs'
-                                    : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
-                                }`}
-                              >
-                                Συνισταμένη (ΣF)
-                              </button>
-                            )}
-                            {activeForce.isPaused && activeForce.showForces && (
-                              <>
-                                <div className="grid grid-cols-2 gap-1.5">
+
+                              {/* 5. Length Card (Μήκος Νήματος L - μόνο μέτρα, ελάχιστο βήμα 0.1m) */}
+                              <div className="bg-[#fdfbf7]/90 rounded-xl p-2 border border-[#dfd8cb] space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-[#1e293b]">Μήκος Νήματος:</span>
+                                  <span className="font-mono font-bold text-[#234978] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
+                                    L = {curLenM.toFixed(1)} m
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      handleForceSimAction(activeForce, 'start-an-T')
-                                    }
-                                    className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
-                                      activeForce.anMode === 'T'
-                                        ? 'bg-[#234978] text-white'
-                                        : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
-                                    }`}
+                                    onClick={() => setPendulumLen(curLenM - 0.1)}
+                                    disabled={curLenM <= 0.3}
+                                    className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-[11px] border border-[#dfd8cb] transition cursor-pointer"
+                                    title="Μείωση μήκους κατά 0.1m"
                                   >
-                                    Ανάλυση Τ
+                                    - 0.1m
                                   </button>
+                                  <input
+                                    type="range"
+                                    min="0.3"
+                                    max="2.5"
+                                    step="0.1"
+                                    value={curLenM}
+                                    onChange={(e) => setPendulumLen(parseFloat(e.target.value))}
+                                    className="flex-1 accent-[#234978] cursor-pointer h-1.5"
+                                  />
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      handleForceSimAction(activeForce, 'start-an-B')
-                                    }
-                                    className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
-                                      activeForce.anMode === 'B'
-                                        ? 'bg-[#234978] text-white'
-                                        : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
-                                    }`}
+                                    onClick={() => setPendulumLen(curLenM + 0.1)}
+                                    disabled={curLenM >= 2.5}
+                                    className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-[11px] border border-[#dfd8cb] transition cursor-pointer"
+                                    title="Αύξηση μήκους κατά 0.1m"
                                   >
-                                    Ανάλυση B
+                                    + 0.1m
                                   </button>
                                 </div>
-                                {(activeForce.anMode === 'T' || activeForce.anMode === 'B') && (
-                                  <div className="flex items-center justify-between gap-1.5">
+                              </div>
+
+                              {/* 6. Amplitude Card (Πλάτος Ταλάντωσης θmax - μόνο στο dashboard) */}
+                              <div className="bg-[#fdfbf7]/90 rounded-xl p-2 border border-[#dfd8cb] space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-[#1e293b]">Πλάτος Ταλάντωσης:</span>
+                                  <span className="font-mono font-bold text-[#0284c7] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
+                                    θmax = {curMaxDeg}°
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-4 gap-1">
+                                  {[15, 30, 45, 60].map((deg) => (
                                     <button
+                                      key={deg}
                                       type="button"
-                                      onClick={() =>
-                                        handleForceSimAction(activeForce, 'prev-step')
-                                      }
-                                      disabled={curStep <= 0}
-                                      className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
+                                      onClick={() => setPendulumAmp(deg)}
+                                      className={`py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                                        curMaxDeg === deg
+                                          ? 'bg-[#234978] text-white shadow-2xs'
+                                          : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                      }`}
                                     >
-                                      ◀ Προηγ.
+                                      {deg}°
                                     </button>
-                                    <span className="text-[11px] font-bold text-[#234978]">
-                                      Βήμα {curStep}/6
-                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* 7. Forces Analysis & Resultant (when Forces are active) */}
+                              {activeForce.showForces && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'toggle-resultant')}
+                                  className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
+                                    activeForce.showResultant
+                                      ? 'bg-[#234978] text-white shadow-xs'
+                                      : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                  }`}
+                                >
+                                  <span>Συνισταμένη (ΣF)</span>
+                                </button>
+                              )}
+
+                              {activeForce.isPaused && activeForce.showForces && (
+                                <>
+                                  <div className="grid grid-cols-2 gap-1.5">
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        handleForceSimAction(activeForce, 'next-step')
-                                      }
-                                      disabled={curStep >= 6}
-                                      className="flex-1 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
+                                      onClick={() => handleForceSimAction(activeForce, 'start-an-T')}
+                                      className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
+                                        activeForce.anMode === 'T'
+                                          ? 'bg-[#234978] text-white'
+                                          : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                      }`}
                                     >
-                                      Επόμ. ▶
+                                      Ανάλυση Τ
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleForceSimAction(activeForce, 'start-an-B')}
+                                      className={`py-1.5 px-2 rounded-lg font-bold text-[11px] cursor-pointer transition ${
+                                        activeForce.anMode === 'B'
+                                          ? 'bg-[#234978] text-white'
+                                          : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
+                                      }`}
+                                    >
+                                      Ανάλυση B
                                     </button>
                                   </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
+                                  {(activeForce.anMode === 'T' || activeForce.anMode === 'B') && (
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleForceSimAction(activeForce, 'prev-step')}
+                                        disabled={curStep <= 0}
+                                        className="flex-1 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-xs border border-[#dfd8cb] cursor-pointer transition"
+                                      >
+                                        ◀ Προηγ.
+                                      </button>
+                                      <span className="text-[11px] font-bold text-[#234978]">
+                                        Βήμα {curStep}/6
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleForceSimAction(activeForce, 'next-step')}
+                                        disabled={curStep >= 6}
+                                        className="flex-1 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] disabled:opacity-40 text-white font-bold text-xs cursor-pointer transition"
+                                      >
+                                        Επόμ. ▶
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })()
@@ -63492,98 +63527,206 @@ export default function App() {
               </div>
             )}
 
-            {/* Draggable Digital Stopwatch Widget (⏱️) */}
-            {showStopwatch && (
-              <div
-                data-ui-panel="true"
-                style={{ left: stopwatchPos.x, top: stopwatchPos.y }}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="fixed z-45 w-52 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_16px_36px_-6px_rgba(0,0,0,0.18),0_4px_12px_-2px_rgba(0,0,0,0.06)] p-3 select-none text-[#1e293b] space-y-2.5"
-              >
-                {/* Drag Header */}
+            {/* Draggable & Uniformly Resizable Digital Stopwatch Widget (⏱️) */}
+            {showStopwatch && (() => {
+              const swScale = stopwatchWidth / 210;
+              const padPx = Math.round(12 * swScale);
+              const radiusPx = Math.round(16 * swScale);
+
+              const startStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                stopwatchResizeRef.current = {
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  origW: stopwatchWidth,
+                };
+              };
+              const moveStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
+                const rz = stopwatchResizeRef.current;
+                if (!rz) return;
+                e.stopPropagation();
+                const dx = e.clientX - rz.startX;
+                const dy = e.clientY - rz.startY;
+                const delta = Math.round((dx + dy) / 2);
+                const minW = 160;
+                const maxW = Math.min(460, window.innerWidth - 24);
+                setStopwatchWidth(Math.max(minW, Math.min(maxW, rz.origW + delta)));
+              };
+              const endStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                stopwatchResizeRef.current = null;
+                try {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                } catch {}
+              };
+
+              return (
                 <div
-                  onPointerDown={(e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
-                    e.stopPropagation();
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                    stopwatchDragRef.current = {
-                      startClientX: e.clientX,
-                      startClientY: e.clientY,
-                      origX: stopwatchPos.x,
-                      origY: stopwatchPos.y,
-                    };
+                  data-ui-panel="true"
+                  style={{
+                    left: stopwatchPos.x,
+                    top: stopwatchPos.y,
+                    width: `${stopwatchWidth}px`,
+                    padding: `${padPx}px`,
+                    borderRadius: `${radiusPx}px`,
                   }}
-                  onPointerMove={(e) => {
-                    const drag = stopwatchDragRef.current;
-                    if (!drag) return;
-                    const nextX = Math.max(
-                      8,
-                      Math.min(window.innerWidth - 220, drag.origX + (e.clientX - drag.startClientX))
-                    );
-                    const nextY = Math.max(
-                      8,
-                      Math.min(window.innerHeight - 140, drag.origY + (e.clientY - drag.startClientY))
-                    );
-                    setStopwatchPos({ x: nextX, y: nextY });
-                  }}
-                  onPointerUp={(e) => {
-                    stopwatchDragRef.current = null;
-                    try {
-                      e.currentTarget.releasePointerCapture(e.pointerId);
-                    } catch {}
-                  }}
-                  className="flex items-center justify-between cursor-grab active:cursor-grabbing pb-1 border-b border-[#dfd8cb]/60"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="fixed z-45 ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_16px_36px_-6px_rgba(0,0,0,0.18),0_4px_12px_-2px_rgba(0,0,0,0.06)] select-none text-[#1e293b] space-y-2.5 relative"
                 >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#1e293b]">
-                    <span className="text-sm">⏱️</span>
-                    <span>Χρονόμετρο</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowStopwatch(false)}
-                    className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] text-xs font-bold transition cursor-pointer"
-                    title="Κλείσιμο χρονομέτρου"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* LCD Screen: Dark Blue Navy Background with crisp white digital time (MM:SS.s) */}
-                <div className="bg-[#1e293b] rounded-xl px-3 py-2 border border-[#334155] shadow-inner text-center">
-                  <span className="font-mono font-black text-2xl tracking-widest text-white drop-shadow-xs">
-                    {formatStopwatch(stopwatchElapsedMs)}
-                  </span>
-                  <div className="text-[9px] text-[#94a3b8] font-mono tracking-wider mt-0.5">
-                    ΛΕΠ : ΔΕΥΤ . ΔΕΚ
-                  </div>
-                </div>
-
-                {/* Buttons: Play/Pause (same button) and Reset */}
-                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setStopwatchRunning((r) => !r)}
-                    className={`py-1.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer ${
-                      stopwatchRunning
-                        ? 'bg-[#dc2626] hover:bg-[#b91c1c] text-white'
-                        : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
-                    }`}
-                  >
-                    {stopwatchRunning ? '❚❚ Παύση' : '▶ Έναρξη'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStopwatchRunning(false);
-                      setStopwatchElapsedMs(0);
+                  {/* Drag Header */}
+                  <div
+                    onPointerDown={(e) => {
+                      if (
+                        (e.target as HTMLElement).closest('button') ||
+                        (e.target as HTMLElement).closest('[data-sw-resize="true"]')
+                      ) {
+                        return;
+                      }
+                      e.stopPropagation();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      stopwatchDragRef.current = {
+                        startClientX: e.clientX,
+                        startClientY: e.clientY,
+                        origX: stopwatchPos.x,
+                        origY: stopwatchPos.y,
+                      };
                     }}
-                    className="py-1.5 px-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer"
+                    onPointerMove={(e) => {
+                      const drag = stopwatchDragRef.current;
+                      if (!drag) return;
+                      const nextX = Math.max(
+                        8,
+                        Math.min(
+                          window.innerWidth - stopwatchWidth - 8,
+                          drag.origX + (e.clientX - drag.startClientX)
+                        )
+                      );
+                      const nextY = Math.max(
+                        8,
+                        Math.min(
+                          window.innerHeight - 120,
+                          drag.origY + (e.clientY - drag.startClientY)
+                        )
+                      );
+                      setStopwatchPos({ x: nextX, y: nextY });
+                    }}
+                    onPointerUp={(e) => {
+                      stopwatchDragRef.current = null;
+                      try {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                      } catch {}
+                    }}
+                    className="flex items-center justify-between cursor-grab active:cursor-grabbing pb-1 border-b border-[#dfd8cb]/60"
                   >
-                    ↺ Μηδεν.
-                  </button>
+                    <div
+                      className="flex items-center gap-1.5 font-bold text-[#1e293b]"
+                      style={{ fontSize: `${Math.max(10, Math.round(12 * swScale))}px` }}
+                    >
+                      <span style={{ fontSize: `${Math.round(14 * swScale)}px` }}>⏱️</span>
+                      <span>Χρονόμετρο</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowStopwatch(false)}
+                      style={{
+                        width: `${Math.round(20 * swScale)}px`,
+                        height: `${Math.round(20 * swScale)}px`,
+                        fontSize: `${Math.max(9, Math.round(11 * swScale))}px`,
+                      }}
+                      className="flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] font-bold transition cursor-pointer"
+                      title="Κλείσιμο χρονομέτρου"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* LCD Screen: Signature Dark Navy Blue (#132644) Background */}
+                  <div
+                    style={{
+                      backgroundColor: '#132644',
+                      borderColor: 'rgba(35, 73, 120, 0.65)',
+                      padding: `${Math.round(7 * swScale)}px ${Math.round(10 * swScale)}px`,
+                      borderRadius: `${Math.round(12 * swScale)}px`,
+                    }}
+                    className="border shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)] text-center"
+                  >
+                    <span
+                      style={{ fontSize: `${Math.round(24 * swScale)}px` }}
+                      className="font-mono font-black tracking-widest text-white drop-shadow-xs"
+                    >
+                      {formatStopwatch(stopwatchElapsedMs)}
+                    </span>
+                    <div
+                      style={{ fontSize: `${Math.max(8, Math.round(9 * swScale))}px` }}
+                      className="text-[#93c5fd]/70 font-mono tracking-wider mt-0.5"
+                    >
+                      ΛΕΠ : ΔΕΥΤ . ΔΕΚ
+                    </div>
+                  </div>
+
+                  {/* Buttons: Play/Pause (same button) and Reset */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setStopwatchRunning((r) => !r)}
+                      style={{
+                        padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
+                        borderRadius: `${Math.round(10 * swScale)}px`,
+                        fontSize: `${Math.max(10, Math.round(12 * swScale))}px`,
+                      }}
+                      className={`font-bold flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer ${
+                        stopwatchRunning
+                          ? 'bg-[#dc2626] hover:bg-[#b91c1c] text-white'
+                          : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+                      }`}
+                    >
+                      {stopwatchRunning ? '❚❚ Παύση' : '▶ Έναρξη'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStopwatchRunning(false);
+                        setStopwatchElapsedMs(0);
+                      }}
+                      style={{
+                        padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
+                        borderRadius: `${Math.round(10 * swScale)}px`,
+                        fontSize: `${Math.max(10, Math.round(12 * swScale))}px`,
+                      }}
+                      className="bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                    >
+                      ↺ Μηδεν.
+                    </button>
+                  </div>
+
+                  {/* Bottom-Right Uniform Resize Handle */}
+                  <div
+                    data-sw-resize="true"
+                    onPointerDown={startStopwatchResize}
+                    onPointerMove={moveStopwatchResize}
+                    onPointerUp={endStopwatchResize}
+                    onPointerCancel={endStopwatchResize}
+                    className="absolute -bottom-1 -right-1 w-5 h-5 cursor-se-resize flex items-end justify-end p-1 text-[#94a3b8] hover:text-[#234978] transition"
+                    title="Σύρετε για ομοιόμορφη αλλαγή μεγέθους"
+                  >
+                    <svg
+                      width="9"
+                      height="9"
+                      viewBox="0 0 9 9"
+                      className="opacity-70 hover:opacity-100"
+                    >
+                      <path
+                        d="M8 2 L2 8 M8 5 L5 8 M8 8 L8 8"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Draggable & Corner-Resizable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
             {showPeriodicTableModal && (() => {
