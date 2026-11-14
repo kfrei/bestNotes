@@ -95,6 +95,7 @@ export interface HeatContainerState {
   parentBasinId?: string; // ID of the basin this container is resting in
   snappedTripodId?: string; // ID of tripod underneath
   pencilHovered?: boolean;
+  fillHovered?: boolean;
 }
 
 export interface HeatThermometerState {

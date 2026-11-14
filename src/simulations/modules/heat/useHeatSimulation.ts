@@ -40,6 +40,7 @@ export interface UseHeatSimulationReturn {
   toggleBurner: () => void;
   resetSim: () => void;
   toggleGraph: () => void;
+  handleFillContainer: (containerId?: string) => void;
 }
 
 export function useHeatSimulation(
@@ -390,6 +391,42 @@ export function useHeatSimulation(
     });
   }, [updateActiveHeatSim]);
 
+  const handleFillContainer = useCallback(
+    (containerId?: string) => {
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const targetContainer = containerId
+          ? cur.objects.find((o) => o.id === containerId && o.containerState)
+          : cur.objects.find((o) => o.id === cur.selectedObjectId && o.containerState) ||
+            cur.objects.find((o) => o.containerState);
+
+        if (!targetContainer || !targetContainer.containerState) return cur;
+
+        const cap = targetContainer.containerState.capacityMl || 500;
+        const curVol = targetContainer.containerState.volumeMl || 0;
+        const nextVol = curVol === 0 ? Math.round(cap * 0.5) : curVol < cap ? cap : 0;
+
+        const next = {
+          ...cur,
+          objects: cur.objects.map((o) =>
+            o.id === targetContainer.id && o.containerState
+              ? {
+                  ...o,
+                  containerState: {
+                    ...o.containerState,
+                    volumeMl: nextVol,
+                  },
+                }
+              : o
+          ),
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+    },
+    [updateActiveHeatSim]
+  );
+
   // Pointer interactions on canvas (clicking pencil, toggling burner, dragging objects)
   const handlePointerDown = useCallback(
     (_e: React.PointerEvent | PointerEvent, lx: number, ly: number): boolean => {
@@ -446,12 +483,61 @@ export function useHeatSimulation(
 
         if (!inside) continue;
 
-        // Check if pencil icon was clicked (for beaker, basin, flask)
+        // Check if Quick Fill button or Pencil icon was clicked (for beaker, basin, flask)
         if (obj.containerState) {
-          const pencilX = obj.x + obj.width - 14;
-          const pencilY = obj.y - 6;
-          const distPencil = Math.hypot(lx - pencilX, ly - pencilY);
-          if (distPencil <= 18) {
+          const isFlask = obj.type === 'flask';
+          const neckW = obj.width * 0.28;
+          const topRightX = isFlask ? obj.x + obj.width / 2 + neckW / 2 + 32 : obj.x + obj.width - 8;
+          const topRightY = isFlask ? obj.y - 6 : obj.y - 8;
+
+          // 1. Quick Fill Pill Button [ 💧 Γέμισμα ] / [ 💧 250ml ]
+          const pillW = 62;
+          const pillH = 17;
+          const pillX = topRightX - pillW - 12;
+          const pillY = topRightY - pillH / 2;
+
+          if (
+            lx >= pillX - 6 &&
+            lx <= pillX + pillW + 6 &&
+            ly >= pillY - 6 &&
+            ly <= pillY + pillH + 6
+          ) {
+            updateActiveHeatSim((prev: HeatSimConfig) => {
+              const cur = liveSimRef.current || prev;
+              const next = {
+                ...cur,
+                objects: cur.objects.map((o: HeatObject) => {
+                  if (o.id === obj.id && o.containerState) {
+                    const cap = o.containerState.capacityMl || 500;
+                    const curVol = o.containerState.volumeMl || 0;
+                    let nextVol = 0;
+                    if (curVol === 0) {
+                      nextVol = Math.round(cap * 0.5); // Fill 50%
+                    } else if (curVol < cap) {
+                      nextVol = cap; // Fill 100%
+                    } else {
+                      nextVol = 0; // Empty
+                    }
+                    return {
+                      ...o,
+                      containerState: {
+                        ...o.containerState,
+                        volumeMl: nextVol,
+                      },
+                    };
+                  }
+                  return o;
+                }),
+              };
+              liveSimRef.current = next;
+              return next;
+            });
+            return true;
+          }
+
+          // 2. Edit Pencil Badge [ ✎ ]
+          const distPencil = Math.hypot(lx - topRightX, ly - topRightY);
+          if (distPencil <= 16) {
             setEditingContainer(obj);
             return true;
           }
@@ -652,5 +738,6 @@ export function useHeatSimulation(
     toggleBurner,
     resetSim,
     toggleGraph,
+    handleFillContainer,
   };
 }

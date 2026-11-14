@@ -11110,12 +11110,27 @@ export default function App() {
         drawPaperBackground(ctx, pWidth, pHeight, pageObj.template, pageObj.paperColor);
       }
 
+      const isCurrentActivePage = pageIdx === activePageIndex;
+
+      // 0.5. Heat Simulation Apparatus Base (rendered directly on paper, under handwriting & pencil so user can color apparatus with pencil/highlighter)
+      if (pageObj.heatSims && pageObj.heatSims.length > 0) {
+        const isDark = isDarkPaperColor(getEffectivePaperColor(pageObj));
+        for (const hSim of pageObj.heatSims) {
+          const liveSim = (isCurrentActivePage && (heatSim as any).getLiveSim)
+            ? (heatSim as any).getLiveSim()
+            : hSim;
+          if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
+            continue;
+          }
+          renderHeatSimulation(ctx, liveSim || hSim, { isDark, layer: 'apparatus' });
+        }
+      }
+
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
       // Top of pageObj.layers list (index 0) has the highest layerRank -> rendered ON TOP of layers below it!
       const layerRankMap = new Map(
         pageObj.layers.map((l, lIdx) => [l.id, pageObj.layers.length - lIdx])
       );
-      const isCurrentActivePage = pageIdx === activePageIndex;
 
       // 1-3. Unified Layer-Order + Z-Order Rendering for BOTH Images and Strokes/Shapes!
       // Moving a Layer UP in the Layers panel brings all its contents in front of lower Layers,
@@ -12610,7 +12625,7 @@ export default function App() {
         ctx.restore();
       }
 
-      // 7. Heat & Thermodynamics Simulation (Always rendered on static canvas so apparatus never disappears!)
+      // 7. Heat & Thermodynamics Simulation UI Controls & Dynamic Graph (floating above strokes)
       if (pageObj.heatSims && pageObj.heatSims.length > 0) {
         const isDark = isDarkPaperColor(getEffectivePaperColor(pageObj));
         for (const hSim of pageObj.heatSims) {
@@ -12621,7 +12636,7 @@ export default function App() {
           if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
             continue;
           }
-          renderHeatSimulation(ctx, liveSim || hSim, { isDark });
+          renderHeatSimulation(ctx, liveSim || hSim, { isDark, layer: 'ui' });
         }
       }
     });
@@ -63077,6 +63092,10 @@ export default function App() {
                       toggleStopwatchWithSmartPlacement();
                     }}
                     onToggleBurner={heatSim.toggleBurner}
+                    onFillContainer={() => {
+                      heatSim.handleFillContainer();
+                      renderStaticSceneRef.current?.();
+                    }}
                     onAddObject={(type) => {
                       let spawnX = 340;
                       let spawnY = 400;

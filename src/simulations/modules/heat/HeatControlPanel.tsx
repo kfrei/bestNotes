@@ -12,6 +12,7 @@ export interface HeatControlPanelProps {
   showStopwatch?: boolean;
   onToggleStopwatch?: () => void;
   onToggleBurner?: () => void;
+  onFillContainer?: () => void;
   onAddObject: (type: HeatObjectType) => void;
   selectedStrokeIdsCount: number;
   onConvertLassoSketch: () => void;
@@ -26,6 +27,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   showStopwatch = false,
   onToggleStopwatch,
   onToggleBurner,
+  onFillContainer,
   onAddObject,
   selectedStrokeIdsCount,
   onConvertLassoSketch,
@@ -153,6 +155,35 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 2.5 Quick Container Fill Bar */}
+      {primaryContainer?.containerState && (
+        <div className="flex items-center justify-between p-2 rounded-xl bg-white/60 border border-[#dfd8cb] text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-[#234978]">
+            <Droplets className="w-3.5 h-3.5 text-blue-500" />
+            <span>
+              {primaryContainer.containerState.volumeMl > 0
+                ? `${primaryContainer.containerState.volumeMl} ml / ${primaryContainer.containerState.capacityMl} ml`
+                : 'Άδειο Δοχείο (0 ml)'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onFillContainer}
+            className="py-1 px-2.5 rounded-lg font-bold text-[11px] bg-[#234978] hover:bg-[#1c3c63] text-white shadow-2xs transition cursor-pointer flex items-center gap-1"
+            title="Κλικ για άμεσο γέμισμα / άδειασμα του δοχείου"
+          >
+            <Droplets className="w-3 h-3" />
+            <span>
+              {primaryContainer.containerState.volumeMl === 0
+                ? 'Γέμισμα (50%)'
+                : primaryContainer.containerState.volumeMl < primaryContainer.containerState.capacityMl
+                ? 'Γεμάτο (100%)'
+                : 'Άδειασμα (0 ml)'}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* 3. Lasso Sketch Recognition Convert Button */}
       {selectedStrokeIdsCount > 0 && (

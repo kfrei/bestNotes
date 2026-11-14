@@ -1,15 +1,17 @@
 /**
- * 2.5D Canvas Vector Renderer for the Heat & Thermodynamics Simulation.
+ * 2.5D Monochrome Sketch Vector Renderer for the Heat & Thermodynamics Simulation.
  * BestNotes / ExplainBoards.
  *
- * Implements clean 2.5D academic laboratory visuals for:
- * 1. Bunsen Burner (flame animation, ambient glow, on/off click target)
- * 2. Laboratory Tripod (wire gauze ceramic plate with thermal glow)
- * 3. Borosilicate Glass Beaker (graduations, meniscus, bubbles, steam, faint pencil icon)
- * 4. Wide Basin / Water Bath (Υδατόλουτρο, supports nesting other vessels)
- * 5. Erlenmeyer Flask (narrow neck, graduated lines, liquid fill)
- * 6. Precision Laboratory Thermometer (0-100°C gradient fill, live digital badge)
- * 7. Dynamic Transparent T-t Real-Time Graph (single/dual curves for thermal equilibrium)
+ * Implements clean hand-drawn monochrome sketch line-art matching notebook ink sketches:
+ * 1. Bunsen Burner (monochrome flared base with dual rim, chimney with air collar, sketched line-art flame)
+ * 2. Laboratory Tripod (line-art cast legs, wire gauze crosshatch, central ceramic disc)
+ * 3. Borosilicate Glass Beaker (pouring spout, 2.5D elliptical rim & bottom depth curve, graduation marks)
+ * 4. Wide Basin / Water Bath (Υδατόλουτρο, supports nested vessels & thermal equilibrium)
+ * 5. Erlenmeyer Flask (narrow neck, conical body, 2.5D bottom curve, graduated marks)
+ * 6. Precision Laboratory Thermometer (0-100°C column, tick marks, digital badge)
+ * 7. Quick "Γέμισμα" (Fill) Pill Button & "✎" Edit Pencil Badge for all containers
+ * 8. Gorgeous Liquid Depth Gradients (multi-stop translucent surface to rich depth, 3D meniscus)
+ * 9. Layer separation: 'apparatus' on paper under pencil strokes, 'ui' for controls & graph on top
  */
 
 import {
@@ -18,6 +20,7 @@ import {
   HeatObject,
   HeatSimConfig,
   HeatThermometerState,
+  LiquidType,
   LIQUID_REGISTRY,
 } from './types';
 
@@ -44,36 +47,44 @@ function lerpColor(c1: string, c2: string, t: number): string {
 export function getThermometerColor(tempC: number): string {
   const clamped = Math.max(0, Math.min(100, tempC));
   if (clamped <= 30) {
-    return lerpColor('#2563eb', '#059669', clamped / 30); // Blue to Green
+    return lerpColor('#2563eb', '#059669', clamped / 30);
   } else if (clamped <= 65) {
-    return lerpColor('#059669', '#d97706', (clamped - 30) / 35); // Green to Orange
+    return lerpColor('#059669', '#d97706', (clamped - 30) / 35);
   } else {
-    return lerpColor('#d97706', '#dc2626', (clamped - 65) / 35); // Orange to Red
+    return lerpColor('#d97706', '#dc2626', (clamped - 65) / 35);
   }
 }
 
+export interface RenderHeatSimulationOptions {
+  isDark?: boolean;
+  scale?: number;
+  hoveredObjectId?: string | null;
+  layer?: 'all' | 'apparatus' | 'ui';
+}
+
 /**
- * Draws the complete Heat Simulation on a 2D canvas.
+ * Draws the Heat Simulation on a 2D canvas.
+ * Supports rendering:
+ * - 'apparatus': draws physical objects on paper (under pencil strokes so users can color them)
+ * - 'ui': draws interactive buttons ([💧 Γέμισμα], [✎]) and dynamic T-t graph
+ * - 'all': draws both (default)
  */
 export function renderHeatSimulation(
   ctx: CanvasRenderingContext2D,
   sim: HeatSimConfig,
-  options?: {
-    isDark?: boolean;
-    scale?: number;
-    hoveredObjectId?: string | null;
-  }
+  options?: RenderHeatSimulationOptions
 ): void {
   const isDark = Boolean(options?.isDark);
+  const layer = options?.layer || 'all';
 
   ctx.save();
 
   // Render objects sorted by z-order:
   // 1. Tripod
-  // 2. Burner (behind vessel, underneath tripod)
+  // 2. Burner
   // 3. Wide Basin
   // 4. Beaker / Flask
-  // 5. Thermometer (foreground)
+  // 5. Thermometer
   const sorted = [...sim.objects].sort((a, b) => {
     const order: Record<string, number> = {
       tripod: 1,
@@ -95,30 +106,30 @@ export function renderHeatSimulation(
 
     switch (obj.type) {
       case 'burner':
-        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected || isHovered);
+        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected || isHovered, layer);
         break;
       case 'tripod':
-        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected || isHovered);
+        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected || isHovered, layer);
         break;
       case 'beaker':
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered);
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
         break;
       case 'wide-basin':
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered);
+        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
         break;
       case 'flask':
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered);
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
         break;
       case 'thermometer':
-        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected || isHovered);
+        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected || isHovered, layer);
         break;
     }
 
     ctx.restore();
   }
 
-  // Render Dynamic T-t Graph if enabled
-  if (sim.graph.visible) {
+  // Render Dynamic T-t Graph if enabled (only in 'ui' or 'all' layer)
+  if (sim.graph.visible && (layer === 'all' || layer === 'ui')) {
     renderThermalGraph(ctx, sim, isDark);
   }
 
@@ -126,7 +137,139 @@ export function renderHeatSimulation(
 }
 
 /**
- * 1. Bunsen Burner 2.5D vector rendering
+ * Helper: renders gorgeous multi-stop liquid depth gradient with 3D elliptical meniscus
+ */
+function renderLiquidBody(
+  ctx: CanvasRenderingContext2D,
+  liquidType: LiquidType,
+  x: number,
+  liquidTopY: number,
+  bw: number,
+  liquidH: number,
+  bottomY: number,
+  meniscusRy: number = 4.5
+): void {
+  // 1. Vertical linear depth gradient
+  const grad = ctx.createLinearGradient(x, liquidTopY, x, bottomY);
+  if (liquidType === 'oil') {
+    grad.addColorStop(0, 'rgba(254, 249, 195, 0.85)'); // Golden surface sheen
+    grad.addColorStop(0.18, 'rgba(250, 204, 21, 0.70)'); // Luminous olive oil
+    grad.addColorStop(0.65, 'rgba(245, 158, 11, 0.75)'); // Amber midtone
+    grad.addColorStop(1, 'rgba(180, 83, 9, 0.85)'); // Rich golden depth
+  } else if (liquidType === 'milk') {
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.96)'); // Pure white cream top
+    grad.addColorStop(0.25, 'rgba(254, 252, 232, 0.92)'); // Ivory milk
+    grad.addColorStop(0.7, 'rgba(254, 243, 199, 0.88)'); // Soft warm milk
+    grad.addColorStop(1, 'rgba(253, 230, 138, 0.82)'); // Base density
+  } else {
+    // Water
+    grad.addColorStop(0, 'rgba(224, 242, 254, 0.88)'); // Crystal clear highlight
+    grad.addColorStop(0.15, 'rgba(186, 230, 253, 0.70)'); // Sky water
+    grad.addColorStop(0.6, 'rgba(56, 189, 248, 0.62)'); // Aquamarine
+    grad.addColorStop(1, 'rgba(2, 132, 199, 0.78)'); // Deep clear blue
+  }
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(x - 2, liquidTopY, bw + 6, liquidH + 12);
+
+  // 2. Surface Meniscus with 3D elliptical curvature
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x + bw / 2, liquidTopY, bw / 2 - 1, meniscusRy, 0, 0, Math.PI * 2);
+
+  const meniscusGrad = ctx.createRadialGradient(
+    x + bw / 2, liquidTopY, 2,
+    x + bw / 2, liquidTopY, bw / 2
+  );
+  if (liquidType === 'oil') {
+    meniscusGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+    meniscusGrad.addColorStop(0.7, 'rgba(245, 158, 11, 0.75)');
+    meniscusGrad.addColorStop(1, 'rgba(180, 83, 9, 0.85)');
+  } else if (liquidType === 'milk') {
+    meniscusGrad.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
+    meniscusGrad.addColorStop(1, 'rgba(254, 243, 199, 0.88)');
+  } else {
+    meniscusGrad.addColorStop(0, 'rgba(240, 249, 255, 0.98)');
+    meniscusGrad.addColorStop(0.6, 'rgba(125, 211, 252, 0.80)');
+    meniscusGrad.addColorStop(1, 'rgba(2, 132, 199, 0.85)');
+  }
+
+  ctx.fillStyle = meniscusGrad;
+  ctx.fill();
+
+  ctx.strokeStyle = liquidType === 'oil' ? '#b45309' : liquidType === 'milk' ? '#ca8a04' : '#0284c7';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * On-Canvas Action Badges: Quick Fill Button [💧 Γέμισμα] + Edit Pencil [✎]
+ */
+function renderContainerActions(
+  ctx: CanvasRenderingContext2D,
+  topRightX: number,
+  topRightY: number,
+  vol: number,
+  cap: number,
+  pencilHovered?: boolean,
+  fillHovered?: boolean
+): void {
+  ctx.save();
+
+  // 1. Quick Fill Pill Button [ 💧 Γέμισμα ] / [ 💧 250ml ]
+  const pillW = 62;
+  const pillH = 17;
+  const pillX = topRightX - pillW - 12;
+  const pillY = topRightY - pillH / 2;
+
+  ctx.beginPath();
+  ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fillStyle = fillHovered
+    ? '#234978'
+    : vol > 0
+    ? 'rgba(238, 242, 255, 0.94)'
+    : 'rgba(255, 255, 255, 0.92)';
+  ctx.fill();
+  ctx.strokeStyle = fillHovered
+    ? '#1c3c63'
+    : vol > 0
+    ? '#3b82f6'
+    : 'rgba(100, 116, 139, 0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.font = 'bold 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = fillHovered ? '#ffffff' : vol > 0 ? '#1d4ed8' : '#334155';
+  const label = vol > 0 ? `💧 ${vol}ml` : '💧 Γέμισμα';
+  ctx.fillText(label, pillX + pillW / 2, pillY + pillH / 2);
+
+  // 2. Pencil Badge [ ✎ ]
+  const pencilR = 8.5;
+  const pencilX = topRightX;
+  const pencilY = topRightY;
+
+  ctx.beginPath();
+  ctx.arc(pencilX, pencilY, pencilR, 0, Math.PI * 2);
+  ctx.fillStyle = pencilHovered ? '#234978' : 'rgba(255, 255, 255, 0.92)';
+  ctx.fill();
+  ctx.strokeStyle = pencilHovered ? '#1c3c63' : 'rgba(100, 116, 139, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = pencilHovered ? '#ffffff' : '#475569';
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✎', pencilX, pencilY);
+
+  ctx.restore();
+}
+
+/**
+ * 1. Bunsen Burner - Monochrome hand-drawn sketch style matching notebook ink
  */
 function renderBurner(
   ctx: CanvasRenderingContext2D,
@@ -134,18 +277,20 @@ function renderBurner(
   h: number,
   state: HeatBurnerState | undefined,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
   const cx = w / 2;
-  const baseW = w * 0.76;
-  const baseH = h * 0.18;
-  const stemW = w * 0.18;
-  const stemH = h * 0.58;
-  const baseY = h - baseH;
+  const baseW = w * 0.74;
+  const baseH = h * 0.22;
+  const stemW = w * 0.17;
+  const stemH = h * 0.52;
+  const baseY = h - baseH - 14;
   const stemY = baseY - stemH;
 
   // Selection outline
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -154,153 +299,159 @@ function renderBurner(
     ctx.restore();
   }
 
-  // Flame when ON
-  if (state?.isOn) {
-    const cycle = state.flameCycle || 0;
-    const flicker1 = Math.sin(cycle * Math.PI * 2) * 3;
-    const flicker2 = Math.cos(cycle * Math.PI * 4) * 2;
-    const flameH = state.intensity === 'roaring' ? h * 0.72 : state.intensity === 'normal' ? h * 0.58 : h * 0.42;
-    const flameTipY = stemY - flameH + flicker1;
+  // 1. Physical Apparatus Sketch (apparatus / all)
+  if (layer === 'all' || layer === 'apparatus') {
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.9;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    // Ambient thermal glow
-    const glow = ctx.createRadialGradient(cx, stemY - flameH * 0.4, 4, cx, stemY - flameH * 0.4, flameH * 1.4);
-    glow.addColorStop(0, state.intensity === 'roaring' ? 'rgba(59, 130, 246, 0.45)' : 'rgba(245, 158, 11, 0.45)');
-    glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(cx - flameH * 1.5, stemY - flameH * 1.6, flameH * 3, flameH * 2.2);
+    // Flame when ON (sketched line-art flame with warm inner gradient)
+    if (state?.isOn) {
+      const cycle = state.flameCycle || 0;
+      const flicker1 = Math.sin(cycle * Math.PI * 2) * 2.2;
+      const flicker2 = Math.cos(cycle * Math.PI * 4) * 1.4;
+      const flameH = state.intensity === 'roaring' ? h * 0.65 : state.intensity === 'normal' ? h * 0.52 : h * 0.40;
+      const flameTipY = stemY - 6 - flameH + flicker1;
 
-    // Outer flame body (yellow -> orange -> red tip)
-    ctx.beginPath();
-    ctx.moveTo(cx - stemW * 0.65, stemY);
-    ctx.bezierCurveTo(
-      cx - stemW * 1.1 + flicker2,
-      stemY - flameH * 0.4,
-      cx - stemW * 0.4 + flicker1,
-      stemY - flameH * 0.8,
-      cx,
-      flameTipY
-    );
-    ctx.bezierCurveTo(
-      cx + stemW * 0.4 - flicker1,
-      stemY - flameH * 0.8,
-      cx + stemW * 1.1 - flicker2,
-      stemY - flameH * 0.4,
-      cx + stemW * 0.65,
-      stemY
-    );
-    ctx.closePath();
+      // Ambient thermal glow
+      const glow = ctx.createRadialGradient(cx, stemY - flameH * 0.4, 4, cx, stemY - flameH * 0.4, flameH * 1.3);
+      glow.addColorStop(0, state.intensity === 'roaring' ? 'rgba(59, 130, 246, 0.35)' : 'rgba(245, 158, 11, 0.35)');
+      glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(cx - flameH * 1.4, stemY - flameH * 1.5, flameH * 2.8, flameH * 2.0);
 
-    const outerFlameGrad = ctx.createLinearGradient(cx, stemY, cx, flameTipY);
-    if (state.intensity === 'roaring') {
-      outerFlameGrad.addColorStop(0, '#3b82f6'); // Vibrant blue
-      outerFlameGrad.addColorStop(0.5, '#60a5fa');
-      outerFlameGrad.addColorStop(1, '#93c5fd');
-    } else {
-      outerFlameGrad.addColorStop(0, '#f97316'); // Orange
-      outerFlameGrad.addColorStop(0.65, '#eab308'); // Yellow
-      outerFlameGrad.addColorStop(1, '#ef4444'); // Red flick
+      // Outer flame contour
+      ctx.beginPath();
+      ctx.moveTo(cx - stemW * 0.55, stemY - 4);
+      ctx.bezierCurveTo(
+        cx - stemW * 1.1 + flicker2,
+        stemY - flameH * 0.38,
+        cx - stemW * 0.45 + flicker1,
+        stemY - flameH * 0.78,
+        cx,
+        flameTipY
+      );
+      ctx.bezierCurveTo(
+        cx + stemW * 0.45 - flicker1,
+        stemY - flameH * 0.78,
+        cx + stemW * 1.1 - flicker2,
+        stemY - flameH * 0.38,
+        cx + stemW * 0.55,
+        stemY - 4
+      );
+      ctx.closePath();
+
+      const outerFlameGrad = ctx.createLinearGradient(cx, stemY, cx, flameTipY);
+      if (state.intensity === 'roaring') {
+        outerFlameGrad.addColorStop(0, 'rgba(59, 130, 246, 0.50)');
+        outerFlameGrad.addColorStop(0.6, 'rgba(147, 197, 253, 0.40)');
+        outerFlameGrad.addColorStop(1, 'rgba(219, 234, 254, 0.30)');
+      } else {
+        outerFlameGrad.addColorStop(0, 'rgba(234, 88, 12, 0.55)');
+        outerFlameGrad.addColorStop(0.65, 'rgba(250, 204, 21, 0.45)');
+        outerFlameGrad.addColorStop(1, 'rgba(254, 240, 138, 0.30)');
+      }
+      ctx.fillStyle = outerFlameGrad;
+      ctx.fill();
+      ctx.strokeStyle = state.intensity === 'roaring' ? '#2563eb' : '#ea580c';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // Inner bright flame core
+      ctx.beginPath();
+      ctx.moveTo(cx - stemW * 0.3, stemY - 4);
+      ctx.bezierCurveTo(
+        cx - stemW * 0.45,
+        stemY - flameH * 0.22,
+        cx - stemW * 0.18,
+        stemY - flameH * 0.46,
+        cx,
+        stemY - flameH * 0.55
+      );
+      ctx.bezierCurveTo(
+        cx + stemW * 0.18,
+        stemY - flameH * 0.46,
+        cx + stemW * 0.45,
+        stemY - flameH * 0.22,
+        cx + stemW * 0.3,
+        stemY - 4
+      );
+      ctx.closePath();
+      ctx.fillStyle = state.intensity === 'roaring' ? 'rgba(219, 234, 254, 0.85)' : 'rgba(254, 249, 195, 0.90)';
+      ctx.fill();
+      ctx.strokeStyle = state.intensity === 'roaring' ? '#60a5fa' : '#f59e0b';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
     }
-    ctx.fillStyle = outerFlameGrad;
-    ctx.fill();
 
-    // Inner bright core
+    // Flared Conical Base (Clean line art with double rim, matching sketch in media_1794694870640_233b6a5d.jpg)
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.9;
+
+    // Conical base slope
     ctx.beginPath();
-    ctx.moveTo(cx - stemW * 0.35, stemY);
-    ctx.bezierCurveTo(
-      cx - stemW * 0.5,
-      stemY - flameH * 0.25,
-      cx - stemW * 0.2,
-      stemY - flameH * 0.5,
-      cx,
-      stemY - flameH * 0.6
-    );
-    ctx.bezierCurveTo(
-      cx + stemW * 0.2,
-      stemY - flameH * 0.5,
-      cx + stemW * 0.5,
-      stemY - flameH * 0.25,
-      cx + stemW * 0.35,
-      stemY
-    );
-    ctx.closePath();
-    ctx.fillStyle = state.intensity === 'roaring' ? '#bfdbfe' : '#fef08a';
-    ctx.fill();
+    ctx.moveTo(cx - baseW / 2, baseY + baseH * 0.65);
+    ctx.quadraticCurveTo(cx - stemW * 0.95, baseY + baseH * 0.22, cx - stemW * 0.72, baseY);
+    ctx.lineTo(cx + stemW * 0.72, baseY);
+    ctx.quadraticCurveTo(cx + stemW * 0.95, baseY + baseH * 0.22, cx + baseW / 2, baseY + baseH * 0.65);
+    ctx.stroke();
+
+    // Bottom dual rim ellipses (showing the foot rim thickness from sketch)
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY + baseH * 0.65, baseW / 2, baseH * 0.26, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY + baseH * 0.78, baseW / 2 - 2, baseH * 0.22, 0, 0, Math.PI * 2);
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    // Vertical Burner Barrel / Tube (Straight clean line art)
+    ctx.lineWidth = 1.9;
+    ctx.strokeRect(cx - stemW / 2, stemY, stemW, stemH);
+
+    // Collar with air intake oval slot near bottom
+    const collarY = stemY + stemH * 0.62;
+    const collarH = stemH * 0.22;
+    ctx.strokeRect(cx - stemW * 0.65, collarY, stemW * 1.3, collarH);
+
+    // Air vent slot (oval/pill slot)
+    ctx.beginPath();
+    ctx.roundRect(cx - stemW * 0.28, collarY + collarH * 0.2, stemW * 0.56, collarH * 0.6, collarH * 0.3);
+    ctx.stroke();
+
+    // Top nozzle lip collar
+    const nozzleW = stemW * 1.3;
+    ctx.strokeRect(cx - nozzleW / 2, stemY - 5, nozzleW, 6);
+
+    ctx.restore();
   }
 
-  // Cast Metal Flared Base
-  ctx.save();
-  const baseGrad = ctx.createLinearGradient(cx - baseW / 2, baseY, cx + baseW / 2, baseY);
-  baseGrad.addColorStop(0, isDark ? '#1e293b' : '#334155');
-  baseGrad.addColorStop(0.35, isDark ? '#475569' : '#64748b');
-  baseGrad.addColorStop(0.7, isDark ? '#334155' : '#475569');
-  baseGrad.addColorStop(1, isDark ? '#0f172a' : '#1e293b');
+  // 2. Interactive UI Controls (ui / all)
+  if (layer === 'all' || layer === 'ui') {
+    const btnY = baseY + baseH + 3;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(cx - 28, btnY, 56, 17, 8.5);
+    ctx.fillStyle = state?.isOn ? '#16a34a' : isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.92)';
+    ctx.fill();
+    ctx.strokeStyle = state?.isOn ? '#15803d' : 'rgba(100, 116, 139, 0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
-  ctx.beginPath();
-  ctx.ellipse(cx, baseY + baseH * 0.65, baseW / 2, baseH * 0.32, 0, 0, Math.PI * 2);
-  ctx.fillStyle = isDark ? '#0f172a' : '#1e293b';
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(cx - baseW / 2, baseY + baseH * 0.65);
-  ctx.quadraticCurveTo(cx - stemW * 0.9, baseY + baseH * 0.2, cx - stemW * 0.7, baseY);
-  ctx.lineTo(cx + stemW * 0.7, baseY);
-  ctx.quadraticCurveTo(cx + stemW * 0.9, baseY + baseH * 0.2, cx + baseW / 2, baseY + baseH * 0.65);
-  ctx.closePath();
-  ctx.fillStyle = baseGrad;
-  ctx.fill();
-  ctx.strokeStyle = isDark ? '#334155' : '#1e293b';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Vertical Chrome Burner Barrel / Tube
-  const stemGrad = ctx.createLinearGradient(cx - stemW / 2, stemY, cx + stemW / 2, stemY);
-  stemGrad.addColorStop(0, '#64748b');
-  stemGrad.addColorStop(0.35, '#cbd5e1'); // Highlight reflection
-  stemGrad.addColorStop(0.75, '#94a3b8');
-  stemGrad.addColorStop(1, '#475569');
-
-  ctx.fillStyle = stemGrad;
-  ctx.fillRect(cx - stemW / 2, stemY, stemW, stemH);
-  ctx.strokeRect(cx - stemW / 2, stemY, stemW, stemH);
-
-  // Air hole ring / collar near bottom of barrel
-  const collarY = stemY + stemH * 0.65;
-  const collarH = stemH * 0.22;
-  ctx.fillStyle = isDark ? '#1e293b' : '#334155';
-  ctx.fillRect(cx - stemW * 0.6, collarY, stemW * 1.2, collarH);
-  ctx.strokeStyle = '#94a3b8';
-  ctx.strokeRect(cx - stemW * 0.6, collarY, stemW * 1.2, collarH);
-
-  // Air vent hole slot
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(cx - stemW * 0.25, collarY + collarH * 0.25, stemW * 0.5, collarH * 0.5);
-
-  // Top brass nozzle lip
-  ctx.fillStyle = '#d97706';
-  ctx.fillRect(cx - stemW * 0.55, stemY - 2, stemW * 1.1, 4);
-  ctx.restore();
-
-  // On/Off Indicator Button below base
-  const btnY = baseY + baseH * 0.85;
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(cx - 28, btnY, 56, 18, 9);
-  ctx.fillStyle = state?.isOn ? '#16a34a' : isDark ? '#334155' : '#e2e8f0';
-  ctx.fill();
-  ctx.strokeStyle = state?.isOn ? '#15803d' : '#94a3b8';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.fillStyle = state?.isOn ? '#ffffff' : isDark ? '#f8fafc' : '#334155';
-  ctx.font = 'bold 9.5px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(state?.isOn ? 'ΦΛΟΓΑ ON' : 'OFF', cx, btnY + 9);
-  ctx.restore();
+    ctx.fillStyle = state?.isOn ? '#ffffff' : isDark ? '#f8fafc' : '#334155';
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(state?.isOn ? 'ΦΛΟΓΑ ON' : 'OFF', cx, btnY + 8.5);
+    ctx.restore();
+  }
 }
 
 /**
- * 2. Laboratory Tripod 2.5D with Wire Gauze
+ * 2. Laboratory Tripod - Monochrome line-art with wire gauze crosshatch
  */
 function renderTripod(
   ctx: CanvasRenderingContext2D,
@@ -308,15 +459,17 @@ function renderTripod(
   h: number,
   gauzeTempC: number,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
   const cx = w / 2;
   const collarW = w * 0.72;
   const collarH = h * 0.14;
   const topY = 4;
   const legBotY = h - 6;
 
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -325,91 +478,91 @@ function renderTripod(
     ctx.restore();
   }
 
-  ctx.save();
-  // 3 Black Cast Iron Legs
-  const legColor = isDark ? '#334155' : '#1e293b';
-  ctx.strokeStyle = legColor;
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
+  if (layer === 'all' || layer === 'apparatus') {
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-  // Left Leg
-  ctx.beginPath();
-  ctx.moveTo(cx - collarW * 0.38, topY + collarH * 0.5);
-  ctx.lineTo(cx - collarW * 0.55, legBotY);
-  ctx.stroke();
-
-  // Right Leg
-  ctx.beginPath();
-  ctx.moveTo(cx + collarW * 0.38, topY + collarH * 0.5);
-  ctx.lineTo(cx + collarW * 0.55, legBotY);
-  ctx.stroke();
-
-  // Center Back Leg (perspective foreshortened)
-  ctx.beginPath();
-  ctx.moveTo(cx, topY + collarH * 0.2);
-  ctx.lineTo(cx, legBotY - 4);
-  ctx.lineWidth = 3.5;
-  ctx.strokeStyle = isDark ? '#1e293b' : '#334155';
-  ctx.stroke();
-
-  // Circular Top Ring / Collar
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = legColor;
-  ctx.fillStyle = isDark ? '#0f172a' : '#0f172a';
-  ctx.beginPath();
-  ctx.ellipse(cx, topY + collarH * 0.5, collarW / 2, collarH / 2, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Wire Gauze (Πυράντοχο Πλέγμα Αμιάντου) resting on collar
-  const gauzeW = collarW * 0.88;
-  const gauzeH = collarH * 0.88;
-
-  // Grid mesh lines
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(cx, topY + collarH * 0.5, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-  ctx.clip();
-
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 0.8;
-  const step = 4;
-  for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+    // Left Leg
     ctx.beginPath();
-    ctx.moveTo(x, topY);
-    ctx.lineTo(x, topY + collarH);
+    ctx.moveTo(cx - collarW * 0.38, topY + collarH * 0.5);
+    ctx.lineTo(cx - collarW * 0.55, legBotY);
     ctx.stroke();
-  }
-  for (let y = topY; y <= topY + collarH; y += step) {
+
+    // Right Leg
     ctx.beginPath();
-    ctx.moveTo(cx - gauzeW / 2, y);
-    ctx.lineTo(cx + gauzeW / 2, y);
+    ctx.moveTo(cx + collarW * 0.38, topY + collarH * 0.5);
+    ctx.lineTo(cx + collarW * 0.55, legBotY);
     ctx.stroke();
+
+    // Center Back Leg
+    ctx.beginPath();
+    ctx.moveTo(cx, topY + collarH * 0.2);
+    ctx.lineTo(cx, legBotY - 4);
+    ctx.lineWidth = 2.0;
+    ctx.stroke();
+
+    // Circular Top Collar Ring
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(cx, topY + collarH * 0.5, collarW / 2, collarH / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Wire Gauze mesh crosshatch
+    const gauzeW = collarW * 0.88;
+    const gauzeH = collarH * 0.88;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, topY + collarH * 0.5, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
+    ctx.lineWidth = 0.8;
+    const step = 4;
+    for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, topY);
+      ctx.lineTo(x, topY + collarH);
+      ctx.stroke();
+    }
+    for (let y = topY; y <= topY + collarH; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(cx - gauzeW / 2, y);
+      ctx.lineTo(cx + gauzeW / 2, y);
+      ctx.stroke();
+    }
+
+    // Central ceramic circle (heats up with burner)
+    const ceramicR = gauzeH * 0.52;
+    const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
+
+    ctx.beginPath();
+    ctx.ellipse(cx, topY + collarH * 0.5, ceramicR * 1.5, ceramicR, 0, 0, Math.PI * 2);
+    if (heatFraction > 0.05) {
+      const discGlow = ctx.createRadialGradient(cx, topY + collarH * 0.5, 2, cx, topY + collarH * 0.5, ceramicR * 1.5);
+      discGlow.addColorStop(0, '#fef08a');
+      discGlow.addColorStop(0.4, '#f97316');
+      discGlow.addColorStop(0.85, '#dc2626');
+      discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
+      ctx.fillStyle = discGlow;
+    } else {
+      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.75)';
+    }
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
   }
-
-  // Central ceramic disc (turns radiant glowing orange/red when heated by burner)
-  const ceramicR = gauzeH * 0.55;
-  const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
-
-  ctx.beginPath();
-  ctx.ellipse(cx, topY + collarH * 0.5, ceramicR * 1.5, ceramicR, 0, 0, Math.PI * 2);
-  if (heatFraction > 0.05) {
-    const discGlow = ctx.createRadialGradient(cx, topY + collarH * 0.5, 2, cx, topY + collarH * 0.5, ceramicR * 1.5);
-    discGlow.addColorStop(0, '#fef08a'); // Hot center
-    discGlow.addColorStop(0.4, '#f97316'); // Orange
-    discGlow.addColorStop(0.85, '#dc2626'); // Red
-    discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
-    ctx.fillStyle = discGlow;
-  } else {
-    ctx.fillStyle = '#e2e8f0'; // Cold white ceramic
-  }
-  ctx.fill();
-  ctx.restore();
-
-  ctx.restore();
 }
 
 /**
- * 3. Borosilicate Glass Beaker (2.5D with Liquid, Bubbles, Steam & Pencil Button)
+ * 3. Borosilicate Glass Beaker - Monochrome line-art matching the hand-drawn sketch
  */
 function renderBeaker(
   ctx: CanvasRenderingContext2D,
@@ -417,15 +570,21 @@ function renderBeaker(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
-  const pad = 6;
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const pad = 8;
   const bw = w - pad * 2;
-  const bh = h - pad * 2;
+  const bh = h - pad * 2 - 6;
   const x = pad;
-  const y = pad;
+  const y = pad + 4;
+  const cx = x + bw / 2;
+  const rimH = 14;
+  const bottomH = 14;
+  const spoutW = 12;
 
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -436,98 +595,120 @@ function renderBeaker(
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
-  const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
+  const liquidType = state?.liquidType ?? 'water';
 
-  // Calculate liquid height: leaving a mandatory thin headspace even when 100% full
-  const maxLiquidFraction = 0.88;
+  const maxLiquidFraction = 0.86;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = bh * liquidFrac;
-  const liquidTopY = y + bh - liquidH;
+  const liquidH = (bh - bottomH / 2) * liquidFrac;
+  const liquidTopY = y + bh - bottomH / 2 - liquidH;
 
-  ctx.save();
-
-  // Glass Beaker Path (with left pouring spout)
-  const spoutW = 10;
-  ctx.beginPath();
-  ctx.moveTo(x - spoutW, y + 2); // Spout tip
-  ctx.quadraticCurveTo(x, y + 6, x, y + 14); // Spout blend to left rim
-  ctx.lineTo(x, y + bh - 10);
-  ctx.quadraticCurveTo(x, y + bh, x + 10, y + bh); // Bottom left rounded corner
-  ctx.lineTo(x + bw - 10, y + bh);
-  ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - 10); // Bottom right
-  ctx.lineTo(x + bw, y + 10);
-  ctx.quadraticCurveTo(x + bw, y + 2, x + bw - 4, y); // Right rim flare
-  ctx.lineTo(x + 4, y);
-  ctx.closePath();
-
-  // Draw Liquid Fill if volume > 0
-  if (vol > 0 && liquidH > 2) {
+  // 1. Physical Beaker & Liquid Body (apparatus / all)
+  if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
-    ctx.clip(); // Clip within beaker shape
 
-    // Liquid Body Fill
-    ctx.fillStyle = liquidProp.color;
-    ctx.fillRect(x - 2, liquidTopY, bw + 14, liquidH + 10);
+    // Draw Liquid Fill if volume > 0
+    if (vol > 0 && liquidH > 2) {
+      ctx.save();
+      // Clip inside beaker cylindrical shape
+      ctx.beginPath();
+      ctx.moveTo(x, liquidTopY);
+      ctx.lineTo(x, y + bh - bottomH / 2);
+      ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, Math.PI, 0, true);
+      ctx.lineTo(x + bw, liquidTopY);
+      ctx.closePath();
+      ctx.clip();
 
-    // Liquid Surface Meniscus
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.35);
+
+      // Boiling Bubbles & Steam
+      if (state?.isBoiling) {
+        renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
+        renderSteam(ctx, cx, liquidTopY - 6, bw);
+      }
+
+      ctx.restore();
+    }
+
+    // Outer Glass Beaker Path (with left pouring spout & curved rim flare)
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     ctx.beginPath();
-    ctx.ellipse(x + bw / 2, liquidTopY, bw / 2 - 1, 4.5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = liquidProp.glowColor;
-    ctx.fill();
-    ctx.strokeStyle = liquidProp.deepColor;
-    ctx.lineWidth = 1.2;
+    // Spout tip
+    ctx.moveTo(x - spoutW, y + 2);
+    // Spout top curve blending into top rim
+    ctx.quadraticCurveTo(x - 2, y, x + 4, y);
+    // Top rim to right flare
+    ctx.lineTo(x + bw - 4, y);
+    ctx.quadraticCurveTo(x + bw + 3, y + 2, x + bw, y + rimH / 2);
+    // Right vertical wall
+    ctx.lineTo(x + bw, y + bh - bottomH / 2);
+    // Bottom outer curve (base)
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - 10, y + bh);
+    ctx.lineTo(x + 10, y + bh);
+    ctx.quadraticCurveTo(x, y + bh, x, y + bh - bottomH / 2);
+    // Left vertical wall
+    ctx.lineTo(x, y + rimH / 2 + 5);
+    // Spout under-curve
+    ctx.quadraticCurveTo(x - 2, y + 6, x - spoutW, y + 2);
     ctx.stroke();
 
-    // Boiling Bubbles & Steam
-    if (state?.isBoiling) {
-      renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
-      renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
+    // Top Rim 2.5D Ellipse (Open beaker mouth from sketch)
+    ctx.beginPath();
+    ctx.ellipse(cx, y + rimH / 2, bw / 2, rimH / 2, 0, 0, Math.PI * 2);
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // Bottom 2.5D Depth Curve (visible through glass, exactly as in media_1794694870640_233b6a5d.jpg)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, 0, Math.PI);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+
+    // Vertical glass reflection sheen strip on right side
+    const reflectGrad = ctx.createLinearGradient(x + bw - 14, y, x + bw - 4, y);
+    reflectGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    reflectGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.35)');
+    reflectGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = reflectGrad;
+    ctx.fillRect(x + bw - 14, y + rimH, 10, bh - rimH - bottomH);
+
+    // Graduated Measurement Lines (e.g. 100, 200, 300, 400, 500 ml)
+    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
+    ctx.lineWidth = 1.1;
+    const numMarks = 5;
+    for (let i = 1; i <= numMarks; i++) {
+      const markFrac = (i / numMarks) * maxLiquidFraction;
+      const my = y + bh - bottomH / 2 - (bh - bottomH / 2) * markFrac;
+      const markVal = Math.round((i / numMarks) * cap);
+
+      ctx.beginPath();
+      ctx.moveTo(x + 3, my);
+      ctx.lineTo(x + 14, my);
+      ctx.stroke();
+
+      ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
+      ctx.font = 'bold 8.5px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${markVal}`, x + 17, my + 3);
     }
 
     ctx.restore();
   }
 
-  // Borosilicate Glass Reflections & Outer Strokes
-  ctx.strokeStyle = isDark ? '#94a3b8' : '#475569';
-  ctx.lineWidth = 2.2;
-  ctx.stroke();
-
-  // Vertical highlight reflection strip on right glass wall
-  const reflectGrad = ctx.createLinearGradient(x + bw - 14, y, x + bw - 4, y);
-  reflectGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  reflectGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.45)');
-  reflectGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = reflectGrad;
-  ctx.fillRect(x + bw - 14, y + 8, 10, bh - 16);
-
-  // Graduated Measurement Lines (e.g. 100, 200, 300, 400, 500 ml)
-  ctx.strokeStyle = isDark ? '#e2e8f0' : '#1e293b';
-  ctx.lineWidth = 1;
-  const numMarks = 5;
-  for (let i = 1; i <= numMarks; i++) {
-    const markFrac = (i / numMarks) * maxLiquidFraction;
-    const my = y + bh - bh * markFrac;
-    const markVal = Math.round((i / numMarks) * cap);
-
-    ctx.beginPath();
-    ctx.moveTo(x + 2, my);
-    ctx.lineTo(x + 14, my);
-    ctx.stroke();
-
-    ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
-    ctx.font = '8px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${markVal}`, x + 17, my + 3);
+  // 2. Interactive Action Badges (ui / all)
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActions(ctx, x + bw - 8, y - 8, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
-
-  // Faint Pencil Icon on Top Right
-  renderPencilBadge(ctx, x + bw - 14, y - 6, state?.pencilHovered);
-
-  ctx.restore();
 }
 
 /**
- * 4. Wide Basin / Water Bath (Υδατόλουτρο)
+ * 4. Wide Basin / Water Bath (Υδατόλουτρο) - Monochrome line art
  */
 function renderWideBasin(
   ctx: CanvasRenderingContext2D,
@@ -535,15 +716,20 @@ function renderWideBasin(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
-  const pad = 6;
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const pad = 8;
   const bw = w - pad * 2;
-  const bh = h - pad * 2;
+  const bh = h - pad * 2 - 6;
   const x = pad;
-  const y = pad;
+  const y = pad + 4;
+  const cx = x + bw / 2;
+  const rimH = 14;
+  const bottomH = 14;
 
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -554,74 +740,91 @@ function renderWideBasin(
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 800;
-  const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
+  const liquidType = state?.liquidType ?? 'water';
 
   const maxLiquidFraction = 0.85;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = bh * liquidFrac;
-  const liquidTopY = y + bh - liquidH;
+  const liquidH = (bh - bottomH / 2) * liquidFrac;
+  const liquidTopY = y + bh - bottomH / 2 - liquidH;
 
-  ctx.save();
-
-  // Wide Low Basin Shape
-  ctx.beginPath();
-  ctx.moveTo(x - 6, y + 2); // Left rim lip
-  ctx.quadraticCurveTo(x, y + 4, x, y + 12);
-  ctx.lineTo(x, y + bh - 12);
-  ctx.quadraticCurveTo(x, y + bh, x + 14, y + bh);
-  ctx.lineTo(x + bw - 14, y + bh);
-  ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - 12);
-  ctx.lineTo(x + bw, y + 12);
-  ctx.quadraticCurveTo(x + bw, y + 4, x + bw + 6, y + 2);
-  ctx.closePath();
-
-  // Liquid Fill
-  if (vol > 0 && liquidH > 2) {
+  // 1. Physical Basin Sketch & Liquid Body (apparatus / all)
+  if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
-    ctx.clip();
-    ctx.fillStyle = liquidProp.color;
-    ctx.fillRect(x - 2, liquidTopY, bw + 10, liquidH + 6);
 
-    // Liquid Surface
+    // Liquid Fill
+    if (vol > 0 && liquidH > 2) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x, liquidTopY);
+      ctx.lineTo(x, y + bh - bottomH / 2);
+      ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, Math.PI, 0, true);
+      ctx.lineTo(x + bw, liquidTopY);
+      ctx.closePath();
+      ctx.clip();
+
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.4);
+
+      if (state?.isBoiling) {
+        renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
+        renderSteam(ctx, cx, liquidTopY - 6, bw);
+      }
+      ctx.restore();
+    }
+
+    // Basin Outer Outline
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     ctx.beginPath();
-    ctx.ellipse(x + bw / 2, liquidTopY, bw / 2 - 1, 5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = liquidProp.glowColor;
-    ctx.fill();
-    ctx.strokeStyle = liquidProp.deepColor;
-    ctx.lineWidth = 1;
+    ctx.moveTo(x - 8, y + 2);
+    ctx.quadraticCurveTo(x, y + 4, x, y + 14);
+    ctx.lineTo(x, y + bh - bottomH / 2);
+    ctx.quadraticCurveTo(x, y + bh, x + 14, y + bh);
+    ctx.lineTo(x + bw - 14, y + bh);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
+    ctx.lineTo(x + bw, y + 14);
+    ctx.quadraticCurveTo(x + bw, y + 4, x + bw + 8, y + 2);
     ctx.stroke();
 
-    if (state?.isBoiling) {
-      renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
-      renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
+    // Top Rim 2.5D Ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, y + rimH / 2, bw / 2, rimH / 2, 0, 0, Math.PI * 2);
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // Bottom 2.5D Depth Curve
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, 0, Math.PI);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.restore();
+
+    // Graduated marks on left
+    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
+    ctx.lineWidth = 1.1;
+    for (let i = 1; i <= 3; i++) {
+      const my = y + bh - bottomH / 2 - (bh - bottomH / 2) * 0.85 * (i / 3);
+      ctx.beginPath();
+      ctx.moveTo(x + 3, my);
+      ctx.lineTo(x + 12, my);
+      ctx.stroke();
     }
+
     ctx.restore();
   }
 
-  // Glass Stroke
-  ctx.strokeStyle = isDark ? '#94a3b8' : '#475569';
-  ctx.lineWidth = 2.4;
-  ctx.stroke();
-
-  // Graduated marks on left
-  ctx.strokeStyle = isDark ? '#e2e8f0' : '#1e293b';
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const my = y + bh - (bh * 0.85 * (i / 3));
-    ctx.beginPath();
-    ctx.moveTo(x + 2, my);
-    ctx.lineTo(x + 10, my);
-    ctx.stroke();
+  // 2. Interactive Action Badges (ui / all)
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActions(ctx, x + bw - 8, y - 8, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
-
-  // Faint Pencil Icon on Top Right
-  renderPencilBadge(ctx, x + bw - 14, y - 6, state?.pencilHovered);
-
-  ctx.restore();
 }
 
 /**
- * 5. Erlenmeyer Flask (Κωνική Φιάλη)
+ * 5. Erlenmeyer Flask (Κωνική Φιάλη) - Monochrome line art
  */
 function renderFlask(
   ctx: CanvasRenderingContext2D,
@@ -629,18 +832,21 @@ function renderFlask(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
-  const pad = 6;
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const pad = 8;
   const bw = w - pad * 2;
-  const bh = h - pad * 2;
+  const bh = h - pad * 2 - 6;
   const x = pad;
-  const y = pad;
+  const y = pad + 4;
   const cx = x + bw / 2;
   const neckW = bw * 0.28;
-  const neckH = bh * 0.38;
+  const neckH = bh * 0.36;
+  const bottomH = 12;
 
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -651,78 +857,91 @@ function renderFlask(
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
-  const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
+  const liquidType = state?.liquidType ?? 'water';
 
   const maxLiquidFraction = 0.86;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = bh * liquidFrac;
-  const liquidTopY = y + bh - liquidH;
+  const liquidH = (bh - bottomH / 2) * liquidFrac;
+  const liquidTopY = y + bh - bottomH / 2 - liquidH;
 
-  ctx.save();
-
-  // Erlenmeyer Flask Path
-  ctx.beginPath();
-  // Flared top rim
-  ctx.moveTo(cx - neckW * 0.65, y);
-  ctx.lineTo(cx + neckW * 0.65, y);
-  // Neck
-  ctx.lineTo(cx + neckW / 2, y + neckH);
-  // Conical bottom slope
-  ctx.lineTo(x + bw - 6, y + bh - 8);
-  ctx.quadraticCurveTo(x + bw, y + bh, x + bw - 10, y + bh);
-  ctx.lineTo(x + 10, y + bh);
-  ctx.quadraticCurveTo(x, y + bh, x + 6, y + bh - 8);
-  ctx.lineTo(cx - neckW / 2, y + neckH);
-  ctx.closePath();
-
-  // Liquid Fill
-  if (vol > 0 && liquidH > 2) {
+  // 1. Physical Flask & Liquid Body (apparatus / all)
+  if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
-    ctx.clip();
-    ctx.fillStyle = liquidProp.color;
-    ctx.fillRect(x - 2, liquidTopY, bw + 10, liquidH + 10);
 
-    // Meniscus
-    const currentSpanW = cx - (cx - neckW / 2) + ((bw / 2 - neckW / 2) * (liquidH / (bh - neckH)));
-    ctx.beginPath();
-    ctx.ellipse(cx, liquidTopY, Math.min(bw / 2 - 2, currentSpanW), 4, 0, 0, Math.PI * 2);
-    ctx.fillStyle = liquidProp.glowColor;
-    ctx.fill();
-    ctx.strokeStyle = liquidProp.deepColor;
-    ctx.lineWidth = 1;
+    // Flask Path
+    const createFlaskPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(cx - neckW * 0.65, y);
+      ctx.lineTo(cx + neckW * 0.65, y);
+      ctx.lineTo(cx + neckW / 2, y + neckH);
+      ctx.lineTo(x + bw - 6, y + bh - 8);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - 10, y + bh);
+      ctx.lineTo(x + 10, y + bh);
+      ctx.quadraticCurveTo(x, y + bh, x + 6, y + bh - 8);
+      ctx.lineTo(cx - neckW / 2, y + neckH);
+      ctx.closePath();
+    };
+
+    // Liquid Fill
+    if (vol > 0 && liquidH > 2) {
+      ctx.save();
+      createFlaskPath();
+      ctx.clip();
+
+      const currentSpanW = cx - (cx - neckW / 2) + ((bw / 2 - neckW / 2) * (liquidH / (bh - neckH)));
+      renderLiquidBody(ctx, liquidType, cx - currentSpanW, liquidTopY, currentSpanW * 2, liquidH, y + bh, 4.0);
+
+      if (state?.isBoiling) {
+        renderBoilingBubbles(ctx, cx - currentSpanW * 0.7, liquidTopY, currentSpanW * 1.4, liquidH);
+        renderSteam(ctx, cx, y - 4, neckW);
+      }
+      ctx.restore();
+    }
+
+    // Flask Outer Glass Outline
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    createFlaskPath();
     ctx.stroke();
 
-    if (state?.isBoiling) {
-      renderBoilingBubbles(ctx, cx - currentSpanW * 0.7, liquidTopY, currentSpanW * 1.4, liquidH);
-      renderSteam(ctx, cx, y - 4, neckW);
+    // Flared top rim ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 2, neckW * 0.65, 3.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Bottom 2.5D Depth Curve
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2 - 6, bottomH / 2, 0, 0, Math.PI);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.restore();
+
+    // Graduated marks on lower conical body
+    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
+    ctx.lineWidth = 1.1;
+    for (let i = 1; i <= 4; i++) {
+      const my = y + bh - bh * 0.55 * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(cx - neckW * 0.9 - i * 3, my);
+      ctx.lineTo(cx - neckW * 0.4, my);
+      ctx.stroke();
     }
+
     ctx.restore();
   }
 
-  // Glass Stroke
-  ctx.strokeStyle = isDark ? '#94a3b8' : '#475569';
-  ctx.lineWidth = 2.2;
-  ctx.stroke();
-
-  // Graduated marks on lower conical body
-  ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 4; i++) {
-    const my = y + bh - bh * 0.55 * (i / 4);
-    ctx.beginPath();
-    ctx.moveTo(cx - neckW * 0.9 - i * 3, my);
-    ctx.lineTo(cx - neckW * 0.4, my);
-    ctx.stroke();
+  // 2. Interactive Action Badges (ui / all)
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActions(ctx, cx + neckW / 2 + 32, y - 6, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
-
-  // Faint Pencil Icon on Top Right
-  renderPencilBadge(ctx, cx + neckW / 2 + 6, y - 4, state?.pencilHovered);
-
-  ctx.restore();
 }
 
 /**
- * 6. Precision Laboratory Thermometer
+ * 6. Precision Laboratory Thermometer - Monochrome sketch style with dynamic temperature indicator
  */
 function renderThermometer(
   ctx: CanvasRenderingContext2D,
@@ -730,8 +949,10 @@ function renderThermometer(
   h: number,
   state: HeatThermometerState | undefined,
   isDark: boolean,
-  highlight: boolean
+  highlight: boolean,
+  layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
+  const strokeColor = isDark ? '#f8fafc' : '#111827';
   const cx = w / 2;
   const stemW = 8;
   const bulbR = 7.5;
@@ -739,7 +960,7 @@ function renderThermometer(
   const botY = h - bulbR - 4;
   const stemH = botY - topY;
 
-  if (highlight) {
+  if (highlight && (layer === 'all' || layer === 'apparatus')) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -753,111 +974,90 @@ function renderThermometer(
   const liquidTopY = botY - stemH * tempFrac;
   const liquidColor = getThermometerColor(temp);
 
-  ctx.save();
+  // 1. Physical Thermometer Sketch (apparatus / all)
+  if (layer === 'all' || layer === 'apparatus') {
+    ctx.save();
 
-  // Glass Outer Stem
-  ctx.beginPath();
-  ctx.roundRect(cx - stemW / 2, topY, stemW, stemH, stemW / 2);
-  ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.65)';
-  ctx.fill();
-  ctx.strokeStyle = isDark ? '#94a3b8' : '#64748b';
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-
-  // Glass Bulb at bottom
-  ctx.beginPath();
-  ctx.arc(cx, botY + 2, bulbR, 0, Math.PI * 2);
-  ctx.fillStyle = liquidColor;
-  ctx.fill();
-  ctx.strokeStyle = isDark ? '#cbd5e1' : '#475569';
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-
-  // Liquid Column inside stem
-  const colW = stemW - 3;
-  ctx.beginPath();
-  ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
-  ctx.fillStyle = liquidColor;
-  ctx.fill();
-
-  // Calibration Tick Marks (0 to 100 °C)
-  ctx.strokeStyle = isDark ? '#cbd5e1' : '#1e293b';
-  ctx.lineWidth = 0.8;
-  for (let t = 0; t <= 100; t += 10) {
-    const ty = botY - stemH * (t / 100);
-    const isMajor = t === 0 || t === 50 || t === 100;
-    const tickLen = isMajor ? 6 : 3.5;
-
+    // Glass Outer Stem
     ctx.beginPath();
-    ctx.moveTo(cx + stemW / 2, ty);
-    ctx.lineTo(cx + stemW / 2 + tickLen, ty);
+    ctx.roundRect(cx - stemW / 2, topY, stemW, stemH, stemW / 2);
+    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.4)' : 'rgba(255, 255, 255, 0.55)';
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    if (isMajor) {
-      ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
-      ctx.font = '7.5px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${t}`, cx + stemW / 2 + 8, ty + 2.5);
+    // Glass Bulb at bottom
+    ctx.beginPath();
+    ctx.arc(cx, botY + 2, bulbR, 0, Math.PI * 2);
+    ctx.fillStyle = liquidColor;
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // Liquid Column inside stem
+    const colW = stemW - 3;
+    ctx.beginPath();
+    ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
+    ctx.fillStyle = liquidColor;
+    ctx.fill();
+
+    // Calibration Tick Marks (0 to 100 °C)
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.9;
+    for (let t = 0; t <= 100; t += 10) {
+      const ty = botY - stemH * (t / 100);
+      const isMajor = t === 0 || t === 50 || t === 100;
+      const tickLen = isMajor ? 6 : 3.5;
+
+      ctx.beginPath();
+      ctx.moveTo(cx + stemW / 2, ty);
+      ctx.lineTo(cx + stemW / 2 + tickLen, ty);
+      ctx.stroke();
+
+      if (isMajor) {
+        ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+        ctx.font = 'bold 7.5px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${t}`, cx + stemW / 2 + 8, ty + 2.5);
+      }
     }
+
+    ctx.restore();
   }
 
-  // Live Digital Badge above/beside thermometer
-  const badgeText = `${temp.toFixed(1)} °C`;
-  ctx.font = 'bold 10px system-ui, sans-serif';
-  const badgeW = ctx.measureText(badgeText).width + 18;
-  const badgeH = 18;
-  const badgeX = cx - badgeW / 2;
-  const badgeY = topY - badgeH - 3;
+  // 2. Interactive Digital Badge (ui / all)
+  if (layer === 'all' || layer === 'ui') {
+    ctx.save();
+    const badgeText = `${temp.toFixed(1)} °C`;
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    const badgeW = ctx.measureText(badgeText).width + 18;
+    const badgeH = 18;
+    const badgeX = cx - badgeW / 2;
+    const badgeY = topY - badgeH - 3;
 
-  ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.94)';
-  ctx.fill();
-  ctx.strokeStyle = liquidColor;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.94)';
+    ctx.fill();
+    ctx.strokeStyle = liquidColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-  // Color indicator dot
-  ctx.beginPath();
-  ctx.arc(badgeX + 8, badgeY + badgeH / 2, 3.5, 0, Math.PI * 2);
-  ctx.fillStyle = liquidColor;
-  ctx.fill();
+    // Color indicator dot
+    ctx.beginPath();
+    ctx.arc(badgeX + 8, badgeY + badgeH / 2, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = liquidColor;
+    ctx.fill();
 
-  // Numeric text
-  ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(badgeText, badgeX + 15, badgeY + badgeH / 2);
-
-  ctx.restore();
-}
-
-/**
- * Faint Pencil Badge on Container Top-Right (Click to configure)
- */
-function renderPencilBadge(
-  ctx: CanvasRenderingContext2D,
-  bx: number,
-  by: number,
-  isHovered?: boolean
-): void {
-  ctx.save();
-  const r = 9;
-  ctx.beginPath();
-  ctx.arc(bx, by, r, 0, Math.PI * 2);
-  ctx.fillStyle = isHovered ? '#234978' : 'rgba(100, 116, 139, 0.18)';
-  ctx.fill();
-  ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(100, 116, 139, 0.45)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Draw clean vector pencil icon
-  ctx.fillStyle = isHovered ? '#ffffff' : '#64748b';
-  ctx.font = '9px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('✎', bx, by);
-  ctx.restore();
+    // Numeric text
+    ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, badgeX + 15, badgeY + badgeH / 2);
+    ctx.restore();
+  }
 }
 
 /**
@@ -881,9 +1081,9 @@ function renderBoilingBubbles(
 
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.70)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.90)';
     ctx.lineWidth = 0.8;
     ctx.stroke();
   }
@@ -935,7 +1135,7 @@ function renderThermalGraph(
   // Glass Card Background (iPadOS frosted glass)
   ctx.beginPath();
   ctx.roundRect(gx, gy, gw, gh, 16);
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.72)' : 'rgba(253, 251, 247, 0.75)';
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.78)' : 'rgba(253, 251, 247, 0.82)';
   ctx.fill();
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.85)';
   ctx.lineWidth = 1.5;
