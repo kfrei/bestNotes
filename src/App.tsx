@@ -51837,7 +51837,7 @@ export default function App() {
   // Dedicated Admin Portal View (ExplainBoards Admin Dashboard)
   if (isAdminViewOpen) {
     return (
-      <>
+      <div className="fixed inset-0 w-screen h-screen z-[9999] overflow-hidden bg-[#f7f5f0] select-auto touch-pan-y">
         <AdminDashboard
           currentUser={currentUser}
           notebooks={notebooks}
@@ -51869,7 +51869,7 @@ export default function App() {
             showToast('🎉 Συνδέθηκες επιτυχώς!');
           }}
         />
-      </>
+      </div>
     );
   }
 

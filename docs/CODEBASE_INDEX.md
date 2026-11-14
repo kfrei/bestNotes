@@ -123,7 +123,7 @@ graph TD
 | | `src/features/admin/components/AdminKpiCards.tsx` | Συγκεντρωτικές κάρτες KPI (Χρήστες, Αρχεία, Χώρος Storage, Μέσος Χρόνος) με σαφή διαχωρισμό δεδομένων Admin vs Υπόλοιποι Χρήστες | Απομονωμένο metrics dashboard |
 | | `src/features/admin/components/AdminUsersTable.tsx` | Πλήρης πίνακας χρηστών με αναζήτηση, ταξινόμηση, avatar, metrics & CSV εξαγωγή με έντονη διαφοροποίηση και επισήμανση της γραμμής του Admin (`Admin (Εσύ)`) | Data grid διαχείρισης χρηστών |
 | | `src/features/admin/components/AdminTrafficView.tsx` | Αναλυτικός πίνακας & visual timeline για επισκέπτες και αρχεία ανά ημέρα με CSV εξαγωγή | Traffic & Guest Activity View |
-| | `src/features/admin/components/AdminOcrAnalyticsView.tsx` | Παρακολούθηση όλων των AI features (Κείμενο/Tags, Μαθηματικά/f(x), Χημεία/3D, Ζωντάνεμα/Smart Sketch), συγκριτική ανάλυση κατανάλωσης Quota Admin vs Άλλοι/Guests, ποσοστό δωρεάν ορίου Google Gemini (1.500 RPD), ιστόγραμμα 14 ημερών & CSV | AI & Quota Analytics Dashboard |
+| | `src/features/admin/components/AdminOcrAnalyticsView.tsx` | Παρακολούθηση όλων των AI features (Κείμενο/Tags, Μαθηματικά/f(x), Χημεία/3D, Ζωντάνεμα/Smart Sketch), συγκριτική ανάλυση κατανάλωσης Quota Admin vs Άλλοι/Guests, ραβδόγραμμα % κατανάλωσης δωρεάν ορίου Google Gemini (1.500 RPD) ανά ημέρα με mode switcher, ιστόγραμμα 14 ημερών & CSV | AI & Quota Analytics Dashboard |
 | | `src/features/admin/AdminDashboard.tsx` | Κεντρικός διαχειριστικός πίνακας με Google Auth verification για `freiderikoskostas@gmail.com` | Αυτόνομο portal διαχείρισης |
 | **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide) | Αποφυγή μονολιθικού bundle 6.2 MB & ακαριαία φόρτωση στο iPad |
 

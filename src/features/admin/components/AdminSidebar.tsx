@@ -58,7 +58,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 shrink-0 bg-[#1b2a4a] text-white flex flex-col justify-between p-4 shadow-2xl select-none min-h-screen">
+    <aside className="w-64 h-full shrink-0 bg-[#1b2a4a] text-white flex flex-col justify-between p-4 shadow-2xl select-none overflow-y-auto overscroll-contain">
       {/* Top Branding */}
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-2">

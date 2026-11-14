@@ -12,6 +12,8 @@ import {
   Clapperboard,
   ShieldCheck,
   Users,
+  Percent,
+  BarChart3,
 } from 'lucide-react';
 import type { DailyTrafficStats } from '../types';
 import {
@@ -29,6 +31,8 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
   isLoading,
 }) => {
   const [searchDate, setSearchDate] = useState<string>('');
+  const [chartMode, setChartMode] = useState<'quotaPct' | 'type' | 'attribution'>('quotaPct');
+
   const ocrMetrics = computeOcrMetrics(traffic);
 
   const filteredTraffic = traffic.filter((t) =>
@@ -36,10 +40,30 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
   );
 
   // Maximum AI total across recent days for proportional histogram height
+  const recentDays = traffic.slice(0, 14).reverse();
   const maxOcrInChart = Math.max(
     1,
-    ...traffic.slice(0, 14).map((t) => t.ocrTotalCount || 0)
+    ...recentDays.map((t) => t.ocrTotalCount || 0)
   );
+
+  // Maximum % quota across recent 14 days
+  const maxDayQuotaPct = Math.max(
+    0.1,
+    ...recentDays.map((t) => Number((((t.ocrTotalCount || 0) / 1500) * 100).toFixed(1)))
+  );
+
+  // Average % quota across recent 14 days
+  const avgQuotaPct =
+    recentDays.length > 0
+      ? Number(
+          (
+            recentDays.reduce(
+              (acc, t) => acc + ((t.ocrTotalCount || 0) / 1500) * 100,
+              0
+            ) / recentDays.length
+          ).toFixed(1)
+        )
+      : 0;
 
   // Admin vs Others proportions today
   const adminTodayPct =
@@ -61,7 +85,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             <span>Ανάλυση AI & Κατανάλωση Δωρεάν Ορίου Gemini</span>
           </h2>
           <p className="text-xs text-[#64748b]">
-            Πλήρης καταμέτρηση OCR (Κείμενο, Μαθηματικά, Χημεία) & Έξυπνου Ζωντανέματος (Smart Sketch) με διαχωρισμό Admin vs Υπολοίπων.
+            Πλήρης καταμέτρηση OCR (Κείμενο, Μαθηματικά, Χημεία) & Έξυπνου Ζωντανέματος (Smart Sketch) με ραβδόγραμμα % κατανάλωσης ανά ημέρα.
           </p>
         </div>
 
@@ -264,76 +288,214 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Daily Stacked Histogram Chart (Last 14 days) */}
+      {/* 5. Daily % Quota Bar Chart & Histograms (Last 14 days) */}
       <div className="p-5 rounded-3xl bg-white/75 backdrop-blur-md border border-white/85 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h3 className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
-            <span>Ημερήσιο Ιστόγραμμα AI ανά Τύπο (Τελευταίες 14 Ημέρες)</span>
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#dfd8cb]/60 pb-3">
+          <div>
+            <h3 className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
+              <span>
+                {chartMode === 'quotaPct'
+                  ? 'Ραβδόγραμμα % Κατανάλωσης Δωρεάν Ορίου Gemini (1.500 αιτήματα / ημέρα)'
+                  : chartMode === 'type'
+                  ? 'Ημερήσιο Ιστόγραμμα AI ανά Τύπο (Κείμενο, Math, Χημεία, Ζωντάνεμα)'
+                  : 'Ημερήσια Κατανομή AI: Admin vs Υπόλοιποι Χρήστες'}
+              </span>
+            </h3>
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              {chartMode === 'quotaPct'
+                ? `14-day Μ.Ο.: ${avgQuotaPct}% | Σήμερα: ${ocrMetrics.quotaUsedPercent}% (${ocrMetrics.todayTotal} / 1.500)`
+                : `Τελευταίες ${recentDays.length} καταγεγραμμένες ημέρες`}
+            </p>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#64748b]">
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Κείμενο
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#2b4a7a]" /> Μαθηματικά
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#4b6a9a]" /> Χημεία
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#5c4a72]" /> Ζωντάνεμα
-            </span>
+          {/* Mode Switcher Tabs */}
+          <div className="flex items-center gap-1 bg-[#efebe3]/80 p-1 rounded-xl self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setChartMode('quotaPct')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                chartMode === 'quotaPct'
+                  ? 'bg-[#1b2a4a] text-white shadow-2xs'
+                  : 'text-[#1b2a4a] hover:bg-white/60'
+              }`}
+            >
+              <Percent className="w-3.5 h-3.5" />
+              <span>% Quota</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartMode('type')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                chartMode === 'type'
+                  ? 'bg-[#1b2a4a] text-white shadow-2xs'
+                  : 'text-[#1b2a4a] hover:bg-white/60'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Ανά Τύπο</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartMode('attribution')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                chartMode === 'attribution'
+                  ? 'bg-[#1b2a4a] text-white shadow-2xs'
+                  : 'text-[#1b2a4a] hover:bg-white/60'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin vs Άλλοι</span>
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 sm:grid-cols-14 gap-2 pt-4 items-end h-40">
-          {traffic
-            .slice(0, 14)
-            .reverse()
-            .map((t) => {
-              const total = t.ocrTotalCount || 0;
-              const textC = t.ocrTextCount || 0;
-              const mathC = t.ocrMathCount || 0;
-              const chemC = t.ocrChemCount || 0;
-              const animC = t.ocrAnimCount || 0;
-              const adminC = t.ocrAdminCount || 0;
-              const othersC = Math.max(0, total - adminC);
+        {/* Legend strip according to chart mode */}
+        <div className="flex flex-wrap items-center justify-between text-[11px] text-[#64748b] gap-2 pt-1">
+          {chartMode === 'quotaPct' && (
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> % Κατανάλωση Ορίου
+              </span>
+              <span className="text-[10.5px] text-[#64748b]">
+                Όριο: <strong>1.500 requests/ημέρα</strong>
+              </span>
+            </div>
+          )}
 
-              const totalHeight = total > 0 ? Math.max(10, Math.round((total / maxOcrInChart) * 100)) : 4;
+          {chartMode === 'type' && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Κείμενο
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#2b4a7a]" /> Μαθηματικά
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#4b6a9a]" /> Χημεία
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#5c4a72]" /> Ζωντάνεμα
+              </span>
+            </div>
+          )}
 
-              const textPct = total > 0 ? (textC / total) * 100 : 0;
-              const mathPct = total > 0 ? (mathC / total) * 100 : 0;
-              const chemPct = total > 0 ? (chemC / total) * 100 : 0;
-              const animPct = total > 0 ? (animC / total) * 100 : 0;
+          {chartMode === 'attribution' && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Admin (Εσύ)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#7a8a9e]" /> Υπόλοιποι Χρήστες & Guests
+              </span>
+            </div>
+          )}
 
-              return (
-                <div key={t.date} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                  <div
-                    style={{ height: `${totalHeight}%` }}
-                    className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
-                    title={`${t.date}: ${total} AI (${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC})`}
+          <span className="text-[10px] text-[#64748b]">
+            Πέρασμα ποντικιού πάνω από κάθε στήλη για αναλυτικά στοιχεία
+          </span>
+        </div>
+
+        {/* The Bars Render Grid */}
+        <div className="grid grid-cols-7 sm:grid-cols-14 gap-2 pt-4 items-end h-44 border-b border-[#dfd8cb]/40 pb-2">
+          {recentDays.map((t) => {
+            const total = t.ocrTotalCount || 0;
+            const textC = t.ocrTextCount || 0;
+            const mathC = t.ocrMathCount || 0;
+            const chemC = t.ocrChemCount || 0;
+            const animC = t.ocrAnimCount || 0;
+            const adminC = t.ocrAdminCount || 0;
+            const othersC = Math.max(0, total - adminC);
+
+            const quotaPct = Number(((total / 1500) * 100).toFixed(1));
+
+            // Dynamic heights based on selected mode
+            let totalHeight = 4;
+            if (chartMode === 'quotaPct') {
+              // Scale relative to peak day or minimum 14% height for visibility of small % (e.g. 0.2%)
+              totalHeight = total > 0 ? Math.max(14, Math.min(100, Math.round((quotaPct / Math.max(2, maxDayQuotaPct)) * 100))) : 4;
+            } else {
+              totalHeight = total > 0 ? Math.max(10, Math.round((total / maxOcrInChart) * 100)) : 4;
+            }
+
+            const textPct = total > 0 ? (textC / total) * 100 : 0;
+            const mathPct = total > 0 ? (mathC / total) * 100 : 0;
+            const chemPct = total > 0 ? (chemC / total) * 100 : 0;
+            const animPct = total > 0 ? (animC / total) * 100 : 0;
+
+            const adminPct = total > 0 ? (adminC / total) * 100 : 0;
+            const othersPct = total > 0 ? (othersC / total) * 100 : 0;
+
+            return (
+              <div key={t.date} className="flex flex-col items-center gap-1 h-full justify-end group">
+                {/* % Indicator above bar in % Quota mode */}
+                {chartMode === 'quotaPct' && (
+                  <span
+                    className={`text-[10px] font-extrabold tabular-nums transition ${
+                      total > 0
+                        ? 'text-[#1b2a4a] group-hover:scale-110'
+                        : 'text-slate-300'
+                    }`}
                   >
-                    {animPct > 0 && (
-                      <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
-                    )}
-                    {chemPct > 0 && (
-                      <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
-                    )}
-                    {mathPct > 0 && (
-                      <div style={{ height: `${mathPct}%` }} className="w-full bg-[#2b4a7a]" />
-                    )}
-                    {textPct > 0 && (
-                      <div style={{ height: `${textPct}%` }} className="w-full bg-[#1b2a4a]" />
-                    )}
-                  </div>
-                  <span className="text-[10px] text-[#64748b] group-hover:text-[#1b2a4a] group-hover:font-bold transition truncate max-w-full">
-                    {t.date.slice(5)}
+                    {quotaPct}%
                   </span>
+                )}
+
+                {chartMode !== 'quotaPct' && total > 0 && (
+                  <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums">
+                    {total}
+                  </span>
+                )}
+
+                {/* Vertical Bar */}
+                <div
+                  style={{ height: `${totalHeight}%` }}
+                  className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
+                  title={`${t.date}: ${quotaPct}% του δωρεάν ορίου | ${total}/1.500 AI requests (${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC})`}
+                >
+                  {chartMode === 'quotaPct' && (
+                    <div className="w-full h-full bg-[#1b2a4a]" />
+                  )}
+
+                  {chartMode === 'type' && (
+                    <>
+                      {animPct > 0 && (
+                        <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
+                      )}
+                      {chemPct > 0 && (
+                        <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
+                      )}
+                      {mathPct > 0 && (
+                        <div style={{ height: `${mathPct}%` }} className="w-full bg-[#2b4a7a]" />
+                      )}
+                      {textPct > 0 && (
+                        <div style={{ height: `${textPct}%` }} className="w-full bg-[#1b2a4a]" />
+                      )}
+                    </>
+                  )}
+
+                  {chartMode === 'attribution' && (
+                    <>
+                      {othersPct > 0 && (
+                        <div style={{ height: `${othersPct}%` }} className="w-full bg-[#7a8a9e]" />
+                      )}
+                      {adminPct > 0 && (
+                        <div style={{ height: `${adminPct}%` }} className="w-full bg-[#1b2a4a]" />
+                      )}
+                    </>
+                  )}
                 </div>
-              );
-            })}
+
+                {/* Subtext beneath bar: total count & date */}
+                <span className="text-[9px] font-semibold text-slate-500 tabular-nums">
+                  {total}
+                </span>
+                <span className="text-[10px] text-[#64748b] group-hover:text-[#1b2a4a] group-hover:font-bold transition truncate max-w-full">
+                  {t.date.slice(5)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -368,7 +530,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                 <th className="py-2.5 px-3">Μαθηματικά</th>
                 <th className="py-2.5 px-3">Χημεία</th>
                 <th className="py-2.5 px-3">Ζωντάνεμα</th>
-                <th className="py-2.5 px-3">Κατανάλωση Quota</th>
+                <th className="py-2.5 px-3">% Κατανάλωση (1.500)</th>
                 <th className="py-2.5 px-3">Υπόλοιπο Δωρεάν</th>
                 <th className="py-2.5 px-3 text-right">Τελευταίο Event</th>
               </tr>
@@ -429,9 +591,14 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 font-semibold">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold border bg-[#eef3f8] text-[#1b2a4a] border-[#1b2a4a]/20">
-                          {pct}%
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold border bg-[#eef3f8] text-[#1b2a4a] border-[#1b2a4a]/20">
+                            {pct}%
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({total}/1.5k)
+                          </span>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-slate-700 tabular-nums font-semibold">
                         {rem.toLocaleString()}
