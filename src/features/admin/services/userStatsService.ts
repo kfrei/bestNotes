@@ -224,8 +224,12 @@ export async function fetchAdminUsersList(
       const uid = uDoc.id;
       if (!userMap.has(uid)) {
         const uData = uDoc.data();
-        const email = uData.driveEmail || '';
-        const displayName = email ? email.split('@')[0] : `Χρήστης (${uid.slice(0, 6)})`;
+        const email = uData.email || uData.driveEmail || uData.userEmail || '';
+        const displayName =
+          uData.displayName ||
+          uData.fullName ||
+          uData.name ||
+          (email ? email.split('@')[0] : `Χρήστης (UID: ${uid.slice(0, 6)})`);
         const updatedAt = uData.updatedAt || new Date().toISOString();
 
         userMap.set(uid, {

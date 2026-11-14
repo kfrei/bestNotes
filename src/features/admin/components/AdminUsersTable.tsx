@@ -275,8 +275,12 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-slate-500 truncate" title={u.email}>
-                              {u.email}
+                            <p className="text-[11px] text-slate-500 truncate" title={u.email || u.uid}>
+                              {u.email || (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  UID: {u.uid.slice(0, 12)}...
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>
