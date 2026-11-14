@@ -2609,9 +2609,11 @@ export default function App() {
     origY: number;
   } | null>(null);
   const stopwatchResizeRef = useRef<{
+    corner: 'br' | 'bl';
     startX: number;
     startY: number;
     origW: number;
+    origX: number;
   } | null>(null);
 
   useEffect(() => {
@@ -63810,31 +63812,59 @@ export default function App() {
               const padPx = Math.round(12 * swScale);
               const radiusPx = Math.round(16 * swScale);
 
-              const startStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
+              const startStopwatchResize = (
+                e: React.PointerEvent<HTMLDivElement>,
+                corner: 'br' | 'bl'
+              ) => {
                 e.stopPropagation();
                 e.currentTarget.setPointerCapture(e.pointerId);
                 stopwatchResizeRef.current = {
+                  corner,
                   startX: e.clientX,
                   startY: e.clientY,
                   origW: stopwatchWidth,
+                  origX: stopwatchPos.x,
                 };
               };
               const moveStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
                 const rz = stopwatchResizeRef.current;
                 if (!rz) return;
                 e.stopPropagation();
-                const dx = e.clientX - rz.startX;
-                const dy = e.clientY - rz.startY;
-                const delta = Math.round((dx + dy) / 2);
                 const minW = 160;
                 const maxW = Math.min(460, window.innerWidth - 24);
-                const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
-                setStopwatchWidth(nextW);
-                hasUserCustomizedStopwatchRef.current = true;
-                try {
-                  localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
-                  localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
-                } catch {}
+
+                if (rz.corner === 'bl') {
+                  const dx = e.clientX - rz.startX;
+                  const dy = e.clientY - rz.startY;
+                  const delta = Math.round((-dx + dy) / 2);
+                  const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
+                  const rightEdge = rz.origX + rz.origW;
+                  const nextX = Math.max(8, rightEdge - nextW);
+                  setStopwatchWidth(nextW);
+                  setStopwatchPos((p) => {
+                    const nextPos = { ...p, x: nextX };
+                    try {
+                      localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify(nextPos));
+                    } catch {}
+                    return nextPos;
+                  });
+                  hasUserCustomizedStopwatchRef.current = true;
+                  try {
+                    localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
+                    localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+                  } catch {}
+                } else {
+                  const dx = e.clientX - rz.startX;
+                  const dy = e.clientY - rz.startY;
+                  const delta = Math.round((dx + dy) / 2);
+                  const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
+                  setStopwatchWidth(nextW);
+                  hasUserCustomizedStopwatchRef.current = true;
+                  try {
+                    localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
+                    localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+                  } catch {}
+                }
               };
               const endStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
                 e.stopPropagation();
@@ -64007,10 +64037,35 @@ export default function App() {
                     </button>
                   </div>
 
+                  {/* Bottom-Left Uniform Resize Handle */}
+                  <div
+                    data-sw-resize="true"
+                    onPointerDown={(e) => startStopwatchResize(e, 'bl')}
+                    onPointerMove={moveStopwatchResize}
+                    onPointerUp={endStopwatchResize}
+                    onPointerCancel={endStopwatchResize}
+                    className="absolute -bottom-1 -left-1 w-5 h-5 cursor-sw-resize flex items-end justify-start p-1 text-[#94a3b8] hover:text-[#234978] transition"
+                    title="Σύρετε για ομοιόμορφη αλλαγή μεγέθους"
+                  >
+                    <svg
+                      width="9"
+                      height="9"
+                      viewBox="0 0 9 9"
+                      className="opacity-70 hover:opacity-100"
+                    >
+                      <path
+                        d="M1 2 L7 8 M1 5 L4 8 M1 8 L1 8"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+
                   {/* Bottom-Right Uniform Resize Handle */}
                   <div
                     data-sw-resize="true"
-                    onPointerDown={startStopwatchResize}
+                    onPointerDown={(e) => startStopwatchResize(e, 'br')}
                     onPointerMove={moveStopwatchResize}
                     onPointerUp={endStopwatchResize}
                     onPointerCancel={endStopwatchResize}
