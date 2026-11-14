@@ -2567,12 +2567,39 @@ export default function App() {
   } | null>(null);
 
   // Digital Stopwatch State (⏱️) for Physics Experiments (WarmStudio Beige & Dark Navy)
+  const hasUserCustomizedStopwatchRef = useRef<boolean>(
+    typeof window !== 'undefined' &&
+      localStorage.getItem('bestnotes_stopwatch_customized_v1') === 'true'
+  );
   const [showStopwatch, setShowStopwatch] = useState<boolean>(false);
-  const [stopwatchWidth, setStopwatchWidth] = useState<number>(210);
-  const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => ({
-    x: typeof window !== 'undefined' ? Math.max(20, Math.min(window.innerWidth - 240, 340)) : 340,
-    y: 110,
-  }));
+  const [stopwatchWidth, setStopwatchWidth] = useState<number>(() => {
+    try {
+      const savedW = localStorage.getItem('bestnotes_stopwatch_width_v1');
+      if (savedW) {
+        const parsed = Number(savedW);
+        if (!isNaN(parsed) && parsed >= 160 && parsed <= 500) return parsed;
+      }
+    } catch {}
+    return 304; // Matches Tailwind w-76 (19rem = 304px) of the top simulation window
+  });
+  const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const savedPos = localStorage.getItem('bestnotes_stopwatch_pos_v1');
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(10, Math.min(typeof window !== 'undefined' ? window.innerWidth - 60 : 800, parsed.x)),
+            y: Math.max(10, Math.min(typeof window !== 'undefined' ? window.innerHeight - 60 : 600, parsed.y)),
+          };
+        }
+      }
+    } catch {}
+    return {
+      x: 16,
+      y: 540,
+    };
+  });
   const [stopwatchRunning, setStopwatchRunning] = useState<boolean>(false);
   const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState<number>(0);
   const stopwatchDragRef = useRef<{
@@ -4287,6 +4314,9 @@ export default function App() {
       showSimulationPanel,
       simActiveCategory,
       simPanelPos,
+      showStopwatch,
+      stopwatchPos,
+      stopwatchWidth,
       isSimulating,
       isSpringSimulating,
       isSpringPaused,
@@ -4340,6 +4370,9 @@ export default function App() {
       showSimulationPanel,
       simActiveCategory,
       simPanelPos,
+      showStopwatch,
+      stopwatchPos,
+      stopwatchWidth,
       isSimulating,
       isSpringSimulating,
       isSpringPaused,
@@ -19816,6 +19849,42 @@ export default function App() {
     });
   };
 
+  const toggleStopwatchWithSmartPlacement = () => {
+    setShowStopwatch((prev) => {
+      const next = !prev;
+      if (next) {
+        if (!hasUserCustomizedStopwatchRef.current) {
+          let simEl: HTMLElement | null = null;
+          if (typeof document !== 'undefined') {
+            simEl = document.querySelector('[data-popover-panel="simulation"]');
+          }
+          const simRect = simEl?.getBoundingClientRect();
+          const simW = simRect ? Math.round(simRect.width) : 304;
+          const simLeft = simRect ? Math.round(simRect.left) : simPanelPos.x;
+          const simBottom = simRect ? Math.round(simRect.bottom) : simPanelPos.y + 430;
+          const targetY = Math.max(16, Math.min(window.innerHeight - 200, simBottom + 12));
+          setStopwatchWidth(simW);
+          setStopwatchPos({ x: simLeft, y: targetY });
+        } else {
+          setStopwatchPos((cur) => {
+            if (
+              cur.x > window.innerWidth - 60 ||
+              cur.y > window.innerHeight - 60 ||
+              cur.x < 10
+            ) {
+              return {
+                x: Math.max(10, Math.min(window.innerWidth - stopwatchWidth - 10, cur.x)),
+                y: Math.max(10, Math.min(window.innerHeight - 120, cur.y)),
+              };
+            }
+            return cur;
+          });
+        }
+      }
+      return next;
+    });
+  };
+
   const handleForceSimAction = (sim: ForceSimConfig | null, action: string) => {
     const U = A4_GRID_STEP_PX;
     if (action.startsWith('quick-pair-synthesis:')) {
@@ -20435,7 +20504,7 @@ export default function App() {
       );
       triggerForceSimStep(sim.id, 1, undefined, 620);
     } else if (action === 'toggle-stopwatch') {
-      setShowStopwatch((s) => !s);
+      toggleStopwatchWithSmartPlacement();
     } else if (action.startsWith('set-rod-length:')) {
       const newL = Number(action.slice('set-rod-length:'.length));
       if (!isNaN(newL) && newL >= 69 && newL <= 690 && sim) {
@@ -63215,29 +63284,7 @@ export default function App() {
                                 {/* Stopwatch (Χρονόμετρο) */}
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setShowStopwatch((prev) => {
-                                      const next = !prev;
-                                      if (next) {
-                                        setStopwatchPos((cur) => {
-                                          const targetX = Math.max(
-                                            20,
-                                            Math.min(window.innerWidth - stopwatchWidth - 20, 340)
-                                          );
-                                          const targetY = 110;
-                                          if (
-                                            cur.x > window.innerWidth - 60 ||
-                                            cur.y > window.innerHeight - 60 ||
-                                            cur.x < 10
-                                          ) {
-                                            return { x: targetX, y: targetY };
-                                          }
-                                          return cur;
-                                        });
-                                      }
-                                      return next;
-                                    });
-                                  }}
+                                  onClick={toggleStopwatchWithSmartPlacement}
                                   className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
                                     showStopwatch
                                       ? 'bg-[#234978] text-white shadow-xs'
@@ -63781,7 +63828,13 @@ export default function App() {
                 const delta = Math.round((dx + dy) / 2);
                 const minW = 160;
                 const maxW = Math.min(460, window.innerWidth - 24);
-                setStopwatchWidth(Math.max(minW, Math.min(maxW, rz.origW + delta)));
+                const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
+                setStopwatchWidth(nextW);
+                hasUserCustomizedStopwatchRef.current = true;
+                try {
+                  localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
+                  localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+                } catch {}
               };
               const endStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
                 e.stopPropagation();
@@ -63842,7 +63895,13 @@ export default function App() {
                           drag.origY + (e.clientY - drag.startClientY)
                         )
                       );
-                      setStopwatchPos({ x: nextX, y: nextY });
+                      const nextPos = { x: nextX, y: nextY };
+                      setStopwatchPos(nextPos);
+                      hasUserCustomizedStopwatchRef.current = true;
+                      try {
+                        localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify(nextPos));
+                        localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+                      } catch {}
                     }}
                     onPointerUp={(e) => {
                       stopwatchDragRef.current = null;
