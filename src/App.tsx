@@ -20222,23 +20222,53 @@ export default function App() {
         false
       );
     } else if (action === 'toggle-resultant') {
+      const nextShow = !sim.showResultant;
       forceSimAnimRef.current = null;
       setForceSimAnim(null);
-      updateActivePage(
-        (page) => ({
-          ...page,
-          forceSims: (page.forceSims || []).map((s) =>
-            s.id === sim.id
-              ? {
-                  ...s,
-                  showResultant: !s.showResultant,
-                  ...(!s.showResultant ? { anMode: 'none', step: 0 } : {}),
-                }
-              : s
-          ),
-        }),
-        false
-      );
+      if (nextShow) {
+        // Pause and trigger 3-step automatic animation with pencil:
+        // Step 1: 1st dashed parallel line
+        // Step 2: 2nd dashed parallel line
+        // Step 3: Green resultant vector ΣF
+        const pState = pendulumPhysRef.current[sim.id];
+        const curAng = pState ? pState.ang : (sim.pendulumAngleRad ?? Math.PI / 4);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    showForces: true,
+                    showResultant: true,
+                    isPaused: true,
+                    pendulumAngleRad: curAng,
+                    anMode: 'none',
+                    step: 1,
+                  }
+                : s
+            ),
+          }),
+          false
+        );
+        triggerForceSimStep(sim.id, 1, 3, 580);
+      } else {
+        updateActivePage(
+          (page) => ({
+            ...page,
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    showResultant: false,
+                    step: 0,
+                  }
+                : s
+            ),
+          }),
+          false
+        );
+      }
     } else if (action === 'toggle-numeric-values') {
       updateActivePage(
         (page) => ({
@@ -30482,18 +30512,11 @@ export default function App() {
             const ty = tm_vis * Math.sin(ta);
             const sx = wx + tx;
             const sy = wy + ty;
-            if (fSim.isPaused || isDraggingBob) {
-              drawSimLineOrAxis(
-                bx + wx,
-                by + wy,
-                bx + sx,
-                by + sy,
-                '#64748b',
-                1.6,
-                [5, 4],
-                false,
-                1
-              );
+            const isResAnim = Boolean(curAnim && curAnim.simId === fSim.id);
+            const rStep = isResAnim ? curStep : 3;
+
+            // Step 1: 1st dashed line (from tip of T parallel to B) drawn with pencil
+            if (rStep >= 1 && (fSim.isPaused || isDraggingBob || isResAnim)) {
               drawSimLineOrAxis(
                 bx + tx,
                 by + ty,
@@ -30503,10 +30526,38 @@ export default function App() {
                 1.6,
                 [5, 4],
                 false,
-                1
+                getStepProg(1)
               );
             }
-            drawSimVector(bx, by, bx + sx, by + sy, '#27a69a', 3.8, 1, 'ΣF');
+
+            // Step 2: 2nd dashed line (from tip of B parallel to T) drawn with pencil
+            if (rStep >= 2 && (fSim.isPaused || isDraggingBob || isResAnim)) {
+              drawSimLineOrAxis(
+                bx + wx,
+                by + wy,
+                bx + sx,
+                by + sy,
+                '#64748b',
+                1.6,
+                [5, 4],
+                false,
+                getStepProg(2)
+              );
+            }
+
+            // Step 3: Green resultant vector ΣF drawn with pencil
+            if (rStep >= 3) {
+              drawSimVector(
+                bx,
+                by,
+                bx + sx,
+                by + sy,
+                '#27a69a',
+                3.8,
+                getStepProg(3),
+                'ΣF'
+              );
+            }
           }
         }
 
