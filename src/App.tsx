@@ -7928,6 +7928,21 @@ export default function App() {
           bonds: as.bonds ? as.bonds.map((b) => ({ ...b })) : [],
         }))
       : undefined,
+    heatSims: p.heatSims
+      ? p.heatSims.map((hs) => ({
+          ...hs,
+          objects: (hs.objects || []).map((obj) => ({
+            ...obj,
+            burnerState: obj.burnerState ? { ...obj.burnerState } : undefined,
+            containerState: obj.containerState ? { ...obj.containerState } : undefined,
+            thermometerState: obj.thermometerState ? { ...obj.thermometerState } : undefined,
+            tripodState: obj.tripodState ? { ...obj.tripodState } : undefined,
+          })),
+          graph: hs.graph ? { ...hs.graph } : { visible: false, x: 0, y: 0, width: 260, height: 180 },
+          history: hs.history ? hs.history.map((h) => ({ ...h })) : [],
+        }))
+      : undefined,
+    activeHeatSimId: p.activeHeatSimId,
   }), []);
 
   const MAX_UNDO_STACK_SIZE = 250;
@@ -7954,6 +7969,8 @@ export default function App() {
     if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
     if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
     if ((a.atomSims?.length || 0) !== (b.atomSims?.length || 0)) return false;
+    if ((a.heatSims?.length || 0) !== (b.heatSims?.length || 0)) return false;
+    if (a.activeHeatSimId !== b.activeHeatSimId) return false;
     if (
       a.springSims !== b.springSims &&
       JSON.stringify(a.springSims || []) !== JSON.stringify(b.springSims || [])
@@ -7975,6 +7992,12 @@ export default function App() {
     if (
       a.atomSims !== b.atomSims &&
       JSON.stringify(a.atomSims || []) !== JSON.stringify(b.atomSims || [])
+    ) {
+      return false;
+    }
+    if (
+      a.heatSims !== b.heatSims &&
+      JSON.stringify(a.heatSims || []) !== JSON.stringify(b.heatSims || [])
     ) {
       return false;
     }
@@ -12587,11 +12610,18 @@ export default function App() {
         ctx.restore();
       }
 
-      // 7. Heat & Thermodynamics Simulation for non-active pages or when overlay is idle
-      if (!isCurrentActivePage && pageObj.heatSims && pageObj.heatSims.length > 0) {
+      // 7. Heat & Thermodynamics Simulation (Always rendered on static canvas so apparatus never disappears!)
+      if (pageObj.heatSims && pageObj.heatSims.length > 0) {
         const isDark = isDarkPaperColor(getEffectivePaperColor(pageObj));
         for (const hSim of pageObj.heatSims) {
-          renderHeatSimulation(ctx, hSim, { isDark });
+          const liveSim = (isCurrentActivePage && (heatSim as any).getLiveSim)
+            ? (heatSim as any).getLiveSim()
+            : hSim;
+          // While dragging or running on the active page, Layer 1.5 (simCanvas) animates at 60fps
+          if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
+            continue;
+          }
+          renderHeatSimulation(ctx, liveSim || hSim, { isDark });
         }
       }
     });
@@ -69053,6 +69083,7 @@ export default function App() {
             ...prev,
             objects: prev.objects.map((o) => (o.id === updated.id ? updated : o)),
           }));
+          renderStaticSceneRef.current?.();
         }}
       />
 

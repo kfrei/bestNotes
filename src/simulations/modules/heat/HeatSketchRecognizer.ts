@@ -223,7 +223,7 @@ export function createHeatObjectFromRecognition(
         height: Math.max(130, h),
         containerState: {
           capacityMl: 500,
-          volumeMl: 250,
+          volumeMl: 0,
           liquidType: 'water',
           temperature: 20,
           initialTemp: 20,
@@ -242,7 +242,7 @@ export function createHeatObjectFromRecognition(
         height: Math.max(80, h),
         containerState: {
           capacityMl: 800,
-          volumeMl: 450,
+          volumeMl: 0,
           liquidType: 'water',
           temperature: 20,
           initialTemp: 20,
@@ -261,7 +261,7 @@ export function createHeatObjectFromRecognition(
         height: Math.max(140, h),
         containerState: {
           capacityMl: 500,
-          volumeMl: 250,
+          volumeMl: 0,
           liquidType: 'water',
           temperature: 20,
           initialTemp: 20,

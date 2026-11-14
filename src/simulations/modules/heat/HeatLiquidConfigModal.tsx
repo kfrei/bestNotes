@@ -19,7 +19,9 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
   if (!isOpen || !container || !container.containerState) return null;
 
   const [capacityMl, setCapacityMl] = useState<number>(container.containerState.capacityMl || 500);
-  const [volumeMl, setVolumeMl] = useState<number>(container.containerState.volumeMl || 250);
+  const [volumeMl, setVolumeMl] = useState<number>(
+    typeof container.containerState.volumeMl === 'number' ? container.containerState.volumeMl : 0
+  );
   const [liquidType, setLiquidType] = useState<LiquidType>(container.containerState.liquidType || 'water');
   const [temperature, setTemperature] = useState<number>(container.containerState.temperature || 20);
   const [widthPx, setWidthPx] = useState<number>(container.width || 120);
@@ -28,7 +30,9 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
   useEffect(() => {
     if (container.containerState) {
       setCapacityMl(container.containerState.capacityMl || 500);
-      setVolumeMl(container.containerState.volumeMl || 250);
+      setVolumeMl(
+        typeof container.containerState.volumeMl === 'number' ? container.containerState.volumeMl : 0
+      );
       setLiquidType(container.containerState.liquidType || 'water');
       setTemperature(Math.round(container.containerState.temperature || 20));
       setWidthPx(container.width || 120);
@@ -216,6 +220,54 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
               {volumeMl} ml / {capacityMl} ml ({Math.round((volumeMl / capacityMl) * 100)}%)
             </span>
           </div>
+
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <button
+              type="button"
+              onClick={() => setVolumeMl(0)}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                volumeMl === 0
+                  ? 'bg-[#234978] text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Άδειο (0 ml)
+            </button>
+            <button
+              type="button"
+              onClick={() => setVolumeMl(Math.round(capacityMl * 0.25))}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                volumeMl === Math.round(capacityMl * 0.25)
+                  ? 'bg-[#234978] text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              25%
+            </button>
+            <button
+              type="button"
+              onClick={() => setVolumeMl(Math.round(capacityMl * 0.5))}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                volumeMl === Math.round(capacityMl * 0.5)
+                  ? 'bg-[#234978] text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              50%
+            </button>
+            <button
+              type="button"
+              onClick={() => setVolumeMl(capacityMl)}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                volumeMl === capacityMl
+                  ? 'bg-[#234978] text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Γεμάτο (100%)
+            </button>
+          </div>
+
           <input
             type="range"
             min={0}

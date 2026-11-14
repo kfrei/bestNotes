@@ -31,6 +31,7 @@ export interface UseHeatSimulationReturn {
     canvasLogicalY: number
   ) => boolean;
   handlePointerUp: () => boolean;
+  isDragging: () => boolean;
   handleConvertLassoSketch: (selectedStrokeIds: string[], strokes: StrokeObject[]) => boolean;
   stepPhysicsFrame: (dt: number) => void;
   toggleRun: () => void;
@@ -176,6 +177,10 @@ export function useHeatSimulation(
             ...freshSim,
             objects: [newObj],
             selectedObjectId: newObj.id,
+            graph: {
+              ...freshSim.graph,
+              visible: false,
+            },
           };
           nextSims = [targetSim];
           finalActiveId = targetSim.id;
@@ -557,6 +562,10 @@ export function useHeatSimulation(
     return true;
   }, [updateActiveHeatSim]);
 
+  const isDragging = useCallback((): boolean => {
+    return dragRef.current !== null;
+  }, []);
+
   // Recognition from Lasso selection
   const handleConvertLassoSketch = useCallback(
     (selectedStrokeIds: string[], strokes: StrokeObject[]): boolean => {
@@ -634,6 +643,7 @@ export function useHeatSimulation(
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
+    isDragging,
     handleConvertLassoSketch,
     stepPhysicsFrame,
     toggleRun,

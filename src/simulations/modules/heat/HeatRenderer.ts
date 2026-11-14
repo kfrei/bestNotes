@@ -434,7 +434,7 @@ function renderBeaker(
     ctx.restore();
   }
 
-  const vol = state?.volumeMl ?? 250;
+  const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
   const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
 
@@ -552,7 +552,7 @@ function renderWideBasin(
     ctx.restore();
   }
 
-  const vol = state?.volumeMl ?? 450;
+  const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 800;
   const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
 
@@ -649,7 +649,7 @@ function renderFlask(
     ctx.restore();
   }
 
-  const vol = state?.volumeMl ?? 250;
+  const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
   const liquidProp = LIQUID_REGISTRY[state?.liquidType ?? 'water'];
 

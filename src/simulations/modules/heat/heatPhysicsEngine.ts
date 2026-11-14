@@ -148,8 +148,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       cs.temperature -= coolDelta * AMBIENT_COOLING_COEFF * timeStep;
     }
 
-    // Boiling plateau check
-    if (cs.temperature >= liquidProps.boilingPoint) {
+    // Boiling plateau check (only if container has liquid!)
+    if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint) {
       cs.temperature = liquidProps.boilingPoint;
       cs.isBoiling = receivedPowerWatts > 50;
       cs.boilingIntensity = Math.min(1.0, receivedPowerWatts / 800);
