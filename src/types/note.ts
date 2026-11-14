@@ -1,3 +1,6 @@
+import type { HeatSimConfig, HeatObject } from '../simulations/modules/heat/types';
+export type { HeatSimConfig, HeatObject };
+
 export type ToolType =
   | 'pen'
   | 'pencil'
@@ -427,6 +430,8 @@ export interface NotePage {
   activeForceSimId?: string;
   atomSims?: AtomSimConfig[];
   activeAtomSimId?: string;
+  heatSims?: HeatSimConfig[];
+  activeHeatSimId?: string;
   ruler?: {
     visible: boolean;
     x: number;

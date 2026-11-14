@@ -266,7 +266,15 @@ import {
 } from './utils/geometryAndAlgorithms';
 import { LibraryNoteMiniThumb } from './components/LibraryNoteMiniThumb';
 import { WarmStudioToggle } from './components/WarmStudioToggle';
-import { StopwatchWidget, FullscreenLaserCanvas } from './simulations';
+import {
+  StopwatchWidget,
+  FullscreenLaserCanvas,
+  useHeatSimulation,
+  HeatControlPanel,
+  HeatLiquidConfigModal,
+  renderHeatSimulation,
+  stepHeatSimulation,
+} from './simulations';
 import { LassoOcrButtons } from './stem-engines';
 import {
   RecentlyOpenedStrip,
@@ -1968,7 +1976,7 @@ export default function App() {
     Boolean(initialSession?.showSimulationPanel)
   );
   const [simActiveCategory, setSimActiveCategory] = useState<
-    'circuits' | 'springs' | 'forces' | 'atoms' | null
+    'circuits' | 'springs' | 'forces' | 'atoms' | 'heat' | null
   >(() => initialSession?.simActiveCategory ?? null);
   const [isSimulating, setIsSimulating] = useState<boolean>(() => Boolean(initialSession?.isSimulating));
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(() =>
@@ -8150,6 +8158,10 @@ export default function App() {
     },
     [activeNotebook.id, activePageIndex, clonePageFast, isSamePageStateForUndo, pushUndoSnapshot]
   );
+
+  // Heat & Thermodynamics Interactive Simulation Hook
+  const heatSim = useHeatSimulation(activePage, updateActivePage);
+  const heatSimLastFrameRef = useRef<number | null>(null);
 
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
   useEffect(() => {
@@ -32708,6 +32720,22 @@ export default function App() {
           }
         }
 
+        // 5. Heat & Thermodynamics Simulation Overlay
+        if (activePage.heatSims && activePage.heatSims.length > 0) {
+          const isDarkPaper = isDarkPaperColor(getEffectivePaperColor(activePage));
+          for (const hSim of activePage.heatSims) {
+            renderHeatSimulation(ctx, hSim, { isDark: isDarkPaper });
+          }
+
+          if (heatSimLastFrameRef.current !== null) {
+            const hDt = Math.max(0.001, Math.min(0.1, (now - heatSimLastFrameRef.current) / 1000));
+            heatSim.stepPhysicsFrame(hDt);
+          }
+          heatSimLastFrameRef.current = now;
+        } else {
+          heatSimLastFrameRef.current = null;
+        }
+
         livePdfSimButtonsRef.current = nextLiveBtns;
       } else {
         livePdfSimButtonsRef.current = [];
@@ -32728,6 +32756,8 @@ export default function App() {
         atomReactionAnim !== null ||
         atomReactionAnimRef.current !== null ||
         (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
+        (activePage.heatSims && activePage.heatSims.some((s) => s.isRunning)) ||
+        (showSimulationPanel && simActiveCategory === 'heat') ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -36661,6 +36691,22 @@ export default function App() {
       }
     }
 
+    // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (Pencil click, burner on/off, dragging objects & graph)
+    if (heatSim.activeHeatSim && (simActiveCategory === 'heat' || activeTool === 'lasso' || activeTool === 'pan')) {
+      if (heatSim.handlePointerDown(e, pt.x, pt.y)) {
+        e.preventDefault();
+        isDrawingRef.current = true;
+        activePointerIdRef.current = e.pointerId;
+        activePointerTypeRef.current = e.pointerType;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+    }
+
     // 0a-spring. Interactive Spring Simulation Canvas Handles:
     //            1) Blue Square Handles (□) on the +A / -A blue dashed lines (symmetric amplitude sliding)
     //            2) Draggable Live Graph Cards (x(t), υ(t), α(t)) & their "✕" close buttons
@@ -39717,6 +39763,12 @@ export default function App() {
       if (distFromStart > penTapTrackRef.current.maxDist) {
         penTapTrackRef.current.maxDist = distFromStart;
       }
+    }
+
+    // 0-heat. Interactive Heat & Thermodynamics Simulation Move / Drag:
+    if (heatSim.handlePointerMove(latestPt.x, latestPt.y)) {
+      renderStaticSceneRef.current();
+      return;
     }
 
     // 0-atoms. Interactive Atom Simulation Handle Dragging (Nucleus reposition, Uniform Resize, or Outer Valence Electron drag):
@@ -45033,6 +45085,11 @@ export default function App() {
     cancelAddNodeLongPress();
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+
+    if (heatSim.handlePointerUp()) {
+      renderStaticSceneRef.current();
+      return;
+    }
 
     if (draggingAtomHandleRef.current) {
       const finishedAtomDrag = draggingAtomHandleRef.current;
@@ -60107,8 +60164,8 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Top-Level Physics & Chemistry Simulation Category Switcher: "Κυκλώματα" | "Ελατήρια" | "Δυνάμεις" | "Άτομο" */}
-                <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner">
+                {/* Top-Level Physics & Chemistry Simulation Category Switcher: "Κυκλώματα" | "Ελατήρια" | "Δυνάμεις" | "Άτομο" | "Θερμότητα" */}
+                <div className="grid grid-cols-5 gap-1 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner">
                   <button
                     type="button"
                     onClick={() => {
@@ -60176,6 +60233,23 @@ export default function App() {
                     }`}
                   >
                     <span>Άτομο</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
+                      setSimActiveCategory(nextCat);
+                      if (nextCat === 'heat') {
+                        heatSim.ensureActiveHeatSim(activePage);
+                      }
+                    }}
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold flex items-center justify-center transition cursor-pointer ${
+                      simActiveCategory === 'heat'
+                        ? 'bg-[#234978] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
+                    }`}
+                  >
+                    <span>Θερμότητα</span>
                   </button>
                 </div>
 
@@ -62658,6 +62732,24 @@ export default function App() {
                       </div>
                     );
                   })()
+                ) : simActiveCategory === 'heat' ? (
+                  <HeatControlPanel
+                    sim={heatSim.activeHeatSim}
+                    onToggleRun={heatSim.toggleRun}
+                    onReset={heatSim.resetSim}
+                    onToggleGraph={heatSim.toggleGraph}
+                    onAddObject={(type) => heatSim.handleAddObject(type)}
+                    selectedStrokeIdsCount={selectedStrokeIds.length}
+                    onConvertLassoSketch={() => {
+                      const converted = heatSim.handleConvertLassoSketch(selectedStrokeIds, activePage.strokes);
+                      if (converted) {
+                        setSelectedStrokeIds([]);
+                        showToast('✨ Το σκίτσο μετατράπηκε επιτυχώς σε εργαστηριακό αντικείμενο!');
+                      } else {
+                        showToast('ℹ️ Δεν αναγνωρίστηκε εργαστηριακό αντικείμενο από το σκίτσο.');
+                      }
+                    }}
+                  />
                 ) : null}
               </div>
             )}
@@ -68607,6 +68699,19 @@ export default function App() {
         onSuccess={() => {
           setShowAuthModal(false);
           showToast('🎉 Συνδέθηκες επιτυχώς στο BestNotes Cloud!');
+        }}
+      />
+
+      {/* Heat Simulation Liquid Configuration Glass Modal */}
+      <HeatLiquidConfigModal
+        isOpen={Boolean(heatSim.editingContainer)}
+        container={heatSim.editingContainer}
+        onClose={() => heatSim.setEditingContainer(null)}
+        onSave={(updated) => {
+          heatSim.updateActiveHeatSim((prev) => ({
+            ...prev,
+            objects: prev.objects.map((o) => (o.id === updated.id ? updated : o)),
+          }));
         }}
       />
 
