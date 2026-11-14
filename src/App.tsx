@@ -9944,9 +9944,24 @@ export default function App() {
 
       if (topHitStroke && (!topHitImg || topHitStroke.score >= topHitImg.score)) {
         const tappedStroke = topHitStroke.stroke;
-        const memberStrokes = tappedStroke.groupId
+        const matchedFs = (pageObj.forceSims || []).find(
+          (fs) =>
+            fs.mode === 'pendulum' &&
+            (fs.primaryStrokeId === tappedStroke.id ||
+              fs.secondaryStrokeId === tappedStroke.id ||
+              fs.supportStrokeId === tappedStroke.id)
+        );
+        let memberStrokes = tappedStroke.groupId
           ? strokeList.filter((s) => s.groupId === tappedStroke.groupId)
           : [tappedStroke];
+        if (!tappedStroke.groupId && matchedFs) {
+          const pStrokes = [
+            strokeList.find((s) => s.id === matchedFs.primaryStrokeId),
+            strokeList.find((s) => s.id === matchedFs.secondaryStrokeId),
+            matchedFs.supportStrokeId ? strokeList.find((s) => s.id === matchedFs.supportStrokeId) : null,
+          ].filter(Boolean) as StrokeObject[];
+          memberStrokes = Array.from(new Set([...memberStrokes, ...pStrokes]));
+        }
         const memberIds = memberStrokes.map((s) => s.id);
         let minX = Infinity,
           minY = Infinity,
@@ -11934,8 +11949,9 @@ export default function App() {
         const isSelectedForceSimVector =
           selectedImageIds.length === 0 &&
           !selectedImageId &&
-          selectedStrokeIds.length > 0 &&
+          selectedStrokeIds.length === 1 &&
           (pageObj.forceSims || []).some((fs) =>
+            (fs.mode === 'analysis' || fs.mode === 'synthesis') &&
             selectedStrokeIds.some(
               (sid) => fs.primaryStrokeId === sid || fs.secondaryStrokeId === sid
             )
@@ -18913,10 +18929,17 @@ export default function App() {
         showCalc: false,
       };
 
+      const pendulumGroupId =
+        rodSt.groupId ||
+        bobSt.groupId ||
+        (supportId ? page.strokes.find((s) => s.id === supportId)?.groupId : undefined) ||
+        `grp-pendulum-${Date.now()}`;
+
       const nextStrokes = page.strokes.map((st) => {
         if (st.id === rodSt.id) {
           return {
             ...st,
+            groupId: pendulumGroupId,
             isShape: true,
             shapeType: 'line' as const,
             rodSupport: supportId ? { supportStrokeId: supportId, fixedEnd: 'start' as const } : st.rodSupport,
@@ -18935,6 +18958,7 @@ export default function App() {
         if (st.id === bobSt.id) {
           return {
             ...st,
+            groupId: pendulumGroupId,
             points: st.points.map((pt) => ({
               ...pt,
               x: pt.x + bdx,
@@ -18942,6 +18966,12 @@ export default function App() {
               ...(pt.cx !== undefined ? { cx: pt.cx + bdx } : {}),
               ...(pt.cy !== undefined ? { cy: pt.cy + bdy } : {}),
             })),
+          };
+        }
+        if (supportId && st.id === supportId) {
+          return {
+            ...st,
+            groupId: pendulumGroupId,
           };
         }
         return st;
@@ -36598,50 +36628,53 @@ export default function App() {
             return;
           }
         }
-        for (const h of fHit.handles) {
-          if (h.kind === 'calc-box') continue;
-          const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
-          if (isHit) {
-            e.preventDefault();
-            if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
-            if (activeNodeStrokeId) setActiveNodeStrokeId(null);
-            forceSimAnimRef.current = null;
-            setForceSimAnim(null);
-            pushUndoSnapshot(targetPage);
-            const targetVecStroke = h.strokeId
-              ? targetPage.strokes.find((s) => s.id === h.strokeId)
-              : curForceSim?.primaryStrokeId
-              ? targetPage.strokes.find((s) => s.id === curForceSim.primaryStrokeId)
-              : undefined;
-            const initOx =
-              targetVecStroke && targetVecStroke.points.length >= 2
-                ? targetVecStroke.points[0].x
-                : curForceSim?.originX ?? h.x;
-            const initOy =
-              targetVecStroke && targetVecStroke.points.length >= 2
-                ? targetVecStroke.points[0].y
-                : curForceSim?.originY ?? h.y;
-            draggingForceHandleRef.current = {
-              simId: fHit.simId,
-              kind: h.kind,
-              strokeId: h.strokeId,
-              startX: pt.x,
-              startY: pt.y,
-              origOriginX: initOx,
-              origOriginY: initOy,
-              origCalcX: h.x - (h.w || 236) / 2,
-              origCalcY: h.y - (h.h || 110) / 2,
-            };
-            activePointerIdRef.current = e.pointerId;
-            activePointerTypeRef.current = e.pointerType;
-            try {
-              e.currentTarget.setPointerCapture(e.pointerId);
-            } catch {
-              // ignore
+        // In Lasso mode, let Lasso tool select & drag selections instead of force handles capturing the touch!
+        if (effectiveTool !== 'lasso') {
+          for (const h of fHit.handles) {
+            if (h.kind === 'calc-box') continue;
+            const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
+            if (isHit) {
+              e.preventDefault();
+              if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+              if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+              forceSimAnimRef.current = null;
+              setForceSimAnim(null);
+              pushUndoSnapshot(targetPage);
+              const targetVecStroke = h.strokeId
+                ? targetPage.strokes.find((s) => s.id === h.strokeId)
+                : curForceSim?.primaryStrokeId
+                ? targetPage.strokes.find((s) => s.id === curForceSim.primaryStrokeId)
+                : undefined;
+              const initOx =
+                targetVecStroke && targetVecStroke.points.length >= 2
+                  ? targetVecStroke.points[0].x
+                  : curForceSim?.originX ?? h.x;
+              const initOy =
+                targetVecStroke && targetVecStroke.points.length >= 2
+                  ? targetVecStroke.points[0].y
+                  : curForceSim?.originY ?? h.y;
+              draggingForceHandleRef.current = {
+                simId: fHit.simId,
+                kind: h.kind,
+                strokeId: h.strokeId,
+                startX: pt.x,
+                startY: pt.y,
+                origOriginX: initOx,
+                origOriginY: initOy,
+                origCalcX: h.x - (h.w || 236) / 2,
+                origCalcY: h.y - (h.h || 110) / 2,
+              };
+              activePointerIdRef.current = e.pointerId;
+              activePointerTypeRef.current = e.pointerType;
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                // ignore
+              }
+              isDrawingRef.current = true;
+              renderStaticSceneRef.current();
+              return;
             }
-            isDrawingRef.current = true;
-            renderStaticSceneRef.current();
-            return;
           }
         }
 
@@ -39266,6 +39299,32 @@ export default function App() {
         }
       }
 
+      // Check if tapping near active pendulum bob or pivot point
+      if (!topHitStroke && !topHitTxt) {
+        for (const fs of activePage.forceSims || []) {
+          if (fs.mode === 'pendulum') {
+            const pState = pendulumPhysRef.current[fs.id];
+            const ang = pState?.ang ?? fs.pendulumAngleRad ?? 0;
+            const L = fs.rodLengthPx || 230;
+            const bx = fs.originX + L * Math.sin(ang);
+            const by = fs.originY + L * Math.cos(ang);
+            if (distance(pt, { x: bx, y: by }) <= 25) {
+              const bSt = strokeList.find((s) => s.id === fs.secondaryStrokeId);
+              if (bSt) {
+                topHitStroke = { stroke: bSt, z: 999999 };
+                break;
+              }
+            } else if (distance(pt, { x: fs.originX, y: fs.originY }) <= 20) {
+              const pSt = strokeList.find((s) => s.id === fs.primaryStrokeId);
+              if (pSt) {
+                topHitStroke = { stroke: pSt, z: 999999 };
+                break;
+              }
+            }
+          }
+        }
+      }
+
       const curImgIds =
         selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
       const curTxtIds = selectedLassoTextIds;
@@ -39348,9 +39407,24 @@ export default function App() {
       if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
         const tappedStroke = topHitStroke.stroke;
         const grpId = tappedStroke.groupId;
-        const memberStrokeIds = grpId
+        const matchedFs = (activePage.forceSims || []).find(
+          (fs) =>
+            fs.mode === 'pendulum' &&
+            (fs.primaryStrokeId === tappedStroke.id ||
+              fs.secondaryStrokeId === tappedStroke.id ||
+              fs.supportStrokeId === tappedStroke.id)
+        );
+        let memberStrokeIds = grpId
           ? strokeList.filter((s) => s.groupId === grpId).map((s) => s.id)
           : [tappedStroke.id];
+        if (!grpId && matchedFs) {
+          const pIds = [
+            matchedFs.primaryStrokeId,
+            matchedFs.secondaryStrokeId,
+            matchedFs.supportStrokeId,
+          ].filter(Boolean) as string[];
+          memberStrokeIds = Array.from(new Set([...memberStrokeIds, ...pIds]));
+        }
         const memberImgIds = grpId
           ? imgList.filter((im) => im.groupId === grpId).map((im) => im.id)
           : [];
@@ -39565,6 +39639,48 @@ export default function App() {
       if (isPointInPolygon({ x: (sb.minX + sb.maxX) / 2, y: (sb.minY + sb.maxY) / 2 }, poly)) return true;
       return densePoly.some((lp) => isPointNearStroke(lp, s, 14, true));
     });
+
+    // Ensure assembled pendulum components (support ceiling, string/rod, bob) are matched if circled
+    for (const fs of activePage.forceSims || []) {
+      if (fs.mode === 'pendulum') {
+        const pSt = strokeList.find((s) => s.id === fs.primaryStrokeId);
+        const bSt = strokeList.find((s) => s.id === fs.secondaryStrokeId);
+        const supSt = fs.supportStrokeId ? strokeList.find((s) => s.id === fs.supportStrokeId) : null;
+        const pState = pendulumPhysRef.current[fs.id];
+        const ang = pState?.ang ?? fs.pendulumAngleRad ?? 0;
+        const L = fs.rodLengthPx || 230;
+        const bx = fs.originX + L * Math.sin(ang);
+        const by = fs.originY + L * Math.cos(ang);
+        const bobPt = { x: bx, y: by };
+        const pivotPt = { x: fs.originX, y: fs.originY };
+        const midPt = { x: (fs.originX + bx) / 2, y: (fs.originY + by) / 2 };
+        const touchesPendulum =
+          isPointInPolygon(pivotPt, poly) ||
+          isPointInPolygon(bobPt, poly) ||
+          isPointInPolygon(midPt, poly) ||
+          densePoly.some((lp) => distance(lp, bobPt) <= 28 || distance(lp, pivotPt) <= 24) ||
+          (pSt && directMatchedStrokes.some((m) => m.id === pSt.id)) ||
+          (bSt && directMatchedStrokes.some((m) => m.id === bSt.id));
+        if (touchesPendulum) {
+          if (pSt && !directMatchedStrokes.some((m) => m.id === pSt.id)) {
+            directMatchedStrokes.push(pSt);
+          }
+          if (bSt && !directMatchedStrokes.some((m) => m.id === bSt.id)) {
+            directMatchedStrokes.push(bSt);
+          }
+          if (supSt && !directMatchedStrokes.some((m) => m.id === supSt.id)) {
+            const supBounds = getStrokeBounds(supSt);
+            if (
+              isPointInPolygon({ x: (supBounds.minX + supBounds.maxX) / 2, y: (supBounds.minY + supBounds.maxY) / 2 }, poly) ||
+              densePoly.some((lp) => isPointNearStroke(lp, supSt, 16, true)) ||
+              isPointInPolygon(pivotPt, poly)
+            ) {
+              directMatchedStrokes.push(supSt);
+            }
+          }
+        }
+      }
+    }
 
     // Match ALL images whose center, corners, edge midpoints, or interior grid points are inside the Lasso loop,
     // OR whose edges/interior are crossed by the Lasso loop!
@@ -42455,6 +42571,22 @@ export default function App() {
                     }),
                   };
                 }),
+                forceSims: (page.forceSims || []).map((fs) => {
+                  const movesPivot =
+                    Boolean(fs.primaryStrokeId && selectedStrokeIds.includes(fs.primaryStrokeId)) ||
+                    Boolean(fs.supportStrokeId && selectedStrokeIds.includes(fs.supportStrokeId)) ||
+                    Boolean(fs.secondaryStrokeId && selectedStrokeIds.includes(fs.secondaryStrokeId));
+                  if (movesPivot) {
+                    const rx = fs.originX - tf.centerX;
+                    const ry = fs.originY - tf.centerY;
+                    return {
+                      ...fs,
+                      originX: tf.centerX + rx * cosA - ry * sinA,
+                      originY: tf.centerY + rx * sinA + ry * cosA,
+                    };
+                  }
+                  return fs;
+                }),
               };
             },
             false
@@ -42688,6 +42820,21 @@ export default function App() {
                       outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
                     })),
                   };
+                }),
+                forceSims: (page.forceSims || []).map((fs) => {
+                  const movesPivot =
+                    Boolean(fs.primaryStrokeId && selectedStrokeIds.includes(fs.primaryStrokeId)) ||
+                    Boolean(fs.supportStrokeId && selectedStrokeIds.includes(fs.supportStrokeId)) ||
+                    Boolean(fs.secondaryStrokeId && selectedStrokeIds.includes(fs.secondaryStrokeId));
+                  if (movesPivot) {
+                    return {
+                      ...fs,
+                      originX: tf.anchorX + (fs.originX - tf.anchorX) * scaleFactor,
+                      originY: tf.anchorY + (fs.originY - tf.anchorY) * scaleFactor,
+                      rodLengthPx: fs.rodLengthPx ? Math.round(fs.rodLengthPx * scaleFactor) : fs.rodLengthPx,
+                    };
+                  }
+                  return fs;
                 }),
               };
             },
@@ -44728,6 +44875,37 @@ export default function App() {
               );
             }
 
+            const nextForceSims = (page.forceSims || []).map((fs) => {
+              const movesPivot =
+                Boolean(fs.primaryStrokeId && movingStrokeSet.has(fs.primaryStrokeId)) ||
+                Boolean(fs.supportStrokeId && movingStrokeSet.has(fs.supportStrokeId)) ||
+                Boolean(fs.secondaryStrokeId && movingStrokeSet.has(fs.secondaryStrokeId));
+              if (movesPivot) {
+                return {
+                  ...fs,
+                  originX: fs.originX + dx,
+                  originY: fs.originY + dy,
+                };
+              }
+              return fs;
+            });
+
+            for (const fs of page.forceSims || []) {
+              const movesPivot =
+                Boolean(fs.primaryStrokeId && movingStrokeSet.has(fs.primaryStrokeId)) ||
+                Boolean(fs.supportStrokeId && movingStrokeSet.has(fs.supportStrokeId)) ||
+                Boolean(fs.secondaryStrokeId && movingStrokeSet.has(fs.secondaryStrokeId));
+              if (movesPivot && pendulumPhysRef.current[fs.id]) {
+                const pSt = pendulumPhysRef.current[fs.id];
+                if (pSt.trajectory && pSt.trajectory.length > 0) {
+                  pSt.trajectory = pSt.trajectory.map((pt) => ({
+                    x: pt.x + dx,
+                    y: pt.y + dy,
+                  }));
+                }
+              }
+            }
+
             let nextPage: NotePage = {
               ...page,
               texts:
@@ -44747,6 +44925,7 @@ export default function App() {
               ),
               strokes: movedStrokes,
               springSims: nextSpringSims,
+              forceSims: nextForceSims,
               activeSpringSimId:
                 unhookedSpringSimIdToRemove &&
                 page.activeSpringSimId === unhookedSpringSimIdToRemove
