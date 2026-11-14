@@ -2570,8 +2570,8 @@ export default function App() {
   const [showStopwatch, setShowStopwatch] = useState<boolean>(false);
   const [stopwatchWidth, setStopwatchWidth] = useState<number>(210);
   const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => ({
-    x: typeof window !== 'undefined' ? Math.max(16, window.innerWidth - 240) : 340,
-    y: 120,
+    x: typeof window !== 'undefined' ? Math.max(20, Math.min(window.innerWidth - 240, 340)) : 340,
+    y: 110,
   }));
   const [stopwatchRunning, setStopwatchRunning] = useState<boolean>(false);
   const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState<number>(0);
@@ -36331,12 +36331,13 @@ export default function App() {
             return;
           }
         }
-        // In Lasso mode, let Lasso tool select & drag selections instead of force handles capturing the touch!
-        if (effectiveTool !== 'lasso') {
-          for (const h of fHit.handles) {
-            if (h.kind === 'calc-box') continue;
-            const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
-            if (isHit) {
+        // In Lasso mode, let Lasso tool select & drag selections instead of force handles capturing the touch,
+        // BUT ALWAYS allow grabbing the pendulum bob directly to adjust length or start oscillation!
+        for (const h of fHit.handles) {
+          if (h.kind === 'calc-box') continue;
+          if (effectiveTool === 'lasso' && h.kind !== 'pendulum-bob') continue;
+          const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
+          if (isHit) {
               e.preventDefault();
               if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
               if (activeNodeStrokeId) setActiveNodeStrokeId(null);
@@ -36379,7 +36380,6 @@ export default function App() {
               return;
             }
           }
-        }
 
         if (hadOpenCalc) {
           e.preventDefault();
@@ -62939,7 +62939,29 @@ export default function App() {
                               {/* 3. Stopwatch Toggle (Χρονόμετρο) */}
                               <button
                                 type="button"
-                                onClick={() => setShowStopwatch((s) => !s)}
+                                onClick={() => {
+                                  setShowStopwatch((prev) => {
+                                    const next = !prev;
+                                    if (next) {
+                                      setStopwatchPos((cur) => {
+                                        const targetX = Math.max(
+                                          20,
+                                          Math.min(window.innerWidth - stopwatchWidth - 20, 340)
+                                        );
+                                        const targetY = 110;
+                                        if (
+                                          cur.x > window.innerWidth - 60 ||
+                                          cur.y > window.innerHeight - 60 ||
+                                          cur.x < 10
+                                        ) {
+                                          return { x: targetX, y: targetY };
+                                        }
+                                        return cur;
+                                      });
+                                    }
+                                    return next;
+                                  });
+                                }}
                                 className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
                                   showStopwatch
                                     ? 'bg-[#234978] text-white shadow-xs'
@@ -62962,70 +62984,34 @@ export default function App() {
                                 <span>⋯ Τροχιά Εκκρεμούς</span>
                               </button>
 
-                              {/* 5. Length Card (Μήκος Νήματος L - μόνο μέτρα, ελάχιστο βήμα 0.1m) */}
-                              <div className="bg-[#fdfbf7]/90 rounded-xl p-2 border border-[#dfd8cb] space-y-1.5">
+                              {/* 5. Length Card (Μήκος Νήματος L - μόνο slider και τιμή L) */}
+                              <div className="bg-[#fdfbf7]/90 rounded-xl p-2.5 border border-[#dfd8cb] space-y-2">
                                 <div className="flex items-center justify-between text-[11px]">
                                   <span className="font-bold text-[#1e293b]">Μήκος Νήματος:</span>
                                   <span className="font-mono font-bold text-[#234978] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
                                     L = {curLenM.toFixed(1)} m
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setPendulumLen(curLenM - 0.1)}
-                                    disabled={curLenM <= 0.3}
-                                    className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-[11px] border border-[#dfd8cb] transition cursor-pointer"
-                                    title="Μείωση μήκους κατά 0.1m"
-                                  >
-                                    - 0.1m
-                                  </button>
-                                  <input
-                                    type="range"
-                                    min="0.3"
-                                    max="2.5"
-                                    step="0.1"
-                                    value={curLenM}
-                                    onChange={(e) => setPendulumLen(parseFloat(e.target.value))}
-                                    className="flex-1 accent-[#234978] cursor-pointer h-1.5"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => setPendulumLen(curLenM + 0.1)}
-                                    disabled={curLenM >= 2.5}
-                                    className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 text-[#2c3e50] font-bold text-[11px] border border-[#dfd8cb] transition cursor-pointer"
-                                    title="Αύξηση μήκους κατά 0.1m"
-                                  >
-                                    + 0.1m
-                                  </button>
-                                </div>
+                                <input
+                                  type="range"
+                                  min="0.3"
+                                  max="2.5"
+                                  step="0.1"
+                                  value={curLenM}
+                                  onChange={(e) => setPendulumLen(parseFloat(e.target.value))}
+                                  className="w-full accent-[#234978] cursor-pointer h-2"
+                                />
                               </div>
 
-                              {/* 6. Amplitude Card (Πλάτος Ταλάντωσης θmax - μόνο στο dashboard) */}
-                              <div className="bg-[#fdfbf7]/90 rounded-xl p-2 border border-[#dfd8cb] space-y-1.5">
-                                <div className="flex items-center justify-between text-[11px]">
+                              {/* 6. Amplitude Card (Πλάτος Ταλάντωσης θmax - μόνο η τιμή, και ΜΟΝΟ όταν ξεκινήσει η ταλάντωση) */}
+                              {(!activeForce.isPaused || curMaxDeg >= 5) && (
+                                <div className="bg-[#fdfbf7]/90 rounded-xl p-2.5 border border-[#dfd8cb] flex items-center justify-between text-[11px]">
                                   <span className="font-bold text-[#1e293b]">Πλάτος Ταλάντωσης:</span>
                                   <span className="font-mono font-bold text-[#0284c7] bg-[#efebe3] px-2 py-0.5 rounded-md border border-[#dfd8cb]">
                                     θmax = {curMaxDeg}°
                                   </span>
                                 </div>
-                                <div className="grid grid-cols-4 gap-1">
-                                  {[15, 30, 45, 60].map((deg) => (
-                                    <button
-                                      key={deg}
-                                      type="button"
-                                      onClick={() => setPendulumAmp(deg)}
-                                      className={`py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
-                                        curMaxDeg === deg
-                                          ? 'bg-[#234978] text-white shadow-2xs'
-                                          : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
-                                      }`}
-                                    >
-                                      {deg}°
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
+                              )}
 
                               {/* 7. Forces Analysis & Resultant (when Forces are active) */}
                               {activeForce.showForces && (
@@ -63531,15 +63517,18 @@ export default function App() {
               return (
                 <div
                   data-ui-panel="true"
+                  data-popover-panel="stopwatch"
                   style={{
-                    left: stopwatchPos.x,
-                    top: stopwatchPos.y,
+                    position: 'fixed',
+                    left: `${stopwatchPos.x}px`,
+                    top: `${stopwatchPos.y}px`,
+                    zIndex: 9999,
                     width: `${stopwatchWidth}px`,
                     padding: `${padPx}px`,
                     borderRadius: `${radiusPx}px`,
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="fixed z-45 ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_16px_36px_-6px_rgba(0,0,0,0.18),0_4px_12px_-2px_rgba(0,0,0,0.06)] select-none text-[#1e293b] space-y-2.5 relative"
+                  className="ipados-liquid-glass bg-[#fdfbf7]/98 backdrop-blur-2xl border border-[#dfd8cb] shadow-[0_20px_45px_-8px_rgba(0,0,0,0.22),0_4px_16px_-2px_rgba(0,0,0,0.08)] select-none text-[#1e293b] space-y-2.5"
                 >
                   {/* Drag Header */}
                   <div
