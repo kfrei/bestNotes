@@ -30298,7 +30298,7 @@ export default function App() {
             ctx.restore();
           }
 
-          // Draw Rod + Pivot + Bob (Clean ink outline when paused, cyan ONLY when actively dragged!)
+          // Draw Rod + Bob (Clean ink outline when paused, cyan ONLY when actively dragged!)
           ctx.save();
           ctx.strokeStyle = '#0f172a';
           ctx.lineWidth = 2.2;
@@ -30306,11 +30306,6 @@ export default function App() {
           ctx.moveTo(PX, PY);
           ctx.lineTo(bx, by);
           ctx.stroke();
-
-          ctx.fillStyle = '#0f172a';
-          ctx.beginPath();
-          ctx.arc(PX, PY, 5.5, 0, Math.PI * 2);
-          ctx.fill();
 
           ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
           ctx.shadowBlur = 8;
