@@ -45755,6 +45755,33 @@ export default function App() {
       }
     }
 
+    // 3b. Heat Laboratory Apparatus Stencils ('burner', 'tripod', 'beaker', 'wide-basin', 'flask', 'thermometer')
+    if (
+      activeTool === 'shape' &&
+      (shapePreset === 'burner' ||
+        shapePreset === 'tripod' ||
+        shapePreset === 'beaker' ||
+        shapePreset === 'wide-basin' ||
+        shapePreset === 'flask' ||
+        shapePreset === 'thermometer')
+    ) {
+      clearActiveOverlay();
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const p of rawPts) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+      heatSim.handleAddObject(shapePreset, minX + (maxX - minX) / 2, minY + (maxY - minY) / 2);
+      snappedCurrentStrokeRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
     // 4. Physics Grouped Stencils ('axes', 'wave-axes', 'bulb', 'battery', 'voltage-source', 'inclined-plane', 'switch', 'fan')
     if (
       activeTool === 'shape' &&
@@ -57120,7 +57147,7 @@ export default function App() {
                   );
                 })()}
                 {activeTool === 'shape' && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x max-w-full px-1 py-0.5">
                     {/*
                       NOTE (Backup / Restore Point - git commit 94339ed):
                       Simple shapes handled automatically by Pen/Pencil Hold-to-Snap ('auto' mode) were removed from this sub-bar:
@@ -57449,10 +57476,90 @@ export default function App() {
                             </svg>
                           ),
                         },
+                        {
+                          id: 'burner',
+                          title: 'Καμινέτο Bunsen (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          isFirstHeatItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 17 2 C 15 5 15.5 7 17 8 C 18.5 7 19 5 17 2 Z" fill="#f97316" stroke="#ea580c" strokeWidth="1.2" />
+                              <rect x="15" y="8" width="4" height="8" fill="#cbd5e1" stroke="#111827" strokeWidth="1.5" />
+                              <rect x="14" y="12" width="6" height="2.5" fill="#475569" stroke="#111827" strokeWidth="1" />
+                              <path d="M 15 16 L 10 20 L 24 20 L 19 16 Z" fill="#64748b" stroke="#111827" strokeWidth="1.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'tripod',
+                          title: 'Τρίποδας Εργαστηρίου με Πυράντοχο Πλέγμα (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <ellipse cx="17" cy="5.5" rx="8.5" ry="2.5" strokeWidth="1.8" />
+                              <ellipse cx="17" cy="5.5" rx="4" ry="1.2" fill="#f97316" stroke="#ea580c" strokeWidth="0.8" />
+                              <line x1="10" y1="6.5" x2="6" y2="20" strokeWidth="1.8" />
+                              <line x1="24" y1="6.5" x2="28" y2="20" strokeWidth="1.8" />
+                              <line x1="17" y1="7.5" x2="17" y2="19" strokeWidth="1.4" strokeOpacity="0.6" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'beaker',
+                          title: 'Ποτήρι Ζέσεως με Κλίμακα ml (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 9 3 L 8 4 L 10 5 L 10 18 C 10 19.5 11.5 20.5 13 20.5 L 21 20.5 C 22.5 20.5 24 19.5 24 18 L 24 3 L 9 3" strokeWidth="1.7" />
+                              <path d="M 10.5 11 C 12 10.5 22 10.5 23.5 11 L 23.5 18 C 23.5 19 22.5 19.8 21 19.8 L 13 19.8 C 11.5 19.8 10.5 19 10.5 18 Z" fill="rgba(56,189,248,0.4)" stroke="#0284c7" strokeWidth="1" />
+                              <line x1="12" y1="8" x2="15" y2="8" strokeWidth="1.2" />
+                              <line x1="12" y1="12" x2="16" y2="12" strokeWidth="1.2" />
+                              <line x1="12" y1="16" x2="15" y2="16" strokeWidth="1.2" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'wide-basin',
+                          title: 'Πλατιά Λεκάνη / Υδατόλουτρο (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 4 8 C 5 8 5 9 5 10 L 5 17 C 5 19.5 7 20.5 9 20.5 L 25 20.5 C 27 20.5 29 19.5 29 17 L 29 10 C 29 9 29 8 30 8" strokeWidth="1.8" />
+                              <path d="M 5.5 12 C 9 11.5 25 11.5 28.5 12 L 28.5 17 C 28.5 19 27 19.8 25 19.8 L 9 19.8 C 7 19.8 5.5 19 5.5 17 Z" fill="rgba(56,189,248,0.45)" stroke="#0284c7" strokeWidth="1" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'flask',
+                          title: 'Κωνική Φιάλη Erlenmeyer (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 14 2 L 20 2 M 15 2 L 15 8 L 8 18 C 7 19.5 8 20.5 10 20.5 L 24 20.5 C 26 20.5 27 19.5 26 18 L 19 8 L 19 2" strokeWidth="1.7" />
+                              <path d="M 11.5 13 L 8.5 18 C 8 19 8.8 19.8 10 19.8 L 24 19.8 C 25.2 19.8 26 19 25.5 18 L 22.5 13 Z" fill="rgba(56,189,248,0.4)" stroke="#0284c7" strokeWidth="1" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'thermometer',
+                          title: 'Εργαστηριακό Θερμόμετρο 0–100°C (Προσομοίωση Θερμότητας)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="15" y="2" width="4" height="13" rx="2" fill="rgba(255,255,255,0.7)" stroke="#111827" strokeWidth="1.5" />
+                              <circle cx="17" cy="17" r="3.5" fill="#dc2626" stroke="#111827" strokeWidth="1.5" />
+                              <rect x="16" y="7" width="2" height="8" fill="#dc2626" />
+                              <line x1="20" y1="5" x2="22" y2="5" stroke="#111827" strokeWidth="1" />
+                              <line x1="20" y1="8" x2="23" y2="8" stroke="#111827" strokeWidth="1.2" />
+                              <line x1="20" y1="11" x2="22" y2="11" stroke="#111827" strokeWidth="1" />
+                            </svg>
+                          ),
+                        },
                       ] as const
                     ).map((sp) => {
                       const isSim = 'isSimItem' in sp && sp.isSimItem;
                       const isFirstSim = 'isFirstSimItem' in sp && sp.isFirstSimItem;
+                      const isFirstHeat = 'isFirstHeatItem' in sp && sp.isFirstHeatItem;
                       const isSelected =
                         shapePreset === sp.id ||
                         (sp.id === 'arrow' && shapePreset === 'spring-pointer');
@@ -57464,13 +57571,31 @@ export default function App() {
                               title="Αντικείμενα Προσομοιώσεων Φυσικής"
                             />
                           )}
+                          {isFirstHeat && (
+                            <div
+                              className="h-5 w-px bg-[#dfd8cb] ml-2.5 mr-1 shrink-0"
+                              title="Αντικείμενα Θερμότητας & Εργαστηρίου"
+                            />
+                          )}
                           <button
                             onClick={() => {
-                              setShapePreset(sp.id as ShapePresetType);
-                              lastCreatedShapeIdsRef.current = [];
+                              if (
+                                sp.id === 'burner' ||
+                                sp.id === 'tripod' ||
+                                sp.id === 'beaker' ||
+                                sp.id === 'wide-basin' ||
+                                sp.id === 'flask' ||
+                                sp.id === 'thermometer'
+                              ) {
+                                heatSim.handleAddObject(sp.id);
+                                showToast(`✨ Προστέθηκε: ${sp.title.split(' (')[0]}`);
+                              } else {
+                                setShapePreset(sp.id as ShapePresetType);
+                                lastCreatedShapeIdsRef.current = [];
+                              }
                             }}
                             title={sp.title}
-                            className={`flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
+                            className={`shrink-0 flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
                               isSelected
                                 ? 'bg-[#efebe3] border-[#234978] ring-2 ring-[#234978]/25 shadow-xs'
                                 : isSim

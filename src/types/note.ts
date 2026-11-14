@@ -52,6 +52,12 @@ export type ShapePresetType =
   | 'fan'
   | 'ammeter'
   | 'voltmeter'
+  | 'burner'
+  | 'tripod'
+  | 'beaker'
+  | 'wide-basin'
+  | 'flask'
+  | 'thermometer'
   | 'title-box';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
