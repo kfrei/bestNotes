@@ -30144,19 +30144,20 @@ export default function App() {
           // Always allow grabbing the pendulum bob to displace it from equilibrium!
           handlesHit.push({ kind: 'pendulum-bob', x: bx, y: by, r: 30 });
 
-          const wm_phys = 78;
-          const VSCALE = 1.45;
-          const wm_vis = wm_phys * VSCALE;
-          const tm_phys = Math.max(
-            0,
-            wm_phys * Math.cos(ang) +
-              (fSim.isPaused || isDraggingBob ? 0 : Math.abs(pState.av * pState.av * L * 0.6))
-          );
-          const tm_vis = tm_phys * VSCALE;
+          const B_N = 10;
+          const L_m = Math.max(0.2, L / 230); // 10 grid squares (230px) = 1.0 meter
+          const G = 9.81; // Earth gravity m/s^2
+          const omega = fSim.isPaused || isDraggingBob ? 0 : (pState.av || 0);
+          const centripetalRatio = (omega * omega * L_m) / G;
+          const t_ratio = Math.max(0, Math.cos(ang) + centripetalRatio);
+          const T_N = t_ratio * B_N;
+
+          // Visual length of Weight B vector (proportional to L, capped around 102px)
+          const wm_vis = Math.min(102, Math.max(48, L * 0.52));
+          // Tension vector T magnitude scaled proportionally to B, clamped strictly so it never shoots beyond ceiling pivot (PX, PY)
+          const tm_vis = Math.min(wm_vis * t_ratio, Math.max(20, L - 20));
           const wa = Math.PI / 2;
           const ta = Math.atan2(PY - by, PX - bx);
-          const B_N = 10;
-          const T_N = (tm_phys / wm_phys) * B_N;
 
           // Step-by-step Analysis of T or B when paused
           const axLen = 110;
@@ -30365,15 +30366,26 @@ export default function App() {
               1,
               showNums ? `B = ${B_N} N` : 'B'
             );
+            const tTipX = bx + tm_vis * Math.cos(ta);
+            const tTipY = by + tm_vis * Math.sin(ta);
+            const isNearVertical = Math.abs(ang) < 0.12;
+            const sideSign = ang >= 0 ? 1 : -1;
+            const tLabelPos = isNearVertical
+              ? { x: tTipX + (showNums ? 34 : 15), y: Math.max(PY + 14, tTipY + 2) }
+              : {
+                  x: tTipX + sideSign * (showNums ? 26 : 14) * Math.cos(ang),
+                  y: Math.max(PY + 14, tTipY - 6),
+                };
             drawSimVector(
               bx,
               by,
-              bx + tm_vis * Math.cos(ta),
-              by + tm_vis * Math.sin(ta),
+              tTipX,
+              tTipY,
               '#0e6efd',
               3.6,
               1,
-              showNums ? `T = ${T_N.toFixed(1)} N` : 'T'
+              showNums ? `T = ${T_N.toFixed(1)} N` : 'T',
+              tLabelPos
             );
           }
 
