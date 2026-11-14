@@ -30238,7 +30238,7 @@ export default function App() {
           const ta = Math.atan2(PY - by, PX - bx);
 
           // Step-by-step Analysis of T or B when paused
-          const axLen = 110;
+          const axLen = 150;
           const isLeft = bx < PX;
           const s = Math.sin(ang);
           const c = Math.cos(ang);
@@ -30334,10 +30334,18 @@ export default function App() {
           } else if (fSim.isPaused && fSim.showForces && fSim.anMode === 'B') {
             const wTipX = bx;
             const wTipY = by + wm_vis;
-            const yax1 = { x: bx + axLen * s, y: by + axLen * c };
-            const yax2 = { x: PX, y: PY };
-            const p1 = { x: bx - axLen * c, y: by + axLen * s };
-            const p2 = { x: bx + axLen * c, y: by - axLen * s };
+
+            // y-axis positive direction: along the string towards the pivot, reaching about halfway of radius (0.52 * L)
+            const yHalfLen = Math.max(tm_vis + 24, L * 0.52);
+            const yax2 = { x: bx - yHalfLen * s, y: by - yHalfLen * c };
+            // y-axis negative direction: extending past By
+            const yNegLen = 135;
+            const yax1 = { x: bx + yNegLen * s, y: by + yNegLen * c };
+
+            // x-axis: longer (165px) so the 'x' arrow and label are well clear of 'Bx'
+            const axLenX = 165;
+            const p1 = { x: bx - axLenX * c, y: by + axLenX * s };
+            const p2 = { x: bx + axLenX * c, y: by - axLenX * s };
             const xax1 = isLeft ? (p1.x < p2.x ? p1 : p2) : p1.x > p2.x ? p1 : p2;
             const xax2 = isLeft ? (p1.x < p2.x ? p2 : p1) : p1.x > p2.x ? p2 : p1;
 
