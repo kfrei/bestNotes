@@ -285,6 +285,7 @@ import {
 } from './utils/geometryAndAlgorithms';
 import { LibraryNoteMiniThumb } from './components/LibraryNoteMiniThumb';
 import { WarmStudioToggle } from './components/WarmStudioToggle';
+import { StopwatchWidget, FullscreenLaserCanvas } from './simulations';
 import {
   buildLibraryFilterChips,
   formatRecentRelativeLabel,
@@ -63812,288 +63813,33 @@ export default function App() {
             )}
 
             {/* Draggable & Uniformly Resizable Digital Stopwatch Widget (⏱️) */}
-            {showStopwatch && (() => {
-              const swScale = stopwatchWidth / 210;
-              const padPx = Math.round(12 * swScale);
-              const radiusPx = Math.round(16 * swScale);
-
-              const startStopwatchResize = (
-                e: React.PointerEvent<HTMLDivElement>,
-                corner: 'br' | 'bl'
-              ) => {
-                e.stopPropagation();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                stopwatchResizeRef.current = {
-                  corner,
-                  startX: e.clientX,
-                  startY: e.clientY,
-                  origW: stopwatchWidth,
-                  origX: stopwatchPos.x,
-                };
-              };
-              const moveStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
-                const rz = stopwatchResizeRef.current;
-                if (!rz) return;
-                e.stopPropagation();
-                const minW = 160;
-                const maxW = Math.min(460, window.innerWidth - 24);
-
-                if (rz.corner === 'bl') {
-                  const dx = e.clientX - rz.startX;
-                  const dy = e.clientY - rz.startY;
-                  const delta = Math.round((-dx + dy) / 2);
-                  const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
-                  const rightEdge = rz.origX + rz.origW;
-                  const nextX = Math.max(8, rightEdge - nextW);
-                  setStopwatchWidth(nextW);
-                  setStopwatchPos((p) => {
-                    const nextPos = { ...p, x: nextX };
-                    try {
-                      localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify(nextPos));
-                    } catch {}
-                    return nextPos;
-                  });
-                  hasUserCustomizedStopwatchRef.current = true;
-                  try {
-                    localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
-                    localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
-                  } catch {}
-                } else {
-                  const dx = e.clientX - rz.startX;
-                  const dy = e.clientY - rz.startY;
-                  const delta = Math.round((dx + dy) / 2);
-                  const nextW = Math.max(minW, Math.min(maxW, rz.origW + delta));
-                  setStopwatchWidth(nextW);
-                  hasUserCustomizedStopwatchRef.current = true;
-                  try {
-                    localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
-                    localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
-                  } catch {}
-                }
-              };
-              const endStopwatchResize = (e: React.PointerEvent<HTMLDivElement>) => {
-                e.stopPropagation();
-                stopwatchResizeRef.current = null;
-                try {
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                } catch {}
-              };
-
-              return (
-                <div
-                  data-ui-panel="true"
-                  data-popover-panel="stopwatch"
-                  style={{
-                    position: 'fixed',
-                    left: `${stopwatchPos.x}px`,
-                    top: `${stopwatchPos.y}px`,
-                    zIndex: 9999,
-                    width: `${stopwatchWidth}px`,
-                    padding: `${padPx}px`,
-                    borderRadius: `${radiusPx}px`,
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="ipados-liquid-glass bg-[#fdfbf7]/98 backdrop-blur-2xl border border-[#dfd8cb] shadow-[0_20px_45px_-8px_rgba(0,0,0,0.22),0_4px_16px_-2px_rgba(0,0,0,0.08)] select-none text-[#1e293b] space-y-2.5"
-                >
-                  {/* Drag Header */}
-                  <div
-                    onPointerDown={(e) => {
-                      if (
-                        (e.target as HTMLElement).closest('button') ||
-                        (e.target as HTMLElement).closest('[data-sw-resize="true"]')
-                      ) {
-                        return;
-                      }
-                      e.stopPropagation();
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      stopwatchDragRef.current = {
-                        startClientX: e.clientX,
-                        startClientY: e.clientY,
-                        origX: stopwatchPos.x,
-                        origY: stopwatchPos.y,
-                      };
-                    }}
-                    onPointerMove={(e) => {
-                      const drag = stopwatchDragRef.current;
-                      if (!drag) return;
-                      const nextX = Math.max(
-                        8,
-                        Math.min(
-                          window.innerWidth - stopwatchWidth - 8,
-                          drag.origX + (e.clientX - drag.startClientX)
-                        )
-                      );
-                      const nextY = Math.max(
-                        8,
-                        Math.min(
-                          window.innerHeight - 120,
-                          drag.origY + (e.clientY - drag.startClientY)
-                        )
-                      );
-                      const nextPos = { x: nextX, y: nextY };
-                      setStopwatchPos(nextPos);
-                      hasUserCustomizedStopwatchRef.current = true;
-                      try {
-                        localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify(nextPos));
-                        localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
-                      } catch {}
-                    }}
-                    onPointerUp={(e) => {
-                      stopwatchDragRef.current = null;
-                      try {
-                        e.currentTarget.releasePointerCapture(e.pointerId);
-                      } catch {}
-                    }}
-                    className="flex items-center justify-between cursor-grab active:cursor-grabbing pb-1 border-b border-[#dfd8cb]/60"
-                  >
-                    <div
-                      className="flex items-center gap-1.5 font-bold text-[#1e293b]"
-                      style={{ fontSize: `${Math.max(10, Math.round(12 * swScale))}px` }}
-                    >
-                      <span style={{ fontSize: `${Math.round(14 * swScale)}px` }}>⏱️</span>
-                      <span>Χρονόμετρο</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowStopwatch(false)}
-                      style={{
-                        width: `${Math.round(20 * swScale)}px`,
-                        height: `${Math.round(20 * swScale)}px`,
-                        fontSize: `${Math.max(9, Math.round(11 * swScale))}px`,
-                      }}
-                      className="flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] font-bold transition cursor-pointer"
-                      title="Κλείσιμο χρονομέτρου"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* LCD Screen: Signature Dark Navy Blue (#132644) Background */}
-                  <div
-                    style={{
-                      backgroundColor: '#132644',
-                      borderColor: 'rgba(35, 73, 120, 0.65)',
-                      padding: `${Math.round(7 * swScale)}px ${Math.round(10 * swScale)}px`,
-                      borderRadius: `${Math.round(12 * swScale)}px`,
-                    }}
-                    className="border shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)] text-center"
-                  >
-                    <span
-                      style={{ fontSize: `${Math.round(24 * swScale)}px` }}
-                      className="font-mono font-black tracking-widest text-white drop-shadow-xs"
-                    >
-                      {formatStopwatch(stopwatchElapsedMs)}
-                    </span>
-                    <div
-                      style={{ fontSize: `${Math.max(8, Math.round(9 * swScale))}px` }}
-                      className="text-[#93c5fd]/70 font-mono tracking-wider mt-0.5"
-                    >
-                      ΛΕΠ : ΔΕΥΤ . ΔΕΚ
-                    </div>
-                  </div>
-
-                  {/* Buttons: Play/Pause (same button) and Reset */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextRunning = !stopwatchRunning;
-                        setStopwatchRunning(nextRunning);
-                        const activeSim = getActiveForceSim(activePage);
-                        if (activeSim && activeSim.mode === 'pendulum') {
-                          handleForceSimAction(activeSim, nextRunning ? 'resume' : 'pause');
-                        }
-                      }}
-                      style={{
-                        padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
-                        borderRadius: `${Math.round(10 * swScale)}px`,
-                        fontSize: `${Math.max(10, Math.round(12 * swScale))}px`,
-                      }}
-                      className={`font-bold flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer ${
-                        stopwatchRunning
-                          ? 'bg-[#dc2626] hover:bg-[#b91c1c] text-white'
-                          : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
-                      }`}
-                    >
-                      {stopwatchRunning
-                        ? '❚❚ Παύση'
-                        : stopwatchElapsedMs > 0
-                        ? '▶ Συνέχεια'
-                        : '▶ Έναρξη'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStopwatchRunning(false);
-                        setStopwatchElapsedMs(0);
-                        const activeSim = getActiveForceSim(activePage);
-                        if (activeSim && activeSim.mode === 'pendulum') {
-                          handleForceSimAction(activeSim, 'reset-pendulum-initial');
-                        }
-                      }}
-                      style={{
-                        padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
-                        borderRadius: `${Math.round(10 * swScale)}px`,
-                        fontSize: `${Math.max(10, Math.round(12 * swScale))}px`,
-                      }}
-                      className="bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                    >
-                      ↺ Μηδεν.
-                    </button>
-                  </div>
-
-                  {/* Bottom-Left Uniform Resize Handle */}
-                  <div
-                    data-sw-resize="true"
-                    onPointerDown={(e) => startStopwatchResize(e, 'bl')}
-                    onPointerMove={moveStopwatchResize}
-                    onPointerUp={endStopwatchResize}
-                    onPointerCancel={endStopwatchResize}
-                    className="absolute -bottom-1 -left-1 w-5 h-5 cursor-sw-resize flex items-end justify-start p-1 text-[#94a3b8] hover:text-[#234978] transition"
-                    title="Σύρετε για ομοιόμορφη αλλαγή μεγέθους"
-                  >
-                    <svg
-                      width="9"
-                      height="9"
-                      viewBox="0 0 9 9"
-                      className="opacity-70 hover:opacity-100"
-                    >
-                      <path
-                        d="M1 2 L7 8 M1 5 L4 8 M1 8 L1 8"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-
-                  {/* Bottom-Right Uniform Resize Handle */}
-                  <div
-                    data-sw-resize="true"
-                    onPointerDown={(e) => startStopwatchResize(e, 'br')}
-                    onPointerMove={moveStopwatchResize}
-                    onPointerUp={endStopwatchResize}
-                    onPointerCancel={endStopwatchResize}
-                    className="absolute -bottom-1 -right-1 w-5 h-5 cursor-se-resize flex items-end justify-end p-1 text-[#94a3b8] hover:text-[#234978] transition"
-                    title="Σύρετε για ομοιόμορφη αλλαγή μεγέθους"
-                  >
-                    <svg
-                      width="9"
-                      height="9"
-                      viewBox="0 0 9 9"
-                      className="opacity-70 hover:opacity-100"
-                    >
-                      <path
-                        d="M8 2 L2 8 M8 5 L5 8 M8 8 L8 8"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              );
-            })()}
+            {showStopwatch && (
+              <StopwatchWidget
+                pos={stopwatchPos}
+                width={stopwatchWidth}
+                running={stopwatchRunning}
+                elapsedMs={stopwatchElapsedMs}
+                onPosChange={setStopwatchPos}
+                onWidthChange={setStopwatchWidth}
+                onClose={() => setShowStopwatch(false)}
+                onTogglePlayPause={() => {
+                  const nextRunning = !stopwatchRunning;
+                  setStopwatchRunning(nextRunning);
+                  const activeSim = getActiveForceSim(activePage);
+                  if (activeSim && activeSim.mode === 'pendulum') {
+                    handleForceSimAction(activeSim, nextRunning ? 'resume' : 'pause');
+                  }
+                }}
+                onReset={() => {
+                  setStopwatchRunning(false);
+                  setStopwatchElapsedMs(0);
+                  const activeSim = getActiveForceSim(activePage);
+                  if (activeSim && activeSim.mode === 'pendulum') {
+                    handleForceSimAction(activeSim, 'reset-pendulum-initial');
+                  }
+                }}
+              />
+            )}
 
             {/* Draggable & Corner-Resizable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
             {showPeriodicTableModal && (() => {
@@ -70154,8 +69900,8 @@ export default function App() {
       />
 
       {/* Viewport-Level Global Red Laser Pointer Canvas (Active everywhere across entire browser, over all dashboards & modals) */}
-      <canvas
-        ref={(el) => {
+      <FullscreenLaserCanvas
+        canvasRef={(el) => {
           globalLaserCanvasRef.current = el;
           if (el) {
             const ctx =
@@ -70170,34 +69916,11 @@ export default function App() {
             globalLaserCtxRef.current = null;
           }
         }}
-        width={
-          typeof window !== 'undefined'
-            ? Math.round(window.innerWidth * (window.devicePixelRatio || CANVAS_DPR || 1))
-            : 1920
-        }
-        height={
-          typeof window !== 'undefined'
-            ? Math.round(window.innerHeight * (window.devicePixelRatio || CANVAS_DPR || 1))
-            : 1080
-        }
+        activeTool={activeTool}
         onPointerDown={handleGlobalLaserPointerDown}
         onPointerMove={handleGlobalLaserPointerMove}
         onPointerUp={handleGlobalLaserPointerUp}
-        onPointerCancel={handleGlobalLaserPointerUp}
-        onContextMenu={(e) => e.preventDefault()}
-        style={{
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          width: '100vw',
-          height: '100vh',
-          zIndex: 100000,
-          pointerEvents: activeTool === 'laser' ? 'auto' : 'none',
-          touchAction: 'none',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          cursor: activeTool === 'laser' ? 'crosshair' : 'default',
-        }}
+        dpr={CANVAS_DPR}
       />
     </div>
   );

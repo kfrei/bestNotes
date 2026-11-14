@@ -232,4 +232,36 @@
 
 ---
 
-*Τελευταία ενημέρωση τεκμηρίωσης: 14 Νοεμβρίου 2026 — v0.99 (pendulumSimFullyFunctional)*
+## 7. Αρθρωτή Αρχιτεκτονική Προσομοιώσεων (`src/simulations/`)
+
+Για την ασφαλή και κλιμακούμενη υποστήριξη δεκάδων νέων θεμάτων Φυσικής (Βολές, Κεκλιμένο με κίνηση & τριβή, Υδροστατική πίεση, Επίλυση Ohm/Kirchhoff, Ροπές/Στερεό), ο κώδικας των προσομοιώσεων απομονώθηκε σε αυτόνομη αρχιτεκτονική:
+
+```
+src/simulations/
+├── index.ts                         // Master export & Registry initialization
+├── types.ts                         // ISimulationModule, SimCategory, Vector2D
+├── core/
+│   ├── PhysicsMath.ts               // Διανυσματικά μαθηματικά (Vector2D), γινόμενα, ομαλή ολοκλήρωση
+│   ├── UniversalStopwatchBridge.ts  // Κοινή γέφυρα pub/sub για διασύνδεση με το Χρονόμετρο
+│   └── VirtualPencilAnimator.ts     // Κοινή υπηρεσία βηματικής σχεδίασης με το μολυβάκι (Pencil PNG)
+├── registry/
+│   └── SimulationRegistry.ts        // Plug-and-Play Registry για δυναμική εγγραφή νέων θεμάτων
+├── modules/
+│   └── mechanics/
+│       └── pendulum/
+│           ├── pendulumPhysics.ts   // Φυσική εκκρεμούς: T=2π√(L/g), τάση νήματος, συντεταγμένες
+│           └── PendulumModule.ts    // Module εγγραφής & παραμέτρων
+└── ui/
+    ├── StopwatchWidget.tsx          // Αυτόνομο widget ψηφιακού χρονομέτρου (dual-corner resize)
+    └── FullscreenLaserCanvas.tsx    // Αυτόνομος καμβάς κόκκινου laser z-[100000]
+```
+
+### Βασικά Χαρακτηριστικά Αρχιτεκτονικής:
+1. **Διεπαφή `ISimulationModule`:** Κάθε νέα προσομοίωση υλοποιεί σαφές συμβόλαιο (`detect`, `initState`, `stepPhysics`, `render`, `onStopwatchEvent`).
+2. **Κατάλογος Εγγραφής `SimulationRegistry`:** Επιτρέπει δυναμική εγγραφή (`register`), αναζήτηση ανά ID και ομαδοποίηση ανά κατηγορία (`mechanics`, `electricity`, `fluids`, `waves`, `chemistry`, `math`).
+3. **Καθολική Γέφυρα Χρονομέτρου (`UniversalStopwatchBridge`):** Όλες οι προσομοιώσεις συνδέονται αμφίδρομα με το Χρονόμετρο μέσω καθαρού pub/sub χωρίς κυκλικές εξαρτήσεις.
+4. **Απομόνωση UI:** Το `StopwatchWidget` και το `FullscreenLaserCanvas` λειτουργούν ως ανεξάρτητα, επαναχρησιμοποιήσιμα components, μειώνοντας δραστικά το μέγεθος του `App.tsx`.
+
+---
+
+*Τελευταία ενημέρωση τεκμηρίωσης: 14 Νοεμβρίου 2026 — v0.99 (pendulumSimFullyFunctional + Modular Simulations Core)*

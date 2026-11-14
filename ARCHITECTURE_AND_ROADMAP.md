@@ -302,7 +302,10 @@ sequenceDiagram
 
 ### 9.1 ✅ Τι Έχουμε Ολοκληρώσει Πλήρως έως την `v0.99 (pendulumSimFullyFunctional)`
 
-#### Α00000000. Πλήρης Προσομοίωση Απλού Εκκρεμούς, Χρονόμετρο Διπλής Γωνίας & Καθολικό Laser (`v0.99 — pendulumSimFullyFunctional`)
+#### Α00000000. Πλήρης Προσομοίωση Απλού Εκκρεμούς, Χρονόμετρο Διπλής Γωνίας & Αρθρωτός Πυρήνας Προσομοιώσεων (`v0.99 — pendulumSimFullyFunctional + Modular Simulations Core`)
+* **🧩 Αρθρωτός Πυρήνας Προσομοιώσεων (`src/simulations/`):**
+  * Δημιουργία της νέας plug-and-play αρχιτεκτονικής προσομοιώσεων: `ISimulationModule`, `SimulationRegistry`, `PhysicsMath` (2D vector utilities), `UniversalStopwatchBridge` (pub/sub) και `VirtualPencilAnimator` (κινούμενο μολυβάκι).
+  * Απομόνωση του `StopwatchWidget` και του `FullscreenLaserCanvas` σε ανεξάρτητα επαναχρησιμοποιήσιμα components, ελαφρύνοντας το `App.tsx` κατά εκατοντάδες γραμμές κώδικα με 100% διατήρηση λειτουργικότητας.
 * **🕰️ Φυσικά Ακριβές Απλό Εκκρεμές (Simple Pendulum):**
   * Εύρος μήκους $0.3\text{m} \le L \le 2.0\text{m}$ με διαδραστική ρύθμιση μέσω slider αλλά και απευθείας με κατακόρυφη σύρση του σφαιριδίου στο χαρτί ($23\text{px} = 0.1\text{m}$).
   * Αυστηρός υπολογισμός δυναμικής τάσης νήματος $T = mg(3\cos\theta - 2\cos\theta_{\max})$ με αποτροπή διάτρησης του ταβανιού.
