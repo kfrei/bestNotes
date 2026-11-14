@@ -23,6 +23,7 @@ import { AdminSidebar } from './components/AdminSidebar';
 import { AdminKpiCards } from './components/AdminKpiCards';
 import { AdminUsersTable } from './components/AdminUsersTable';
 import { AdminTrafficView } from './components/AdminTrafficView';
+import { AdminOcrAnalyticsView } from './components/AdminOcrAnalyticsView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
@@ -220,10 +221,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Tab 1: Overview (Combined Traffic & Users) */}
+        {/* Tab 1: Overview (Combined Traffic, AI OCR & Users) */}
         {currentTab === 'overview' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <AdminTrafficView
+              traffic={trafficHistory}
+              isLoading={isTrafficLoading}
+            />
+            <AdminOcrAnalyticsView
               traffic={trafficHistory}
               isLoading={isTrafficLoading}
             />
@@ -250,7 +255,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           />
         )}
 
-        {/* Tab 3: Users Table */}
+        {/* Tab 3: AI OCR Analytics & Quota Tracking */}
+        {currentTab === 'ocr' && (
+          <AdminOcrAnalyticsView
+            traffic={trafficHistory}
+            isLoading={isTrafficLoading}
+          />
+        )}
+
+        {/* Tab 4: Users Table */}
         {currentTab === 'users' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">

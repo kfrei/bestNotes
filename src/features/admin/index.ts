@@ -10,4 +10,5 @@ export * from './components/AdminSidebar';
 export * from './components/AdminKpiCards';
 export * from './components/AdminUsersTable';
 export * from './components/AdminTrafficView';
+export * from './components/AdminOcrAnalyticsView';
 export * from './AdminDashboard';

@@ -80,6 +80,10 @@ rules_version = '2';
 //   - totalFilesCreated: number (optional, >= 0) - total files created count
 //   - totalActiveSeconds: number (optional, >= 0) - cumulative active seconds across users
 //   - uniqueVisitorsEstimate: number (optional, >= 0) - estimated unique visitor count
+//   - ocrTextCount: number (optional, >= 0) - handwriting Greek text OCR calls
+//   - ocrMathCount: number (optional, >= 0) - math & equation / LaTeX OCR calls
+//   - ocrChemCount: number (optional, >= 0) - chemistry & molecule OCR calls
+//   - ocrTotalCount: number (optional, >= 0) - total AI OCR calls count
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of metric update
 //
 // ===============================================================
@@ -282,6 +286,10 @@ service cloud.firestore {
           'totalFilesCreated',
           'totalActiveSeconds',
           'uniqueVisitorsEstimate',
+          'ocrTextCount',
+          'ocrMathCount',
+          'ocrChemCount',
+          'ocrTotalCount',
           'updatedAt'
         ]) &&
         hasRequiredFields(['date', 'updatedAt']) &&
@@ -295,7 +303,11 @@ service cloud.firestore {
         isValidOptionalNumber('registeredFilesCreated') &&
         isValidOptionalNumber('totalFilesCreated') &&
         isValidOptionalNumber('totalActiveSeconds') &&
-        isValidOptionalNumber('uniqueVisitorsEstimate');
+        isValidOptionalNumber('uniqueVisitorsEstimate') &&
+        isValidOptionalNumber('ocrTextCount') &&
+        isValidOptionalNumber('ocrMathCount') &&
+        isValidOptionalNumber('ocrChemCount') &&
+        isValidOptionalNumber('ocrTotalCount');
     }
 
     // ===============================================================

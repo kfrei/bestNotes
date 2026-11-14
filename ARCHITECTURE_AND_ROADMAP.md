@@ -614,12 +614,13 @@ sequenceDiagram
    - **`WaveDiagramChoiceModal.tsx`:** Επιλογή διαγράμματος για κυματική εξίσωση $y = A\eta\mu[2\pi(\frac{t}{T} \mp \frac{x}{\lambda})]$ (Στιγμιότυπο $f(x)$ ή Ταλάντωση $f(t)$).
    - **Facade:** `src/components/modals/index.ts`.
 
-8. **`src/features/admin/` (Πίνακας Ελέγχου Admin, Τηλεμετρία Χρηστών, Επισκεψιμότητα & Storage Analytics):**
-   - **Types & Schema:** `types.ts` (`UserProfileStats`, `AdminTab`, `AdminAggregateMetrics`, `DailyTrafficStats`).
+8. **`src/features/admin/` (Πίνακας Ελέγχου Admin, Τηλεμετρία Χρηστών, Επισκεψιμότητα, AI OCR & Storage Analytics):**
+   - **Types & Schema:** `types.ts` (`UserProfileStats`, `AdminTab`, `AdminAggregateMetrics`, `DailyTrafficStats`, `DailyOcrSummary`).
    - **Telemetry Engine:** `services/userStatsService.ts` (30s heartbeat ενεργού χρόνου, μέσος όρος λεπτών/ημέρα, υπολογισμός χωρητικότητας KB/MB ανά χρήστη, συγχρονισμός στο Firestore `user_profiles/{uid}`, CSV exporter).
    - **Visitor & Traffic Engine:** `services/trafficService.ts` (αυτόματη καταγραφή ημερήσιας κίνησης στο `daily_traffic/{YYYY-MM-DD}`, διαχωρισμός επισκέψεων Guest vs Logged-In, καταγραφή νέων αρχείων από επισκέπτες, αναδρομική άντληση αρχείων επισκεπτών από local storage, ενοποίηση με ιστορικό εγγεγραμμένων χρηστών από την έναρξη λειτουργίας της εφαρμογής).
+   - **AI OCR & Gemini Quota Engine:** Καταγραφή κάθε OCR κλήσης ανά κατηγορία (`text`, `math`, `chem`), υπολογισμός ποσοστού κατανάλωσης του δωρεάν ορίου Google Gemini (1.500 αιτήματα/ημέρα), υπόλοιπο δωρεάν αιτημάτων και ημερήσιο ιστόγραμμα.
    - **UI Design System:** Dark Navy (`#234978`) & Warm Studio Beige (`#fdfbf7` / `#efebe3`) με Liquid Frosted Glass αισθητική.
-   - **Components:** `AdminSidebar.tsx` (κάθετη μπάρα με μονόχρωμα κουμπιά), `AdminKpiCards.tsx` (συγκεντρωτικοί δείκτες), `AdminUsersTable.tsx` (πίνακας χρηστών με αναζήτηση, sorting, avatar, ημερομηνία εγγραφής, αρχεία, χώρο, χρόνο παραμονής), `AdminTrafficView.tsx` (οπτικοποίηση επισκεψιμότητας και ημερήσιων αρχείων επισκεπτών).
+   - **Components:** `AdminSidebar.tsx` (κάθετη μπάρα με μονόχρωμα κουμπιά), `AdminKpiCards.tsx` (συγκεντρωτικοί δείκτες), `AdminUsersTable.tsx` (πίνακας χρηστών με αναζήτηση, sorting, avatar, ημερομηνία εγγραφής, αρχεία, χώρο, χρόνο παραμονής), `AdminTrafficView.tsx` (οπτικοποίηση επισκεψιμότητας και ημερήσιων αρχείων επισκεπτών), `AdminOcrAnalyticsView.tsx` (ιστόγραμμα OCR ανά τύπο και μετρητής δωρεάν Gemini quota).
    - **Access Control:** Αυστηρός έλεγχος Google Sign-In αποκλειστικά για τον διαχειριστή `freiderikoskostas@gmail.com` και Firestore Security Rules validation.
    - **Facade:** `src/features/admin/index.ts`.
 

@@ -18,7 +18,7 @@ export interface UserProfileStats {
   updatedAt: string;       // ISO timestamp
 }
 
-export type AdminTab = 'overview' | 'traffic' | 'users' | 'storage' | 'activity';
+export type AdminTab = 'overview' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
 
 export interface DailyTrafficStats {
   date: string;                 // YYYY-MM-DD
@@ -30,7 +30,25 @@ export interface DailyTrafficStats {
   totalFilesCreated: number;    // guestFilesCreated + registeredFilesCreated
   totalActiveSeconds?: number;  // Cumulative active user seconds
   uniqueVisitorsEstimate?: number;
+  ocrTextCount?: number;        // Handwriting Greek text OCR calls
+  ocrMathCount?: number;        // Math & Equation / LaTeX OCR calls
+  ocrChemCount?: number;        // Chemistry & Molecule OCR calls
+  ocrTotalCount?: number;       // Total AI OCR calls today
   updatedAt: string;            // ISO timestamp
+}
+
+export const GEMINI_FREE_TIER_DAILY_LIMIT = 1500; // 1,500 Requests Per Day on Google Gemini API Free Tier
+export const GEMINI_FREE_TIER_RPM_LIMIT = 15;     // 15 Requests Per Minute
+
+export interface DailyOcrMetrics {
+  todayTotal: number;
+  todayText: number;
+  todayMath: number;
+  todayChem: number;
+  dailyQuotaLimit: number;
+  quotaUsedPercent: number;
+  quotaRemaining: number;
+  allTimeOcrTotal: number;
 }
 
 export interface AdminAggregateMetrics {

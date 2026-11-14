@@ -332,6 +332,7 @@ import {
   recordDailyVisit,
   recordFileCreation,
   syncHistoricalLocalGuestFiles,
+  recordOcrUsage,
 } from './features/admin';
 import {
   MIND_MAPS_CATALOG,
@@ -48884,6 +48885,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει Κείμενο OCR!');
       return;
     }
+    void recordOcrUsage('text');
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49047,6 +49049,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
+    void recordOcrUsage('math');
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49240,6 +49243,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική αντίδραση (π.χ. C + O2 -> CO2)!');
       return;
     }
+    void recordOcrUsage('chem');
 
     let minX = Infinity;
     let minY = Infinity;
@@ -49513,6 +49517,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική ένωση (π.χ. H2O, CH4, CO2, NH3)!');
       return;
     }
+    void recordOcrUsage('chem');
 
     let minX = Infinity;
     let minY = Infinity;
@@ -50008,6 +50013,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
       return;
     }
+    void recordOcrUsage('math');
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line

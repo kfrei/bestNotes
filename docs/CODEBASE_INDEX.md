@@ -60,6 +60,7 @@ graph TD
         AdminKpi["components/AdminKpiCards.tsx (Metrics Cards)"]
         AdminTable["components/AdminUsersTable.tsx (Data Grid & CSV)"]
         AdminTrafficView["components/AdminTrafficView.tsx (Visitor Traffic & Charts)"]
+        AdminOcrView["components/AdminOcrAnalyticsView.tsx (AI OCR Quota & Histograms)"]
     end
 
     App --> SimIndex
@@ -122,6 +123,7 @@ graph TD
 | | `src/features/admin/components/AdminKpiCards.tsx` | Συγκεντρωτικές κάρτες KPI (Χρήστες, Αρχεία, Χώρος Storage, Μέσος Χρόνος, Σημερινοί Ενεργοί) | Απομονωμένο metrics dashboard |
 | | `src/features/admin/components/AdminUsersTable.tsx` | Πλήρης πίνακας χρηστών με αναζήτηση, ταξινόμηση, avatar, metrics & CSV εξαγωγή | Data grid διαχείρισης χρηστών |
 | | `src/features/admin/components/AdminTrafficView.tsx` | Αναλυτικός πίνακας & visual timeline για επισκέπτες και αρχεία ανά ημέρα με CSV εξαγωγή | Traffic & Guest Activity View |
+| | `src/features/admin/components/AdminOcrAnalyticsView.tsx` | Παρακολούθηση AI OCR ανά τύπο (Κείμενο, Μαθηματικά, Χημεία), ποσοστό κατανάλωσης δωρεάν Gemini Quota (1.500 RPD) & ιστόγραμμα | AI OCR Quota & Histograms |
 | | `src/features/admin/AdminDashboard.tsx` | Κεντρικός διαχειριστικός πίνακας με Google Auth verification για `freiderikoskostas@gmail.com` | Αυτόνομο portal διαχείρισης |
 | **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide) | Αποφυγή μονολιθικού bundle 6.2 MB & ακαριαία φόρτωση στο iPad |
 

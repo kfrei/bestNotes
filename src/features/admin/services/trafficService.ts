@@ -14,7 +14,8 @@ import {
   limit,
   increment,
 } from '../../../firebase';
-import type { DailyTrafficStats } from '../types';
+import type { DailyTrafficStats, DailyOcrMetrics } from '../types';
+import { GEMINI_FREE_TIER_DAILY_LIMIT } from '../types';
 
 export function getTodayDateString(): string {
   const now = new Date();
@@ -147,6 +148,10 @@ export async function fetchDailyTrafficHistory(): Promise<DailyTrafficStats[]> {
         totalFilesCreated: Number(data.totalFilesCreated) || 0,
         totalActiveSeconds: Number(data.totalActiveSeconds) || 0,
         uniqueVisitorsEstimate: Number(data.uniqueVisitorsEstimate) || 0,
+        ocrTextCount: Number(data.ocrTextCount) || 0,
+        ocrMathCount: Number(data.ocrMathCount) || 0,
+        ocrChemCount: Number(data.ocrChemCount) || 0,
+        ocrTotalCount: Number(data.ocrTotalCount) || 0,
         updatedAt: data.updatedAt || '',
       });
     });
@@ -194,6 +199,109 @@ export function exportTrafficToCsv(traffic: DailyTrafficStats[]): void {
   link.setAttribute(
     'download',
     `bestnotes_traffic_analytics_${new Date().toISOString().slice(0, 10)}.csv`
+  );
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Atomically records an OCR call in Firestore under `daily_traffic/{today}`
+ */
+export async function recordOcrUsage(kind: 'text' | 'math' | 'chem'): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const today = getTodayDateString();
+
+  try {
+    const docRef = doc(db, 'daily_traffic', today);
+    const fieldMap: Record<string, any> = {
+      date: today,
+      ocrTotalCount: increment(1),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (kind === 'text') fieldMap.ocrTextCount = increment(1);
+    else if (kind === 'math') fieldMap.ocrMathCount = increment(1);
+    else if (kind === 'chem') fieldMap.ocrChemCount = increment(1);
+
+    await setDoc(docRef, fieldMap, { merge: true });
+  } catch (err) {
+    console.debug('[Traffic] recordOcrUsage skipped:', err);
+  }
+}
+
+/**
+ * Computes aggregated OCR & Google Gemini API Free Tier Quota statistics
+ */
+export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics {
+  const today = getTodayDateString();
+  const todayEntry = traffic.find((t) => t.date === today);
+
+  const todayTotal = todayEntry?.ocrTotalCount || 0;
+  const todayText = todayEntry?.ocrTextCount || 0;
+  const todayMath = todayEntry?.ocrMathCount || 0;
+  const todayChem = todayEntry?.ocrChemCount || 0;
+
+  const quotaLimit = GEMINI_FREE_TIER_DAILY_LIMIT;
+  const quotaUsedPercent = Number(((todayTotal / quotaLimit) * 100).toFixed(1));
+  const quotaRemaining = Math.max(0, quotaLimit - todayTotal);
+
+  const allTimeOcrTotal = traffic.reduce((acc, t) => acc + (t.ocrTotalCount || 0), 0);
+
+  return {
+    todayTotal,
+    todayText,
+    todayMath,
+    todayChem,
+    dailyQuotaLimit: quotaLimit,
+    quotaUsedPercent,
+    quotaRemaining,
+    allTimeOcrTotal,
+  };
+}
+
+/**
+ * Exports OCR usage history into a CSV file
+ */
+export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
+  const headers = [
+    'Ημερομηνία',
+    'Σύνολο OCR AI',
+    'Κείμενο (Text)',
+    'Μαθηματικά (Math)',
+    'Χημεία (Chem)',
+    'Ποσοστό Δωρεάν Ορίου (%)',
+    'Υπόλοιπο Δωρεάν (από 1.500)',
+    'Τελευταίο Event',
+  ];
+
+  const rows = traffic.map((t) => {
+    const total = t.ocrTotalCount || 0;
+    const pct = ((total / GEMINI_FREE_TIER_DAILY_LIMIT) * 100).toFixed(1);
+    const rem = Math.max(0, GEMINI_FREE_TIER_DAILY_LIMIT - total);
+    return [
+      t.date,
+      total,
+      t.ocrTextCount || 0,
+      t.ocrMathCount || 0,
+      t.ocrChemCount || 0,
+      `${pct}%`,
+      rem,
+      t.updatedAt,
+    ];
+  });
+
+  const csvContent =
+    '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute(
+    'download',
+    `bestnotes_ai_ocr_analytics_${new Date().toISOString().slice(0, 10)}.csv`
   );
   document.body.appendChild(link);
   link.click();
