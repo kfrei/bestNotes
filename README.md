@@ -1,8 +1,8 @@
-# 📝 BestNotes / ExplainBoards — `v0.99 (pendulumSimFullyFunctional)`
+# 📝 BestNotes / ExplainBoards — `v1.00 (codeRestructured)`
 
 > **Live Web App (Primary):** [**https://explainboards.web.app**](https://explainboards.web.app) & [**https://mybestnotes.web.app**](https://mybestnotes.web.app)  
 > **Mirror Hosting:** [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app)  
-> **Τρέχουσα Έκδοση:** **`v0.99 — pendulumSimFullyFunctional`** (14 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`v1.00 — codeRestructured`** (14 Νοεμβρίου 2026)
 
 Το **BestNotes / ExplainBoards** είναι μια προηγμένη εφαρμογή χειρόγραφων σημειώσεων, διδασκαλίας Μαθηματικών/Φυσικής/Χημείας και διανυσματικής σχεδίασης για **iPad (με Apple Pencil Pro)**, **Android Tablets** και **Web**, που συνδυάζει:
 1. Το οικείο, ταχύτατο περιβάλλον και την αίσθηση γραφής $120\text{Hz}$ του **Goodnotes 6** με **Premium Minimalist Monochrome UI**, **Ιεραρχικούς Φακέλους/Υποφακέλους (`customFolders`)** με δίχρωμες κάρτες, 10 χρώματα, 20 εικονίδια, Αγαπημένα (`⭐`) & **1-Click Δελταϊκό Συγχρονισμό Φακέλου με Google Drive**, **Native Reader & Highlighter Mode** για μεγάλα βιβλία PDF (`13 MB` / `170+` σελίδες) και **Ζωντανή Μετάδοση `Live TV` (`16:9`)** από το iPad στον Διαδραστικό Πίνακα της τάξης,
