@@ -388,3 +388,22 @@ export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Clean decoupled facade to track an AI action from anywhere in the app
+ */
+export function trackAiAction(kind: AiActionKind, user?: { email?: string | null } | null): void {
+  const adminEmail = 'freiderikoskostas@gmail.com';
+  void recordOcrUsage(kind, {
+    isGuest: !user,
+    isAdmin: user?.email?.toLowerCase() === adminEmail,
+  });
+}
+
+/**
+ * Clean decoupled facade to track file creation from anywhere in the app
+ */
+export function trackFileCreation(user?: { email?: string | null } | null, count = 1): void {
+  void recordFileCreation(!user, count);
+}
+

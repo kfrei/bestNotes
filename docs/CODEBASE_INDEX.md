@@ -51,11 +51,14 @@ graph TD
         StorKeys["storageKeys.ts (STORAGE_KEY, UI_SESSION_STORAGE_KEY)"]
     end
 
-    subgraph D6["6. src/features/admin/ (Πίνακας Ελέγχου Admin, Τηλεμετρία & Traffic)"]
+    subgraph D6["6. src/features/admin/ (Πίνακας Ελέγχου Admin, Τηλεμετρία & Traffic - Isolated Domain)"]
         AdminIndex["index.ts (Facade)"]
+        AdminPortal["AdminPortal.tsx (Lazy Code-Split Gate & Suspense)"]
         AdminDash["AdminDashboard.tsx (Master View)"]
+        AdminRouteHook["hooks/useAdminRoute.ts (Decoupled Routing Hook)"]
+        AdminTelemHook["hooks/useAppTelemetry.ts (Decoupled Telemetry Lifecycle Hook)"]
         AdminStats["services/userStatsService.ts (User Telemetry)"]
-        AdminTraffic["services/trafficService.ts (Visitor & Daily Traffic)"]
+        AdminTraffic["services/trafficService.ts (Visitor, AI Telemetry & trackAiAction)"]
         AdminSide["components/AdminSidebar.tsx (Navy/Beige Controls)"]
         AdminKpi["components/AdminKpiCards.tsx (Metrics Cards)"]
         AdminTable["components/AdminUsersTable.tsx (Data Grid & CSV)"]
@@ -116,16 +119,19 @@ graph TD
 | | `src/components/modals/NativeShareSheetModal.tsx` | Παράθυρο 1-Tap κοινοποίησης PDF στο iPadOS (AirDrop, Viber, Goodnotes) | ~60 γραμμές inline JSX |
 | | `src/components/modals/WaveDiagramChoiceModal.tsx` | Παράθυρο επιλογής διαγράμματος Κύματος $f(x)$ (στιγμιότυπο) ή $f(t)$ (ταλάντωση σημείου) | ~135 γραμμές inline JSX |
 | **Admin & Telemetry** | `src/features/admin/index.ts` | Master Facade export για τον Πίνακα Ελέγχου Διαχειριστή | Ενοποιημένο import διαχείρισης |
+| | `src/features/admin/AdminPortal.tsx` | Αυτόνομο Portal απομόνωσης με On-Demand Code Splitting (`React.lazy` & `Suspense`) | Πλήρης αποσύνδεση από το Canvas & Editor |
+| | `src/features/admin/hooks/useAdminRoute.ts` | Isolated hook για ανίχνευση και διαχείριση URL παραμέτρων (`?admin=true`, `/admin`, `popstate`) | Απομάκρυνση 35 γραμμών routing από το `App.tsx` |
+| | `src/features/admin/hooks/useAppTelemetry.ts` | Isolated hook για καρδιακό παλμό (30s heartbeat), sync προφίλ χρήστη και καταγραφή επισκεπτών | Απομάκρυνση 30 γραμμών telemetry από το `App.tsx` |
 | | `src/features/admin/types.ts` | `UserProfileStats`, `AdminTab`, `AdminAggregateMetrics`, `DailyTrafficStats` | Τύποι τηλεμετρίας χρηστών & επισκεψιμότητας |
 | | `src/features/admin/services/userStatsService.ts` | `buildUserProfileFromUser` (άμεση ένταξη admin στο μητρώο), καταγραφή ενεργού χρόνου (30s heartbeat), υπολογισμός αποθηκευτικού χώρου, Firestore συγχρονισμός & fallback scanning συλλογής `users` | Engine τηλεμετρίας & Firestore querying |
-| | `src/features/admin/services/trafficService.ts` | Καταγραφή ημερήσιας κίνησης επισκεπτών & AI τηλεμετρίας (Guest visits, Registered visits, Guest files created, αναδρομικός συγχρονισμός, ατομικοί μετρητές Firestore για όλα τα AI features & attribution Admin vs Others) | Engine επισκεψιμότητας & AI requests |
+| | `src/features/admin/services/trafficService.ts` | Καταγραφή ημερήσιας κίνησης επισκεπτών & AI τηλεμετρίας (`trackAiAction`, `trackFileCreation`, αναδρομικός συγχρονισμός, ατομικοί μετρητές Firestore για όλα τα AI features & attribution Admin vs Others) | Engine επισκεψιμότητας & AI requests |
 | | `src/features/admin/components/AdminSidebar.tsx` | Κάθετη μπάρα πλοήγησης με επίσημο λογότυπο ExplainBoards (στυλό, κόκκινες γραμμές, ερωτηματικό & crimson gradient), μονόχρωμα κουμπιά σε Dark Navy (`#1b2a4a`) και Warm Beige (`#fdfbf7`) με διανυσματικά Lucide icons (χωρίς έγχρωμα emojis) | Απομονωμένο layout sidebar |
 | | `src/features/admin/components/AdminKpiCards.tsx` | Συγκεντρωτικές κάρτες KPI (Χρήστες, Αρχεία, Χώρος Storage, Μέσος Χρόνος) με σαφή διαχωρισμό δεδομένων Admin vs Υπόλοιποι Χρήστες | Απομονωμένο metrics dashboard |
 | | `src/features/admin/components/AdminUsersTable.tsx` | Πλήρης πίνακας χρηστών με αναζήτηση, ταξινόμηση, avatar, metrics & CSV εξαγωγή με έντονη διαφοροποίηση και επισήμανση της γραμμής του Admin (`Admin (Εσύ)`) | Data grid διαχείρισης χρηστών |
 | | `src/features/admin/components/AdminTrafficView.tsx` | Αναλυτικός πίνακας & visual timeline για επισκέπτες και αρχεία ανά ημέρα με CSV εξαγωγή | Traffic & Guest Activity View |
 | | `src/features/admin/components/AdminOcrAnalyticsView.tsx` | Παρακολούθηση όλων των AI features (Κείμενο/Tags, Μαθηματικά/f(x), Χημεία/3D, Ζωντάνεμα/Smart Sketch), συγκριτική ανάλυση κατανάλωσης Quota Admin vs Άλλοι/Guests, ραβδόγραμμα % κατανάλωσης δωρεάν ορίου Google Gemini (1.500 RPD) ανά ημέρα με mode switcher, ιστόγραμμα 14 ημερών & CSV | AI & Quota Analytics Dashboard |
 | | `src/features/admin/AdminDashboard.tsx` | Κεντρικός διαχειριστικός πίνακας με Google Auth verification για `freiderikoskostas@gmail.com` | Αυτόνομο portal διαχείρισης |
-| **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide) | Αποφυγή μονολιθικού bundle 6.2 MB & ακαριαία φόρτωση στο iPad |
+| **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide, `feature-admin`) | Απομόνωση 72 kB Admin bundle & μηδενική επιβάρυνση για τους μαθητές |
 
 ---
 

@@ -326,14 +326,12 @@ import {
   WaveDiagramChoiceModal,
 } from './components/modals';
 import {
-  AdminDashboard,
+  AdminPortal,
   ADMIN_EMAIL,
-  recordActiveSecondsLocally,
-  syncCurrentUserProfileStats,
-  recordDailyVisit,
-  recordFileCreation,
-  syncHistoricalLocalGuestFiles,
-  recordOcrUsage,
+  useAdminRoute,
+  useAppTelemetry,
+  trackAiAction,
+  trackFileCreation,
 } from './features/admin';
 import {
   MIND_MAPS_CATALOG,
@@ -1410,55 +1408,9 @@ export default function App() {
   );
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [isAdminViewOpen, setIsAdminViewOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
-    return (
-      params.get('admin') === 'true' ||
-      params.get('view') === 'admin' ||
-      window.location.pathname.startsWith('/admin') ||
-      window.location.hostname.startsWith('explainboards.dash')
-    );
-  });
-
-  useEffect(() => {
-    const handleUrlChange = () => {
-      const params = new URLSearchParams(window.location.search);
-      const shouldBeOpen =
-        params.get('admin') === 'true' ||
-        params.get('view') === 'admin' ||
-        window.location.pathname.startsWith('/admin') ||
-        window.location.hostname.startsWith('explainboards.dash');
-      setIsAdminViewOpen(shouldBeOpen);
-    };
-    window.addEventListener('popstate', handleUrlChange);
-    return () => window.removeEventListener('popstate', handleUrlChange);
-  }, []);
-
-  // Telemetry: Record active seconds locally every 30s when window has user focus
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hasFocus()) {
-        recordActiveSecondsLocally(currentUser.uid, 30);
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [currentUser?.uid]);
-
-  // Telemetry: Synchronize user profile & notebook storage usage to Firestore `user_profiles/{uid}`
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    void syncCurrentUserProfileStats(currentUser, notebooks);
-  }, [currentUser, notebooks.length]);
-
-  // Visitor Telemetry: Record daily session visit (Guest / Registered) and backfill local guest notebooks
-  useEffect(() => {
-    void recordDailyVisit(!currentUser);
-    if (notebooks.length > 0) {
-      void syncHistoricalLocalGuestFiles(notebooks);
-    }
-  }, [currentUser, notebooks.length > 0]);
+  // Dedicated Admin routing & telemetry encapsulated in isolated domain hooks
+  const { isAdminOpen, openAdmin, closeAdmin } = useAdminRoute();
+  useAppTelemetry(currentUser, notebooks);
 
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
@@ -4782,10 +4734,7 @@ export default function App() {
         showToast('✨ Ανάλυση χειρόγραφων, εικόνων & κειμένου για αυτόματη εξαγωγή 4 βασικών #tags...');
       }
       try {
-        void recordOcrUsage('text', {
-          isGuest: !currentUser,
-          isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-        });
+        trackAiAction('text', currentUser);
         const aiTags = await generateSmartGreekTagsFromImages(
           targetNb.title,
           uniqueUrls,
@@ -47870,7 +47819,7 @@ export default function App() {
       ],
     };
     userEditedInSessionRef.current.add(newNb.id);
-    void recordFileCreation(!currentUser, 1);
+    trackFileCreation(currentUser);
     setNotebooks((prev) => [newNb, ...prev]);
     setOpenNotebookIds((prev) => [...prev, newNb.id]);
     setActiveNotebookId(newNb.id);
@@ -48887,10 +48836,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει Κείμενο OCR!');
       return;
     }
-    void recordOcrUsage('text', {
-      isGuest: !currentUser,
-      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-    });
+    trackAiAction('text', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49054,10 +49000,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
-    void recordOcrUsage('math', {
-      isGuest: !currentUser,
-      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-    });
+    trackAiAction('math', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49251,10 +49194,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική αντίδραση (π.χ. C + O2 -> CO2)!');
       return;
     }
-    void recordOcrUsage('chem', {
-      isGuest: !currentUser,
-      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-    });
+    trackAiAction('chem', currentUser);
 
     let minX = Infinity;
     let minY = Infinity;
@@ -49457,10 +49397,7 @@ export default function App() {
         );
         // Αν η εξίσωση είναι σύνθετη (π.χ. Οξειδοαναγωγή ή Οργανική Χημεία) και δεν βρέθηκε τοπική διόρθωση, ρώτα το Gemini AI!
         if (rawUserStr.includes('->') || rawUserStr.includes('→') || rawUserStr.includes('+')) {
-          void recordOcrUsage('chem', {
-            isGuest: !currentUser,
-            isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-          });
+          trackAiAction('chem', currentUser);
           void analyzeTypedChemistryWithGemini(rawUserStr).then((aiRes) => {
             const aiCorr = aiRes?.correctedEquation?.trim();
             if (!aiCorr) return;
@@ -49532,10 +49469,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική ένωση (π.χ. H2O, CH4, CO2, NH3)!');
       return;
     }
-    void recordOcrUsage('chem', {
-      isGuest: !currentUser,
-      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-    });
+    trackAiAction('chem', currentUser);
 
     let minX = Infinity;
     let minY = Infinity;
@@ -50031,10 +49965,7 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
       return;
     }
-    void recordOcrUsage('math', {
-      isGuest: !currentUser,
-      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-    });
+    trackAiAction('math', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -51448,10 +51379,7 @@ export default function App() {
     });
 
     if (!existingSpec) {
-      void recordOcrUsage('anim', {
-        isGuest: !currentUser,
-        isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-      });
+      trackAiAction('anim', currentUser);
       const analyzed = await analyzeImageForSmartSketchAnimation(snapshotUrl, customGeminiKey);
       if (analyzed) {
         setAiAnimateModal((prev) =>
@@ -51664,7 +51592,7 @@ export default function App() {
           if (currentUser) {
             pushNotebookToCloudTracked(currentUser.uid, nbWithFolder);
           }
-          void recordFileCreation(!currentUser, 1);
+          trackFileCreation(currentUser);
           lastImported = nbWithFolder;
         } catch {
           showToast(`⚠️ Σφάλμα ανάγνωσης αρχείου "${archFile.name}"`);
@@ -51753,7 +51681,7 @@ export default function App() {
           pages: importedPages,
         };
         userEditedInSessionRef.current.add(newNb.id);
-        void recordFileCreation(!currentUser, 1);
+        trackFileCreation(currentUser);
         setNotebooks((prev) => [newNb, ...prev]);
         setOpenNotebookIds((prev) => (prev.includes(newNb.id) ? prev : [...prev, newNb.id]));
         if (targetFolderOverride !== undefined && viewMode === 'library') {
@@ -51835,41 +51763,13 @@ export default function App() {
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
   // Dedicated Admin Portal View (ExplainBoards Admin Dashboard)
-  if (isAdminViewOpen) {
+  if (isAdminOpen) {
     return (
-      <div className="fixed inset-0 w-screen h-screen z-[9999] overflow-hidden bg-[#f7f5f0] select-auto touch-pan-y">
-        <AdminDashboard
-          currentUser={currentUser}
-          notebooks={notebooks}
-          onBackToNotes={() => {
-            setIsAdminViewOpen(false);
-            try {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('admin');
-              url.searchParams.delete('view');
-              const newSearch = url.searchParams.toString();
-              const newPath = url.pathname.startsWith('/admin') ? '/' : url.pathname;
-              window.history.replaceState({}, '', newPath + (newSearch ? `?${newSearch}` : ''));
-            } catch {
-              // fallback
-            }
-          }}
-          onSignInGoogle={() => {
-            setAuthMode('signin');
-            setShowAuthModal(true);
-          }}
-        />
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
-          mode={authMode}
-          setMode={setAuthMode}
-          onSuccess={() => {
-            setShowAuthModal(false);
-            showToast('🎉 Συνδέθηκες επιτυχώς!');
-          }}
-        />
-      </div>
+      <AdminPortal
+        currentUser={currentUser}
+        notebooks={notebooks}
+        onClose={closeAdmin}
+      />
     );
   }
 
@@ -52674,10 +52574,7 @@ export default function App() {
           {currentUser?.email === ADMIN_EMAIL && (
             <button
               type="button"
-              onClick={() => {
-                setIsAdminViewOpen(true);
-                window.history.pushState({}, '', '?admin=true');
-              }}
+              onClick={openAdmin}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
               title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
             >
@@ -52742,8 +52639,7 @@ export default function App() {
                           type="button"
                           onClick={() => {
                             setShowUserDropdown(false);
-                            setIsAdminViewOpen(true);
-                            window.history.pushState({}, '', '?admin=true');
+                            openAdmin();
                           }}
                           className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b2a4a] hover:bg-[#152238] text-white text-xs font-bold transition cursor-pointer border border-white/10 shadow-xs active:scale-98"
                         >
@@ -68504,10 +68400,7 @@ export default function App() {
                     disabled={aiAnimateModal.isAnalyzing}
                     onClick={async () => {
                       setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
-                      void recordOcrUsage('anim', {
-                        isGuest: !currentUser,
-                        isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-                      });
+                      trackAiAction('anim', currentUser);
                       const re = await analyzeImageForSmartSketchAnimation(
                         aiAnimateModal.snapshotDataUrl,
                         customGeminiKey,
@@ -68568,10 +68461,7 @@ export default function App() {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
-                        void recordOcrUsage('anim', {
-                          isGuest: !currentUser,
-                          isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
-                        });
+                        trackAiAction('anim', currentUser);
                         const re = await analyzeImageForSmartSketchAnimation(
                           aiAnimateModal.snapshotDataUrl,
                           customGeminiKey,
