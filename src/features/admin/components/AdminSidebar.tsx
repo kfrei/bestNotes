@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   LayoutDashboard,
+  TrendingUp,
   Users,
   HardDrive,
   Clock,
@@ -27,6 +28,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'overview',
       label: 'Επισκόπηση',
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: 'traffic',
+      label: 'Κίνηση & Επισκέπτες',
+      icon: <TrendingUp className="w-5 h-5" />,
     },
     {
       id: 'users',

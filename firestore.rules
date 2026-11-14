@@ -68,6 +68,20 @@ rules_version = '2';
 //   - pageJson: string (optional, 0..950000 chars) - serialized page content JSON
 //   - simStateJson: string (optional, 0..65536 chars) - serialized simulation state JSON
 //
+// Collection: daily_traffic
+// Document ID: {dateId} (ISO date string YYYY-MM-DD matching data.date)
+// Fields:
+//   - date: string (required, 10 chars, immutable matching {dateId}) - ISO date string (YYYY-MM-DD)
+//   - totalVisits: number (optional, >= 0) - total visits count
+//   - guestVisits: number (optional, >= 0) - visits by guest/unauthenticated users
+//   - registeredVisits: number (optional, >= 0) - visits by registered users
+//   - guestFilesCreated: number (optional, >= 0) - files created by guest users
+//   - registeredFilesCreated: number (optional, >= 0) - files created by registered users
+//   - totalFilesCreated: number (optional, >= 0) - total files created count
+//   - totalActiveSeconds: number (optional, >= 0) - cumulative active seconds across users
+//   - uniqueVisitorsEstimate: number (optional, >= 0) - estimated unique visitor count
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of metric update
+//
 // ===============================================================
 
 service cloud.firestore {
@@ -257,6 +271,33 @@ service cloud.firestore {
         isValidOptionalString('simStateJson', 0, 65536);
     }
 
+    function isValidDailyTrafficDoc(data, dateId) {
+      return hasOnlyAllowedFields([
+          'date',
+          'totalVisits',
+          'guestVisits',
+          'registeredVisits',
+          'guestFilesCreated',
+          'registeredFilesCreated',
+          'totalFilesCreated',
+          'totalActiveSeconds',
+          'uniqueVisitorsEstimate',
+          'updatedAt'
+        ]) &&
+        hasRequiredFields(['date', 'updatedAt']) &&
+        data.date == dateId &&
+        validStringLength('date', 10, 10) &&
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalNumber('totalVisits') &&
+        isValidOptionalNumber('guestVisits') &&
+        isValidOptionalNumber('registeredVisits') &&
+        isValidOptionalNumber('guestFilesCreated') &&
+        isValidOptionalNumber('registeredFilesCreated') &&
+        isValidOptionalNumber('totalFilesCreated') &&
+        isValidOptionalNumber('totalActiveSeconds') &&
+        isValidOptionalNumber('uniqueVisitorsEstimate');
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -307,6 +348,12 @@ service cloud.firestore {
       allow update: if isValidLiveRoomDoc(request.resource.data, roomId) &&
         areImmutableFieldsUnchanged(['roomId']);
       allow delete: if true;
+    }
+
+    match /daily_traffic/{dateId} {
+      allow read: if isAdmin();
+      allow create, update: if isValidDailyTrafficDoc(request.resource.data, dateId);
+      allow delete: if isAdmin();
     }
 
     // Default deny all other paths

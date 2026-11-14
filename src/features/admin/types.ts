@@ -18,7 +18,20 @@ export interface UserProfileStats {
   updatedAt: string;       // ISO timestamp
 }
 
-export type AdminTab = 'overview' | 'users' | 'storage' | 'activity';
+export type AdminTab = 'overview' | 'traffic' | 'users' | 'storage' | 'activity';
+
+export interface DailyTrafficStats {
+  date: string;                 // YYYY-MM-DD
+  totalVisits: number;          // Total session visits
+  guestVisits: number;          // Guest/visitor sessions without login
+  registeredVisits: number;     // Authenticated user visits
+  guestFilesCreated: number;    // Files created/imported by guests
+  registeredFilesCreated: number; // Files created/saved by logged-in users
+  totalFilesCreated: number;    // guestFilesCreated + registeredFilesCreated
+  totalActiveSeconds?: number;  // Cumulative active user seconds
+  uniqueVisitorsEstimate?: number;
+  updatedAt: string;            // ISO timestamp
+}
 
 export interface AdminAggregateMetrics {
   totalUsers: number;

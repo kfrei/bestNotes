@@ -27,6 +27,7 @@ import {
   deleteDoc,
   writeBatch,
   onSnapshot,
+  increment,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -147,5 +148,6 @@ export {
   deleteDoc,
   writeBatch,
   onSnapshot,
+  increment,
   type User,
 };

@@ -10,7 +10,7 @@ import {
   Clock,
   Activity,
 } from 'lucide-react';
-import type { AdminTab, UserProfileStats } from './types';
+import type { AdminTab, UserProfileStats, DailyTrafficStats } from './types';
 import {
   ADMIN_EMAIL,
   fetchAdminUsersList,
@@ -18,9 +18,11 @@ import {
   formatBytes,
   formatMinutesLabel,
 } from './services/userStatsService';
+import { fetchDailyTrafficHistory } from './services/trafficService';
 import { AdminSidebar } from './components/AdminSidebar';
 import { AdminKpiCards } from './components/AdminKpiCards';
 import { AdminUsersTable } from './components/AdminUsersTable';
+import { AdminTrafficView } from './components/AdminTrafficView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
@@ -35,7 +37,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [currentTab, setCurrentTab] = useState<AdminTab>('overview');
   const [users, setUsers] = useState<UserProfileStats[]>([]);
+  const [trafficHistory, setTrafficHistory] = useState<DailyTrafficStats[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isTrafficLoading, setIsTrafficLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isAdmin = currentUser?.email === ADMIN_EMAIL;
@@ -43,14 +47,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadData = async () => {
     if (!isAdmin) return;
     setIsLoading(true);
+    setIsTrafficLoading(true);
     setErrorMsg(null);
     try {
-      const list = await fetchAdminUsersList();
-      setUsers(list);
+      const [userList, trafficList] = await Promise.all([
+        fetchAdminUsersList(),
+        fetchDailyTrafficHistory(),
+      ]);
+      setUsers(userList);
+
+      // Merge & backfill historical dates from registered users so timeline covers all online history
+      const dateMap: Record<string, DailyTrafficStats> = {};
+      for (const t of trafficList) {
+        dateMap[t.date] = { ...t };
+      }
+
+      for (const u of userList) {
+        const createDate = u.createdAt?.slice(0, 10);
+        if (createDate && /^\d{4}-\d{2}-\d{2}$/.test(createDate)) {
+          if (!dateMap[createDate]) {
+            dateMap[createDate] = {
+              date: createDate,
+              totalVisits: 1,
+              guestVisits: 0,
+              registeredVisits: 1,
+              guestFilesCreated: 0,
+              registeredFilesCreated: u.notebooksCount || 0,
+              totalFilesCreated: u.notebooksCount || 0,
+              updatedAt: u.updatedAt || new Date().toISOString(),
+            };
+          } else {
+            dateMap[createDate].registeredVisits = (dateMap[createDate].registeredVisits || 0) + 1;
+            dateMap[createDate].totalVisits = (dateMap[createDate].totalVisits || 0) + 1;
+          }
+        }
+      }
+
+      const mergedTraffic = Object.values(dateMap).sort((a, b) => b.date.localeCompare(a.date));
+      setTrafficHistory(mergedTraffic);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Σφάλμα φόρτωσης χρηστών από το Cloud.');
+      setErrorMsg(err?.message || 'Σφάλμα φόρτωσης δεδομένων από το Cloud.');
     } finally {
       setIsLoading(false);
+      setIsTrafficLoading(false);
     }
   };
 
@@ -181,8 +220,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Tab 1: Overview & Users Table */}
-        {(currentTab === 'overview' || currentTab === 'users') && (
+        {/* Tab 1: Overview (Combined Traffic & Users) */}
+        {currentTab === 'overview' && (
+          <div className="space-y-6">
+            <AdminTrafficView
+              traffic={trafficHistory}
+              isLoading={isTrafficLoading}
+            />
+            <div className="space-y-4 pt-4 border-t border-[#dfd8cb]/80">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-[#1b2a4a] uppercase tracking-wider">
+                  Μητρώο Εγγεγραμμένων Χρηστών ({users.length})
+                </h3>
+              </div>
+              <AdminUsersTable
+                users={users}
+                onRefresh={loadData}
+                isRefreshing={isLoading}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Traffic & Visitor Analytics */}
+        {currentTab === 'traffic' && (
+          <AdminTrafficView
+            traffic={trafficHistory}
+            isLoading={isTrafficLoading}
+          />
+        )}
+
+        {/* Tab 3: Users Table */}
+        {currentTab === 'users' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-[#1b2a4a] uppercase tracking-wider">

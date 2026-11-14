@@ -329,6 +329,9 @@ import {
   ADMIN_EMAIL,
   recordActiveSecondsLocally,
   syncCurrentUserProfileStats,
+  recordDailyVisit,
+  recordFileCreation,
+  syncHistoricalLocalGuestFiles,
 } from './features/admin';
 import {
   MIND_MAPS_CATALOG,
@@ -1449,6 +1452,14 @@ export default function App() {
     }, 3000);
     return () => clearTimeout(timer);
   }, [currentUser, notebooks]);
+
+  // Visitor Telemetry: Record daily session visit (Guest / Registered) and backfill local guest notebooks
+  useEffect(() => {
+    void recordDailyVisit(!currentUser);
+    if (notebooks.length > 0) {
+      void syncHistoricalLocalGuestFiles(notebooks);
+    }
+  }, [currentUser, notebooks.length > 0]);
 
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
@@ -47856,6 +47867,7 @@ export default function App() {
       ],
     };
     userEditedInSessionRef.current.add(newNb.id);
+    void recordFileCreation(!currentUser, 1);
     setNotebooks((prev) => [newNb, ...prev]);
     setOpenNotebookIds((prev) => [...prev, newNb.id]);
     setActiveNotebookId(newNb.id);
@@ -47865,7 +47877,7 @@ export default function App() {
     setPan({ x: 0, y: 0 });
     setViewMode('editor');
     showToast(`📄 Νέα Σημείωση: «${newNb.title}»`);
-  }, [notebooks.length, activeLibraryFolder, activeNotebook?.folder, showToast]);
+  }, [notebooks.length, activeLibraryFolder, activeNotebook?.folder, showToast, currentUser]);
 
   const handleCloseCurrentTab = useCallback(() => {
     if (viewMode !== 'editor') return;
@@ -51621,6 +51633,7 @@ export default function App() {
           if (currentUser) {
             pushNotebookToCloudTracked(currentUser.uid, nbWithFolder);
           }
+          void recordFileCreation(!currentUser, 1);
           lastImported = nbWithFolder;
         } catch {
           showToast(`⚠️ Σφάλμα ανάγνωσης αρχείου "${archFile.name}"`);
@@ -51709,6 +51722,7 @@ export default function App() {
           pages: importedPages,
         };
         userEditedInSessionRef.current.add(newNb.id);
+        void recordFileCreation(!currentUser, 1);
         setNotebooks((prev) => [newNb, ...prev]);
         setOpenNotebookIds((prev) => (prev.includes(newNb.id) ? prev : [...prev, newNb.id]));
         if (targetFolderOverride !== undefined && viewMode === 'library') {
