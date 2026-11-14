@@ -11256,7 +11256,16 @@ export function autoAlignAndConnectCircuit(
     const isLeftmostCol = cIdx === 0 || xCol <= Math.min(...vCols.map((c) => c.xCol)) + 12;
     if (isLeftmostCol && !hasAnyExplicitSwitch && colComps.length === 0 && mergedV.length > 0) {
       const minY = Math.min(...mergedV.map((v) => v.yT));
-      const maxY = Math.max(...mergedV.map((v) => v.yB));
+      let maxY = Math.max(...mergedV.map((v) => v.yB));
+
+      // Check if there is a bottom horizontal wire endpoint at this column that needs to be reached
+      const bottomHep = hWireEndpoints
+        .filter((hep) => Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL && hep.y > minY + 50)
+        .sort((a, b) => b.y - a.y)[0];
+      if (bottomHep && bottomHep.y > maxY + 30) {
+        maxY = bottomHep.y;
+      }
+
       const totalH = maxY - minY;
       if (totalH >= 50) {
         const swYCenter = (minY + maxY) / 2;
@@ -11277,6 +11286,12 @@ export function autoAlignAndConnectCircuit(
               nextMergedV.push({ yT: swYBot, yB: seg.yB, stroke: seg.stroke });
             }
           }
+        }
+        // If there is no lower vertical segment reaching down to maxY, synthesize it so the knife switch has a bottom wire!
+        const templateStroke = mergedV[0]?.stroke || currentStrokes[0];
+        const hasBottomSeg = nextMergedV.some((seg) => seg.yB >= maxY - 14);
+        if (!hasBottomSeg && templateStroke && maxY - swYBot >= 6) {
+          nextMergedV.push({ yT: swYBot, yB: maxY, stroke: templateStroke });
         }
         mergedV.length = 0;
         mergedV.push(...nextMergedV);

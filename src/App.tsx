@@ -11762,10 +11762,6 @@ export default function App() {
           if (s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5)) {
             continue;
           }
-          // Never render legacy bugged switch-gap filler wire strokes
-          if (s.id.includes('-v-left-top-bot-') || s.id.includes('-v-left-bot-top-')) {
-            continue;
-          }
           // Hide natural length (l0) spring when user unchecks "Εμφάνιση Φυσικού Μήκους (l₀)"
           if (hiddenNaturalSpringIds.has(s.id)) {
             continue;
@@ -23661,6 +23657,20 @@ export default function App() {
       return { x1, y1, x2, y2 };
     }
     if (span.kind === 'v-left') {
+      const swYCenter = (prop.yTop + prop.yBot) / 2;
+      const swHalfGap = Math.min(21, Math.max(14, Math.abs(prop.yBot - prop.yTop) * 0.18));
+      const swYTop = Math.round(swYCenter - swHalfGap);
+      const swYBot = Math.round(swYCenter + swHalfGap);
+      if (span.id === 'v-left-top') {
+        const y1 = span.fixedY1 !== undefined ? span.fixedY1 : prop.yTop;
+        const y2 = span.fixedY2 !== undefined ? span.fixedY2 : swYTop;
+        return { x1: prop.xLeft, y1, x2: prop.xLeft, y2: Math.min(y2, swYTop) };
+      }
+      if (span.id === 'v-left-bot') {
+        const y1 = span.fixedY1 !== undefined ? span.fixedY1 : swYBot;
+        const y2 = span.fixedY2 !== undefined ? span.fixedY2 : prop.yBot;
+        return { x1: prop.xLeft, y1: Math.max(y1, swYBot), x2: prop.xLeft, y2 };
+      }
       const y1 = span.fixedY1 !== undefined ? span.fixedY1 : prop.yTop;
       const y2 = span.fixedY2 !== undefined ? span.fixedY2 : prop.yBot;
       return { x1: prop.xLeft, y1, x2: prop.xLeft, y2 };
@@ -24951,8 +24961,8 @@ export default function App() {
       } else {
         const targetX = targetCoords.x1;
         const otherX = sp.kind === 'v-left' ? xRight : xLeft;
-        const sMinY = Math.min(yTop, yBot);
-        const sMaxY = Math.max(yTop, yBot);
+        const sMinY = targetCoords.y1;
+        const sMaxY = targetCoords.y2;
         const sLen = Math.max(1, sMaxY - sMinY);
 
         const match = rawExternalSegs.find((seg) => {
@@ -24973,59 +24983,168 @@ export default function App() {
             const swHalfGap = Math.min(21, Math.max(14, Math.abs(yBot - yTop) * 0.18));
             const swYTop = Math.round(swYCenter - swHalfGap);
             const swYBot = Math.round(swYCenter + swHalfGap);
-            const wireIdTop = `st-wire-ex-${Date.now()}-${sp.id}-top-${Math.random().toString(36).slice(2, 5)}`;
-            const wireIdBot = `st-wire-ex-${Date.now()}-${sp.id}-bot-${Math.random().toString(36).slice(2, 5)}`;
-            sp.existingStrokeId = wireIdTop;
-            const botSpan = spans.find((s) => s.id === 'v-left-bot');
-            if (botSpan) {
-              botSpan.existingStrokeId = wireIdBot;
+            const wMinY = Math.min(match.y1, match.y2);
+            const wMaxY = Math.max(match.y1, match.y2);
+
+            if (sp.id === 'v-left-top') {
+              const wireIdTop = `st-wire-ex-${Date.now()}-left-top-${Math.random().toString(36).slice(2, 5)}`;
+              sp.existingStrokeId = wireIdTop;
+              matchedWireStrokes.push({
+                id: wireIdTop,
+                tool: 'pen',
+                penType: match.stroke.penType,
+                lineStyle: match.stroke.lineStyle || 'solid',
+                color: match.stroke.color || '#111827',
+                width: match.stroke.width || 2.0,
+                opacity: match.stroke.opacity ?? 1,
+                layerId: match.stroke.layerId || defaultLayerId,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: targetCoords.x1, y: yTop, pressure: 0.7 },
+                  {
+                    x: targetCoords.x1,
+                    y: swYTop,
+                    cx: targetCoords.x1,
+                    cy: (yTop + swYTop) / 2,
+                    pressure: 0.7,
+                  },
+                ],
+              });
+              if (wMaxY >= swYBot + 12) {
+                const botSpan = spans.find((s) => s.id === 'v-left-bot');
+                if (botSpan && !botSpan.existingStrokeId) {
+                  const wireIdBot = `st-wire-ex-${Date.now()}-left-bot-${Math.random().toString(36).slice(2, 5)}`;
+                  botSpan.existingStrokeId = wireIdBot;
+                  matchedWireStrokes.push({
+                    id: wireIdBot,
+                    tool: 'pen',
+                    penType: match.stroke.penType,
+                    lineStyle: match.stroke.lineStyle || 'solid',
+                    color: match.stroke.color || '#111827',
+                    width: match.stroke.width || 2.0,
+                    opacity: match.stroke.opacity ?? 1,
+                    layerId: match.stroke.layerId || defaultLayerId,
+                    isShape: true,
+                    shapeType: 'line',
+                    points: [
+                      { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
+                      {
+                        x: targetCoords.x1,
+                        y: yBot,
+                        cx: targetCoords.x1,
+                        cy: (swYBot + yBot) / 2,
+                        pressure: 0.7,
+                      },
+                    ],
+                  });
+                }
+              }
+            } else if (sp.id === 'v-left-bot') {
+              const wireIdBot = `st-wire-ex-${Date.now()}-left-bot-${Math.random().toString(36).slice(2, 5)}`;
+              sp.existingStrokeId = wireIdBot;
+              matchedWireStrokes.push({
+                id: wireIdBot,
+                tool: 'pen',
+                penType: match.stroke.penType,
+                lineStyle: match.stroke.lineStyle || 'solid',
+                color: match.stroke.color || '#111827',
+                width: match.stroke.width || 2.0,
+                opacity: match.stroke.opacity ?? 1,
+                layerId: match.stroke.layerId || defaultLayerId,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
+                  {
+                    x: targetCoords.x1,
+                    y: yBot,
+                    cx: targetCoords.x1,
+                    cy: (swYBot + yBot) / 2,
+                    pressure: 0.7,
+                  },
+                ],
+              });
+              if (wMinY <= swYTop - 12) {
+                const topSpan = spans.find((s) => s.id === 'v-left-top');
+                if (topSpan && !topSpan.existingStrokeId) {
+                  const wireIdTop = `st-wire-ex-${Date.now()}-left-top-${Math.random().toString(36).slice(2, 5)}`;
+                  topSpan.existingStrokeId = wireIdTop;
+                  matchedWireStrokes.push({
+                    id: wireIdTop,
+                    tool: 'pen',
+                    penType: match.stroke.penType,
+                    lineStyle: match.stroke.lineStyle || 'solid',
+                    color: match.stroke.color || '#111827',
+                    width: match.stroke.width || 2.0,
+                    opacity: match.stroke.opacity ?? 1,
+                    layerId: match.stroke.layerId || defaultLayerId,
+                    isShape: true,
+                    shapeType: 'line',
+                    points: [
+                      { x: targetCoords.x1, y: yTop, pressure: 0.7 },
+                      {
+                        x: targetCoords.x1,
+                        y: swYTop,
+                        cx: targetCoords.x1,
+                        cy: (yTop + swYTop) / 2,
+                        pressure: 0.7,
+                      },
+                    ],
+                  });
+                }
+              }
+            } else {
+              const wireIdTop = `st-wire-ex-${Date.now()}-left-top-${Math.random().toString(36).slice(2, 5)}`;
+              const wireIdBot = `st-wire-ex-${Date.now()}-left-bot-${Math.random().toString(36).slice(2, 5)}`;
+              sp.existingStrokeId = wireIdTop;
+              matchedWireStrokes.push({
+                id: wireIdTop,
+                tool: 'pen',
+                penType: match.stroke.penType,
+                lineStyle: match.stroke.lineStyle || 'solid',
+                color: match.stroke.color || '#111827',
+                width: match.stroke.width || 2.0,
+                opacity: match.stroke.opacity ?? 1,
+                layerId: match.stroke.layerId || defaultLayerId,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: targetCoords.x1, y: yTop, pressure: 0.7 },
+                  {
+                    x: targetCoords.x1,
+                    y: swYTop,
+                    cx: targetCoords.x1,
+                    cy: (yTop + swYTop) / 2,
+                    pressure: 0.7,
+                  },
+                ],
+              });
+              matchedWireStrokes.push({
+                id: wireIdBot,
+                tool: 'pen',
+                penType: match.stroke.penType,
+                lineStyle: match.stroke.lineStyle || 'solid',
+                color: match.stroke.color || '#111827',
+                width: match.stroke.width || 2.0,
+                opacity: match.stroke.opacity ?? 1,
+                layerId: match.stroke.layerId || defaultLayerId,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
+                  {
+                    x: targetCoords.x1,
+                    y: yBot,
+                    cx: targetCoords.x1,
+                    cy: (swYBot + yBot) / 2,
+                    pressure: 0.7,
+                  },
+                ],
+              });
             }
-            matchedWireStrokes.push({
-              id: wireIdTop,
-              tool: 'pen',
-              penType: match.stroke.penType,
-              lineStyle: match.stroke.lineStyle || 'solid',
-              color: match.stroke.color || '#111827',
-              width: match.stroke.width || 2.0,
-              opacity: match.stroke.opacity ?? 1,
-              layerId: match.stroke.layerId || defaultLayerId,
-              isShape: true,
-              shapeType: 'line',
-              points: [
-                { x: targetCoords.x1, y: yTop, pressure: 0.7 },
-                {
-                  x: targetCoords.x1,
-                  y: swYTop,
-                  cx: targetCoords.x1,
-                  cy: (yTop + swYTop) / 2,
-                  pressure: 0.7,
-                },
-              ],
-            });
-            matchedWireStrokes.push({
-              id: wireIdBot,
-              tool: 'pen',
-              penType: match.stroke.penType,
-              lineStyle: match.stroke.lineStyle || 'solid',
-              color: match.stroke.color || '#111827',
-              width: match.stroke.width || 2.0,
-              opacity: match.stroke.opacity ?? 1,
-              layerId: match.stroke.layerId || defaultLayerId,
-              isShape: true,
-              shapeType: 'line',
-              points: [
-                { x: targetCoords.x1, y: swYBot, pressure: 0.7 },
-                {
-                  x: targetCoords.x1,
-                  y: yBot,
-                  cx: targetCoords.x1,
-                  cy: (swYBot + yBot) / 2,
-                  pressure: 0.7,
-                },
-              ],
-            });
           } else {
-            const wireId = `st-wire-ex-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`;
+            const wireId = `st-wire-ex-${Date.now()}-${sp.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Math.random().toString(36).slice(2, 5)}`;
             sp.existingStrokeId = wireId;
             matchedWireStrokes.push({
               id: wireId,
@@ -25194,7 +25313,7 @@ export default function App() {
 
         if (swYTop - c.y1 >= 4) {
           createdWires.push({
-            id: `st-wire-comp-${Date.now()}-${sp.id}-top-${Math.random().toString(36).slice(2, 5)}`,
+            id: `st-wire-comp-${Date.now()}-left-top-${Math.random().toString(36).slice(2, 5)}`,
             tool: 'pen',
             penType: prop.wirePenSubType,
             lineStyle: prop.wireLineStyle || 'solid',
@@ -25219,7 +25338,7 @@ export default function App() {
 
         if (c.y2 - swYBot >= 4) {
           createdWires.push({
-            id: `st-wire-comp-${Date.now()}-${sp.id}-bot-${Math.random().toString(36).slice(2, 5)}`,
+            id: `st-wire-comp-${Date.now()}-left-bot-${Math.random().toString(36).slice(2, 5)}`,
             tool: 'pen',
             penType: prop.wirePenSubType,
             lineStyle: prop.wireLineStyle || 'solid',
@@ -25244,8 +25363,60 @@ export default function App() {
         continue;
       }
 
+      if (sp.id === 'v-left-top' && !hasExplicitSwitch) {
+        createdWires.push({
+          id: `st-wire-comp-${Date.now()}-left-top-${Math.random().toString(36).slice(2, 5)}`,
+          tool: 'pen',
+          penType: prop.wirePenSubType,
+          lineStyle: prop.wireLineStyle || 'solid',
+          color: prop.wireColor || '#111827',
+          width: prop.wireWidth || 2.0,
+          opacity: prop.wireOpacity ?? 1,
+          layerId: prop.layerId,
+          isShape: true,
+          shapeType: 'line',
+          points: [
+            { x: Math.round(c.x1), y: Math.round(c.y1), pressure: 0.7 },
+            {
+              x: Math.round(c.x1),
+              y: Math.round(c.y2),
+              cx: Math.round(c.x1),
+              cy: Math.round((c.y1 + c.y2) / 2),
+              pressure: 0.7,
+            },
+          ],
+        });
+        continue;
+      }
+
+      if (sp.id === 'v-left-bot' && !hasExplicitSwitch) {
+        createdWires.push({
+          id: `st-wire-comp-${Date.now()}-left-bot-${Math.random().toString(36).slice(2, 5)}`,
+          tool: 'pen',
+          penType: prop.wirePenSubType,
+          lineStyle: prop.wireLineStyle || 'solid',
+          color: prop.wireColor || '#111827',
+          width: prop.wireWidth || 2.0,
+          opacity: prop.wireOpacity ?? 1,
+          layerId: prop.layerId,
+          isShape: true,
+          shapeType: 'line',
+          points: [
+            { x: Math.round(c.x1), y: Math.round(c.y1), pressure: 0.7 },
+            {
+              x: Math.round(c.x2),
+              y: Math.round(c.y2),
+              cx: Math.round(c.x1),
+              cy: Math.round((c.y1 + c.y2) / 2),
+              pressure: 0.7,
+            },
+          ],
+        });
+        continue;
+      }
+
       createdWires.push({
-        id: `st-wire-comp-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`,
+        id: `st-wire-comp-${Date.now()}-${sp.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Math.random().toString(36).slice(2, 5)}`,
         tool: 'pen',
         penType: prop.wirePenSubType,
         lineStyle: prop.wireLineStyle || 'solid',
