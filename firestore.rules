@@ -6,6 +6,22 @@ rules_version = '2';
 //
 // This security rules file assumes the following data structures:
 //
+// Collection: user_profiles
+// Document ID: {userId} (must match authenticated user's UID and data.uid)
+// Fields:
+//   - uid: string (required, 1..128 chars, matches {userId}) - authenticated user identifier
+//   - email: string (required, 1..320 chars) - user account email address
+//   - displayName: string (required, 0..256 chars) - user display or full name
+//   - photoURL: string (optional, 0..2048 chars) - user avatar image URL
+//   - createdAt: string (required, 1..100 chars) - ISO timestamp when account was registered
+//   - lastSeenAt: string (required, 1..100 chars) - ISO timestamp of user's last app session
+//   - notebooksCount: number (required, >= 0) - total number of notebooks owned
+//   - totalSizeBytes: number (required, >= 0) - total storage occupied in bytes
+//   - totalActiveSeconds: number (required, >= 0) - cumulative active usage time in seconds
+//   - activeDaysCount: number (required, >= 0) - count of distinct active usage days
+//   - avgDailyMinutes: number (required, >= 0) - calculated average active usage in minutes/day
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of profile metric update
+//
 // Collection: users
 // Document ID: {userId} (must match authenticated user's UID)
 // Fields:
@@ -71,6 +87,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Check if the user is the bootstrapped administrator
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'freiderikoskostas@gmail.com';
+    }
+
     // Validate required fields exist on the resulting document
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
@@ -102,6 +123,12 @@ service cloud.firestore {
         (request.resource.data[field] is bool);
     }
 
+    // Validate required number field (must be number and non-negative)
+    function isValidNumber(field) {
+      return request.resource.data[field] is number &&
+        request.resource.data[field] >= 0;
+    }
+
     // Validate optional number field (if present, must be number and non-negative)
     function isValidOptionalNumber(field) {
       return !(field in request.resource.data) ||
@@ -117,6 +144,49 @@ service cloud.firestore {
     // ===============================================================
     // Domain Validators (Used in BOTH create and update rules)
     // ===============================================================
+
+    function isValidUserProfile(data, userId) {
+      return hasOnlyAllowedFields([
+          'uid',
+          'email',
+          'displayName',
+          'photoURL',
+          'createdAt',
+          'lastSeenAt',
+          'notebooksCount',
+          'totalSizeBytes',
+          'totalActiveSeconds',
+          'activeDaysCount',
+          'avgDailyMinutes',
+          'updatedAt'
+        ]) &&
+        hasRequiredFields([
+          'uid',
+          'email',
+          'displayName',
+          'createdAt',
+          'lastSeenAt',
+          'notebooksCount',
+          'totalSizeBytes',
+          'totalActiveSeconds',
+          'activeDaysCount',
+          'avgDailyMinutes',
+          'updatedAt'
+        ]) &&
+        data.uid == userId &&
+        validStringLength('uid', 1, 128) &&
+        validStringLength('email', 1, 320) &&
+        validStringLength('displayName', 0, 256) &&
+        isValidOptionalString('photoURL', 0, 2048) &&
+        validStringLength('createdAt', 1, 100) &&
+        validStringLength('lastSeenAt', 1, 100) &&
+        isValidNumber('notebooksCount') &&
+        isValidNumber('totalSizeBytes') &&
+        isValidNumber('totalActiveSeconds') &&
+        isValidNumber('activeDaysCount') &&
+        isValidNumber('avgDailyMinutes') &&
+        validStringLength('updatedAt', 1, 100);
+    }
 
     function isValidUserDoc(data) {
       return data.keys().hasOnly([
@@ -191,8 +261,14 @@ service cloud.firestore {
     // Collection Rules
     // ===============================================================
 
+    match /user_profiles/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data, userId);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUserDoc(request.resource.data);
       allow update: if isOwner(userId) &&
         isValidUserDoc(request.resource.data) &&
@@ -204,7 +280,7 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
 
       match /notebooks/{notebookId} {
-        allow read: if isOwner(userId);
+        allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidNotebookDoc(request.resource.data, notebookId);
         allow update: if isOwner(userId) &&
           isValidNotebookDoc(request.resource.data, notebookId) &&

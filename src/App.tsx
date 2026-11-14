@@ -325,6 +325,12 @@ import {
   WaveDiagramChoiceModal,
 } from './components/modals';
 import {
+  AdminDashboard,
+  ADMIN_EMAIL,
+  recordActiveSecondsLocally,
+  syncCurrentUserProfileStats,
+} from './features/admin';
+import {
   MIND_MAPS_CATALOG,
   type MindMapSubject,
   type MindMapGrade,
@@ -1399,6 +1405,51 @@ export default function App() {
   );
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [isAdminViewOpen, setIsAdminViewOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return (
+      params.get('admin') === 'true' ||
+      params.get('view') === 'admin' ||
+      window.location.pathname.startsWith('/admin') ||
+      window.location.hostname.startsWith('explainboards.dash')
+    );
+  });
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const shouldBeOpen =
+        params.get('admin') === 'true' ||
+        params.get('view') === 'admin' ||
+        window.location.pathname.startsWith('/admin') ||
+        window.location.hostname.startsWith('explainboards.dash');
+      setIsAdminViewOpen(shouldBeOpen);
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
+
+  // Telemetry: Record active seconds locally every 30s when window has user focus
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hasFocus()) {
+        recordActiveSecondsLocally(currentUser.uid, 30);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [currentUser?.uid]);
+
+  // Telemetry: Synchronize user profile & notebook storage usage to Firestore `user_profiles/{uid}`
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const timer = setTimeout(() => {
+      void syncCurrentUserProfileStats(currentUser, notebooks);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [currentUser, notebooks]);
+
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
@@ -51738,6 +51789,44 @@ export default function App() {
 
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
+  // Dedicated Admin Portal View (ExplainBoards Admin Dashboard)
+  if (isAdminViewOpen) {
+    return (
+      <>
+        <AdminDashboard
+          currentUser={currentUser}
+          onBackToNotes={() => {
+            setIsAdminViewOpen(false);
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('admin');
+              url.searchParams.delete('view');
+              const newSearch = url.searchParams.toString();
+              const newPath = url.pathname.startsWith('/admin') ? '/' : url.pathname;
+              window.history.replaceState({}, '', newPath + (newSearch ? `?${newSearch}` : ''));
+            } catch {
+              // fallback
+            }
+          }}
+          onSignInGoogle={() => {
+            setAuthMode('signin');
+            setShowAuthModal(true);
+          }}
+        />
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          mode={authMode}
+          setMode={setAuthMode}
+          onSuccess={() => {
+            setShowAuthModal(false);
+            showToast('🎉 Συνδέθηκες επιτυχώς!');
+          }}
+        />
+      </>
+    );
+  }
+
   if (viewMode === 'landing' && !isCleanProjectorMode && !isTvReceiverMode) {
     return (
       <LandingPage
@@ -52535,6 +52624,21 @@ export default function App() {
             </>
           )}
 
+          {/* Admin Portal Quick-Launch Button (Visible only to authorized Admin: freiderikoskostas@gmail.com) */}
+          {currentUser?.email === ADMIN_EMAIL && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminViewOpen(true);
+                window.history.pushState({}, '', '?admin=true');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
+            >
+              <span>👑 Admin</span>
+            </button>
+          )}
+
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
           <div className="relative">
             <button
@@ -52585,8 +52689,22 @@ export default function App() {
                   </div>
 
                   {currentUser ? (
-                    <button
-                      onClick={async () => {
+                    <>
+                      {currentUser?.email === ADMIN_EMAIL && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            setIsAdminViewOpen(true);
+                            window.history.pushState({}, '', '?admin=true');
+                          }}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#234978] hover:bg-[#1a385c] text-amber-300 text-xs font-bold transition cursor-pointer border border-amber-300/30 shadow-xs active:scale-98"
+                        >
+                          <span>👑 Πίνακας Ελέγχου Admin</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
                         setShowUserDropdown(false);
                         explicitLandingNavRef.current = true;
                         try {
@@ -52612,7 +52730,8 @@ export default function App() {
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Logout (Αποσύνδεση)</span>
                     </button>
-                  ) : (
+                  </>
+                ) : (
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => {

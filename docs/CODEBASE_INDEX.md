@@ -51,11 +51,21 @@ graph TD
         StorKeys["storageKeys.ts (STORAGE_KEY, UI_SESSION_STORAGE_KEY)"]
     end
 
+    subgraph D6["6. src/features/admin/ (Πίνακας Ελέγχου Admin & Τηλεμετρία)"]
+        AdminIndex["index.ts (Facade)"]
+        AdminDash["AdminDashboard.tsx (Master View)"]
+        AdminStats["services/userStatsService.ts (Telemetry & Firestore)"]
+        AdminSide["components/AdminSidebar.tsx (Navy/Beige Controls)"]
+        AdminKpi["components/AdminKpiCards.tsx (Metrics Cards)"]
+        AdminTable["components/AdminUsersTable.tsx (Data Grid & CSV)"]
+    end
+
     App --> SimIndex
     App --> StemIndex
     App --> CanvasIndex
     App --> LibIndex
     App --> StorIndex
+    App --> AdminIndex
 ```
 
 ---
@@ -102,7 +112,32 @@ graph TD
 | **Editor Modals** | `src/components/modals/index.ts` | Master Facade export για τα contextual παράθυρα διαλόγου του Editor | Αποσύνθεση του τέλους του `App.tsx` |
 | | `src/components/modals/NativeShareSheetModal.tsx` | Παράθυρο 1-Tap κοινοποίησης PDF στο iPadOS (AirDrop, Viber, Goodnotes) | ~60 γραμμές inline JSX |
 | | `src/components/modals/WaveDiagramChoiceModal.tsx` | Παράθυρο επιλογής διαγράμματος Κύματος $f(x)$ (στιγμιότυπο) ή $f(t)$ (ταλάντωση σημείου) | ~135 γραμμές inline JSX |
+| **Admin & Telemetry** | `src/features/admin/index.ts` | Master Facade export για τον Πίνακα Ελέγχου Διαχειριστή | Ενοποιημένο import διαχείρισης |
+| | `src/features/admin/types.ts` | `UserProfileStats`, `AdminTab`, `AdminAggregateMetrics` | Τύποι τηλεμετρίας χρηστών |
+| | `src/features/admin/services/userStatsService.ts` | Καταγραφή ενεργού χρόνου (30s heartbeat), υπολογισμός αποθηκευτικού χώρου, Firestore συγχρονισμός & exports | Engine τηλεμετρίας & Firestore querying |
+| | `src/features/admin/components/AdminSidebar.tsx` | Κάθετη μπάρα πλοήγησης με μονόχρωμα κουμπιά σε Navy (`#234978`) και Warm Beige (`#efebe3`) | Απομονωμένο layout sidebar |
+| | `src/features/admin/components/AdminKpiCards.tsx` | Συγκεντρωτικές κάρτες KPI (Χρήστες, Αρχεία, Χώρος Storage, Μέσος Χρόνος, Σημερινοί Ενεργοί) | Απομονωμένο metrics dashboard |
+| | `src/features/admin/components/AdminUsersTable.tsx` | Πλήρης πίνακας χρηστών με αναζήτηση, ταξινόμηση, avatar, metrics & CSV εξαγωγή | Data grid διαχείρισης χρηστών |
+| | `src/features/admin/AdminDashboard.tsx` | Κεντρικός διαχειριστικός πίνακας με Google Auth verification για `freiderikoskostas@gmail.com` | Αυτόνομο portal διαχείρισης |
 | **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide) | Αποφυγή μονολιθικού bundle 6.2 MB & ακαριαία φόρτωση στο iPad |
+
+---
+
+## 🔬 Επερχόμενο Roadmap Προσομοιώσεων (Simulations & Live Objects)
+
+### 1. Νέα Στρατηγική Παρουσίασης & UI Ribbon
+- **Ενοποιημένο Κουμπί `SIM`:** Πατώντας το κουμπί `SIM` στην κύρια εργαλειοθήκη, ανοίγει το μενού επιλογής προσομοίωσης (Ηλεκτρικά Κυκλώματα, Μηχανική/Εκκρεμές, Θερμότητα & Θερμοκρασία).
+- **Επάνω Μισό Dashboard / Swipeable Ribbon:** Στο επάνω μέρος εμφανίζεται η οριζόντια μπάρα αντικειμένων (`SimulationObjectRibbon`). Εάν τα αντικείμενα είναι πολλά, κάνουν ομαλό οριζόντιο swipe (όπως η παλέτα χρωμάτων του μολυβιού).
+
+### 2. Hand-Drawn to Live Simulation (Ζωντάνεμα Χειρόγραφου Σχήματος)
+- **Κοινή Φιλοσοφία:** Ο καθηγητής/μαθητής σχεδιάζει με το χέρι (π.χ. μία μπαταρία, ένα εκκρεμές, ένα δοχείο με νερό, ένα καμινέτο).
+- **Αυτόματη Ενεργοποίηση:** Όταν το κουμπί `SIM` είναι ενεργό, είτε αυτόματα με gesture είτε πατώντας το αντίστοιχο κουμπί, η χειρόγραφη ζωγραφιά αναγνωρίζεται και αντικαθίσταται/ζωντανεύει σε διαδραστικό φυσικό αντικείμενο.
+- **Εναλλακτική:** Παράλληλα, υπάρχουν πάντοτε και τα έτοιμα προκατασκευασμένα αντικείμενα στο ribbon για άμεσο drag & drop.
+
+### 3. Νέα Θεματική Ενότητα: Θερμότητα & Θερμοκρασία (Φυσική Α' Γυμνασίου)
+- **Αντικείμενα:** Δοχεία με υγρό, καμινέτα (ρύθμιση φλόγας/παροχής θερμότητας $Q$), θερμόμετρα (υδραργύρου/ψηφιακά), θερμιδόμετρα.
+- **Φυσική Μηχανή:** $Q = m \cdot c \cdot \Delta T$, θερμική ισορροπία δύο σωμάτων ($Q_{\text{αποδ}} = Q_{\text{απορ}}$), αλλαγές φάσης (τήξη, πήξη, βρασμός).
+- **Διαδραστικά Διαγράμματα:** Δημιουργία γραφημάτων σε πραγματικό χρόνο $T - t$ (θερμοκρασία σε συνάρτηση με τον χρόνο) για θέρμανση, ψύξη και θερμική ισορροπία.
 
 ---
 
