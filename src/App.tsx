@@ -23210,11 +23210,15 @@ export default function App() {
   };
 
   const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
-    if (!s.isShape) return false;
+    if (s.tool === 'highlighter') return false;
+    if (s.arrowStart || s.arrowEnd) return false;
+    if (s.points[0]?.twist === 999) return false;
+    if (s.fillStyle && s.fillStyle !== 'none') return false;
+    if (!s.isShape) {
+      // Freehand wire strokes drawn with Apple Pencil / Stylus
+      return s.points.length >= 2;
+    }
     if (s.shapeType === 'line') {
-      if (s.arrowStart || s.arrowEnd) return false;
-      if (s.points[0]?.twist === 999) return false;
-      if (s.fillStyle && s.fillStyle !== 'none') return false;
       return s.points.length >= 2;
     }
     return (
@@ -23270,9 +23274,12 @@ export default function App() {
     );
     const out = new Set<string>();
     for (const s of page.strokes) {
-      if (
+      if (baseSet.has(s.id)) {
+        out.add(s.id);
+      } else if (
         isCircuitEligibleStroke(s) &&
-        (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))
+        s.groupId &&
+        groupIds.has(s.groupId)
       ) {
         out.add(s.id);
       }
@@ -23774,7 +23781,29 @@ export default function App() {
       if (s.tool === 'highlighter' || s.points.length < 2) continue;
       if (s.shapeType && s.shapeType !== 'line') continue;
       if (s.points[0]?.twist === 999) continue;
-      if (!s.isShape && s.points.length > 2) continue;
+      if (!s.isShape && s.points.length > 2) {
+        const p0 = s.points[0];
+        const p1 = s.points[s.points.length - 1];
+        const dx = Math.abs(p1.x - p0.x);
+        const dy = Math.abs(p1.y - p0.y);
+        if (Math.hypot(dx, dy) >= 12) {
+          let orientation: 'h' | 'v' | 'diag' = 'diag';
+          if (dy <= Math.max(26, dx * 0.38)) orientation = 'h';
+          else if (dx <= Math.max(26, dy * 0.38)) orientation = 'v';
+          rawExternalSegs.push({
+            x1: p0.x,
+            y1: p0.y,
+            x2: p1.x,
+            y2: p1.y,
+            avgX: (p0.x + p1.x) / 2,
+            avgY: (p0.y + p1.y) / 2,
+            orientation,
+            stroke: s,
+            used: false,
+          });
+        }
+        continue;
+      }
       for (let k = 0; k < s.points.length - 1; k++) {
         const p0 = s.points[k];
         const p1 = s.points[k + 1];
@@ -26143,21 +26172,22 @@ export default function App() {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // 1. Draw proposed dashed wire spans (or if v-left is already an existing solid wire, mask its switch gap)
+        // 1. Always cleanly mask the switch gap with the effective paper background color,
+        // ensuring NO underlying black wire stroke is visible behind the proposed knife switch!
+        const paperBg = getEffectivePaperColor(activePage);
+        ctx.save();
+        ctx.strokeStyle = paperBg;
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        ctx.moveTo(swX, swYTop + 2);
+        ctx.lineTo(swX, swYBot - 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw proposed dashed wire spans
         for (const sp of prop.spans) {
           if (sp.existingStrokeId) {
-            if (sp.id === 'v-left') {
-              const paperBg = getEffectivePaperColor(activePage);
-              ctx.save();
-              ctx.strokeStyle = paperBg;
-              ctx.lineWidth = 10;
-              ctx.lineCap = 'butt';
-              ctx.beginPath();
-              ctx.moveTo(swX, swYTop + 2);
-              ctx.lineTo(swX, swYBot - 2);
-              ctx.stroke();
-              ctx.restore();
-            }
             continue;
           }
           const c = evalCircuitProposalSpan(prop, sp);
@@ -60627,6 +60657,11 @@ export default function App() {
                                                       ? p
                                                       : {
                                                           ...p,
+                                                          circuitSims: (p.circuitSims || []).map((cs) =>
+                                                            cs.id === p.activeCircuitSimId
+                                                              ? { ...cs, switchClosed: simCircuitSwitchClosed }
+                                                              : cs
+                                                          ),
                                                           activeCircuitSimId: sim.id,
                                                         }
                                                   ),
