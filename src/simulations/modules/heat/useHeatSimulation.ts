@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { NotePage, StrokeObject } from '../../../types/note';
 import {
   HeatSimConfig,
@@ -11,6 +11,7 @@ import { recognizeHeatSketch, createHeatObjectFromRecognition } from './HeatSket
 
 export interface UseHeatSimulationReturn {
   activeHeatSim: HeatSimConfig | null;
+  getLiveSim: () => HeatSimConfig | null;
   editingContainer: HeatObject | null;
   setEditingContainer: (c: HeatObject | null) => void;
   ensureActiveHeatSim: (page: NotePage) => HeatSimConfig;
@@ -48,6 +49,51 @@ export function useHeatSimulation(
     (s: HeatSimConfig) => s.id === activePage.activeHeatSimId
   ) || activePage?.heatSims?.[0] || null;
 
+  // In-memory live simulation state ref for smooth 60fps canvas rendering without React re-render thrashing
+  const liveSimRef = useRef<HeatSimConfig | null>(null);
+  const lastStateSyncTimeRef = useRef<number>(0);
+
+  // Keep liveSimRef synced when activeHeatSim changes from page or user actions
+  useEffect(() => {
+    if (activeHeatSim) {
+      if (!liveSimRef.current || liveSimRef.current.id !== activeHeatSim.id) {
+        liveSimRef.current = JSON.parse(JSON.stringify(activeHeatSim));
+      } else {
+        liveSimRef.current.name = activeHeatSim.name;
+        liveSimRef.current.isRunning = activeHeatSim.isRunning;
+        liveSimRef.current.graph = activeHeatSim.graph;
+        liveSimRef.current.selectedObjectId = activeHeatSim.selectedObjectId;
+        // Sync object positions and states
+        for (const o of activeHeatSim.objects) {
+          const live = liveSimRef.current.objects.find((x) => x.id === o.id);
+          if (live) {
+            live.x = o.x;
+            live.y = o.y;
+            live.width = o.width;
+            live.height = o.height;
+            if (!liveSimRef.current.isRunning) {
+              if (o.burnerState) live.burnerState = o.burnerState;
+              if (o.containerState) live.containerState = o.containerState;
+              if (o.thermometerState) live.thermometerState = o.thermometerState;
+              if (o.tripodState) live.tripodState = o.tripodState;
+            }
+          } else {
+            liveSimRef.current.objects.push(JSON.parse(JSON.stringify(o)));
+          }
+        }
+        liveSimRef.current.objects = liveSimRef.current.objects.filter((lo) =>
+          activeHeatSim.objects.some((o) => o.id === lo.id)
+        );
+      }
+    } else {
+      liveSimRef.current = null;
+    }
+  }, [activeHeatSim]);
+
+  const getLiveSim = useCallback((): HeatSimConfig | null => {
+    return liveSimRef.current || activeHeatSim;
+  }, [activeHeatSim]);
+
   // Dragging state
   const dragRef = useRef<{
     objectId: string;
@@ -69,6 +115,7 @@ export function useHeatSimulation(
         if (!activeId || curSims.length === 0) {
           const freshSim = createDefaultHeatSim(320, 380);
           const updated = updater(freshSim);
+          liveSimRef.current = JSON.parse(JSON.stringify(updated));
           return {
             ...page,
             heatSims: [updated],
@@ -77,6 +124,10 @@ export function useHeatSimulation(
         }
 
         const nextSims = curSims.map((s: HeatSimConfig) => (s.id === activeId ? updater(s) : s));
+        const matched = nextSims.find((s) => s.id === activeId);
+        if (matched) {
+          liveSimRef.current = JSON.parse(JSON.stringify(matched));
+        }
         return {
           ...page,
           heatSims: nextSims,
@@ -90,9 +141,11 @@ export function useHeatSimulation(
     (page: NotePage): HeatSimConfig => {
       if (page.heatSims && page.heatSims.length > 0) {
         const found = page.heatSims.find((s: HeatSimConfig) => s.id === page.activeHeatSimId) || page.heatSims[0];
+        liveSimRef.current = JSON.parse(JSON.stringify(found));
         return found;
       }
       const newSim = createDefaultHeatSim(280, 360);
+      liveSimRef.current = JSON.parse(JSON.stringify(newSim));
       updatePage((p: NotePage) => ({
         ...p,
         heatSims: [newSim],
@@ -129,8 +182,11 @@ export function useHeatSimulation(
             objects: [...targetSim.objects, newObj],
             selectedObjectId: newObj.id,
           };
-          nextSims = curSims.map((s: HeatSimConfig) => (s.id === finalActiveId ? targetSim! : s));
+          nextSims = curSims.map((s: HeatSimConfig) => (s.id === targetSim!.id ? targetSim! : s));
+          finalActiveId = targetSim.id;
         }
+
+        liveSimRef.current = JSON.parse(JSON.stringify(targetSim));
 
         return {
           ...page,
@@ -168,70 +224,85 @@ export function useHeatSimulation(
   );
 
   const toggleRun = useCallback(() => {
-    updateActiveHeatSim((prev: HeatSimConfig) => ({
-      ...prev,
-      isRunning: !prev.isRunning,
-    }));
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const cur = liveSimRef.current || prev;
+      const next = {
+        ...cur,
+        isRunning: !cur.isRunning,
+      };
+      liveSimRef.current = next;
+      return next;
+    });
   }, [updateActiveHeatSim]);
 
   const resetSim = useCallback(() => {
-    updateActiveHeatSim((prev: HeatSimConfig) => ({
-      ...prev,
-      elapsedSec: 0,
-      history: [],
-      objects: prev.objects.map((obj: HeatObject) => {
-        if (obj.containerState) {
-          return {
-            ...obj,
-            containerState: {
-              ...obj.containerState,
-              temperature: obj.containerState.initialTemp || 20,
-              isBoiling: false,
-              boilingIntensity: 0,
-            },
-          };
-        }
-        if (obj.thermometerState) {
-          return {
-            ...obj,
-            thermometerState: {
-              ...obj.thermometerState,
-              temperature: 20,
-            },
-          };
-        }
-        if (obj.tripodState) {
-          return {
-            ...obj,
-            tripodState: {
-              ...obj.tripodState,
-              wireGauzeTemp: 20,
-            },
-          };
-        }
-        return obj;
-      }),
-    }));
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const next = {
+        ...prev,
+        elapsedSec: 0,
+        history: [],
+        objects: prev.objects.map((obj: HeatObject) => {
+          if (obj.containerState) {
+            return {
+              ...obj,
+              containerState: {
+                ...obj.containerState,
+                temperature: obj.containerState.initialTemp || 20,
+                isBoiling: false,
+                boilingIntensity: 0,
+              },
+            };
+          }
+          if (obj.thermometerState) {
+            return {
+              ...obj,
+              thermometerState: {
+                ...obj.thermometerState,
+                temperature: 20,
+              },
+            };
+          }
+          if (obj.tripodState) {
+            return {
+              ...obj,
+              tripodState: {
+                ...obj.tripodState,
+                wireGauzeTemp: 20,
+              },
+            };
+          }
+          return obj;
+        }),
+      };
+      liveSimRef.current = next;
+      return next;
+    });
   }, [updateActiveHeatSim]);
 
   const toggleGraph = useCallback(() => {
-    updateActiveHeatSim((prev: HeatSimConfig) => ({
-      ...prev,
-      graph: {
-        ...prev.graph,
-        visible: !prev.graph.visible,
-      },
-    }));
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const cur = liveSimRef.current || prev;
+      const next = {
+        ...cur,
+        graph: {
+          ...cur.graph,
+          visible: !cur.graph.visible,
+        },
+      };
+      liveSimRef.current = next;
+      return next;
+    });
   }, [updateActiveHeatSim]);
 
   // Pointer interactions on canvas (clicking pencil, toggling burner, dragging objects)
   const handlePointerDown = useCallback(
     (_e: React.PointerEvent | PointerEvent, lx: number, ly: number): boolean => {
-      if (!activeHeatSim) return false;
+      const sim = liveSimRef.current || activeHeatSim;
+      if (!sim) return false;
 
       // 1. Check Graph window hit
-      if (activeHeatSim.graph.visible) {
-        const g = activeHeatSim.graph;
+      if (sim.graph.visible) {
+        const g = sim.graph;
         // Check resize handle
         if (
           lx >= g.x + g.width - 24 &&
@@ -268,7 +339,7 @@ export function useHeatSimulation(
       }
 
       // 2. Check objects in reverse z-order (topmost first)
-      const reversed = [...activeHeatSim.objects].reverse();
+      const reversed = [...sim.objects].reverse();
 
       for (const obj of reversed) {
         const inside =
@@ -295,20 +366,25 @@ export function useHeatSimulation(
           const btnX = obj.x + obj.width / 2;
           const btnY = obj.y + obj.height - 10;
           if (Math.abs(lx - btnX) <= 32 && Math.abs(ly - btnY) <= 16) {
-            updateActiveHeatSim((prev: HeatSimConfig) => ({
-              ...prev,
-              objects: prev.objects.map((o: HeatObject) =>
-                o.id === obj.id
-                  ? {
-                      ...o,
-                      burnerState: {
-                        ...o.burnerState!,
-                        isOn: !o.burnerState?.isOn,
-                      },
-                    }
-                  : o
-              ),
-            }));
+            updateActiveHeatSim((prev: HeatSimConfig) => {
+              const cur = liveSimRef.current || prev;
+              const next = {
+                ...cur,
+                objects: cur.objects.map((o: HeatObject) =>
+                  o.id === obj.id
+                    ? {
+                        ...o,
+                        burnerState: {
+                          ...o.burnerState!,
+                          isOn: !o.burnerState?.isOn,
+                        },
+                      }
+                    : o
+                ),
+              };
+              liveSimRef.current = next;
+              return next;
+            });
             return true;
           }
         }
@@ -322,10 +398,15 @@ export function useHeatSimulation(
           origObjY: obj.y,
         };
 
-        updateActiveHeatSim((prev: HeatSimConfig) => ({
-          ...prev,
-          selectedObjectId: obj.id,
-        }));
+        updateActiveHeatSim((prev: HeatSimConfig) => {
+          const cur = liveSimRef.current || prev;
+          const next = {
+            ...cur,
+            selectedObjectId: obj.id,
+          };
+          liveSimRef.current = next;
+          return next;
+        });
         return true;
       }
 
@@ -337,7 +418,8 @@ export function useHeatSimulation(
   const handlePointerMove = useCallback(
     (lx: number, ly: number): boolean => {
       const drag = dragRef.current;
-      if (!drag || !activeHeatSim) return false;
+      const sim = liveSimRef.current || activeHeatSim;
+      if (!drag || !sim) return false;
 
       const dx = lx - drag.startX;
       const dy = ly - drag.startY;
@@ -346,150 +428,77 @@ export function useHeatSimulation(
         if (drag.isGraphResize) {
           const nextW = Math.max(220, (drag.origGraphW || 290) + dx);
           const nextH = Math.max(160, (drag.origGraphH || 200) + dy);
-          updateActiveHeatSim((prev: HeatSimConfig) => ({
-            ...prev,
-            graph: {
-              ...prev.graph,
-              width: nextW,
-              height: nextH,
-              customMoved: true,
-            },
-          }));
+          if (liveSimRef.current) {
+            liveSimRef.current.graph.width = nextW;
+            liveSimRef.current.graph.height = nextH;
+            liveSimRef.current.graph.customMoved = true;
+          }
         } else {
-          updateActiveHeatSim((prev: HeatSimConfig) => ({
-            ...prev,
-            graph: {
-              ...prev.graph,
-              x: drag.origObjX + dx,
-              y: drag.origObjY + dy,
-              customMoved: true,
-            },
-          }));
+          if (liveSimRef.current) {
+            liveSimRef.current.graph.x = drag.origObjX + dx;
+            liveSimRef.current.graph.y = drag.origObjY + dy;
+            liveSimRef.current.graph.customMoved = true;
+          }
         }
         return true;
       }
 
-      // Dragging a laboratory object
-      let nextX = drag.origObjX + dx;
-      let nextY = drag.origObjY + dy;
-
-      // Smart Snapping Logic:
-      const movingObj = activeHeatSim.objects.find((o: HeatObject) => o.id === drag.objectId);
-      if (movingObj) {
-        // A. Burner snapping under Tripod
-        if (movingObj.type === 'burner') {
-          const tripod = activeHeatSim.objects.find((o: HeatObject) => o.type === 'tripod');
-          if (tripod) {
-            const targetX = tripod.x + tripod.width / 2 - movingObj.width / 2;
-            const targetY = tripod.y + tripod.height - movingObj.height * 0.45;
-            if (Math.hypot(nextX - targetX, nextY - targetY) < 36) {
-              nextX = targetX;
-              nextY = targetY;
-            }
-          }
-        }
-
-        // B. Beaker / Flask snapping on top of Tripod
-        if (movingObj.type === 'beaker' || movingObj.type === 'flask') {
-          const tripod = activeHeatSim.objects.find((o: HeatObject) => o.type === 'tripod');
-          if (tripod) {
-            const targetX = tripod.x + tripod.width / 2 - movingObj.width / 2;
-            const targetY = tripod.y - movingObj.height + 6;
-            if (Math.hypot(nextX - targetX, nextY - targetY) < 38) {
-              nextX = targetX;
-              nextY = targetY;
-            }
-          }
-
-          // C. Beaker / Flask snapping inside Wide Basin (Water Bath / Υδατόλουτρο)
-          const basin = activeHeatSim.objects.find((o: HeatObject) => o.type === 'wide-basin');
-          if (basin && basin.id !== movingObj.id) {
-            const targetX = basin.x + basin.width / 2 - movingObj.width / 2;
-            const targetY = basin.y + basin.height - movingObj.height - 4;
-            if (Math.hypot(nextX - targetX, nextY - targetY) < 42) {
-              nextX = targetX;
-              nextY = targetY;
-            }
-          }
-        }
-
-        // D. Thermometer dipping inside any Container
-        if (movingObj.type === 'thermometer') {
-          const container = activeHeatSim.objects.find(
-            (o: HeatObject) => o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin'
-          );
-          if (container) {
-            const targetX = container.x + container.width * 0.45;
-            const targetY = container.y + container.height * 0.2;
-            if (Math.hypot(nextX - targetX, nextY - targetY) < 45) {
-              nextX = targetX;
-              nextY = targetY;
-            }
-          }
+      // Dragging an object: update in liveSimRef immediately for smooth 60fps response
+      if (liveSimRef.current) {
+        const obj = liveSimRef.current.objects.find((o) => o.id === drag.objectId);
+        if (obj) {
+          obj.x = drag.origObjX + dx;
+          obj.y = drag.origObjY + dy;
         }
       }
-
-      updateActiveHeatSim((prev: HeatSimConfig) => ({
-        ...prev,
-        objects: prev.objects.map((o: HeatObject) =>
-          o.id === drag.objectId ? { ...o, x: nextX, y: nextY } : o
-        ),
-      }));
-
       return true;
     },
-    [activeHeatSim, updateActiveHeatSim]
+    [activeHeatSim]
   );
 
   const handlePointerUp = useCallback((): boolean => {
-    if (dragRef.current) {
-      dragRef.current = null;
-      return true;
+    if (!dragRef.current) return false;
+    dragRef.current = null;
+    // Persist final position to note page
+    if (liveSimRef.current) {
+      updateActiveHeatSim(() => liveSimRef.current!);
     }
-    return false;
-  }, []);
+    return true;
+  }, [updateActiveHeatSim]);
 
-  // Converts hand-drawn strokes to heat lab object
+  // Recognition from Lasso selection
   const handleConvertLassoSketch = useCallback(
     (selectedStrokeIds: string[], strokes: StrokeObject[]): boolean => {
-      const selectedStrokes = strokes.filter((s: StrokeObject) => selectedStrokeIds.includes(s.id));
-      if (selectedStrokes.length === 0) return false;
+      const selected = strokes.filter((s) => selectedStrokeIds.includes(s.id));
+      if (selected.length === 0) return false;
 
-      const recognition = recognizeHeatSketch(selectedStrokes);
-      if (!recognition) return false;
+      const rec = recognizeHeatSketch(selected);
+      if (!rec) return false;
 
-      const newObj = createHeatObjectFromRecognition(
-        recognition.type,
-        recognition.bounds,
-        `-${Date.now()}`
-      );
+      const newObj = createHeatObjectFromRecognition(rec.type, rec.bounds, `-${Date.now()}`);
 
-      // Add to active heat sim (or create one if none exists)
       updatePage((page: NotePage) => {
         const curSims = page.heatSims || [];
         const activeId = page.activeHeatSimId || curSims[0]?.id;
+        const targetSim = curSims.find((s: HeatSimConfig) => s.id === activeId);
 
-        if (activeId && curSims.length > 0) {
+        if (targetSim) {
+          const updated: HeatSimConfig = {
+            ...targetSim,
+            objects: [...targetSim.objects, newObj],
+            selectedObjectId: newObj.id,
+          };
+          liveSimRef.current = JSON.parse(JSON.stringify(updated));
           return {
             ...page,
-            // Remove the hand-drawn strokes from the page
             strokes: page.strokes.filter((s: StrokeObject) => !selectedStrokeIds.includes(s.id)),
-            heatSims: curSims.map((s: HeatSimConfig) =>
-              s.id === activeId
-                ? {
-                    ...s,
-                    objects: [...s.objects, newObj],
-                    selectedObjectId: newObj.id,
-                  }
-                : s
-            ),
+            heatSims: curSims.map((s: HeatSimConfig) => (s.id === activeId ? updated : s)),
           };
         } else {
-          const freshSim = createDefaultHeatSim(
-            recognition.bounds.minX - 40,
-            recognition.bounds.minY - 20
-          );
+          const freshSim = createDefaultHeatSim(rec.bounds.minX, rec.bounds.minY);
           freshSim.objects = [newObj];
+          freshSim.selectedObjectId = newObj.id;
+          liveSimRef.current = JSON.parse(JSON.stringify(freshSim));
           return {
             ...page,
             strokes: page.strokes.filter((s: StrokeObject) => !selectedStrokeIds.includes(s.id)),
@@ -504,17 +513,27 @@ export function useHeatSimulation(
     [updatePage]
   );
 
-  // Advances physics frame
+  // Advances physics frame at 60fps in memory, throttling page state sync
   const stepPhysicsFrame = useCallback(
     (dt: number) => {
-      if (!activeHeatSim || !activeHeatSim.isRunning) return;
-      updateActiveHeatSim((prev: HeatSimConfig) => stepHeatSimulation(prev, dt));
+      const cur = liveSimRef.current || activeHeatSim;
+      if (!cur || !cur.isRunning) return;
+      const next = stepHeatSimulation(cur, dt);
+      liveSimRef.current = next;
+
+      // Throttle persistent sync to activePage (every 1.5 seconds) so React does not re-render at 60fps
+      const now = performance.now();
+      if (now - lastStateSyncTimeRef.current > 1500) {
+        lastStateSyncTimeRef.current = now;
+        updateActiveHeatSim(() => next);
+      }
     },
     [activeHeatSim, updateActiveHeatSim]
   );
 
   return {
     activeHeatSim,
+    getLiveSim,
     editingContainer,
     setEditingContainer,
     ensureActiveHeatSim,

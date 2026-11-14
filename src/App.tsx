@@ -12586,6 +12586,14 @@ export default function App() {
         ctx.stroke();
         ctx.restore();
       }
+
+      // 7. Heat & Thermodynamics Simulation for non-active pages or when overlay is idle
+      if (!isCurrentActivePage && pageObj.heatSims && pageObj.heatSims.length > 0) {
+        const isDark = isDarkPaperColor(getEffectivePaperColor(pageObj));
+        for (const hSim of pageObj.heatSims) {
+          renderHeatSimulation(ctx, hSim, { isDark });
+        }
+      }
     });
   }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm]);
   renderStaticSceneRef.current = renderStaticScene;
@@ -32538,6 +32546,23 @@ export default function App() {
         atomOverlayHitRef.current = null;
       }
 
+      // 5. Heat & Thermodynamics Simulation Overlay (Active in ALL simulation modes!)
+      if (activePage.heatSims && activePage.heatSims.length > 0) {
+        const isDarkPaper = isDarkPaperColor(getEffectivePaperColor(activePage));
+        for (const hSim of activePage.heatSims) {
+          const liveSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim;
+          renderHeatSimulation(ctx, liveSim || hSim, { isDark: isDarkPaper });
+        }
+
+        if (heatSimLastFrameRef.current !== null) {
+          const hDt = Math.max(0.001, Math.min(0.05, (now - heatSimLastFrameRef.current) / 1000));
+          heatSim.stepPhysicsFrame(hDt);
+        }
+        heatSimLastFrameRef.current = now;
+      } else {
+        heatSimLastFrameRef.current = null;
+      }
+
       // 7. LIVE PDF MODE: Subtle Interactive Border & Play/Stop Pill ONLY around Animated Simulations!
       if (isLivePdfMode) {
         const nextLiveBtns: typeof livePdfSimButtonsRef.current = [];
@@ -32728,20 +32753,35 @@ export default function App() {
           }
         }
 
-        // 5. Heat & Thermodynamics Simulation Overlay
-        if (activePage.heatSims && activePage.heatSims.length > 0) {
-          const isDarkPaper = isDarkPaperColor(getEffectivePaperColor(activePage));
-          for (const hSim of activePage.heatSims) {
-            renderHeatSimulation(ctx, hSim, { isDark: isDarkPaper });
+        // 7e. Heat & Thermodynamics Simulation Frame in Live PDF Mode
+        for (const hSim of pageHeatSims) {
+          if (hSim.objects.length > 0) {
+            let minHX = Infinity, maxHX = -Infinity, minHY = Infinity, maxHY = -Infinity;
+            for (const obj of hSim.objects) {
+              if (obj.x < minHX) minHX = obj.x;
+              if (obj.x + obj.width > maxHX) maxHX = obj.x + obj.width;
+              if (obj.y < minHY) minHY = obj.y;
+              if (obj.y + obj.height > maxHY) maxHY = obj.y + obj.height;
+            }
+            if (hSim.graph && hSim.graph.visible) {
+              if (hSim.graph.x < minHX) minHX = hSim.graph.x;
+              if (hSim.graph.x + hSim.graph.width > maxHX) maxHX = hSim.graph.x + hSim.graph.width;
+              if (hSim.graph.y < minHY) minHY = hSim.graph.y;
+              if (hSim.graph.y + hSim.graph.height > maxHY) maxHY = hSim.graph.y + hSim.graph.height;
+            }
+            if (Number.isFinite(minHX)) {
+              drawLiveSimFrame(
+                minHX - 16,
+                minHY - 16,
+                maxHX - minHX + 32,
+                maxHY - minHY + 32,
+                '🔥 Θερμότητα & Θερμοδυναμική',
+                hSim.isRunning,
+                'force-play',
+                hSim.id
+              );
+            }
           }
-
-          if (heatSimLastFrameRef.current !== null) {
-            const hDt = Math.max(0.001, Math.min(0.1, (now - heatSimLastFrameRef.current) / 1000));
-            heatSim.stepPhysicsFrame(hDt);
-          }
-          heatSimLastFrameRef.current = now;
-        } else {
-          heatSimLastFrameRef.current = null;
         }
 
         livePdfSimButtonsRef.current = nextLiveBtns;
@@ -62976,15 +63016,27 @@ export default function App() {
                     onReset={heatSim.resetSim}
                     onToggleGraph={heatSim.toggleGraph}
                     onAddObject={(type) => {
-                      const ws = workspaceRef.current;
-                      const curZoom = zoomRef.current || 1;
-                      const curPan = panRef.current || { x: 0, y: 0 };
-                      const targetX = ws ? (ws.clientWidth / 2 - curPan.x) / curZoom : 360;
-                      const targetY = ws ? (ws.clientHeight / 2 - curPan.y) / curZoom : 420;
-                      heatSim.handleAddObject(type, targetX, targetY);
+                      let spawnX = 340;
+                      let spawnY = 400;
+                      if (activeCanvasRef.current) {
+                        try {
+                          const pt = getCanvasPointFromNative(window.innerWidth / 2, window.innerHeight / 2);
+                          if (Number.isFinite(pt.x) && Number.isFinite(pt.y)) {
+                            const pW = getPageLogicalWidth(activePage);
+                            const pH = getPageLogicalHeight(activePage);
+                            spawnX = Math.max(90, Math.min(pW - 90, pt.x));
+                            spawnY = Math.max(110, Math.min(pH - 110, pt.y));
+                          }
+                        } catch {
+                          spawnX = 340;
+                          spawnY = 400;
+                        }
+                      }
+                      heatSim.handleAddObject(type, spawnX, spawnY);
                       setShapePreset(type);
                       setActiveTool('shape');
-                      showToast('✨ Προστέθηκε & ενεργοποιήθηκε για σχεδίαση στο χαρτί!');
+                      renderStaticSceneRef.current?.();
+                      showToast('✨ Προστέθηκε στο χαρτί!');
                     }}
                     selectedStrokeIdsCount={selectedStrokeIds.length}
                     onConvertLassoSketch={() => {
