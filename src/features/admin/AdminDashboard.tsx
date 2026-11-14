@@ -263,7 +263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
                     <Sparkles className="w-5 h-5 text-[#1b2a4a]" />
                   </div>
-                  <span>Χρήση AI OCR & Δωρεάν Όριο Gemini</span>
+                  <span>Χρήση AI (OCR & Ζωντάνεμα) & Δωρεάν Όριο Gemini</span>
                 </>
               )}
               {currentTab === 'users' && (

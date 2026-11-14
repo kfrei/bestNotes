@@ -4782,6 +4782,10 @@ export default function App() {
         showToast('✨ Ανάλυση χειρόγραφων, εικόνων & κειμένου για αυτόματη εξαγωγή 4 βασικών #tags...');
       }
       try {
+        void recordOcrUsage('text', {
+          isGuest: !currentUser,
+          isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+        });
         const aiTags = await generateSmartGreekTagsFromImages(
           targetNb.title,
           uniqueUrls,
@@ -48883,7 +48887,10 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει Κείμενο OCR!');
       return;
     }
-    void recordOcrUsage('text');
+    void recordOcrUsage('text', {
+      isGuest: !currentUser,
+      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+    });
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49047,7 +49054,10 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
-    void recordOcrUsage('math');
+    void recordOcrUsage('math', {
+      isGuest: !currentUser,
+      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+    });
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -49241,7 +49251,10 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική αντίδραση (π.χ. C + O2 -> CO2)!');
       return;
     }
-    void recordOcrUsage('chem');
+    void recordOcrUsage('chem', {
+      isGuest: !currentUser,
+      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+    });
 
     let minX = Infinity;
     let minY = Infinity;
@@ -49444,6 +49457,10 @@ export default function App() {
         );
         // Αν η εξίσωση είναι σύνθετη (π.χ. Οξειδοαναγωγή ή Οργανική Χημεία) και δεν βρέθηκε τοπική διόρθωση, ρώτα το Gemini AI!
         if (rawUserStr.includes('->') || rawUserStr.includes('→') || rawUserStr.includes('+')) {
+          void recordOcrUsage('chem', {
+            isGuest: !currentUser,
+            isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+          });
           void analyzeTypedChemistryWithGemini(rawUserStr).then((aiRes) => {
             const aiCorr = aiRes?.correctedEquation?.trim();
             if (!aiCorr) return;
@@ -49515,7 +49532,10 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική ένωση (π.χ. H2O, CH4, CO2, NH3)!');
       return;
     }
-    void recordOcrUsage('chem');
+    void recordOcrUsage('chem', {
+      isGuest: !currentUser,
+      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+    });
 
     let minX = Infinity;
     let minY = Infinity;
@@ -50011,7 +50031,10 @@ export default function App() {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
       return;
     }
-    void recordOcrUsage('math');
+    void recordOcrUsage('math', {
+      isGuest: !currentUser,
+      isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+    });
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
     // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
@@ -51425,6 +51448,10 @@ export default function App() {
     });
 
     if (!existingSpec) {
+      void recordOcrUsage('anim', {
+        isGuest: !currentUser,
+        isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+      });
       const analyzed = await analyzeImageForSmartSketchAnimation(snapshotUrl, customGeminiKey);
       if (analyzed) {
         setAiAnimateModal((prev) =>
@@ -68477,6 +68504,10 @@ export default function App() {
                     disabled={aiAnimateModal.isAnalyzing}
                     onClick={async () => {
                       setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
+                      void recordOcrUsage('anim', {
+                        isGuest: !currentUser,
+                        isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+                      });
                       const re = await analyzeImageForSmartSketchAnimation(
                         aiAnimateModal.snapshotDataUrl,
                         customGeminiKey,
@@ -68537,6 +68568,10 @@ export default function App() {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
+                        void recordOcrUsage('anim', {
+                          isGuest: !currentUser,
+                          isAdmin: currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(),
+                        });
                         const re = await analyzeImageForSmartSketchAnimation(
                           aiAnimateModal.snapshotDataUrl,
                           customGeminiKey,

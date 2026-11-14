@@ -20,6 +20,8 @@ export interface UserProfileStats {
 
 export type AdminTab = 'overview' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
 
+export type AiActionKind = 'text' | 'math' | 'chem' | 'anim';
+
 export interface DailyTrafficStats {
   date: string;                 // YYYY-MM-DD
   totalVisits: number;          // Total session visits
@@ -33,7 +35,11 @@ export interface DailyTrafficStats {
   ocrTextCount?: number;        // Handwriting Greek text OCR calls
   ocrMathCount?: number;        // Math & Equation / LaTeX OCR calls
   ocrChemCount?: number;        // Chemistry & Molecule OCR calls
-  ocrTotalCount?: number;       // Total AI OCR calls today
+  ocrAnimCount?: number;        // Smart Sketch Animation (Ζωντάνεμα) & Video AI calls
+  ocrAdminCount?: number;       // AI calls initiated by Admin (freiderikoskostas@gmail.com)
+  ocrOtherUsersCount?: number;  // AI calls initiated by other registered users
+  ocrGuestCount?: number;       // AI calls initiated by guest visitors
+  ocrTotalCount?: number;       // Total AI OCR & Animation calls today
   updatedAt: string;            // ISO timestamp
 }
 
@@ -45,10 +51,16 @@ export interface DailyOcrMetrics {
   todayText: number;
   todayMath: number;
   todayChem: number;
+  todayAnim: number;
+  todayAdmin: number;
+  todayOthers: number;
   dailyQuotaLimit: number;
   quotaUsedPercent: number;
   quotaRemaining: number;
   allTimeOcrTotal: number;
+  allTimeAdminTotal: number;
+  allTimeOthersTotal: number;
+  allTimeAnimTotal: number;
 }
 
 export interface AdminAggregateMetrics {

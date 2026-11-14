@@ -37,7 +37,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
     {
       id: 'ocr',
-      label: 'AI OCR & Quota',
+      label: 'AI & Ανάλυση Quota',
       icon: <Sparkles className="w-5 h-5" />,
     },
     {

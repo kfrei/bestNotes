@@ -83,6 +83,10 @@ rules_version = '2';
 //   - ocrTextCount: number (optional, >= 0) - handwriting Greek text OCR calls
 //   - ocrMathCount: number (optional, >= 0) - math & equation / LaTeX OCR calls
 //   - ocrChemCount: number (optional, >= 0) - chemistry & molecule OCR calls
+//   - ocrAnimCount: number (optional, >= 0) - Smart Sketch Animation / Ζωντάνεμα AI calls
+//   - ocrAdminCount: number (optional, >= 0) - AI requests initiated by the Admin
+//   - ocrOtherUsersCount: number (optional, >= 0) - AI requests initiated by other registered users
+//   - ocrGuestCount: number (optional, >= 0) - AI requests initiated by guest visitors
 //   - ocrTotalCount: number (optional, >= 0) - total AI OCR calls count
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of metric update
 //
@@ -289,6 +293,10 @@ service cloud.firestore {
           'ocrTextCount',
           'ocrMathCount',
           'ocrChemCount',
+          'ocrAnimCount',
+          'ocrAdminCount',
+          'ocrOtherUsersCount',
+          'ocrGuestCount',
           'ocrTotalCount',
           'updatedAt'
         ]) &&
@@ -307,6 +315,10 @@ service cloud.firestore {
         isValidOptionalNumber('ocrTextCount') &&
         isValidOptionalNumber('ocrMathCount') &&
         isValidOptionalNumber('ocrChemCount') &&
+        isValidOptionalNumber('ocrAnimCount') &&
+        isValidOptionalNumber('ocrAdminCount') &&
+        isValidOptionalNumber('ocrOtherUsersCount') &&
+        isValidOptionalNumber('ocrGuestCount') &&
         isValidOptionalNumber('ocrTotalCount');
     }
 

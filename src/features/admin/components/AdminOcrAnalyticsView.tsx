@@ -6,11 +6,12 @@ import {
   FlaskConical,
   FileText,
   Download,
-  Info,
   Calendar,
   Layers,
   CheckCircle2,
-  AlertTriangle,
+  Clapperboard,
+  ShieldCheck,
+  Users,
 } from 'lucide-react';
 import type { DailyTrafficStats } from '../types';
 import {
@@ -34,15 +35,21 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
     t.date.toLowerCase().includes(searchDate.toLowerCase())
   );
 
-  // Maximum OCR total across recent days for proportional histogram height
+  // Maximum AI total across recent days for proportional histogram height
   const maxOcrInChart = Math.max(
     1,
     ...traffic.slice(0, 14).map((t) => t.ocrTotalCount || 0)
   );
 
-  // Status color based on quota consumption
-  const isSafeQuota = ocrMetrics.quotaUsedPercent < 65;
-  const isModerateQuota = ocrMetrics.quotaUsedPercent >= 65 && ocrMetrics.quotaUsedPercent < 85;
+  // Admin vs Others proportions today
+  const adminTodayPct =
+    ocrMetrics.todayTotal > 0
+      ? Math.round((ocrMetrics.todayAdmin / ocrMetrics.todayTotal) * 100)
+      : 0;
+  const othersTodayPct =
+    ocrMetrics.todayTotal > 0
+      ? 100 - adminTodayPct
+      : 0;
 
   return (
     <div className="space-y-6">
@@ -51,10 +58,10 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         <div>
           <h2 className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-[#1b2a4a]" />
-            <span>Ανάλυση AI OCR & Κατανάλωση Δωρεάν Ορίου Gemini</span>
+            <span>Ανάλυση AI & Κατανάλωση Δωρεάν Ορίου Gemini</span>
           </h2>
           <p className="text-xs text-[#64748b]">
-            Καταμέτρηση αναγνωρίσεων κειμένου, μαθηματικών & χημείας και έλεγχος ποσοστού του δωρεάν ορίου Google Gemini (1.500 requests/day)
+            Πλήρης καταμέτρηση OCR (Κείμενο, Μαθηματικά, Χημεία) & Έξυπνου Ζωντανέματος (Smart Sketch) με διαχωρισμό Admin vs Υπολοίπων.
           </p>
         </div>
 
@@ -65,7 +72,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1b2a4a] text-white hover:bg-[#152238] disabled:opacity-40 text-xs font-semibold shadow-xs transition cursor-pointer"
         >
           <Download className="w-4 h-4" />
-          <span>Εξαγωγή CSV OCR</span>
+          <span>Εξαγωγή CSV AI Analytics</span>
         </button>
       </div>
 
@@ -106,7 +113,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         <div className="space-y-1.5 pt-1">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-700">
-              Κατανάλωση Σήμερα: <strong className="text-[#1b2a4a]">{ocrMetrics.todayTotal} αιτήματα OCR</strong>
+              Κατανάλωση Σήμερα: <strong className="text-[#1b2a4a]">{ocrMetrics.todayTotal} αιτήματα AI</strong>
             </span>
             <span className="font-black text-xs text-[#1b2a4a]">
               {ocrMetrics.quotaUsedPercent}% του δωρεάν ορίου
@@ -122,8 +129,85 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Breakdown by OCR Type Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+      {/* 3. Comparative Breakdown: Admin (Εσύ) vs Υπόλοιποι Χρήστες & Guests */}
+      <div className="p-4 rounded-2xl bg-white/75 backdrop-blur-md border border-[#1b2a4a]/15 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#dfd8cb]/60 pb-2.5">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[#1b2a4a]" />
+            <h3 className="text-xs font-bold text-[#1b2a4a]">
+              Κατανομή Κατανάλωσης AI: Εσύ (Admin) vs Υπόλοιποι Χρήστες & Guests
+            </h3>
+          </div>
+          <span className="text-[11px] text-[#64748b]">
+            Σήμερα: {ocrMetrics.todayTotal} αιτήματα | Συνολικά: {ocrMetrics.allTimeOcrTotal}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Admin Card */}
+          <div className="p-3.5 rounded-xl bg-[#eef3f8]/70 border border-[#1b2a4a]/25 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#1b2a4a]">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#1b2a4a]" />
+                <span>Εσύ (Admin - freiderikoskostas@gmail.com)</span>
+              </div>
+              <div className="text-[11px] text-[#64748b]">
+                {ocrMetrics.todayAdmin} αιτήματα σήμερα ({adminTodayPct}% της σημερινής χρήσης)
+              </div>
+              <div className="text-[10px] text-[#64748b]">
+                Σύνολο all-time: <strong className="text-[#1b2a4a]">{ocrMetrics.allTimeAdminTotal}</strong> αιτήματα
+              </div>
+            </div>
+            <div className="text-2xl font-black text-[#1b2a4a] tabular-nums">
+              {ocrMetrics.todayAdmin}
+            </div>
+          </div>
+
+          {/* Others Card */}
+          <div className="p-3.5 rounded-xl bg-white/80 border border-[#dfd8cb] flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                <Users className="w-3.5 h-3.5 text-[#64748b]" />
+                <span>Υπόλοιποι Χρήστες & Guests</span>
+              </div>
+              <div className="text-[11px] text-[#64748b]">
+                {ocrMetrics.todayOthers} αιτήματα σήμερα ({othersTodayPct}% της σημερινής χρήσης)
+              </div>
+              <div className="text-[10px] text-[#64748b]">
+                Σύνολο all-time: <strong className="text-slate-800">{ocrMetrics.allTimeOthersTotal}</strong> αιτήματα
+              </div>
+            </div>
+            <div className="text-2xl font-black text-slate-700 tabular-nums">
+              {ocrMetrics.todayOthers}
+            </div>
+          </div>
+        </div>
+
+        {/* Visual Split Bar */}
+        {ocrMetrics.todayTotal > 0 && (
+          <div className="space-y-1 pt-1">
+            <div className="flex items-center justify-between text-[10px] font-semibold text-[#64748b]">
+              <span>Admin: {adminTodayPct}%</span>
+              <span>Υπόλοιποι: {othersTodayPct}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
+              <div
+                style={{ width: `${adminTodayPct}%` }}
+                className="h-full bg-[#1b2a4a] transition-all"
+                title={`Admin: ${adminTodayPct}%`}
+              />
+              <div
+                style={{ width: `${othersTodayPct}%` }}
+                className="h-full bg-[#7a8a9e] transition-all"
+                title={`Υπόλοιποι: ${othersTodayPct}%`}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. Breakdown by AI Feature (Grid of 5 Cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
             <span>Κείμενο (Text OCR)</span>
@@ -132,23 +216,23 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
           <div className="text-xl font-black text-[#1b2a4a]">
             {ocrMetrics.todayText.toLocaleString()}
           </div>
-          <div className="text-[10px] text-[#64748b] mt-0.5">Ελληνικό χειρόγραφο σήμερα</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">Ελληνικό χειρόγραφο & tags</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
-            <span>Μαθηματικά (Math OCR)</span>
+            <span>Μαθηματικά (Math)</span>
             <Calculator className="w-4 h-4 text-[#1b2a4a]" />
           </div>
           <div className="text-xl font-black text-[#1b2a4a]">
             {ocrMetrics.todayMath.toLocaleString()}
           </div>
-          <div className="text-[10px] text-[#64748b] mt-0.5">Εξισώσεις & LaTeX σήμερα</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">Εξισώσεις & f(x) διαγράμματα</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
-            <span>Χημεία (Chem OCR)</span>
+            <span>Χημεία (Chem)</span>
             <FlaskConical className="w-4 h-4 text-[#1b2a4a]" />
           </div>
           <div className="text-xl font-black text-[#1b2a4a]">
@@ -159,25 +243,36 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
 
         <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
-            <span>Σύνολο Όλων (All-Time)</span>
+            <span>Ζωντάνεμα (Animation)</span>
+            <Clapperboard className="w-4 h-4 text-[#1b2a4a]" />
+          </div>
+          <div className="text-xl font-black text-[#1b2a4a]">
+            {ocrMetrics.todayAnim.toLocaleString()}
+          </div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">Smart Sketch & Physics ήχοι</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white/70 backdrop-blur-md border border-white/80 shadow-xs col-span-2 md:col-span-1">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#64748b] mb-1">
+            <span>Σύνολο AI (All-Time)</span>
             <Sparkles className="w-4 h-4 text-[#1b2a4a]" />
           </div>
           <div className="text-xl font-black text-[#1b2a4a]">
             {ocrMetrics.allTimeOcrTotal.toLocaleString()}
           </div>
-          <div className="text-[10px] text-[#64748b] mt-0.5">όλα τα OCR αιτήματα</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">όλα τα requests AI</div>
         </div>
       </div>
 
-      {/* 4. Daily Stacked Histogram Chart (Last 14 days) */}
+      {/* 5. Daily Stacked Histogram Chart (Last 14 days) */}
       <div className="p-5 rounded-3xl bg-white/75 backdrop-blur-md border border-white/85 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h3 className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
-            <span>Ημερήσιο Ιστόγραμμα OCR ανά Τύπο (Τελευταίες 14 Ημέρες)</span>
+            <span>Ημερήσιο Ιστόγραμμα AI ανά Τύπο (Τελευταίες 14 Ημέρες)</span>
           </h3>
 
-          <div className="flex items-center gap-3 text-[11px] text-[#64748b]">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#64748b]">
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Κείμενο
             </span>
@@ -186,6 +281,9 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#4b6a9a]" /> Χημεία
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#5c4a72]" /> Ζωντάνεμα
             </span>
           </div>
         </div>
@@ -199,20 +297,27 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               const textC = t.ocrTextCount || 0;
               const mathC = t.ocrMathCount || 0;
               const chemC = t.ocrChemCount || 0;
+              const animC = t.ocrAnimCount || 0;
+              const adminC = t.ocrAdminCount || 0;
+              const othersC = Math.max(0, total - adminC);
 
               const totalHeight = total > 0 ? Math.max(10, Math.round((total / maxOcrInChart) * 100)) : 4;
 
               const textPct = total > 0 ? (textC / total) * 100 : 0;
               const mathPct = total > 0 ? (mathC / total) * 100 : 0;
               const chemPct = total > 0 ? (chemC / total) * 100 : 0;
+              const animPct = total > 0 ? (animC / total) * 100 : 0;
 
               return (
                 <div key={t.date} className="flex flex-col items-center gap-1.5 h-full justify-end group">
                   <div
                     style={{ height: `${totalHeight}%` }}
                     className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
-                    title={`${t.date}: ${total} OCR (${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία)`}
+                    title={`${t.date}: ${total} AI (${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC})`}
                   >
+                    {animPct > 0 && (
+                      <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
+                    )}
                     {chemPct > 0 && (
                       <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
                     )}
@@ -232,12 +337,12 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Detailed Daily OCR Table */}
+      {/* 6. Detailed Daily AI & OCR Table */}
       <div className="bg-white/70 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs overflow-hidden">
         <div className="p-3.5 border-b border-[#efebe3] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="text-xs font-bold text-[#1b2a4a] flex items-center gap-2">
             <Layers className="w-4 h-4 text-[#1b2a4a]" />
-            <span>Ημερήσιο Μητρώο OCR ({filteredTraffic.length} ημέρες)</span>
+            <span>Ημερήσιο Μητρώο AI Requests ({filteredTraffic.length} ημέρες)</span>
           </div>
 
           <div className="w-full sm:w-56">
@@ -256,11 +361,14 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             <thead>
               <tr className="bg-[#efebe3]/60 text-[#1b2a4a] font-bold border-b border-[#dfd8cb]">
                 <th className="py-2.5 px-3.5">Ημερομηνία</th>
-                <th className="py-2.5 px-3">Σύνολο OCR</th>
+                <th className="py-2.5 px-3">Σύνολο AI</th>
+                <th className="py-2.5 px-3">Admin (Εσύ)</th>
+                <th className="py-2.5 px-3">Άλλοι / Guests</th>
                 <th className="py-2.5 px-3">Κείμενο</th>
                 <th className="py-2.5 px-3">Μαθηματικά</th>
                 <th className="py-2.5 px-3">Χημεία</th>
-                <th className="py-2.5 px-3">Κατανάλωση Quota (1.500)</th>
+                <th className="py-2.5 px-3">Ζωντάνεμα</th>
+                <th className="py-2.5 px-3">Κατανάλωση Quota</th>
                 <th className="py-2.5 px-3">Υπόλοιπο Δωρεάν</th>
                 <th className="py-2.5 px-3 text-right">Τελευταίο Event</th>
               </tr>
@@ -268,19 +376,21 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             <tbody className="divide-y divide-[#efebe3]">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-xs text-[#64748b]">
-                    Φόρτωση δεδομένων OCR από το Firebase...
+                  <td colSpan={11} className="py-8 text-center text-xs text-[#64748b]">
+                    Φόρτωση δεδομένων AI από το Firebase...
                   </td>
                 </tr>
               ) : filteredTraffic.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-xs text-[#64748b]">
-                    Δεν βρέθηκαν καταγεγραμμένες εγγραφές OCR.
+                  <td colSpan={11} className="py-8 text-center text-xs text-[#64748b]">
+                    Δεν βρέθηκαν καταγεγραμμένες εγγραφές AI.
                   </td>
                 </tr>
               ) : (
                 filteredTraffic.map((t) => {
                   const total = t.ocrTotalCount || 0;
+                  const adminCount = t.ocrAdminCount || 0;
+                  const othersCount = Math.max(0, total - adminCount);
                   const pct = Number(((total / 1500) * 100).toFixed(1));
                   const rem = Math.max(0, 1500 - total);
 
@@ -289,18 +399,33 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                       <td className="py-2.5 px-3.5 font-bold text-[#1b2a4a]">{t.date}</td>
                       <td className="py-2.5 px-3 font-extrabold text-[#1b2a4a]">{total}</td>
                       <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-full bg-[#eef3f8] text-[#1b2a4a] font-semibold text-[11px] border border-[#1b2a4a]/20">
+                        <span className="px-2 py-0.5 rounded-full bg-[#eef3f8] text-[#1b2a4a] font-bold text-[11px] border border-[#1b2a4a]/25">
+                          {adminCount}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[11px] border border-slate-200">
+                          {othersCount}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#1b2a4a]/8 text-[#1b2a4a] font-semibold text-[11px]">
                           {t.ocrTextCount || 0}
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-full bg-[#1b2a4a]/8 text-[#1b2a4a] font-semibold text-[11px] border border-[#1b2a4a]/20">
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#1b2a4a]/8 text-[#1b2a4a] font-semibold text-[11px]">
                           {t.ocrMathCount || 0}
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-full bg-[#1b2a4a]/12 text-[#1b2a4a] font-semibold text-[11px] border border-[#1b2a4a]/20">
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#1b2a4a]/8 text-[#1b2a4a] font-semibold text-[11px]">
                           {t.ocrChemCount || 0}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#5c4a72]/10 text-[#5c4a72] font-semibold text-[11px]">
+                          {t.ocrAnimCount || 0}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 font-semibold">
