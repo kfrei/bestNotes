@@ -339,6 +339,7 @@ export interface ForceSimConfig {
   rodLengthPx?: number; // default 230
   pendulumAngleRad?: number; // default Math.PI / 4
   pendulumMaxAngleRad?: number; // Maximum release angle / amplitude (rad)
+  pendulumInitialAngleRad?: number; // Initial release angle where oscillation started (rad)
   pendulumAngVel?: number; // default 0
   isPaused?: boolean; // default false (swinging)
   showTrajectory?: boolean; // default false

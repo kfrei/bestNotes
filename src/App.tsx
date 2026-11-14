@@ -20056,8 +20056,8 @@ export default function App() {
         false
       );
       triggerForceSimStep(sim.id, 1, undefined, 600);
-    } else if (action === 'toggle-pause') {
-      const nextPaused = !sim.isPaused;
+    } else if (action === 'toggle-pause' || action === 'pause' || action === 'resume') {
+      const nextPaused = action === 'pause' ? true : action === 'resume' ? false : !sim.isPaused;
       const pState = pendulumPhysRef.current[sim.id];
       if (pState) {
         pState.trajectory = [];
@@ -20067,6 +20067,9 @@ export default function App() {
       if (!nextPaused) {
         forceSimAnimRef.current = null;
         setForceSimAnim(null);
+      }
+      if (showStopwatch && sim.mode === 'pendulum') {
+        setStopwatchRunning(!nextPaused);
       }
       // Also sync static rod & bob strokes on pause!
       const curAng = pState ? pState.ang : (sim.pendulumAngleRad ?? Math.PI / 4);
@@ -20122,7 +20125,81 @@ export default function App() {
                   ...s,
                   isPaused: nextPaused,
                   pendulumAngleRad: curAng,
+                  pendulumInitialAngleRad: s.pendulumInitialAngleRad ?? curAng,
                   ...(nextPaused ? {} : { anMode: 'none', step: 0 }),
+                }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'reset-pendulum-initial') {
+      const initAng =
+        sim.pendulumInitialAngleRad ??
+        sim.pendulumMaxAngleRad ??
+        sim.pendulumAngleRad ??
+        Math.PI / 6;
+      const pState = pendulumPhysRef.current[sim.id];
+      if (pState) {
+        pState.ang = initAng;
+        pState.av = 0;
+        pState.lastTime = performance.now();
+        pState.trajectory = [];
+        pState.visitedSteps?.clear();
+      }
+      const px = sim.originX;
+      const py = sim.originY;
+      const rodL = sim.rodLengthPx || 230;
+      const bx = px + rodL * Math.sin(initAng);
+      const by = py + rodL * Math.cos(initAng);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((st) => {
+            if (st.id === sim.primaryStrokeId) {
+              return {
+                ...st,
+                points: [
+                  { x: px, y: py, pressure: 0.7 },
+                  { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                ],
+              };
+            }
+            if (st.id === sim.secondaryStrokeId && st.points.length >= 4) {
+              let minX = Infinity,
+                maxX = -Infinity,
+                minY = Infinity,
+                maxY = -Infinity;
+              for (const pt of st.points) {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+              }
+              const oldCx = (minX + maxX) / 2;
+              const oldCy = (minY + maxY) / 2;
+              const dx = bx - oldCx;
+              const dy = by - oldCy;
+              return {
+                ...st,
+                points: st.points.map((pt) => ({
+                  ...pt,
+                  x: pt.x + dx,
+                  y: pt.y + dy,
+                  ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                  ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                })),
+              };
+            }
+            return st;
+          }),
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  isPaused: true,
+                  pendulumAngleRad: initAng,
+                  pendulumInitialAngleRad: initAng,
                 }
               : s
           ),
@@ -45350,11 +45427,16 @@ export default function App() {
           const absA = Math.abs(curA);
           pState.av = 0;
           pState.lastTime = performance.now();
-          const shouldStayPaused = Boolean(
-            fSim.isPaused || (fSim.anMode && fSim.anMode !== 'none')
-          );
+          // When stopwatch is open, releasing the bob starts oscillation & starts the stopwatch automatically!
+          const shouldStartOscillation =
+            showStopwatch || (!fSim.isPaused && (!fSim.anMode || fSim.anMode === 'none'));
+          const shouldStayPaused = !shouldStartOscillation;
           if (absA > 0.04) {
             pState.maxAngleRad = absA;
+            if (showStopwatch) {
+              setStopwatchElapsedMs(0);
+              setStopwatchRunning(true);
+            }
             updateActivePage(
               (p) => ({
                 ...p,
@@ -45362,8 +45444,9 @@ export default function App() {
                   f.id === fSim.id
                     ? {
                         ...f,
-                        isPaused: shouldStayPaused ? true : false,
+                        isPaused: shouldStayPaused,
                         pendulumAngleRad: curA,
+                        pendulumInitialAngleRad: curA,
                         pendulumMaxAngleRad: absA,
                         angleDeg: Math.round((absA * 180) / Math.PI),
                       }
@@ -45377,6 +45460,10 @@ export default function App() {
             pState.ang = 0;
             pState.av = 0;
             pState.maxAngleRad = 0;
+            if (showStopwatch) {
+              setStopwatchRunning(false);
+              setStopwatchElapsedMs(0);
+            }
             updateActivePage(
               (p) => ({
                 ...p,
@@ -45386,6 +45473,7 @@ export default function App() {
                         ...f,
                         isPaused: true,
                         pendulumAngleRad: 0,
+                        pendulumInitialAngleRad: 0,
                         pendulumMaxAngleRad: 0,
                         angleDeg: 0,
                       }
@@ -63629,7 +63717,14 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => setStopwatchRunning((r) => !r)}
+                      onClick={() => {
+                        const nextRunning = !stopwatchRunning;
+                        setStopwatchRunning(nextRunning);
+                        const activeSim = getActiveForceSim(activePage);
+                        if (activeSim && activeSim.mode === 'pendulum') {
+                          handleForceSimAction(activeSim, nextRunning ? 'resume' : 'pause');
+                        }
+                      }}
                       style={{
                         padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
                         borderRadius: `${Math.round(10 * swScale)}px`,
@@ -63648,6 +63743,10 @@ export default function App() {
                       onClick={() => {
                         setStopwatchRunning(false);
                         setStopwatchElapsedMs(0);
+                        const activeSim = getActiveForceSim(activePage);
+                        if (activeSim && activeSim.mode === 'pendulum') {
+                          handleForceSimAction(activeSim, 'reset-pendulum-initial');
+                        }
                       }}
                       style={{
                         padding: `${Math.round(6 * swScale)}px ${Math.round(8 * swScale)}px`,
