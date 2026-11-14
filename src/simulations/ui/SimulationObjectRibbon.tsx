@@ -27,7 +27,14 @@ export const SimulationObjectRibbon: React.FC<SimulationObjectRibbonProps> = ({
         <span className="text-[10px] text-slate-400 font-medium">← Σύρε για περισσότερα →</span>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 scroll-smooth">
+      <div
+        onWheel={(e) => {
+          if (e.deltaY !== 0 && !e.deltaX) {
+            e.currentTarget.scrollLeft += e.deltaY;
+          }
+        }}
+        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-0.5 scroll-smooth select-none touch-pan-x"
+      >
         {objects.map((obj) => {
           const isSelected = selectedObjectId === obj.id;
           return (
@@ -35,7 +42,7 @@ export const SimulationObjectRibbon: React.FC<SimulationObjectRibbonProps> = ({
               key={obj.id}
               type="button"
               onClick={() => onSelectObject(obj)}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+              className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
                 isSelected
                   ? 'bg-[#234978] border-[#234978] text-white shadow-xs scale-105'
                   : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:scale-102'

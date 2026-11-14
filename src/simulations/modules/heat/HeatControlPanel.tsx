@@ -41,13 +41,13 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   return (
     <div className={`space-y-3 select-none text-[#2c3e50] ${className}`}>
       {/* 1. Quick Controls Toolbar */}
-      <div className="flex items-center justify-between gap-1.5 p-1.5 rounded-2xl bg-white/60 border border-white/80 shadow-2xs">
+      <div className="flex items-center justify-between gap-1.5 p-1.5 rounded-xl bg-white/60 border border-white/80 shadow-2xs">
         <div className="flex items-center gap-1">
           {/* Play / Pause Button */}
           <button
             type="button"
             onClick={onToggleRun}
-            className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
               isRunning
                 ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs'
                 : 'bg-[#234978] hover:bg-[#1a385c] text-white shadow-xs'
@@ -62,7 +62,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
           <button
             type="button"
             onClick={onReset}
-            className="p-1.5 rounded-xl bg-[#efebe3] hover:bg-[#dfd8cb] text-[#475569] hover:text-[#234978] transition cursor-pointer"
+            className="p-1.5 rounded-lg bg-[#efebe3] hover:bg-[#dfd8cb] text-[#475569] hover:text-[#234978] transition cursor-pointer"
             title="Επαναφορά αρχικών θερμοκρασιών & χρονικού άξονα"
           >
             <RotateCcw className="w-4 h-4" />
@@ -73,7 +73,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
         <button
           type="button"
           onClick={onToggleGraph}
-          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
             isGraphVisible
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-white hover:bg-slate-50 text-[#475569] border-[#dfd8cb]'
@@ -86,11 +86,11 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
       </div>
 
       {/* 2. Live Apparatus Status Telemetry */}
-      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-white/45 backdrop-blur-md border border-white/70 shadow-2xs text-[11px]">
+      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-white/45 backdrop-blur-md border border-white/70 shadow-2xs text-[11px]">
         {/* Flame State */}
         <div className="flex items-center gap-2">
           <div
-            className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
               burner?.burnerState?.isOn
                 ? 'bg-amber-100 text-amber-600 animate-pulse'
                 : 'bg-slate-100 text-slate-400'
@@ -108,7 +108,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
 
         {/* Temperature Reading */}
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
             <Droplets className="w-4 h-4" />
           </div>
           <div>
@@ -125,7 +125,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
         <button
           type="button"
           onClick={onConvertLassoSketch}
-          className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-[#234978] to-[#1c3c63] hover:from-[#1c3c63] hover:to-[#152e4d] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
+          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#234978] to-[#1c3c63] hover:from-[#1c3c63] hover:to-[#152e4d] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
           title="Αναγνωρίζει το σκίτσο (καμινέτο, τρίποδας, ποτήρι, θερμόμετρο) και το αντικαθιστά με διαδραστικό εργαστηριακό αντικείμενο"
         >
           <Sparkles className="w-4 h-4 text-amber-300" />
@@ -140,7 +140,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
       />
 
       {/* 5. Educational Tip Card */}
-      <div className="p-2.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-[10.5px] text-amber-900 leading-snug space-y-1">
+      <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[10.5px] text-amber-900 leading-snug space-y-1">
         <p className="font-bold flex items-center gap-1 text-[#234978]">
           <span>💡 Εργαστηριακός Οδηγός:</span>
         </p>

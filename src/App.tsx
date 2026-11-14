@@ -60401,7 +60401,7 @@ export default function App() {
                       e.currentTarget.scrollLeft += e.deltaY;
                     }
                   }}
-                  className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
+                  className="flex items-center gap-1 p-0.5 rounded-xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
                 >
                   <button
                     type="button"
@@ -60416,7 +60416,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60429,7 +60429,7 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60446,7 +60446,7 @@ export default function App() {
                         heatSim.ensureActiveHeatSim(activePage);
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'heat'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60463,7 +60463,7 @@ export default function App() {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'forces'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60480,7 +60480,7 @@ export default function App() {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -61103,7 +61103,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => handleConvertActiveCircuitMode('pictorial')}
-                        className={`px-2 py-2 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                        className={`px-2 py-2 rounded-lg text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
                           detectedMode === 'pictorial'
                             ? 'bg-[#234978] text-white border border-[#234978]'
                             : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
@@ -61127,7 +61127,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => handleConvertActiveCircuitMode('schematic')}
-                        className={`px-2 py-2 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                        className={`px-2 py-2 rounded-lg text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
                           detectedMode === 'schematic'
                             ? 'bg-[#234978] text-white border border-[#234978]'
                             : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
@@ -61474,7 +61474,7 @@ export default function App() {
                         {activeSpring && (
                           <>
                             {/* 1B. Two-Mode Switcher on the SAME Spring Setup: Hooke's Law (F_ελ - Δl) vs Simple Harmonic Oscillation (Α.Α.Τ.) */}
-                            <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-xl border border-[#dfd8cb]">
+                            <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-lg border border-[#dfd8cb]">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -61490,7 +61490,7 @@ export default function App() {
                                     initialPhaseMode: 'eq',
                                   }));
                                 }}
-                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                className={`py-1.5 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                   !activeSpring.showAmplitudeLines
                                     ? 'bg-[#234978] text-white shadow-xs'
                                     : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -61509,7 +61509,7 @@ export default function App() {
                                     showPositionScale: true,
                                   }));
                                 }}
-                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                className={`py-1.5 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                   activeSpring.showAmplitudeLines
                                     ? 'bg-[#234978] text-white shadow-xs'
                                     : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -61975,7 +61975,7 @@ export default function App() {
                     return (
                       <div className="space-y-2">
                         {/* 1. 4 Sub-Modes Grid (Ανάλυση, Σύνθεση, Κεκλιμένο, Εκκρεμές) */}
-                        <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-xl border border-[#dfd8cb]">
+                        <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-lg border border-[#dfd8cb]">
                           {(
                             [
                               { id: 'analysis', label: 'Ανάλυση F' },
@@ -61988,7 +61988,7 @@ export default function App() {
                               key={tab.id}
                               type="button"
                               onClick={() => createOrActivateForceSim(tab.id, false)}
-                              className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
+                              className={`py-1.5 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                 curMode === tab.id
                                   ? 'bg-[#234978] text-white shadow-xs'
                                   : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
