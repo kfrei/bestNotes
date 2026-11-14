@@ -86,49 +86,14 @@ export async function recordFileCreation(isGuest: boolean, count = 1): Promise<v
 }
 
 /**
- * Retroactive backfill: If an existing visitor has local notebooks created on earlier days,
- * sync those creation counts once into daily_traffic so history is preserved.
+ * Deprecated: Live file creations are tracked via trackFileCreation.
+ * Automatic local backfill has been disabled to prevent false attribution of admin / registered user notebooks.
  */
 export async function syncHistoricalLocalGuestFiles(
-  localNotebooks: Array<{ id: string; updatedAt?: string }>
+  _localNotebooks: Array<{ id: string; updatedAt?: string }>
 ): Promise<void> {
-  if (typeof window === 'undefined') return;
-  if (!Array.isArray(localNotebooks) || localNotebooks.length === 0) return;
-
-  try {
-    const backfillKey = 'bestnotes_guest_backfill_done_v2';
-    if (localStorage.getItem(backfillKey) === 'true') {
-      return; // Already synced this visitor's historical notebooks
-    }
-
-    const dateCounts: Record<string, number> = {};
-    for (const nb of localNotebooks) {
-      const dateStr = nb.updatedAt ? nb.updatedAt.slice(0, 10) : getTodayDateString();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-      }
-    }
-
-    for (const [date, count] of Object.entries(dateCounts)) {
-      const docRef = doc(db, 'daily_traffic', date);
-      await setDoc(
-        docRef,
-        {
-          date,
-          totalVisits: increment(1),
-          guestVisits: increment(1),
-          guestFilesCreated: increment(count),
-          totalFilesCreated: increment(count),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    }
-
-    localStorage.setItem(backfillKey, 'true');
-  } catch (err) {
-    console.debug('[Traffic] syncHistoricalLocalGuestFiles skipped:', err);
-  }
+  // No-op: prevents counting admin's local notebooks as guest files
+  return;
 }
 
 /**
@@ -143,16 +108,39 @@ export async function fetchDailyTrafficHistory(): Promise<DailyTrafficStats[]> {
     const list: DailyTrafficStats[] = [];
     snap.forEach((d) => {
       const data = d.data();
-      const guestFiles = Number(data.guestFilesCreated) || 0;
-      const regFiles = Number(data.registeredFilesCreated) || 0;
-      const totalFiles = Number(data.totalFilesCreated) || (guestFiles + regFiles);
+      let guestFiles = Number(data.guestFilesCreated) || 0;
+      let regFiles = Number(data.registeredFilesCreated) || 0;
+      let totalFiles = Number(data.totalFilesCreated) || (guestFiles + regFiles);
 
       let guestVisits = Number(data.guestVisits) || 0;
       let regVisits = Number(data.registeredVisits) || 0;
       let totalVisits = Number(data.totalVisits) || 0;
 
+      // Correction for false backfill: If 3 guest files were recorded on 2026-11-14 with 0 visits,
+      // it was the admin's local notes backfilled before auth resolved!
+      // Re-attribute them correctly: 0 guest files, 0 guest visits, and attribute visit to registered admin.
+      if (d.id === '2026-11-14' && guestFiles === 3 && (Number(data.guestVisits) || 0) === 0) {
+        guestFiles = 0;
+        guestVisits = 0;
+        regVisits = Math.max(1, regVisits || 1);
+        totalVisits = regVisits;
+        totalFiles = regFiles;
+        void setDoc(
+          doc(db, 'daily_traffic', '2026-11-14'),
+          {
+            guestFilesCreated: 0,
+            guestVisits: 0,
+            registeredVisits: regVisits,
+            totalVisits: regVisits,
+            totalFilesCreated: regFiles,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+
       // Mathematical & logical integrity guarantee:
-      // If files were created or synced by guests/users, there is guaranteed at least 1 visit session!
+      // If files were created by genuine guests, ensure at least 1 guest visit session!
       if (guestFiles > 0 && guestVisits === 0) {
         guestVisits = Math.max(1, Math.ceil(guestFiles / 3));
       }

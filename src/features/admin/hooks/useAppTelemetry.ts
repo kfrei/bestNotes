@@ -5,10 +5,7 @@ import {
   recordActiveSecondsLocally,
   syncCurrentUserProfileStats,
 } from '../services/userStatsService';
-import {
-  recordDailyVisit,
-  syncHistoricalLocalGuestFiles,
-} from '../services/trafficService';
+import { recordDailyVisit } from '../services/trafficService';
 
 /**
  * Isolated lifecycle hook managing all background telemetry
@@ -16,7 +13,8 @@ import {
  */
 export function useAppTelemetry(
   currentUser: User | null,
-  notebooks: Notebook[]
+  notebooks: Notebook[],
+  isAuthResolved = true
 ): void {
   // 1. Telemetry Heartbeat: Record active seconds locally every 30s when window has user focus
   useEffect(() => {
@@ -31,15 +29,14 @@ export function useAppTelemetry(
 
   // 2. Telemetry Sync: Synchronize user profile & notebook storage usage to Firestore `user_profiles/{uid}`
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!isAuthResolved || !currentUser?.uid) return;
     void syncCurrentUserProfileStats(currentUser, notebooks);
-  }, [currentUser, notebooks.length]);
+  }, [isAuthResolved, currentUser, notebooks.length]);
 
-  // 3. Visitor Telemetry: Record daily session visit (Guest / Registered) and backfill local guest notebooks
+  // 3. Visitor Telemetry: Record daily session visit ONLY once auth has resolved
+  // This guarantees registered users / admin are never falsely counted as guests on initial mount
   useEffect(() => {
+    if (!isAuthResolved) return;
     void recordDailyVisit(!currentUser);
-    if (notebooks.length > 0) {
-      void syncHistoricalLocalGuestFiles(notebooks);
-    }
-  }, [currentUser, notebooks.length > 0]);
+  }, [isAuthResolved, currentUser]);
 }

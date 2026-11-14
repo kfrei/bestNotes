@@ -1410,7 +1410,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   // Dedicated Admin routing & telemetry encapsulated in isolated domain hooks
   const { isAdminOpen, openAdmin, closeAdmin } = useAdminRoute();
-  useAppTelemetry(currentUser, notebooks);
+  useAppTelemetry(currentUser, notebooks, isAuthResolved);
 
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
