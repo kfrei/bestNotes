@@ -89,7 +89,7 @@ export function createDefaultHeatSim(originX: number = 240, originY: number = 32
     name: 'θερμ01',
     objects: [burner, tripod, beaker, thermometer],
     selectedObjectId: beaker.id,
-    isRunning: true,
+    isRunning: false,
     elapsedSec: 0,
     graph: {
       visible: true,

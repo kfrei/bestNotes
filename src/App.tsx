@@ -63012,9 +63012,30 @@ export default function App() {
                 ) : simActiveCategory === 'heat' ? (
                   <HeatControlPanel
                     sim={heatSim.activeHeatSim}
-                    onToggleRun={heatSim.toggleRun}
-                    onReset={heatSim.resetSim}
+                    onToggleRun={() => {
+                      const willRun = !heatSim.activeHeatSim?.isRunning;
+                      heatSim.toggleRun();
+                      if (showStopwatch) {
+                        setStopwatchRunning(willRun);
+                      }
+                    }}
+                    onReset={() => {
+                      heatSim.resetSim();
+                      if (showStopwatch) {
+                        setStopwatchRunning(false);
+                        setStopwatchElapsedMs(0);
+                      }
+                    }}
                     onToggleGraph={heatSim.toggleGraph}
+                    showStopwatch={showStopwatch}
+                    onToggleStopwatch={() => {
+                      if (!showStopwatch && heatSim.activeHeatSim) {
+                        setStopwatchRunning(heatSim.activeHeatSim.isRunning);
+                        setStopwatchElapsedMs(Math.round((heatSim.activeHeatSim.elapsedSec || 0) * 1000));
+                      }
+                      toggleStopwatchWithSmartPlacement();
+                    }}
+                    onToggleBurner={heatSim.toggleBurner}
                     onAddObject={(type) => {
                       let spawnX = 340;
                       let spawnY = 400;
@@ -63070,6 +63091,13 @@ export default function App() {
                   if (activeSim && activeSim.mode === 'pendulum') {
                     handleForceSimAction(activeSim, nextRunning ? 'resume' : 'pause');
                   }
+                  if (simActiveCategory === 'heat' || (activePage.heatSims && activePage.heatSims.length > 0)) {
+                    if (nextRunning) {
+                      heatSim.startHeatingAndSim();
+                    } else {
+                      heatSim.pauseHeatingAndSim();
+                    }
+                  }
                 }}
                 onReset={() => {
                   setStopwatchRunning(false);
@@ -63077,6 +63105,9 @@ export default function App() {
                   const activeSim = getActiveForceSim(activePage);
                   if (activeSim && activeSim.mode === 'pendulum') {
                     handleForceSimAction(activeSim, 'reset-pendulum-initial');
+                  }
+                  if (simActiveCategory === 'heat' || (activePage.heatSims && activePage.heatSims.length > 0)) {
+                    heatSim.resetSim();
                   }
                 }}
               />

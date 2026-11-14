@@ -1,14 +1,17 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, LineChart, Flame, Plus, Sparkles, Droplets } from 'lucide-react';
+import { Play, Pause, RotateCcw, LineChart, Flame, Sparkles, Droplets, Clock } from 'lucide-react';
 import { SimulationObjectRibbon } from '../../ui/SimulationObjectRibbon';
 import { HEAT_SIMULATION_OBJECTS } from './HeatSimulationModule';
-import { HeatSimConfig, HeatObjectType, LIQUID_REGISTRY } from './types';
+import { HeatSimConfig, HeatObjectType } from './types';
 
 export interface HeatControlPanelProps {
   sim: HeatSimConfig | null;
   onToggleRun: () => void;
   onReset: () => void;
   onToggleGraph: () => void;
+  showStopwatch?: boolean;
+  onToggleStopwatch?: () => void;
+  onToggleBurner?: () => void;
   onAddObject: (type: HeatObjectType) => void;
   selectedStrokeIdsCount: number;
   onConvertLassoSketch: () => void;
@@ -20,12 +23,15 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   onToggleRun,
   onReset,
   onToggleGraph,
+  showStopwatch = false,
+  onToggleStopwatch,
+  onToggleBurner,
   onAddObject,
   selectedStrokeIdsCount,
   onConvertLassoSketch,
   className = '',
 }) => {
-  const isRunning = sim?.isRunning ?? true;
+  const isRunning = sim?.isRunning ?? false;
   const isGraphVisible = sim?.graph.visible ?? true;
   const objects = sim?.objects || [];
 
@@ -40,48 +46,76 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
 
   return (
     <div className={`space-y-3 select-none text-[#2c3e50] ${className}`}>
-      {/* 1. Quick Controls Toolbar */}
-      <div className="flex items-center justify-between gap-1.5 p-1.5 rounded-xl bg-white/60 border border-white/80 shadow-2xs">
-        <div className="flex items-center gap-1">
-          {/* Play / Pause Button */}
+      {/* 1. Quick Controls Grid (2x2 action buttons, identical logic & layout to Pendulum) */}
+      <div className="grid grid-cols-2 gap-2">
+        {/* Play / Pause & Reset */}
+        <div className="flex items-center gap-1 w-full">
           <button
             type="button"
             onClick={onToggleRun}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+            className={`flex-1 py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs ${
               isRunning
-                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs'
-                : 'bg-[#234978] hover:bg-[#1a385c] text-white shadow-xs'
+                ? 'bg-[#234978] hover:bg-[#1c3c63] text-white shadow-xs'
+                : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
             }`}
-            title={isRunning ? 'Παύση Προσομοίωσης' : 'Εκκίνηση Προσομοίωσης'}
+            title={isRunning ? 'Παύση Προσομοίωσης & Χρονομέτρου' : 'Εκκίνηση Θέρμανσης & Χρονομέτρου'}
           >
             {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
             <span>{isRunning ? 'Παύση' : 'Εκκίνηση'}</span>
           </button>
-
-          {/* Reset Button */}
           <button
             type="button"
             onClick={onReset}
-            className="p-1.5 rounded-lg bg-[#efebe3] hover:bg-[#dfd8cb] text-[#475569] hover:text-[#234978] transition cursor-pointer"
-            title="Επαναφορά αρχικών θερμοκρασιών & χρονικού άξονα"
+            className="p-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] cursor-pointer transition shadow-2xs shrink-0"
+            title="Επαναφορά αρχικών θερμοκρασιών, χρόνου & χρονομέτρου"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {/* Stopwatch (Χρονόμετρο) - Matching Pendulum */}
+        <button
+          type="button"
+          onClick={onToggleStopwatch}
+          className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs ${
+            showStopwatch
+              ? 'bg-[#234978] text-white shadow-xs'
+              : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+          }`}
+          title="Εμφάνιση / Απόκρυψη ψηφιακού χρονομέτρου (ίδιο με το εκκρεμές)"
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Χρονόμετρο</span>
+        </button>
 
         {/* Dynamic Graph T-t Toggle */}
         <button
           type="button"
           onClick={onToggleGraph}
-          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
+          className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs ${
             isGraphVisible
-              ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
-              : 'bg-white hover:bg-slate-50 text-[#475569] border-[#dfd8cb]'
+              ? 'bg-[#234978] text-white shadow-xs'
+              : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
           }`}
-          title="Εμφάνιση / Απόκρυψη διαφανούς διαγράμματος T(t)"
+          title="Εμφάνιση / Απόκρυψη δυναμικού διαγράμματος T(t)"
         >
           <LineChart className="w-3.5 h-3.5" />
           <span>Διάγραμμα T(t)</span>
+        </button>
+
+        {/* Burner Quick Flame Toggle */}
+        <button
+          type="button"
+          onClick={onToggleBurner}
+          className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs ${
+            burner?.burnerState?.isOn
+              ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+              : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+          }`}
+          title="Άναμμα / Σβήσιμο φλόγας καμινέτου Bunsen"
+        >
+          <Flame className="w-3.5 h-3.5" />
+          <span>{burner?.burnerState?.isOn ? 'Φλόγα: ON' : 'Φλόγα: OFF'}</span>
         </button>
       </div>
 

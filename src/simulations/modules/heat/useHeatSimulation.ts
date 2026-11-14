@@ -34,6 +34,9 @@ export interface UseHeatSimulationReturn {
   handleConvertLassoSketch: (selectedStrokeIds: string[], strokes: StrokeObject[]) => boolean;
   stepPhysicsFrame: (dt: number) => void;
   toggleRun: () => void;
+  startHeatingAndSim: () => void;
+  pauseHeatingAndSim: () => void;
+  toggleBurner: () => void;
   resetSim: () => void;
   toggleGraph: () => void;
 }
@@ -223,12 +226,89 @@ export function useHeatSimulation(
     [handleAddObjectWithBounds]
   );
 
-  const toggleRun = useCallback(() => {
+  const startHeatingAndSim = useCallback(() => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
       const cur = liveSimRef.current || prev;
       const next = {
         ...cur,
-        isRunning: !cur.isRunning,
+        isRunning: true,
+        objects: cur.objects.map((obj) => {
+          if (obj.type === 'burner' && obj.burnerState) {
+            return {
+              ...obj,
+              burnerState: {
+                ...obj.burnerState,
+                isOn: true,
+              },
+            };
+          }
+          return obj;
+        }),
+      };
+      liveSimRef.current = next;
+      return next;
+    });
+  }, [updateActiveHeatSim]);
+
+  const pauseHeatingAndSim = useCallback(() => {
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const cur = liveSimRef.current || prev;
+      const next = {
+        ...cur,
+        isRunning: false,
+      };
+      liveSimRef.current = next;
+      return next;
+    });
+  }, [updateActiveHeatSim]);
+
+  const toggleRun = useCallback(() => {
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const cur = liveSimRef.current || prev;
+      const willRun = !cur.isRunning;
+      const next = {
+        ...cur,
+        isRunning: willRun,
+        objects: cur.objects.map((obj) => {
+          if (obj.type === 'burner' && obj.burnerState) {
+            // When starting simulation, auto-ignite burner if off so heating begins
+            if (willRun && !obj.burnerState.isOn) {
+              return {
+                ...obj,
+                burnerState: {
+                  ...obj.burnerState,
+                  isOn: true,
+                },
+              };
+            }
+          }
+          return obj;
+        }),
+      };
+      liveSimRef.current = next;
+      return next;
+    });
+  }, [updateActiveHeatSim]);
+
+  const toggleBurner = useCallback(() => {
+    updateActiveHeatSim((prev: HeatSimConfig) => {
+      const cur = liveSimRef.current || prev;
+      const burner = cur.objects.find((o) => o.type === 'burner');
+      const nextOn = !burner?.burnerState?.isOn;
+      const next = {
+        ...cur,
+        objects: cur.objects.map((obj) => {
+          if (obj.type === 'burner' && obj.burnerState) {
+            return {
+              ...obj,
+              burnerState: {
+                ...obj.burnerState,
+                isOn: nextOn,
+              },
+            };
+          }
+          return obj;
+        }),
       };
       liveSimRef.current = next;
       return next;
@@ -240,8 +320,19 @@ export function useHeatSimulation(
       const next = {
         ...prev,
         elapsedSec: 0,
+        isRunning: false,
         history: [],
         objects: prev.objects.map((obj: HeatObject) => {
+          if (obj.type === 'burner' && obj.burnerState) {
+            return {
+              ...obj,
+              burnerState: {
+                ...obj.burnerState,
+                isOn: false,
+                flameCycle: 0,
+              },
+            };
+          }
           if (obj.containerState) {
             return {
               ...obj,
@@ -546,6 +637,9 @@ export function useHeatSimulation(
     handleConvertLassoSketch,
     stepPhysicsFrame,
     toggleRun,
+    startHeatingAndSim,
+    pauseHeatingAndSim,
+    toggleBurner,
     resetSim,
     toggleGraph,
   };
