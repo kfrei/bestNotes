@@ -63921,7 +63921,11 @@ export default function App() {
                           : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
                       }`}
                     >
-                      {stopwatchRunning ? '❚❚ Παύση' : '▶ Έναρξη'}
+                      {stopwatchRunning
+                        ? '❚❚ Παύση'
+                        : stopwatchElapsedMs > 0
+                        ? '▶ Συνέχεια'
+                        : '▶ Έναρξη'}
                     </button>
                     <button
                       type="button"
