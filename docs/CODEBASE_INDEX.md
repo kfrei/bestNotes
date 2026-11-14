@@ -43,10 +43,19 @@ graph TD
         LibFolderModal["components/FolderEditModal.tsx"]
     end
 
+    subgraph D5["5. src/services/storage/ (Αποθήκευση, IndexedDB & Firestore)"]
+        StorIndex["index.ts (Facade)"]
+        StorIDB["indexedDb.ts (openBestNotesIdb, saveNotebooksToIndexedDB)"]
+        StorClean["storageCleaners.ts (cleanNotebookForStorage, serializeNotebookForFirestore)"]
+        StorSync["firestoreSync.ts (saveNotebookToFirestoreChunked)"]
+        StorKeys["storageKeys.ts (STORAGE_KEY, UI_SESSION_STORAGE_KEY)"]
+    end
+
     App --> SimIndex
     App --> StemIndex
     App --> CanvasIndex
     App --> LibIndex
+    App --> StorIndex
 ```
 
 ---
@@ -81,6 +90,18 @@ graph TD
 | | `src/features/library/components/RecentlyOpenedStrip.tsx` | Κάρτες προσφάτως ανοιγμένων σημειώσεων με μικρογραφία, μέγεθος αρχείου & σχετικό χρόνο | ~65 γραμμές inline JSX |
 | | `src/features/library/components/LibraryDeleteModal.tsx` | Liquid Frosted Glass διάλογος επιβεβαίωσης διαγραφής σημείωσης | ~45 γραμμές inline JSX |
 | | `src/features/library/components/FolderEditModal.tsx` | Πλήρες modal επεξεργασίας φακέλου (όνομα, 12 χρώματα, 30 icons, δέντρο μετακίνησης, αγαπημένο) | ~400 γραμμές inline JSX |
+| **Storage & Sync** | `src/services/storage/index.ts` | Master Facade export για Local-First αποθήκευση, IndexedDB και Firestore συγχρονισμό | Ενοποιημένο import |
+| | `src/services/storage/storageKeys.ts` | `STORAGE_KEY`, `ACTIVE_NOTEBOOK_STORAGE_KEY`, `CUSTOM_FOLDERS_STORAGE_KEY`, `UI_SESSION_STORAGE_KEY` | Κλειδιά localStorage & sessionStorage |
+| | `src/services/storage/storageCleaners.ts` | `cleanNotebookForStorage`, `serializeNotebookForFirestore`, `cleanNotebookForLibraryCache` | Καθαρισμός και συμπίεση σημειωματάριων |
+| | `src/services/storage/indexedDb.ts` | `openBestNotesIdb`, `saveNotebooksToIndexedDB`, `loadNotebooksFromIndexedDB`, `saveCustomFoldersToIndexedDB` | High-capacity offline database |
+| | `src/services/storage/localAndIdbSync.ts` | `saveCustomFoldersToLocalAndIdb`, `saveNotebooksToLocalAndIdb`, `saveLibraryShelfCache` | Local-First συγχρονισμός IndexedDB + localStorage |
+| | `src/services/storage/firestoreSync.ts` | `saveNotebookToFirestoreChunked`, `getMonotonicIsoTimestamp` | Atomic multi-chunk συγχρονισμός στο Cloud Firestore |
+| **Seeds & Catalogs** | `src/data/seeds/index.ts` | Master Facade export για όλα τα έτοιμα εκπαιδευτικά τετράδια (Φυσική, Χημεία, Βιολογία, Ηλεκτρισμός) | Τακτοποίηση του `src/utils/` |
+| | `src/data/seeds/*.ts` | 11 θεματικά τετράδια (`einstein`, `davinci`, `electricCircuit`, `volcano`, `scienceNotes` κλπ) | Απομόνωση 1.5 MB δεδομένων |
+| **Editor Modals** | `src/components/modals/index.ts` | Master Facade export για τα contextual παράθυρα διαλόγου του Editor | Αποσύνθεση του τέλους του `App.tsx` |
+| | `src/components/modals/NativeShareSheetModal.tsx` | Παράθυρο 1-Tap κοινοποίησης PDF στο iPadOS (AirDrop, Viber, Goodnotes) | ~60 γραμμές inline JSX |
+| | `src/components/modals/WaveDiagramChoiceModal.tsx` | Παράθυρο επιλογής διαγράμματος Κύματος $f(x)$ (στιγμιότυπο) ή $f(t)$ (ταλάντωση σημείου) | ~135 γραμμές inline JSX |
+| **Performance & Bundling** | `vite.config.ts` | Intelligent Code Splitting (`manualChunks`: React, Firebase, Lucide) | Αποφυγή μονολιθικού bundle 6.2 MB & ακαριαία φόρτωση στο iPad |
 
 ---
 

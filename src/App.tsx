@@ -167,53 +167,33 @@ import {
   buildVolcanoCreationNotebook,
   VOLCANO_NOTEBOOK_ID,
   upgradeWaterCycleNotebookPageToNativeTexts,
-} from './utils/volcanoNoteSeed';
-import {
   buildPhotosynthesisNotebook,
   buildAcidsNotebook,
   buildBasesNotebook,
   PHOTOSYNTHESIS_NOTEBOOK_ID,
   ACIDS_NOTEBOOK_ID,
   BASES_NOTEBOOK_ID,
-} from './utils/scienceNotesSeed';
-import {
   buildWeightMeasurementNotebook,
   buildWaterPhasesNotebook,
   WEIGHT_NOTEBOOK_ID,
   WATER_PHASES_NOTEBOOK_ID,
-} from './utils/weightAndWaterPhasesSeed';
-import {
   buildDaVinciNotebook,
   DAVINCI_NOTEBOOK_ID,
-} from './utils/davinciNoteSeed';
-import {
   buildEinsteinNotebook,
   EINSTEIN_NOTEBOOK_ID,
-} from './utils/einsteinNoteSeed';
-import {
   buildWaterChemistryNotebook,
   WATER_CHEMISTRY_NOTEBOOK_ID,
-} from './utils/waterChemistryNoteSeed';
-import {
   buildWaterPhaseChangesNotebook,
   WATER_PHASE_CHANGES_NOTEBOOK_ID,
-} from './utils/waterPhasesNoteSeed';
-import {
   buildCellBiologyNotebook,
   CELL_BIOLOGY_NOTEBOOK_ID,
-} from './utils/cellBiologyNoteSeed';
-import {
   buildElectricalResistanceNotebook,
   ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
-} from './utils/electricalResistanceNoteSeed';
-import {
   buildElectricCircuitNotebook,
   ELECTRIC_CIRCUIT_NOTEBOOK_ID,
-} from './utils/electricCircuitNoteSeed';
-import {
   buildConductorsAndCurrentNotebook,
   CONDUCTORS_CURRENT_NOTEBOOK_ID,
-} from './utils/conductorsAndCurrentNoteSeed';
+} from './data/seeds';
 import {
   renderPdfFileToPages,
   renderImageFileToPage,
@@ -303,9 +283,47 @@ import {
 } from './canvas-tools';
 export { APP_NAVY, APP_NAVY_HOVER };
 import {
+  STORAGE_KEY,
+  ACTIVE_NOTEBOOK_STORAGE_KEY,
+  CUSTOM_FOLDERS_STORAGE_KEY,
+  SHAPE_LIBRARY_STORAGE_KEY,
+  UI_SESSION_STORAGE_KEY,
+  AUTH_FLAG_STORAGE_KEY,
+  AUTH_UID_STORAGE_KEY,
+  COLOR_SLOTS_STORAGE_KEY,
+  USER_EDITED_SESSION_STORAGE_KEY,
+  LIBRARY_CACHE_STORAGE_KEY,
+  IDB_NAME,
+  IDB_STORE,
+  FIRESTORE_SINGLE_DOC_LIMIT,
+  FIRESTORE_CHUNK_SIZE,
+  loadUserEditedSessionIds,
+  saveUserEditedSessionIds,
+  getNotebookContentScore,
+  cleanNotebookForStorage,
+  serializeNotebookForFirestore,
+  cleanNotebookForLibraryCache,
+  openBestNotesIdb,
+  saveNotebooksToIndexedDB,
+  loadNotebooksFromIndexedDB,
+  saveCustomFoldersToIndexedDB,
+  loadCustomFoldersFromIndexedDB,
+  saveCustomFoldersToLocalAndIdb,
+  saveLibraryShelfCache,
+  saveNotebooksToLocalAndIdb,
+  sessionDeletedNotebookIds,
+  sessionRestoredNotebookIds,
+  getMonotonicIsoTimestamp,
+  saveNotebookToFirestoreChunked,
+} from './services/storage';
+import {
   buildLibraryFilterChips,
   formatRecentRelativeLabel,
 } from './utils/libraryUiHelpers';
+import {
+  NativeShareSheetModal,
+  WaveDiagramChoiceModal,
+} from './components/modals';
 import {
   MIND_MAPS_CATALOG,
   type MindMapSubject,
@@ -635,554 +653,7 @@ function scoreMindMapItemSearch(item: (typeof MIND_MAPS_CATALOG)[number], qNorm:
   return titleAndTagsScore > 0 ? baseScore + titleAndTagsScore * 0.25 : baseScore;
 }
 
-function getNotebookContentScore(nb: Notebook): number {
-  return (nb.pages || []).reduce(
-    (acc, p) =>
-      acc +
-      (p.strokes?.length || 0) * 2 +
-      (p.images?.length || 0) * 8 +
-      (p.texts?.length || 0) * 3 +
-      (p.tapes?.length || 0) * 2 +
-      (p.backgroundDataUrl ? 10 : 0),
-    0
-  );
-}
-
-const cleanedNotebookStorageCache = new WeakMap<Notebook, Notebook>();
-
-function cleanNotebookForStorage(nb: Notebook): Notebook {
-  const cached = cleanedNotebookStorageCache.get(nb);
-  if (cached) return cached;
-  // Strip duplicate base64 originalDataUrl when image is already cropped to a data: URL
-  // and purge empty or whitespace-only non-math text boxes
-  const cleaned: Notebook = {
-    ...nb,
-    pages: (nb.pages || []).map((p) => {
-      const imgs = p.images || [];
-      let anyImgChanged = false;
-      for (let i = 0; i < imgs.length; i++) {
-        const im = imgs[i];
-        if (im.originalDataUrl && im.originalDataUrl.startsWith('data:')) {
-          anyImgChanged = true;
-          break;
-        }
-      }
-      const texts = p.texts || [];
-      const cleanTexts = texts.filter((t) => {
-        if (!t) return false;
-        if (t.isMath) {
-          return Boolean(
-            (t.text && t.text.trim().length > 0) || (t.latex && t.latex.trim().length > 0)
-          );
-        }
-        return Boolean(t.text && t.text.trim().length > 0);
-      });
-      const textsChanged = cleanTexts.length !== texts.length;
-      if (!anyImgChanged && !textsChanged) return p;
-      return {
-        ...p,
-        texts: textsChanged ? cleanTexts : p.texts,
-        images: anyImgChanged
-          ? imgs.map((im) => ({
-              ...im,
-              originalDataUrl:
-                im.originalDataUrl && im.originalDataUrl.startsWith('data:')
-                  ? undefined
-                  : im.originalDataUrl,
-            }))
-          : p.images,
-      };
-    }),
-  };
-  cleanedNotebookStorageCache.set(nb, cleaned);
-  return cleaned;
-}
-
-const serializedFirestoreCache = new WeakMap<Notebook, string>();
-
-function serializeNotebookForFirestore(nb: Notebook): string {
-  const cached = serializedFirestoreCache.get(nb);
-  if (cached !== undefined) return cached;
-  const cleaned = cleanNotebookForStorage(nb);
-  const pages = cleaned.pages || [];
-  let totalBgChars = 0;
-  for (let i = 0; i < pages.length; i++) {
-    totalBgChars += pages[i].backgroundDataUrl?.length || 0;
-  }
-  // For multi-page PDF books (> 5 pages & > 2.5 MB of base64 page backgrounds),
-  // keep page 0's cover background + 100% of strokes/texts/images/layers in Firestore while
-  // keeping the heavy PDF page bitmaps in fast local IndexedDB so JSON.stringify & Firestore sync never freeze or flood chunks!
-  const forFirestore: Notebook =
-    pages.length > 5 && totalBgChars > 2_500_000
-      ? {
-          ...cleaned,
-          pages: pages.map((p, idx) =>
-            idx === 0 || !p.backgroundDataUrl ? p : { ...p, backgroundDataUrl: undefined }
-          ),
-        }
-      : cleaned;
-  const json = JSON.stringify(forFirestore);
-  serializedFirestoreCache.set(nb, json);
-  return json;
-}
-
-// IndexedDB High-Capacity Local Storage (supports 50MB+ notebooks where localStorage 5MB quota fails on Refresh)
-const IDB_NAME = 'bestnotes_idb_v1';
-const IDB_STORE = 'notebooks_by_uid';
-
-function openBestNotesIdb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB unavailable'));
-      return;
-    }
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const dbInstance = req.result;
-      if (!dbInstance.objectStoreNames.contains(IDB_STORE)) {
-        dbInstance.createObjectStore(IDB_STORE);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveNotebooksToIndexedDB(uid: string, nbs: Notebook[]): Promise<void> {
-  try {
-    const idb = await openBestNotesIdb();
-    const cleaned = nbs.map(cleanNotebookForStorage);
-    await new Promise<void>((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(cleaned, uid);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    // ignore
-  }
-}
-
-async function loadNotebooksFromIndexedDB(uid: string): Promise<Notebook[] | null> {
-  try {
-    const idb = await openBestNotesIdb();
-    return await new Promise<Notebook[] | null>((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(uid);
-      req.onsuccess = () => {
-        if (Array.isArray(req.result) && req.result.length > 0) {
-          resolve(req.result as Notebook[]);
-        } else {
-          resolve(null);
-        }
-      };
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function saveCustomFoldersToIndexedDB(uid: string, folders: CustomFolderMeta[]): Promise<void> {
-  try {
-    const idb = await openBestNotesIdb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(folders, `${uid}__custom_folders`);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    // ignore
-  }
-}
-
-async function loadCustomFoldersFromIndexedDB(uid: string): Promise<CustomFolderMeta[] | null> {
-  try {
-    const idb = await openBestNotesIdb();
-    return await new Promise<CustomFolderMeta[] | null>((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(`${uid}__custom_folders`);
-      req.onsuccess = () => {
-        if (Array.isArray(req.result)) {
-          resolve(req.result as CustomFolderMeta[]);
-        } else {
-          resolve(null);
-        }
-      };
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    return null;
-  }
-}
-
-function saveCustomFoldersToLocalAndIdb(uid: string, folders: CustomFolderMeta[], tsIso?: string): void {
-  void saveCustomFoldersToIndexedDB(uid, folders);
-  const foldersStr = JSON.stringify(folders);
-  const writeToLocal = () => {
-    localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
-    if (tsIso) {
-      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, tsIso);
-    }
-  };
-  try {
-    writeToLocal();
-  } catch {
-    // Free up localStorage space by removing the heavy notebooks mirror (which is safely stored in IndexedDB!)
-    try {
-      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
-      writeToLocal();
-    } catch {
-      // ignore
-    }
-  }
-}
-
-const LIBRARY_CACHE_STORAGE_KEY = 'bestnotes_lib_shelf_cache_v2';
-
-function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
-  return {
-    ...nb,
-    pages: (nb.pages || []).map((p, idx) => {
-      if (idx === 0) {
-        return {
-          ...p,
-          backgroundDataUrl:
-            p.backgroundDataUrl && p.backgroundDataUrl.length < 250_000
-              ? p.backgroundDataUrl
-              : undefined,
-          strokes: (p.strokes || []).slice(0, 400),
-          texts: (p.texts || []).slice(0, 80),
-          images: (p.images || []).slice(0, 5),
-        };
-      }
-      return {
-        ...p,
-        strokes: [],
-        shapes: [],
-        texts: [],
-        images: [],
-        tapes: [],
-        backgroundDataUrl: undefined,
-      };
-    }),
-  };
-}
-
-function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
-  if (!uid || !Array.isArray(nbs) || nbs.length === 0) return;
-  try {
-    const valid = nbs.filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0));
-    if (valid.length === 0) return;
-    const cached = valid.map(cleanNotebookForLibraryCache);
-    const serialized = JSON.stringify(cached);
-    if (serialized.length <= 1_800_000) {
-      localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_${uid}`, serialized);
-      localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`, serialized);
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
-  void saveNotebooksToIndexedDB(uid, nbs);
-  saveLibraryShelfCache(uid, nbs);
-  try {
-    // 1. Always cache the currently active notebook in localStorage if it fits (up to 1.8MB)
-    // so on page refresh, the active notebook is ready SYNCHRONOUSLY on the very first frame!
-    const rawSess =
-      localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${uid}`) ||
-      localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
-    let activeId = '';
-    if (rawSess) {
-      try {
-        activeId = JSON.parse(rawSess)?.activeNotebookId || '';
-      } catch {
-        // ignore
-      }
-    }
-    const targetNb = (activeId ? nbs.find((n) => n.id === activeId) : null) || nbs[0];
-    if (targetNb) {
-      try {
-        const activeSerialized = JSON.stringify(cleanNotebookForStorage(targetNb));
-        if (activeSerialized.length <= 1_800_000) {
-          localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${uid}`, activeSerialized);
-          localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`, activeSerialized);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // 2. Full collection check for localStorage (if whole collection fits under 1.5MB)
-    let estimatedChars = 0;
-    for (let i = 0; i < nbs.length; i++) {
-      const pages = nbs[i].pages || [];
-      for (let j = 0; j < pages.length; j++) {
-        estimatedChars += (pages[j].backgroundDataUrl?.length || 0) + 256;
-        if (estimatedChars > 1_500_000) break;
-      }
-      if (estimatedChars > 1_500_000) break;
-    }
-    if (estimatedChars > 1_500_000) {
-      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
-      return;
-    }
-    const serialized = JSON.stringify(nbs.map(cleanNotebookForStorage));
-    if (serialized.length <= 1500000) {
-      localStorage.setItem(`${STORAGE_KEY}_${uid}`, serialized);
-    } else {
-      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
-    }
-  } catch {
-    try {
-      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-// 750 KB single-doc threshold; when chunked, 450 KB per chunk so chunk0 fits inside manifestJson (< 500 KB)
-// AND all chunks + manifest commit in a single atomic Firestore writeBatch!
-const FIRESTORE_SINGLE_DOC_LIMIT = 750000;
-const FIRESTORE_CHUNK_SIZE = 450000;
-
-const sessionDeletedNotebookIds = new Set<string>();
-const sessionRestoredNotebookIds = new Set<string>();
-
-function getMonotonicIsoTimestamp(...candidates: (string | undefined)[]): string {
-  let maxMs = Date.now();
-  for (const c of candidates) {
-    if (c) {
-      const parsed = Date.parse(c);
-      if (!Number.isNaN(parsed) && parsed >= maxMs) {
-        maxMs = parsed + 1000;
-      }
-    }
-  }
-  return new Date(maxMs).toISOString();
-}
-
-async function saveNotebookToFirestoreChunked(
-  uid: string,
-  nb: Notebook,
-  dataJson: string,
-  deviceId: string
-): Promise<boolean> {
-  if (sessionDeletedNotebookIds.has(nb.id)) {
-    return false;
-  }
-  const updatedAt = nb.updatedAt || new Date().toISOString();
-  const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
-  const primaryRef = doc(db, 'users', uid, 'notebooks', nb.id);
-  let prevChunkCount = 0;
-
-  // STRICT SERVER-SIDE TIMESTAMP & TOMBSTONE GUARD:
-  // Query live Firestore server before writing so a second device (e.g. second Mac mini or iPad opened later)
-  // can NEVER overwrite a newer Cloud document or resurrect a soft-deleted document!
-  try {
-    const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
-    if (sessionDeletedNotebookIds.has(nb.id)) {
-      return false;
-    }
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
-      if (existingData?.deleted === true && !sessionRestoredNotebookIds.has(nb.id)) {
-        console.warn(`[CloudSync] Blocked background resurrection of soft-deleted notebook ${nb.id}`);
-        return false;
-      }
-      const cloudUpdatedAt = typeof existingData?.updatedAt === 'string' ? existingData.updatedAt : '';
-      if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && !sessionRestoredNotebookIds.has(nb.id)) {
-        console.warn(
-          `[CloudSync] Blocked stale overwrite of ${nb.id} (local ${updatedAt} < cloud ${cloudUpdatedAt})`
-        );
-        return false;
-      }
-      if (
-        typeof existingData?.dataJson === 'string' &&
-        existingData.dataJson.startsWith('{"__chunked":true')
-      ) {
-        try {
-          const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
-          if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
-            prevChunkCount = oldManifest.chunkCount;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-  } catch {
-    // Offline or transient network error -> proceed
-  }
-
-  if (dataJson.length <= FIRESTORE_SINGLE_DOC_LIMIT) {
-    if (prevChunkCount > 0) {
-      const batch = writeBatch(db);
-      batch.set(
-        primaryRef,
-        {
-          id: nb.id,
-          title: safeTitle,
-          updatedAt,
-          dataJson,
-          deleted: false,
-          deviceId,
-        },
-        { merge: true }
-      );
-      for (let cIdx = 0; cIdx < Math.max(prevChunkCount, 6); cIdx++) {
-        batch.delete(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`));
-      }
-      await batch.commit();
-    } else {
-      await setDoc(
-        primaryRef,
-        {
-          id: nb.id,
-          title: safeTitle,
-          updatedAt,
-          dataJson,
-          deleted: false,
-          deviceId,
-        },
-        { merge: true }
-      );
-    }
-    return true;
-  }
-
-  // Multi-chunk storage for large notebooks (>750 KB, e.g. 1-6 MB with multiple cropped high-res images)
-  const chunks: string[] = [];
-  for (let i = 0; i < dataJson.length; i += FIRESTORE_CHUNK_SIZE) {
-    chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
-  }
-
-  const manifestJson = JSON.stringify({
-    __chunked: true,
-    chunkCount: chunks.length,
-    totalLength: dataJson.length,
-    version: updatedAt,
-    chunk0: chunks[0],
-  });
-
-  // Commit all chunks (0..N-1) AND the primary manifest doc in a SINGLE atomic writeBatch whenever possible!
-  if (chunks.length <= 14) {
-    const batch = writeBatch(db);
-    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
-      const chunkDocId = `${nb.id}__chunk_${cIdx}`;
-      batch.set(
-        doc(db, 'users', uid, 'notebooks', chunkDocId),
-        {
-          id: chunkDocId,
-          title: '__CHUNK__',
-          updatedAt,
-          dataJson: chunks[cIdx],
-          deleted: false,
-          deviceId,
-        },
-        { merge: true }
-      );
-    }
-    batch.set(
-      primaryRef,
-      {
-        id: nb.id,
-        title: safeTitle,
-        updatedAt,
-        dataJson: manifestJson,
-        deleted: false,
-        deviceId,
-      },
-      { merge: true }
-    );
-    if (prevChunkCount > chunks.length) {
-      for (let cIdx = chunks.length; cIdx < prevChunkCount; cIdx++) {
-        batch.delete(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`));
-      }
-    }
-    await batch.commit();
-    return true;
-  }
-
-  // Fallback for huge multi-batch notebooks (> 6 MB)
-  for (let batchStart = 0; batchStart < chunks.length; batchStart += 6) {
-    const batchPromises: Promise<void>[] = [];
-    const batchEnd = Math.min(chunks.length, batchStart + 6);
-    for (let cIdx = batchStart; cIdx < batchEnd; cIdx++) {
-      const chunkDocId = `${nb.id}__chunk_${cIdx}`;
-      batchPromises.push(
-        setDoc(
-          doc(db, 'users', uid, 'notebooks', chunkDocId),
-          {
-            id: chunkDocId,
-            title: '__CHUNK__',
-            updatedAt,
-            dataJson: chunks[cIdx],
-            deleted: false,
-            deviceId,
-          },
-          { merge: true }
-        )
-      );
-    }
-    await Promise.all(batchPromises);
-  }
-
-  await setDoc(
-    primaryRef,
-    {
-      id: nb.id,
-      title: safeTitle,
-      updatedAt,
-      dataJson: manifestJson,
-      deleted: false,
-      deviceId,
-    },
-    { merge: true }
-  );
-
-  if (prevChunkCount > chunks.length) {
-    for (let cIdx = chunks.length; cIdx < prevChunkCount; cIdx++) {
-      void deleteDoc(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`)).catch(() => {});
-    }
-  }
-  return true;
-}
-
-const STORAGE_KEY = 'bestnotes_notebooks_v2';
-const ACTIVE_NOTEBOOK_STORAGE_KEY = 'bestnotes_active_nb_cache_v2';
-const CUSTOM_FOLDERS_STORAGE_KEY = 'bestnotes_custom_folders_v2';
-const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v2';
-const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v2';
-const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
-const AUTH_UID_STORAGE_KEY = 'bestnotes_auth_uid';
-const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
-const USER_EDITED_SESSION_STORAGE_KEY = 'bestnotes_user_edited_session_ids_v1';
-
-function loadUserEditedSessionIds(): Set<string> {
-  try {
-    const raw = sessionStorage.getItem(USER_EDITED_SESSION_STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr);
-    }
-  } catch {
-    // ignore
-  }
-  return new Set();
-}
-
-function saveUserEditedSessionIds(ids: Set<string>): void {
-  try {
-    sessionStorage.setItem(USER_EDITED_SESSION_STORAGE_KEY, JSON.stringify(Array.from(ids)));
-  } catch {
-    // ignore
-  }
-}
+// Local-First Storage, IndexedDB, and Firestore Sync (sourced from src/services/storage)
 
 // Safe internal fallback object when notebooks array is empty (0 notes)
 const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
@@ -68756,159 +68227,18 @@ export default function App() {
       )}
 
       {/* 1-Tap Instant Native Share Sheet Modal (if Safari transient activation expired during multi-page PDF creation) */}
-      {pendingShareFile && (
-        <div
-          onClick={() => setPendingShareFile(null)}
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
-        >
-          <div
-            data-ui-panel="true"
-            onClick={(e) => e.stopPropagation()}
-            className="rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 text-[#2c3e50] border border-white/85 p-6 w-full max-w-sm shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4 text-center"
-          >
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#234978]">
-              <Share2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-[#1b2a4a]">
-                Το PDF «{pendingShareFile.title}.pdf» είναι έτοιμο!
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Πάτησε παρακάτω για να ανοίξει το παράθυρο κοινοποίησης του iPadOS (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία).
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={async () => {
-                  const ready = pendingShareFile;
-                  setPendingShareFile(null);
-                  try {
-                    await navigator.share({
-                      files: [ready.file],
-                    });
-                    showToast(`✅ Κοινοποιήθηκε το «${ready.file.name}»!`);
-                  } catch (err: any) {
-                    if (err?.name !== 'AbortError') {
-                      const url = URL.createObjectURL(ready.file);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = ready.file.name;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
-                    }
-                  }
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#234978] hover:bg-blue-600 text-white text-sm font-bold shadow-md cursor-pointer"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>Άνοιγμα iPadOS Share ({pendingShareFile.title}.pdf)</span>
-              </button>
-              <button
-                onClick={() => setPendingShareFile(null)}
-                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
-              >
-                Ακύρωση
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NativeShareSheetModal
+        pendingShareFile={pendingShareFile}
+        onClose={() => setPendingShareFile(null)}
+        onToast={showToast}
+      />
 
       {/* Modal επιλογής διαγράμματος για Εξίσωση Κύματος δύο μεταβλητών (x, t): Στιγμιότυπο f(x) ή Ταλάντωση Σημείου f(t) */}
-      {waveDiagramPrompt && (
-        <div
-          className="fixed inset-0 z-[1050] bg-slate-950/40 backdrop-blur-md flex items-center justify-center p-4"
-          onClick={() => setWaveDiagramPrompt(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-3.5 text-[#2c3e50]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 flex items-center justify-center text-lg">
-                  🌊
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Εξίσωση Κύματος Δύο Μεταβλητών (x, t)
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Μέγεθος: <span className="font-semibold text-red-600 dark:text-red-400">{waveDiagramPrompt.info.depName} ({waveDiagramPrompt.info.depSymbol})</span> • Ποιο διάγραμμα θέλετε να σχεδιαστεί;
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setWaveDiagramPrompt(null)}
-                className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold cursor-pointer"
-                title="Κλείσιμο"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200 truncate">
-              {waveDiagramPrompt.displayEq}
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              <button
-                onClick={() => handleConfirmWaveDiagramMode('snapshot-x')}
-                className="w-full text-left p-3.5 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/80 dark:hover:bg-blue-900/50 transition-all cursor-pointer flex items-start gap-3"
-              >
-                <span className="text-xl leading-none mt-0.5">📸</span>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                    Στιγμιότυπο Κύματος {waveDiagramPrompt.info.depSymbol} = f(x) με t = σταθ.
-                  </div>
-                  <div className="text-[11px] text-blue-700/90 dark:text-blue-300/80 mt-0.5 leading-snug">
-                    Γραφική παράσταση {waveDiagramPrompt.info.depSymbol}(x) τη χρονική στιγμή t₁ σε συνάρτηση με τη θέση x (μέτωπο κύματος x₁ = u·t₁, ακίνητα σημεία για x &gt; x₁).
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleConfirmWaveDiagramMode('oscillation-t')}
-                className="w-full text-left p-3.5 rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50/70 dark:bg-red-950/40 hover:bg-red-100/80 dark:hover:bg-red-900/50 transition-all cursor-pointer flex items-start gap-3"
-              >
-                <span className="text-xl leading-none mt-0.5">⏱️</span>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-red-900 dark:text-red-200">
-                    Διάγραμμα Ταλάντωσης Σημείου {waveDiagramPrompt.info.depSymbol} = f(t) με x = σταθ.
-                  </div>
-                  <div className="text-[11px] text-red-700/90 dark:text-red-300/80 mt-0.5 leading-snug">
-                    Γραφική παράσταση {waveDiagramPrompt.info.depSymbol}(t) για συγκεκριμένο σημείο x₁: παραμένει ακίνητο (0) από t = 0 έως t_αφ = x/u και εκτελεί Α.Α.Τ. για t ≥ t_αφ!
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleConfirmWaveDiagramMode('both')}
-                className="w-full text-left p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition-all cursor-pointer flex items-center gap-3"
-              >
-                <span className="text-lg leading-none">📊</span>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                    Και τα δύο Διαγράμματα ({waveDiagramPrompt.info.depSymbol} = f(x) &amp; {waveDiagramPrompt.info.depSymbol} = f(t))
-                  </div>
-                  <div className="text-[11px] text-emerald-700/90 dark:text-emerald-300/80">
-                    Σχεδιάζει το στιγμιότυπο κύματος και από κάτω το διάγραμμα ταλάντωσης (από t_αφ = x/u).
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setWaveDiagramPrompt(null)}
-              className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
-            >
-              Ακύρωση
-            </button>
-          </div>
-        </div>
-      )}
+      <WaveDiagramChoiceModal
+        waveDiagramPrompt={waveDiagramPrompt}
+        onConfirm={handleConfirmWaveDiagramMode}
+        onClose={() => setWaveDiagramPrompt(null)}
+      />
 
       {/* AI ANIMATE STUDIO MODAL (Smart Sketch Animator with Vision & Audio) */}
       {aiAnimateModal && (

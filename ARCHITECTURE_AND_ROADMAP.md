@@ -595,4 +595,25 @@ sequenceDiagram
    - **Components:** `RecentlyOpenedStrip.tsx` (πρόσφατα ανοιγμένες σημειώσεις με μέγεθος αρχείου), `LibraryDeleteModal.tsx` (διάλογος διαγραφής), `FolderEditModal.tsx` (επεξεργασία φακέλου & δέντρο μετακίνησης).
    - **Facade:** `src/features/library/index.ts`.
 
+5. **`src/services/storage/` (Local-First Αποθήκευση, IndexedDB & Firestore):**
+   - **Keys:** `storageKeys.ts` (`STORAGE_KEY`, `ACTIVE_NOTEBOOK_STORAGE_KEY`, `CUSTOM_FOLDERS_STORAGE_KEY`, `UI_SESSION_STORAGE_KEY`).
+   - **Cleaners:** `storageCleaners.ts` (`cleanNotebookForStorage`, `serializeNotebookForFirestore`, `cleanNotebookForLibraryCache`).
+   - **IndexedDB:** `indexedDb.ts` (`openBestNotesIdb`, `saveNotebooksToIndexedDB`, `loadNotebooksFromIndexedDB`).
+   - **Local & IDB Sync:** `localAndIdbSync.ts` (`saveNotebooksToLocalAndIdb`, `saveCustomFoldersToLocalAndIdb`).
+   - **Cloud Firestore Sync:** `firestoreSync.ts` (`saveNotebookToFirestoreChunked`, multi-chunk atomic batches).
+   - **Facade:** `src/services/storage/index.ts`.
+
+6. **`src/data/seeds/` (Έτοιμα Εκπαιδευτικά Τετράδια Φυσικής/Χημείας/Βιολογίας):**
+   - **11 Θεματικά Τετράδια:** `einsteinNoteSeed.ts`, `davinciNoteSeed.ts`, `electricCircuitNoteSeed.ts`, `conductorsAndCurrentNoteSeed.ts`, `electricalResistanceNoteSeed.ts`, `scienceNotesSeed.ts`, `volcanoNoteSeed.ts`, `waterChemistryNoteSeed.ts`, `waterPhasesNoteSeed.ts`, `weightAndWaterPhasesSeed.ts`, `cellBiologyNoteSeed.ts`.
+   - **Facade:** `src/data/seeds/index.ts`.
+
+7. **`src/components/modals/` (Contextual Modals του Canvas Editor):**
+   - **`NativeShareSheetModal.tsx`:** Άμεσος διαμοιρασμός PDF μέσω iPadOS Share Sheet (AirDrop, Mail, Αρχεία, Viber).
+   - **`WaveDiagramChoiceModal.tsx`:** Επιλογή διαγράμματος για κυματική εξίσωση $y = A\eta\mu[2\pi(\frac{t}{T} \mp \frac{x}{\lambda})]$ (Στιγμιότυπο $f(x)$ ή Ταλάντωση $f(t)$).
+   - **Facade:** `src/components/modals/index.ts`.
+
+8. **`vite.config.ts` (Βελτιστοποίηση Φόρτωσης & Manual Chunks):**
+   - **Code Splitting:** Διαχωρισμός του μονολιθικού bundle 6.2 MB σε ανεξάρτητα chunks (`vendor-react`, `vendor-firebase`, `vendor-icons`).
+   - **Caching & Latency:** Ο browser του iPad φορτώνει παράλληλα μικρά πακέτα ($0.3\text{s}$) και τα διατηρεί σε μόνιμη HTTP cache.
+
 
