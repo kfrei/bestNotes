@@ -30035,8 +30035,9 @@ export default function App() {
           );
 
           // Visual Retention of Maximum Angle / Amplitude (θmax)
+          // Hide when forces are enabled (fSim.showForces) to prevent visual clutter
           const maxA = fSim.pendulumMaxAngleRad || pState.maxAngleRad || 0;
-          if (maxA > 0.05) {
+          if (!fSim.showForces && maxA > 0.05) {
             const maxBxL = PX - L * Math.sin(maxA);
             const maxByL = PY + L * Math.cos(maxA);
             const maxBxR = PX + L * Math.sin(maxA);
@@ -30179,13 +30180,13 @@ export default function App() {
                 xax1.y,
                 xax2.x,
                 xax2.y,
-                '#0f172a',
+                '#7cb342',
                 1.8,
                 [5, 4],
                 true,
                 getStepProg(1),
                 'x',
-                '#0f172a'
+                '#558b2f'
               );
             }
             if (curStep >= 2) {
@@ -30194,13 +30195,13 @@ export default function App() {
                 yax1.y,
                 yax2.x,
                 yax2.y,
-                '#0f172a',
+                '#7cb342',
                 1.8,
                 [5, 4],
                 true,
                 getStepProg(2),
                 'y',
-                '#0f172a'
+                '#558b2f'
               );
             }
             if (curStep >= 3) {
@@ -62578,19 +62579,6 @@ export default function App() {
                               Σχεδίασε με μολύβι/σχήματα (1 διάνυσμα, 2 διανύσματα, ταβάνι+νήμα+σφαιρίδιο ή κεκλιμένο+σώμα) και πάτα <b>Sim</b>!
                             </p>
                           )}
-
-                          {activeForce && (
-                            <div className="pt-2 border-t border-[#e8e2d6]">
-                              <WarmStudioToggle
-                                checked={Boolean(activeForce.showNumericValues)}
-                                onChange={() =>
-                                  handleForceSimAction(activeForce, 'toggle-numeric-values')
-                                }
-                                label="Αριθμητικές Τιμές (N, °)"
-                                className="w-full"
-                              />
-                            </div>
-                          )}
                         </div>
 
                         {/* 3. Mode-Specific Interactive Controls */}
@@ -62922,79 +62910,82 @@ export default function App() {
 
                           return (
                             <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
-                              {/* 1. Play / Pause Control */}
-                              <button
-                                type="button"
-                                onClick={() => handleForceSimAction(activeForce, 'toggle-pause')}
-                                className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
-                                  activeForce.isPaused
-                                    ? 'bg-[#234978] hover:bg-[#1c3c63] text-white shadow-xs'
-                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
-                                }`}
-                              >
-                                <span>{activeForce.isPaused ? '▶ Συνέχεια' : '❚❚ Παύση'}</span>
-                              </button>
+                              {/* 1-4. Action Controls Grid (2 κουμπιά ανά γραμμή, χωρίς εικονίδια) */}
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* Play / Pause */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'toggle-pause')}
+                                  className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
+                                    activeForce.isPaused
+                                      ? 'bg-[#234978] hover:bg-[#1c3c63] text-white shadow-xs'
+                                      : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                  }`}
+                                >
+                                  <span>{activeForce.isPaused ? 'Συνέχεια' : 'Παύση'}</span>
+                                </button>
 
-                              {/* 2. Forces Button (Δυνάμεις Β, Τ) */}
-                              <button
-                                type="button"
-                                onClick={() => handleForceSimAction(activeForce, 'toggle-forces')}
-                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
-                                  activeForce.showForces
-                                    ? 'bg-[#234978] text-white shadow-xs'
-                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
-                                }`}
-                              >
-                                <span>Δυνάμεις (Β, Τ)</span>
-                              </button>
+                                {/* Forces (Δυνάμεις) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'toggle-forces')}
+                                  className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
+                                    activeForce.showForces
+                                      ? 'bg-[#234978] text-white shadow-xs'
+                                      : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                  }`}
+                                >
+                                  <span>Δυνάμεις</span>
+                                </button>
 
-                              {/* 3. Stopwatch Toggle (Χρονόμετρο) */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowStopwatch((prev) => {
-                                    const next = !prev;
-                                    if (next) {
-                                      setStopwatchPos((cur) => {
-                                        const targetX = Math.max(
-                                          20,
-                                          Math.min(window.innerWidth - stopwatchWidth - 20, 340)
-                                        );
-                                        const targetY = 110;
-                                        if (
-                                          cur.x > window.innerWidth - 60 ||
-                                          cur.y > window.innerHeight - 60 ||
-                                          cur.x < 10
-                                        ) {
-                                          return { x: targetX, y: targetY };
-                                        }
-                                        return cur;
-                                      });
-                                    }
-                                    return next;
-                                  });
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
-                                  showStopwatch
-                                    ? 'bg-[#234978] text-white shadow-xs'
-                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
-                                }`}
-                              >
-                                <span>⏱️ Χρονόμετρο {showStopwatch ? '(Ενεργό)' : ''}</span>
-                              </button>
+                                {/* Stopwatch (Χρονόμετρο) */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowStopwatch((prev) => {
+                                      const next = !prev;
+                                      if (next) {
+                                        setStopwatchPos((cur) => {
+                                          const targetX = Math.max(
+                                            20,
+                                            Math.min(window.innerWidth - stopwatchWidth - 20, 340)
+                                          );
+                                          const targetY = 110;
+                                          if (
+                                            cur.x > window.innerWidth - 60 ||
+                                            cur.y > window.innerHeight - 60 ||
+                                            cur.x < 10
+                                          ) {
+                                            return { x: targetX, y: targetY };
+                                          }
+                                          return cur;
+                                        });
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
+                                    showStopwatch
+                                      ? 'bg-[#234978] text-white shadow-xs'
+                                      : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                  }`}
+                                >
+                                  <span>Χρονόμετρο</span>
+                                </button>
 
-                              {/* 4. Trajectory Toggle (Διακεκομμένη Τροχιά) */}
-                              <button
-                                type="button"
-                                onClick={() => handleForceSimAction(activeForce, 'toggle-trajectory')}
-                                className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs ${
-                                  activeForce.showTrajectory
-                                    ? 'bg-[#234978] text-white shadow-xs'
-                                    : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
-                                }`}
-                              >
-                                <span>⋯ Τροχιά Εκκρεμούς</span>
-                              </button>
+                                {/* Trajectory (Τροχιά) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'toggle-trajectory')}
+                                  className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
+                                    activeForce.showTrajectory
+                                      ? 'bg-[#234978] text-white shadow-xs'
+                                      : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
+                                  }`}
+                                >
+                                  <span>Τροχιά</span>
+                                </button>
+                              </div>
 
                               {/* 5. Length Card (Μήκος Νήματος L - μόνο slider και τιμή L) */}
                               <div className="bg-[#fdfbf7]/90 rounded-xl p-2.5 border border-[#dfd8cb] space-y-2">
