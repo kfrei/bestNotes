@@ -16,6 +16,10 @@ export interface UseHeatSimulationReturn {
   ensureActiveHeatSim: (page: NotePage) => HeatSimConfig;
   updateActiveHeatSim: (updater: (prev: HeatSimConfig) => HeatSimConfig) => void;
   handleAddObject: (type: HeatObjectType, clientX?: number, clientY?: number) => void;
+  handleAddObjectWithBounds: (
+    type: HeatObjectType,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number }
+  ) => void;
   handlePointerDown: (
     e: React.PointerEvent | PointerEvent,
     canvasLogicalX: number,
@@ -62,7 +66,15 @@ export function useHeatSimulation(
       updatePage((page: NotePage) => {
         const curSims = page.heatSims || [];
         const activeId = page.activeHeatSimId || curSims[0]?.id;
-        if (!activeId) return page;
+        if (!activeId || curSims.length === 0) {
+          const freshSim = createDefaultHeatSim(320, 380);
+          const updated = updater(freshSim);
+          return {
+            ...page,
+            heatSims: [updated],
+            activeHeatSimId: updated.id,
+          };
+        }
 
         const nextSims = curSims.map((s: HeatSimConfig) => (s.id === activeId ? updater(s) : s));
         return {
@@ -91,29 +103,68 @@ export function useHeatSimulation(
     [updatePage]
   );
 
+  const handleAddObjectWithBounds = useCallback(
+    (type: HeatObjectType, bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
+      const newObj = createHeatObjectFromRecognition(type, bounds, `-${Date.now()}`);
+
+      updatePage((page: NotePage) => {
+        const curSims = page.heatSims || [];
+        const activeId = page.activeHeatSimId || curSims[0]?.id;
+        let targetSim = curSims.find((s: HeatSimConfig) => s.id === activeId);
+        let nextSims: HeatSimConfig[];
+        let finalActiveId = activeId;
+
+        if (!targetSim) {
+          const freshSim = createDefaultHeatSim(bounds.minX, bounds.minY);
+          targetSim = {
+            ...freshSim,
+            objects: [newObj],
+            selectedObjectId: newObj.id,
+          };
+          nextSims = [targetSim];
+          finalActiveId = targetSim.id;
+        } else {
+          targetSim = {
+            ...targetSim,
+            objects: [...targetSim.objects, newObj],
+            selectedObjectId: newObj.id,
+          };
+          nextSims = curSims.map((s: HeatSimConfig) => (s.id === finalActiveId ? targetSim! : s));
+        }
+
+        return {
+          ...page,
+          heatSims: nextSims,
+          activeHeatSimId: finalActiveId,
+        };
+      });
+    },
+    [updatePage]
+  );
+
   const handleAddObject = useCallback(
     (type: HeatObjectType, clientX?: number, clientY?: number) => {
-      const targetX = clientX ?? 320;
-      const targetY = clientY ?? 380;
+      const targetX = clientX ?? 340;
+      const targetY = clientY ?? 400;
 
-      const newObj = createHeatObjectFromRecognition(
-        type,
-        {
-          minX: targetX - 50,
-          minY: targetY - 60,
-          maxX: targetX + 50,
-          maxY: targetY + 60,
-        },
-        `-${Date.now()}`
-      );
+      const defDims: Record<string, { w: number; h: number }> = {
+        burner: { w: 70, h: 110 },
+        tripod: { w: 120, h: 140 },
+        beaker: { w: 110, h: 130 },
+        'wide-basin': { w: 200, h: 90 },
+        flask: { w: 110, h: 140 },
+        thermometer: { w: 24, h: 160 },
+      };
+      const def = defDims[type] || { w: 100, h: 120 };
 
-      updateActiveHeatSim((prev: HeatSimConfig) => ({
-        ...prev,
-        objects: [...prev.objects, newObj],
-        selectedObjectId: newObj.id,
-      }));
+      handleAddObjectWithBounds(type, {
+        minX: targetX - def.w / 2,
+        minY: targetY - def.h / 2,
+        maxX: targetX + def.w / 2,
+        maxY: targetY + def.h / 2,
+      });
     },
-    [updateActiveHeatSim]
+    [handleAddObjectWithBounds]
   );
 
   const toggleRun = useCallback(() => {
@@ -469,6 +520,7 @@ export function useHeatSimulation(
     ensureActiveHeatSim,
     updateActiveHeatSim,
     handleAddObject,
+    handleAddObjectWithBounds,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,

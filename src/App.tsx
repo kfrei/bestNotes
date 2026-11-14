@@ -274,6 +274,8 @@ import {
   HeatLiquidConfigModal,
   renderHeatSimulation,
   stepHeatSimulation,
+  createHeatObjectFromRecognition,
+  HeatSimConfig,
 } from './simulations';
 import { LassoOcrButtons } from './stem-engines';
 import {
@@ -25970,7 +25972,11 @@ export default function App() {
     const activeSpringSim = getActiveSpringSim(activePage);
     const activeForceSim = getActiveForceSim(activePage);
     const pageAtomSims = getValidAtomSims(activePage);
+    const pageHeatSims = activePage.heatSims || [];
     const isSimModeActive = showSimulationPanel || isSimulating || isSpringSimulating;
+    const hasHeatOverlay =
+      pageHeatSims.length > 0 ||
+      (showSimulationPanel && simActiveCategory === 'heat');
     const hasAtomOverlay =
       (isSimModeActive || atomReactionAnim !== null || draggingAtomHandleRef.current !== null) &&
       (pageAtomSims.length > 0 ||
@@ -26013,13 +26019,15 @@ export default function App() {
       (Boolean(activeSim) ||
         Boolean(activeSpringSim) ||
         Boolean(activeForceSim) ||
-        pageAtomSims.length > 0);
+        pageAtomSims.length > 0 ||
+        pageHeatSims.length > 0);
     if (
       !hasAnySimInLivePdf &&
       !hasProposal &&
       !hasSpringOverlay &&
       !hasForceOverlay &&
       !hasAtomOverlay &&
+      !hasHeatOverlay &&
       ((!isSimulating && !hasAlignFlash) || !activeSim)
     ) {
       autoSwitchHitRef.current = null;
@@ -32756,7 +32764,7 @@ export default function App() {
         atomReactionAnim !== null ||
         atomReactionAnimRef.current !== null ||
         (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
-        (activePage.heatSims && activePage.heatSims.some((s) => s.isRunning)) ||
+        (activePage.heatSims && activePage.heatSims.length > 0) ||
         (showSimulationPanel && simActiveCategory === 'heat') ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
@@ -32798,6 +32806,9 @@ export default function App() {
     activePage.activeForceSimId,
     activePage.atomSims,
     activePage.activeAtomSimId,
+    activePage.heatSims,
+    activePage.activeHeatSimId,
+    heatSim,
     activePage.layers,
     activePage.template,
     simShowElectrons,
@@ -33343,6 +33354,62 @@ export default function App() {
       return;
     }
 
+    if (
+      activeTool === 'shape' &&
+      (shapePreset === 'burner' ||
+        shapePreset === 'tripod' ||
+        shapePreset === 'beaker' ||
+        shapePreset === 'wide-basin' ||
+        shapePreset === 'flask' ||
+        shapePreset === 'thermometer') &&
+      currentStrokePtsRef.current.length >= 2
+    ) {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const p of currentStrokePtsRef.current) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const rawW = maxX - minX;
+      const rawH = maxY - minY;
+      const defDims: Record<string, { w: number; h: number }> = {
+        burner: { w: 70, h: 110 },
+        tripod: { w: 120, h: 140 },
+        beaker: { w: 110, h: 130 },
+        'wide-basin': { w: 200, h: 90 },
+        flask: { w: 110, h: 140 },
+        thermometer: { w: 24, h: 160 },
+      };
+      const def = defDims[shapePreset] || { w: 100, h: 120 };
+      const w = Math.max(def.w, rawW);
+      const h = Math.max(def.h, rawH);
+      const previewObj = createHeatObjectFromRecognition(
+        shapePreset,
+        { minX, minY, maxX: minX + w, maxY: minY + h },
+        'overlay-preview'
+      );
+      const previewSim: HeatSimConfig = {
+        id: 'overlay-preview-sim',
+        name: 'Preview',
+        objects: [previewObj],
+        elapsedSec: 0,
+        isRunning: false,
+        graph: { visible: false, x: 0, y: 0, width: 260, height: 180 },
+        history: [],
+      };
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      renderHeatSimulation(ctx, previewSim, {
+        isDark: isDarkPaperColor(getEffectivePaperColor(activePage)),
+      });
+      ctx.restore();
+      return;
+    }
+
     const liveForcedShape =
       !snappedCurrentStrokeRef.current &&
       activeTool === 'shape' &&
@@ -33357,6 +33424,12 @@ export default function App() {
       shapePreset !== 'fan' &&
       shapePreset !== 'ammeter' &&
       shapePreset !== 'voltmeter' &&
+      shapePreset !== 'burner' &&
+      shapePreset !== 'tripod' &&
+      shapePreset !== 'beaker' &&
+      shapePreset !== 'wide-basin' &&
+      shapePreset !== 'flask' &&
+      shapePreset !== 'thermometer' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -36692,7 +36765,7 @@ export default function App() {
     }
 
     // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (Pencil click, burner on/off, dragging objects & graph)
-    if (heatSim.activeHeatSim && (simActiveCategory === 'heat' || activeTool === 'lasso' || activeTool === 'pan')) {
+    if (heatSim.activeHeatSim && (simActiveCategory === 'heat' || activeTool === 'lasso' || activeTool === 'pan' || activeTool === 'pen' || activeTool === 'shape')) {
       if (heatSim.handlePointerDown(e, pt.x, pt.y)) {
         e.preventDefault();
         isDrawingRef.current = true;
@@ -45776,7 +45849,30 @@ export default function App() {
         maxX = Math.max(maxX, p.x);
         maxY = Math.max(maxY, p.y);
       }
-      heatSim.handleAddObject(shapePreset, minX + (maxX - minX) / 2, minY + (maxY - minY) / 2);
+      const rawW = maxX - minX;
+      const rawH = maxY - minY;
+      const isSingleTap = Math.hypot(rawW, rawH) < 15;
+
+      const defDims: Record<string, { w: number; h: number }> = {
+        burner: { w: 70, h: 110 },
+        tripod: { w: 120, h: 140 },
+        beaker: { w: 110, h: 130 },
+        'wide-basin': { w: 200, h: 90 },
+        flask: { w: 110, h: 140 },
+        thermometer: { w: 24, h: 160 },
+      };
+      const def = defDims[shapePreset] || { w: 100, h: 120 };
+      const finalW = isSingleTap ? def.w : Math.max(def.w, rawW);
+      const finalH = isSingleTap ? def.h : Math.max(def.h, rawH);
+      const spawnX = isSingleTap ? minX - finalW / 2 : minX;
+      const spawnY = isSingleTap ? minY - finalH / 2 : minY;
+
+      heatSim.handleAddObjectWithBounds(shapePreset, {
+        minX: spawnX,
+        minY: spawnY,
+        maxX: spawnX + finalW,
+        maxY: spawnY + finalH,
+      });
       snappedCurrentStrokeRef.current = null;
       renderStaticSceneRef.current();
       return;
@@ -57147,7 +57243,14 @@ export default function App() {
                   );
                 })()}
                 {activeTool === 'shape' && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x max-w-full px-1 py-0.5">
+                  <div
+                    onWheel={(e) => {
+                      if (e.deltaY !== 0 && !e.deltaX) {
+                        e.currentTarget.scrollLeft += e.deltaY;
+                      }
+                    }}
+                    className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x max-w-full px-1 py-0.5"
+                  >
                     {/*
                       NOTE (Backup / Restore Point - git commit 94339ed):
                       Simple shapes handled automatically by Pen/Pencil Hold-to-Snap ('auto' mode) were removed from this sub-bar:
@@ -57587,8 +57690,10 @@ export default function App() {
                                 sp.id === 'flask' ||
                                 sp.id === 'thermometer'
                               ) {
-                                heatSim.handleAddObject(sp.id);
-                                showToast(`✨ Προστέθηκε: ${sp.title.split(' (')[0]}`);
+                                setShapePreset(sp.id as ShapePresetType);
+                                setActiveTool('shape');
+                                lastCreatedShapeIdsRef.current = [];
+                                showToast(`🧪 Έτοιμο για σχεδίαση: ${sp.title.split(' (')[0]}`);
                               } else {
                                 setShapePreset(sp.id as ShapePresetType);
                                 lastCreatedShapeIdsRef.current = [];
@@ -60290,7 +60395,14 @@ export default function App() {
                 </div>
 
                 {/* Top-Level Physics & Chemistry Simulation Category Switcher (Horizontal Swipeable / Scrollable) */}
-                <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x">
+                <div
+                  onWheel={(e) => {
+                    if (e.deltaY !== 0 && !e.deltaX) {
+                      e.currentTarget.scrollLeft += e.deltaY;
+                    }
+                  }}
+                  className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
+                >
                   <button
                     type="button"
                     onClick={() => {
@@ -62863,7 +62975,17 @@ export default function App() {
                     onToggleRun={heatSim.toggleRun}
                     onReset={heatSim.resetSim}
                     onToggleGraph={heatSim.toggleGraph}
-                    onAddObject={(type) => heatSim.handleAddObject(type)}
+                    onAddObject={(type) => {
+                      const ws = workspaceRef.current;
+                      const curZoom = zoomRef.current || 1;
+                      const curPan = panRef.current || { x: 0, y: 0 };
+                      const targetX = ws ? (ws.clientWidth / 2 - curPan.x) / curZoom : 360;
+                      const targetY = ws ? (ws.clientHeight / 2 - curPan.y) / curZoom : 420;
+                      heatSim.handleAddObject(type, targetX, targetY);
+                      setShapePreset(type);
+                      setActiveTool('shape');
+                      showToast('✨ Προστέθηκε & ενεργοποιήθηκε για σχεδίαση στο χαρτί!');
+                    }}
                     selectedStrokeIdsCount={selectedStrokeIds.length}
                     onConvertLassoSketch={() => {
                       const converted = heatSim.handleConvertLassoSketch(selectedStrokeIds, activePage.strokes);
