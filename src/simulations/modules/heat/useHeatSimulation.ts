@@ -8,6 +8,10 @@ import {
 import { stepHeatSimulation } from './heatPhysicsEngine';
 import { createDefaultHeatSim } from './HeatSimulationModule';
 import { recognizeHeatSketch, createHeatObjectFromRecognition } from './HeatSketchRecognizer';
+import {
+  getContainerActionButtonsWorldPos,
+  triggerContainerFillFeedback,
+} from './HeatRenderer';
 
 export interface UseHeatSimulationReturn {
   activeHeatSim: HeatSimConfig | null;
@@ -463,6 +467,8 @@ export function useHeatSimulation(
         const curVol = targetContainer.containerState.volumeMl || 0;
         const nextVol = curVol === 0 ? Math.round(cap * 0.5) : curVol < cap ? cap : 0;
 
+        triggerContainerFillFeedback(targetContainer.id, nextVol, cap);
+
         const next = {
           ...cur,
           objects: cur.objects.map((o) =>
@@ -546,6 +552,27 @@ export function useHeatSimulation(
           const btnCenterY = cyBot + 1;
           if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 18) {
             toggleBurner(obj.id);
+            return true;
+          }
+        }
+      }
+
+      // 0b. Permanent Container Action Buttons (Droplet & Pencil at bottom-right of container glassware)
+      for (const obj of sim.objects) {
+        if (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') {
+          const { dropletX, dropletY, pencilX, pencilY } = getContainerActionButtonsWorldPos(obj);
+          const dDroplet = Math.hypot(lx - dropletX, ly - dropletY);
+          const dPencil = Math.hypot(lx - pencilX, ly - pencilY);
+
+          if (dDroplet <= 14 && dDroplet <= dPencil) {
+            setSelectedObjectIds([obj.id]);
+            handleFillContainer(obj.id);
+            return true;
+          }
+
+          if (dPencil <= 14) {
+            setSelectedObjectIds([obj.id]);
+            setEditingContainer(obj);
             return true;
           }
         }
@@ -768,32 +795,6 @@ export function useHeatSimulation(
         const maxY = selectedObj.y + selectedObj.height + pad;
         const cx = selectedObj.x + selectedObj.width / 2;
         const cy = selectedObj.y + selectedObj.height / 2;
-        const pillY = maxY + 24;
-
-        const hasContainer =
-          selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
-
-        // Floating Action Bar Pills
-        if (hasContainer) {
-          // Fill button [ 💧 Γέμισμα ] / [ 💧 250ml ]
-          const fillX = cx - 14;
-          if (
-            (Math.abs(lx - fillX) <= 44 || Math.abs(lx - (cx - 24)) <= 40) &&
-            Math.abs(ly - pillY) <= 22
-          ) {
-            handleFillContainer(selectedObj.id);
-            return true;
-          }
-          // Edit pencil [ ✎ ]
-          const editX = cx + 32;
-          if (
-            Math.hypot(lx - editX, ly - pillY) <= 24 ||
-            Math.hypot(lx - (cx + 18), ly - pillY) <= 20
-          ) {
-            setEditingContainer(selectedObj);
-            return true;
-          }
-        }
 
         // C. 4 Corner Handles (proportional scaling)
         const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number }[] = [
@@ -854,23 +855,6 @@ export function useHeatSimulation(
         const reversed = [...sim.objects].reverse();
 
         for (const obj of reversed) {
-          // Direct tap on container action pills even before selecting
-          const hasCont = obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask';
-          const pY = obj.y + obj.height + 32;
-          const cX = obj.x + obj.width / 2;
-          if (hasCont && Math.abs(ly - pY) <= 22) {
-            if (Math.abs(lx - (cX - 14)) <= 44 || Math.abs(lx - (cX - 24)) <= 40) {
-              setSelectedObjectIds([obj.id]);
-              handleFillContainer(obj.id);
-              return true;
-            }
-            if (Math.hypot(lx - (cX + 32), ly - pY) <= 24 || Math.hypot(lx - (cX + 18), ly - pY) <= 20) {
-              setSelectedObjectIds([obj.id]);
-              setEditingContainer(obj);
-              return true;
-            }
-          }
-
           const inside =
             lx >= obj.x - 4 &&
             lx <= obj.x + obj.width + 4 &&

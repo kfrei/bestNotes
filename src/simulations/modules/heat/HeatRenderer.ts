@@ -243,50 +243,6 @@ export function renderObjectSelectionFrame(
     ctx.stroke();
   }
 
-  // 4. Floating Action Bar (Pill Handles) positioned cleanly below the frame
-  const pillY = maxY + 24;
-  const hasContainer = type === 'beaker' || type === 'wide-basin' || type === 'flask';
-
-  // Quick Action Pills
-  if (hasContainer) {
-    // Fill Pill [ 💧 Γέμισμα ] / [ 💧 250ml ]
-    const fillX = cx - 14;
-    const pillW = 64;
-    const pillH = 21;
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = volumeMl && volumeMl > 0 ? '#2563eb' : '#ffffff';
-    ctx.strokeStyle = volumeMl && volumeMl > 0 ? '#1d4ed8' : '#cbd5e1';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.roundRect(fillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.font = 'bold 9.5px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = volumeMl && volumeMl > 0 ? '#ffffff' : '#1e293b';
-    ctx.fillText(volumeMl && volumeMl > 0 ? `💧 ${volumeMl}ml` : '💧 Γέμισμα', fillX, pillY);
-
-    // Edit Pencil Button [ ✎ ]
-    const editX = cx + 32;
-    ctx.fillStyle = '#234978';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(editX, pillY, 10.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillText('✎', editX, pillY);
-    ctx.restore();
-  }
-
   ctx.restore();
 }
 
@@ -1139,6 +1095,226 @@ function renderTripod(
 }
 
 /**
+ * Ephemeral Volume Fill Feedback for container droplet clicks (1.5s fade out).
+ */
+export interface ContainerFillFeedback {
+  volumeMl: number;
+  capacityMl: number;
+  startTime: number;
+}
+
+export const containerFillFeedbackMap = new Map<string, ContainerFillFeedback>();
+
+export function triggerContainerFillFeedback(containerId: string, volumeMl: number, capacityMl: number): void {
+  containerFillFeedbackMap.set(containerId, {
+    volumeMl,
+    capacityMl,
+    startTime: performance.now(),
+  });
+}
+
+/**
+ * Coordinate calculators for the permanent discreet action buttons (Droplet & Pencil)
+ * positioned at the bottom-right of container glassware (beaker, wide-basin, flask).
+ */
+export function getContainerActionButtonsLocalPos(w: number, h: number) {
+  const pad = 8;
+  const bw = w - pad * 2;
+  const bh = h - pad * 2 - 6;
+  const glassRightX = pad + bw;
+  const glassBottomY = pad + 4 + bh;
+  const btnSize = 19;
+  const btnHalf = btnSize / 2;
+  // 12px gap from glass wall so buttons are distinct and never glued ("χωρίς να είναι κολλημένα")
+  const dropletX = glassRightX + 12 + btnHalf;
+  const dropletY = glassBottomY - btnHalf - 1;
+  // 4px gap between droplet and pencil squircle buttons
+  const pencilX = dropletX + btnSize + 4;
+  const pencilY = dropletY;
+  return { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX, glassBottomY };
+}
+
+export function getContainerActionButtonsWorldPos(obj: HeatObject) {
+  const local = getContainerActionButtonsLocalPos(obj.width, obj.height);
+  return {
+    dropletX: obj.x + local.dropletX,
+    dropletY: obj.y + local.dropletY,
+    pencilX: obj.x + local.pencilX,
+    pencilY: obj.y + local.pencilY,
+    btnSize: local.btnSize,
+    btnHalf: local.btnHalf,
+    glassRightX: obj.x + local.glassRightX,
+    glassBottomY: obj.y + local.glassBottomY,
+  };
+}
+
+/**
+ * Small monochrome droplet icon outline (no text).
+ */
+function drawDropletIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  // Pointed top tip
+  ctx.moveTo(0, -4.8);
+  // Curve down right
+  ctx.bezierCurveTo(2.4, -1.8, 3.5, 0.8, 3.5, 2.2);
+  // Bottom rounded base
+  ctx.bezierCurveTo(3.5, 4.3, 2.0, 5.0, 0, 5.0);
+  ctx.bezierCurveTo(-2.0, 5.0, -3.5, 4.3, -3.5, 2.2);
+  // Curve up left to tip
+  ctx.bezierCurveTo(-3.5, 0.8, -2.4, -1.8, 0, -4.8);
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Small monochrome pencil icon outline in grey (on white/beige squircle background, not black).
+ */
+function drawPencilIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-Math.PI / 4); // tilted 45 degrees
+  ctx.beginPath();
+  // Pencil body
+  ctx.rect(-1.7, -3.2, 3.4, 5.2);
+  // Pointed lead tip
+  ctx.moveTo(-1.7, 2.0);
+  ctx.lineTo(0, 4.7);
+  ctx.lineTo(1.7, 2.0);
+  // Eraser / ferrule division line
+  ctx.moveTo(-1.7, -1.6);
+  ctx.lineTo(1.7, -1.6);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.15;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Renders the 2 permanent discreet monochrome action buttons (Droplet & Pencil)
+ * and the ephemeral 1.5s fade-out volume badge for containers.
+ */
+function renderContainerActionButtons(
+  ctx: CanvasRenderingContext2D,
+  objId: string | undefined,
+  w: number,
+  h: number,
+  isDark: boolean
+): void {
+  const { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX } = getContainerActionButtonsLocalPos(w, h);
+
+  const frameGrey = isDark
+    ? 'rgba(255, 255, 255, 0.22)'
+    : 'rgba(156, 163, 175, 0.68)'; // Soft, faint neutral whisper-grey (matches burner flame button)
+
+  const iconGrey = isDark
+    ? 'rgba(255, 255, 255, 0.65)'
+    : 'rgba(100, 116, 139, 0.88)'; // Soft neutral grey for icons
+
+  const bgFill = isDark ? 'rgba(30, 41, 59, 0.95)' : '#fdfbf7';
+
+  // 1. Droplet Squircle Button (Fill cycle)
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 1.0;
+  ctx.fillStyle = bgFill;
+  ctx.strokeStyle = frameGrey;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.roundRect(dropletX - btnHalf, dropletY - btnHalf, btnSize, btnSize, 5.5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // Droplet icon inside (monochrome outline only, NO text)
+  drawDropletIcon(ctx, dropletX, dropletY, iconGrey);
+
+  // 2. Pencil Squircle Button (Settings)
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 1.0;
+  ctx.fillStyle = bgFill;
+  ctx.strokeStyle = frameGrey;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.roundRect(pencilX - btnHalf, pencilY - btnHalf, btnSize, btnSize, 5.5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // Pencil icon inside (grey on soft white/beige background)
+  drawPencilIcon(ctx, pencilX, pencilY, iconGrey);
+
+  // 3. Ephemeral 1.5s Fade-out Volume Feedback Badge
+  if (objId) {
+    const feedback = containerFillFeedbackMap.get(objId);
+    if (feedback) {
+      const now = performance.now();
+      const elapsed = now - feedback.startTime;
+      const totalDuration = 1500;
+      const fadeDuration = 450;
+
+      if (elapsed >= totalDuration) {
+        containerFillFeedbackMap.delete(objId);
+      } else {
+        let alpha = 1.0;
+        if (elapsed > totalDuration - fadeDuration) {
+          alpha = Math.max(0, (totalDuration - elapsed) / fadeDuration);
+        }
+        const floatUp = Math.min(5, (elapsed / totalDuration) * 5);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        const badgeText = feedback.volumeMl > 0 ? `💧 ${feedback.volumeMl} ml` : '💧 Άδειο (0 ml)';
+
+        ctx.font = 'bold 9.5px system-ui, sans-serif';
+        const textMetrics = ctx.measureText(badgeText);
+        const badgeW = textMetrics.width + 16;
+        const badgeH = 19;
+        let badgeCenterX = (dropletX + pencilX) / 2;
+        const minCenterX = glassRightX + 4 + badgeW / 2;
+        if (badgeCenterX < minCenterX) {
+          badgeCenterX = minCenterX;
+        }
+        const badgeCenterY = dropletY - btnHalf - 12 - floatUp;
+
+        // Shadow & pill container
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1.2;
+
+        ctx.beginPath();
+        ctx.roundRect(badgeCenterX - badgeW / 2, badgeCenterY - badgeH / 2, badgeW, badgeH, badgeH / 2);
+        ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.94)' : 'rgba(255, 255, 255, 0.96)';
+        ctx.fill();
+        ctx.strokeStyle = feedback.volumeMl > 0 ? 'rgba(59, 130, 246, 0.65)' : frameGrey;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badgeText, badgeCenterX, badgeCenterY + 0.5);
+
+        ctx.restore();
+      }
+    }
+  }
+}
+
+/**
  * 3. Borosilicate Glass Beaker - Plain clean glass (NO measurement lines) matching the hand-drawn sketch
  */
 function renderBeaker(
@@ -1267,6 +1443,11 @@ function renderBeaker(
     ctx.fillRect(x + bw - 12, y + beadH + 2, 9, bh - beadH - cornerR - 2);
 
     ctx.restore();
+  }
+
+  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActionButtons(ctx, objId, w, h, isDark);
   }
 }
 
@@ -1399,6 +1580,11 @@ function renderWideBasin(
     ctx.fillRect(x + bw - 14, y + beadH + 2, 10, bh - beadH - cornerR - 2);
 
     ctx.restore();
+  }
+
+  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActionButtons(ctx, objId, w, h, isDark);
   }
 }
 
@@ -1543,6 +1729,11 @@ function renderFlask(
     ctx.stroke();
 
     ctx.restore();
+  }
+
+  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  if (layer === 'all' || layer === 'ui') {
+    renderContainerActionButtons(ctx, objId, w, h, isDark);
   }
 }
 
