@@ -1842,6 +1842,102 @@ function renderFlask(
 /**
  * 6. Precision Laboratory Thermometer
  */
+/**
+ * Helper to render physical thermometer apparatus elements (stem, bulb, mercury column, calibration ticks).
+ * Supports both crisp emergent air pass and softened/blurred submerged liquid pass.
+ */
+function drawThermometerApparatus(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  topY: number,
+  botY: number,
+  stemW: number,
+  stemH: number,
+  bulbR: number,
+  temp: number,
+  tempFrac: number,
+  liquidTopY: number,
+  liquidColor: string,
+  strokeColor: string,
+  isDark: boolean,
+  isSubmergedPass: boolean = false
+) {
+  // 1. Glass Outer Stem
+  ctx.beginPath();
+  ctx.roundRect(cx - stemW / 2, topY, stemW, stemH, stemW / 2);
+  ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.4)' : 'rgba(255, 255, 255, 0.65)';
+  ctx.fill();
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = isSubmergedPass ? 1.1 : 1.6;
+  ctx.stroke();
+
+  // 2. Glass Bulb at bottom
+  ctx.beginPath();
+  ctx.arc(cx, botY + 2, bulbR, 0, Math.PI * 2);
+  const bulbGrad = ctx.createRadialGradient(cx - 2, botY, 1, cx, botY + 2, bulbR);
+  bulbGrad.addColorStop(0, '#60a5fa');
+  bulbGrad.addColorStop(0.7, '#2563eb');
+  bulbGrad.addColorStop(1, '#1d4ed8');
+  ctx.fillStyle = bulbGrad;
+  ctx.fill();
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = isSubmergedPass ? 1.1 : 1.6;
+  ctx.stroke();
+
+  // 3. Liquid Column inside stem with gradient
+  const colW = stemW - 3;
+  if (tempFrac > 0.005) {
+    const colGrad = ctx.createLinearGradient(cx, botY + 2, cx, liquidTopY);
+    colGrad.addColorStop(0, '#2563eb');
+    if (temp > 30) {
+      colGrad.addColorStop(Math.min(0.85, 30 / temp), '#10b981');
+    }
+    if (temp > 65) {
+      colGrad.addColorStop(Math.min(0.92, 65 / temp), '#f97316');
+    }
+    colGrad.addColorStop(1, liquidColor);
+
+    ctx.beginPath();
+    ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
+    ctx.fillStyle = colGrad;
+    ctx.fill();
+  }
+
+  // 4. Calibration Tick Marks (0 to 100 °C)
+  for (let t = 0; t <= 100; t += 10) {
+    const ty = botY - stemH * (t / 100);
+    const isMajor = t === 0 || t === 50 || t === 100;
+    const tickLen = isMajor ? 6 : 3.5;
+
+    ctx.beginPath();
+    ctx.moveTo(cx + stemW / 2, ty);
+    ctx.lineTo(cx + stemW / 2 + tickLen, ty);
+    ctx.strokeStyle = isSubmergedPass
+      ? (isDark ? 'rgba(248, 250, 252, 0.35)' : 'rgba(17, 24, 39, 0.35)')
+      : strokeColor;
+    ctx.lineWidth = isMajor ? 1.0 : 0.8;
+    ctx.stroke();
+
+    if (isMajor) {
+      ctx.fillStyle = isSubmergedPass
+        ? (isDark ? 'rgba(248, 250, 252, 0.30)' : 'rgba(148, 163, 184, 0.40)')
+        : (isDark ? 'rgba(248, 250, 252, 0.50)' : '#94a3b8');
+      ctx.font = 'bold 7.5px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${t}`, cx + stemW / 2 + 7.5, ty + 2.5);
+    }
+  }
+}
+
+/**
+ * 6. Laboratory Thermometer (0 to 100 °C)
+ * Features dynamic liquid diffusion / blur & optical immersion:
+ * - Emergent part in air: 100% crisp, sharp and clean.
+ * - Submerged part in water: strong diffusion blur (θόλωμα υγρού).
+ * - Submerged part in oil: heavily obscured & diffused.
+ * - Submerged part in milk: almost completely invisible (σχεδόν αόρατο).
+ * - Dynamic emergence: clears up smoothly as it is pulled out of the liquid.
+ */
 function renderThermometer(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1889,95 +1985,112 @@ function renderThermometer(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Glass Outer Stem
-    ctx.beginPath();
-    ctx.roundRect(cx - stemW / 2, topY, stemW, stemH, stemW / 2);
-    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.4)' : 'rgba(255, 255, 255, 0.65)';
-    ctx.fill();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
+    const isDipped = submergedLocalY !== null && submergedLocalY < botY + bulbR + 3;
 
-    // Glass Bulb at bottom
-    ctx.beginPath();
-    ctx.arc(cx, botY + 2, bulbR, 0, Math.PI * 2);
-    const bulbGrad = ctx.createRadialGradient(cx - 2, botY, 1, cx, botY + 2, bulbR);
-    bulbGrad.addColorStop(0, '#60a5fa');
-    bulbGrad.addColorStop(0.7, '#2563eb');
-    bulbGrad.addColorStop(1, '#1d4ed8');
-    ctx.fillStyle = bulbGrad;
-    ctx.fill();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
+    if (!isDipped) {
+      // Completely in the air: 100% sharp and crisp
+      drawThermometerApparatus(
+        ctx,
+        cx,
+        topY,
+        botY,
+        stemW,
+        stemH,
+        bulbR,
+        temp,
+        tempFrac,
+        liquidTopY,
+        liquidColor,
+        strokeColor,
+        isDark,
+        false
+      );
+    } else {
+      const surfaceY = Math.max(topY, submergedLocalY!);
 
-    // Liquid Column inside stem with gradient: Blue (0°C) -> Green (30°C) -> Orange (65°C) -> Red (100°C)
-    const colW = stemW - 3;
-    if (tempFrac > 0.005) {
-      const colGrad = ctx.createLinearGradient(cx, botY + 2, cx, liquidTopY);
-      colGrad.addColorStop(0, '#2563eb'); // Blue at 0°C base
-      if (temp > 30) {
-        colGrad.addColorStop(Math.min(0.85, 30 / temp), '#10b981'); // Green
+      // PASS 1: Emergent Part (in the air: from 0 down to surfaceY)
+      // Crystal clear, unblurred, full contrast
+      if (surfaceY > topY) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, w, surfaceY);
+        ctx.clip();
+        drawThermometerApparatus(
+          ctx,
+          cx,
+          topY,
+          botY,
+          stemW,
+          stemH,
+          bulbR,
+          temp,
+          tempFrac,
+          liquidTopY,
+          liquidColor,
+          strokeColor,
+          isDark,
+          false
+        );
+        ctx.restore();
       }
-      if (temp > 65) {
-        colGrad.addColorStop(Math.min(0.92, 65 / temp), '#f97316'); // Orange
-      }
-      colGrad.addColorStop(1, liquidColor); // Exact current temperature color at top meniscus
 
-      ctx.beginPath();
-      ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
-      ctx.fillStyle = colGrad;
-      ctx.fill();
-    }
-
-    // Calibration Tick Marks (0 to 100 °C)
-    for (let t = 0; t <= 100; t += 10) {
-      const ty = botY - stemH * (t / 100);
-      const isSubmerged = submergedLocalY !== null && ty >= submergedLocalY;
-      const isMajor = t === 0 || t === 50 || t === 100;
-      const tickLen = isMajor ? 6 : 3.5;
-
-      ctx.beginPath();
-      ctx.moveTo(cx + stemW / 2, ty);
-      ctx.lineTo(cx + stemW / 2 + tickLen, ty);
-      ctx.strokeStyle = isSubmerged
-        ? (isDark ? 'rgba(248, 250, 252, 0.22)' : 'rgba(17, 24, 39, 0.24)')
-        : strokeColor;
-      ctx.lineWidth = isSubmerged ? 0.7 : 0.9;
-      ctx.stroke();
-
-      if (isMajor) {
-        // Soft gentle grey for 0, 50, 100 scale labels
-        ctx.fillStyle = isSubmerged
-          ? (isDark ? 'rgba(248, 250, 252, 0.20)' : 'rgba(148, 163, 184, 0.35)')
-          : (isDark ? 'rgba(248, 250, 252, 0.50)' : '#94a3b8');
-        ctx.font = 'bold 7.5px system-ui, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`${t}`, cx + stemW / 2 + 7.5, ty + 2.5);
-      }
-    }
-
-    // If submerged in liquid, apply soft immersion wash and soften the outer glass & bulb stroke
-    if (submergedLocalY !== null && submergedLocalY < botY + bulbR) {
-      const subTop = Math.max(topY, submergedLocalY);
-      const subH = (botY + bulbR + 4) - subTop;
-
+      // PASS 2: Submerged Part (inside liquid: from surfaceY downwards)
+      // Realistic liquid refraction & diffusion blur according to liquid optical density:
+      // - Milk: almost completely invisible (σχεδόν αόρατο, opaque white)
+      // - Oil: heavily obscured & deep refractive blur (ήπια σκιά μέσα στο λάδι)
+      // - Water: strong liquid diffusion blur (έντονο θόλωμα υγρού)
       ctx.save();
-      // 1. Soft immersion veil over the submerged portion of the thermometer
       ctx.beginPath();
-      ctx.roundRect(cx - bulbR - 4, subTop, (bulbR + 4) * 2, subH, 6);
-      ctx.fillStyle =
-        dippedLiquidType === 'oil'
-          ? 'rgba(163, 230, 53, 0.28)'
-          : dippedLiquidType === 'milk'
-          ? 'rgba(255, 255, 255, 0.55)'
-          : 'rgba(56, 189, 248, 0.28)'; // water
-      ctx.fill();
+      ctx.rect(0, surfaceY, w, h - surfaceY + 10);
+      ctx.clip();
 
-      // 2. Soften the harsh black outer stroke underwater to simulate light refraction
-      ctx.strokeStyle = isDark
-        ? 'rgba(30, 41, 59, 0.55)'
-        : 'rgba(255, 255, 255, 0.50)';
+      if (dippedLiquidType === 'milk') {
+        ctx.globalAlpha = 0.04;
+        ctx.filter = 'blur(7px)';
+      } else if (dippedLiquidType === 'oil') {
+        ctx.globalAlpha = 0.16;
+        ctx.filter = 'blur(5.5px)';
+      } else {
+        // Water
+        ctx.globalAlpha = 0.44;
+        ctx.filter = 'blur(4.5px)';
+      }
+
+      drawThermometerApparatus(
+        ctx,
+        cx,
+        topY,
+        botY,
+        stemW,
+        stemH,
+        bulbR,
+        temp,
+        tempFrac,
+        liquidTopY,
+        liquidColor,
+        strokeColor,
+        isDark,
+        true
+      );
+      ctx.restore();
+
+      // Delicate surface meniscus ring where the glass tube enters the liquid
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(cx, surfaceY, stemW / 2 + 2.5, 2.2, 0, 0, Math.PI * 2);
+      ctx.fillStyle =
+        dippedLiquidType === 'milk'
+          ? 'rgba(255, 255, 255, 0.95)'
+          : dippedLiquidType === 'oil'
+          ? 'rgba(217, 249, 157, 0.60)'
+          : 'rgba(186, 230, 253, 0.60)';
+      ctx.fill();
+      ctx.strokeStyle =
+        dippedLiquidType === 'milk'
+          ? 'rgba(209, 213, 219, 0.85)'
+          : dippedLiquidType === 'oil'
+          ? 'rgba(101, 163, 13, 0.45)'
+          : 'rgba(2, 132, 199, 0.45)';
       ctx.lineWidth = 1.0;
       ctx.stroke();
       ctx.restore();
