@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { NotePage, StrokeObject } from '../../../types/note';
 import {
   HeatSimConfig,
+  HeatGraphConfig,
   HeatObject,
   HeatObjectType,
 } from './types';
@@ -50,6 +51,14 @@ export interface UseHeatSimulationReturn {
   handleFillContainer: (containerId?: string) => void;
   handleDeleteSelectedObject: (idOrIds?: string | string[]) => void;
   setSelectedObjectIds: (ids: string[]) => void;
+  graphChoicePrompt: {
+    isOpen: boolean;
+    targetContainer: HeatObject | null;
+    existingGraph: HeatGraphConfig | null;
+  } | null;
+  handleGraphChoice: (choice: 'existing' | 'new') => void;
+  cancelGraphChoice: () => void;
+  handleToggleContainerGraph: (targetContainer: HeatObject) => void;
 }
 
 export function useHeatSimulation(
@@ -57,6 +66,11 @@ export function useHeatSimulation(
   updatePage: (updater: (p: NotePage) => NotePage) => void
 ): UseHeatSimulationReturn {
   const [editingContainer, setEditingContainer] = useState<HeatObject | null>(null);
+  const [graphChoicePrompt, setGraphChoicePrompt] = useState<{
+    isOpen: boolean;
+    targetContainer: HeatObject | null;
+    existingGraph: HeatGraphConfig | null;
+  } | null>(null);
 
   // Active heat simulation config from activePage
   const activeHeatSim = activePage?.heatSims?.find(
@@ -122,6 +136,7 @@ export function useHeatSimulation(
     handle?: 'nw' | 'ne' | 'se' | 'sw' | 'n' | 'e' | 's' | 'w';
     isGraph?: boolean;
     isGraphResize?: boolean;
+    targetGraph?: HeatGraphConfig;
     startX: number;
     startY: number;
     origObjX?: number;
@@ -449,17 +464,128 @@ export function useHeatSimulation(
   const toggleGraph = useCallback(() => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
       const cur = liveSimRef.current || prev;
+      const allGraphs = cur.graphs && cur.graphs.length > 0 ? [...cur.graphs] : [{ ...cur.graph }];
+      const nextVisible = !cur.graph.visible;
+      allGraphs[0].visible = nextVisible;
       const next = {
         ...cur,
         graph: {
           ...cur.graph,
-          visible: !cur.graph.visible,
+          visible: nextVisible,
         },
+        graphs: allGraphs,
       };
       liveSimRef.current = next;
       return next;
     });
   }, [updateActiveHeatSim]);
+
+  const handleToggleContainerGraph = useCallback(
+    (targetContainer: HeatObject) => {
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const allGraphs = cur.graphs && cur.graphs.length > 0 ? [...cur.graphs] : [{ ...cur.graph }];
+        const visibleGraphs = allGraphs.filter((g) => g.visible);
+
+        // Check if container is already in an open graph
+        const existingWithContainer = visibleGraphs.find((g) =>
+          g.boundContainerIds?.includes(targetContainer.id)
+        );
+
+        if (existingWithContainer) {
+          // Toggle off / remove from that graph
+          const updatedBound = (existingWithContainer.boundContainerIds || []).filter(
+            (id) => id !== targetContainer.id
+          );
+          if (updatedBound.length === 0) {
+            existingWithContainer.visible = false;
+          } else {
+            existingWithContainer.boundContainerIds = updatedBound;
+          }
+          const next = {
+            ...cur,
+            graph: { ...allGraphs[0] },
+            graphs: allGraphs,
+          };
+          liveSimRef.current = next;
+          return next;
+        }
+
+        // Container is NOT in any open graph:
+        // If there is already at least one visible graph, prompt user with modal
+        if (visibleGraphs.length > 0) {
+          setGraphChoicePrompt({
+            isOpen: true,
+            targetContainer,
+            existingGraph: visibleGraphs[0],
+          });
+          return cur;
+        }
+
+        // No open graph: open primary graph and bind to targetContainer
+        allGraphs[0].visible = true;
+        allGraphs[0].boundContainerIds = [targetContainer.id];
+        const next = {
+          ...cur,
+          graph: { ...allGraphs[0] },
+          graphs: allGraphs,
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+    },
+    [updateActiveHeatSim]
+  );
+
+  const handleGraphChoice = useCallback(
+    (choice: 'existing' | 'new') => {
+      if (!graphChoicePrompt?.targetContainer) {
+        setGraphChoicePrompt(null);
+        return;
+      }
+      const target = graphChoicePrompt.targetContainer;
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const allGraphs = cur.graphs && cur.graphs.length > 0 ? [...cur.graphs] : [{ ...cur.graph }];
+        const existing = allGraphs.find((g) => g.visible) || allGraphs[0];
+
+        if (choice === 'existing') {
+          const bound = existing.boundContainerIds || [];
+          if (!bound.includes(target.id)) {
+            existing.boundContainerIds = [...bound, target.id];
+          }
+          existing.visible = true;
+        } else {
+          // Create new graph window offset by 35px
+          const newGraph: HeatGraphConfig = {
+            id: `graph-${Date.now()}`,
+            visible: true,
+            x: Math.min(window.innerWidth - 380, existing.x + 35),
+            y: Math.min(window.innerHeight - 260, existing.y + 35),
+            width: existing.width || 340,
+            height: existing.height || 220,
+            customMoved: true,
+            boundContainerIds: [target.id],
+          };
+          allGraphs.push(newGraph);
+        }
+
+        const next = {
+          ...cur,
+          graph: { ...allGraphs[0] },
+          graphs: allGraphs,
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+      setGraphChoicePrompt(null);
+    },
+    [graphChoicePrompt, updateActiveHeatSim]
+  );
+
+  const cancelGraphChoice = useCallback(() => {
+    setGraphChoicePrompt(null);
+  }, []);
 
   const handleFillContainer = useCallback(
     (containerId?: string) => {
@@ -561,13 +687,21 @@ export function useHeatSimulation(
         }
       }
 
-      // 0b. Permanent Container Action Buttons (Droplet & Pencil at bottom-right of container glassware)
-      // Clicking these action buttons directly toggles liquid fill or opens the edit modal without lasso-selecting the container!
+      // 0b. Permanent Container Action Buttons (Droplet, Pencil & Graph at bottom-right of container glassware)
+      // Clicking these action buttons directly toggles actions without lasso-selecting the container!
       for (const obj of sim.objects) {
         if (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') {
-          const { dropletX, dropletY, pencilX, pencilY } = getContainerActionButtonsWorldPos(obj);
+          const { dropletX, dropletY, pencilX, pencilY, graphX, graphY } =
+            getContainerActionButtonsWorldPos(obj);
           const dDroplet = Math.hypot(lx - dropletX, ly - dropletY);
           const dPencil = Math.hypot(lx - pencilX, ly - pencilY);
+          const dGraph = Math.hypot(lx - graphX, ly - graphY);
+
+          if (dGraph <= 15 && dGraph <= dPencil && dGraph <= dDroplet) {
+            setSelectedObjectIds([]);
+            handleToggleContainerGraph(obj);
+            return true;
+          }
 
           if (dDroplet <= 15 && dDroplet <= dPencil) {
             setSelectedObjectIds([]);
@@ -583,10 +717,37 @@ export function useHeatSimulation(
         }
       }
 
-      // 1. Check Graph window hit
-      if (sim.graph.visible) {
-        const g = sim.graph;
-        // Check resize handle
+      // 1. Check Graph window hit (Close 'X' button, Resize handle, Header drag, Card click absorption)
+      const allGraphs = sim.graphs && sim.graphs.length > 0 ? sim.graphs : [sim.graph];
+      const visibleGraphs = allGraphs.filter((g) => g.visible);
+      for (let i = visibleGraphs.length - 1; i >= 0; i--) {
+        const g = visibleGraphs[i];
+
+        // A. Close button '✕' (g.x + g.width - 18, g.y + 17, hit radius 12)
+        const closeX = g.x + g.width - 18;
+        const closeY = g.y + 17;
+        if (Math.hypot(lx - closeX, ly - closeY) <= 12) {
+          updateActiveHeatSim((prev: HeatSimConfig) => {
+            const cur = liveSimRef.current || prev;
+            const curAll = cur.graphs && cur.graphs.length > 0 ? [...cur.graphs] : [{ ...cur.graph }];
+            const match = curAll.find((ag) => (ag.id && ag.id === g.id) || ag === g);
+            if (match) {
+              match.visible = false;
+            } else if (curAll[0]) {
+              curAll[0].visible = false;
+            }
+            const next = {
+              ...cur,
+              graph: { ...curAll[0] },
+              graphs: curAll,
+            };
+            liveSimRef.current = next;
+            return next;
+          });
+          return true;
+        }
+
+        // B. Resize handle at bottom-right
         if (
           lx >= g.x + g.width - 24 &&
           lx <= g.x + g.width + 4 &&
@@ -594,7 +755,8 @@ export function useHeatSimulation(
           ly <= g.y + g.height + 4
         ) {
           dragRef.current = {
-            objectId: 'graph',
+            objectId: g.id || 'graph',
+            targetGraph: g,
             isGraph: true,
             isGraphResize: true,
             startX: lx,
@@ -607,16 +769,20 @@ export function useHeatSimulation(
           return true;
         }
 
-        // Check header drag
-        if (lx >= g.x && lx <= g.x + g.width && ly >= g.y && ly <= g.y + 32) {
-          dragRef.current = {
-            objectId: 'graph',
-            isGraph: true,
-            startX: lx,
-            startY: ly,
-            origObjX: g.x,
-            origObjY: g.y,
-          };
+        // C. Inside Graph Card: Header drag or card click absorption
+        if (lx >= g.x && lx <= g.x + g.width && ly >= g.y && ly <= g.y + g.height) {
+          if (ly <= g.y + 36) {
+            dragRef.current = {
+              objectId: g.id || 'graph',
+              targetGraph: g,
+              isGraph: true,
+              startX: lx,
+              startY: ly,
+              origObjX: g.x,
+              origObjY: g.y,
+            };
+          }
+          // Return true so clicking inside the graph does NOT deselect objects or draw lines
           return true;
         }
       }
@@ -917,17 +1083,49 @@ export function useHeatSimulation(
 
       if (drag.isGraph) {
         if (drag.isGraphResize) {
-          const nextW = Math.max(220, (drag.origGraphW || 290) + dx);
-          const nextH = Math.max(160, (drag.origGraphH || 200) + dy);
+          const nextW = Math.max(260, (drag.origGraphW || 340) + dx);
+          const nextH = Math.max(160, (drag.origGraphH || 220) + dy);
+          if (drag.targetGraph) {
+            drag.targetGraph.width = nextW;
+            drag.targetGraph.height = nextH;
+            drag.targetGraph.customMoved = true;
+          }
           if (liveSimRef.current) {
+            if (drag.targetGraph && liveSimRef.current.graphs) {
+              const match = liveSimRef.current.graphs.find(
+                (g) => (g.id && g.id === drag.targetGraph?.id) || g === drag.targetGraph
+              );
+              if (match) {
+                match.width = nextW;
+                match.height = nextH;
+                match.customMoved = true;
+              }
+            }
             liveSimRef.current.graph.width = nextW;
             liveSimRef.current.graph.height = nextH;
             liveSimRef.current.graph.customMoved = true;
           }
         } else {
+          const nextX = (drag.origObjX ?? 0) + dx;
+          const nextY = (drag.origObjY ?? 0) + dy;
+          if (drag.targetGraph) {
+            drag.targetGraph.x = nextX;
+            drag.targetGraph.y = nextY;
+            drag.targetGraph.customMoved = true;
+          }
           if (liveSimRef.current) {
-            liveSimRef.current.graph.x = (drag.origObjX ?? 0) + dx;
-            liveSimRef.current.graph.y = (drag.origObjY ?? 0) + dy;
+            if (drag.targetGraph && liveSimRef.current.graphs) {
+              const match = liveSimRef.current.graphs.find(
+                (g) => (g.id && g.id === drag.targetGraph?.id) || g === drag.targetGraph
+              );
+              if (match) {
+                match.x = nextX;
+                match.y = nextY;
+                match.customMoved = true;
+              }
+            }
+            liveSimRef.current.graph.x = nextX;
+            liveSimRef.current.graph.y = nextY;
             liveSimRef.current.graph.customMoved = true;
           }
         }
@@ -1208,5 +1406,9 @@ export function useHeatSimulation(
     handleFillContainer,
     handleDeleteSelectedObject,
     setSelectedObjectIds,
+    graphChoicePrompt,
+    handleGraphChoice,
+    cancelGraphChoice,
+    handleToggleContainerGraph,
   };
 }

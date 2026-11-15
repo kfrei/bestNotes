@@ -122,16 +122,19 @@ export interface HeatGraphDataPoint {
   timeSec: number;
   temp1: number; // Primary vessel temperature
   temp2?: number; // Secondary (nested vessel or bath) temperature
+  tempsByContainerId?: Record<string, number>; // Temperature of each container at this second
   tempEquilibrium?: number; // Theoretical asymptote
 }
 
 export interface HeatGraphConfig {
+  id?: string;
   visible: boolean;
   x: number;
   y: number;
   width: number;
   height: number;
   customMoved?: boolean;
+  boundContainerIds?: string[]; // Container IDs plotted on this graph
 }
 
 export interface HeatSimConfig {
@@ -143,5 +146,6 @@ export interface HeatSimConfig {
   isRunning: boolean;
   elapsedSec: number;
   graph: HeatGraphConfig;
+  graphs?: HeatGraphConfig[]; // Supports multiple independent graph windows
   history: HeatGraphDataPoint[];
 }

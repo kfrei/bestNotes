@@ -272,6 +272,7 @@ import {
   useHeatSimulation,
   HeatControlPanel,
   HeatLiquidConfigModal,
+  HeatGraphChoiceModal,
   renderHeatSimulation,
   stepHeatSimulation,
   createHeatObjectFromRecognition,
@@ -69527,6 +69528,14 @@ export default function App() {
           }));
           renderStaticSceneRef.current?.();
         }}
+      />
+
+      {/* Heat Simulation Multi-Curve / New Graph Choice Glass Modal */}
+      <HeatGraphChoiceModal
+        isOpen={Boolean(heatSim.graphChoicePrompt?.isOpen)}
+        targetContainer={heatSim.graphChoicePrompt?.targetContainer || null}
+        onChoose={heatSim.handleGraphChoice}
+        onClose={heatSim.cancelGraphChoice}
       />
 
       {/* Viewport-Level Global Red Laser Pointer Canvas (Active everywhere across entire browser, over all dashboards & modals) */}

@@ -17,6 +17,7 @@
 import {
   HeatBurnerState,
   HeatContainerState,
+  HeatGraphConfig,
   HeatObject,
   HeatObjectType,
   HeatSimConfig,
@@ -137,12 +138,19 @@ export function renderHeatSimulation(
             obj.x + obj.width <= b.x + b.width + 20 &&
             obj.y + obj.height >= b.y + 15
         );
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin);
+        const isGraphActive = (sim.graphs || [sim.graph]).some(
+          (g) => g.visible && g.boundContainerIds?.includes(obj.id)
+        );
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin, isGraphActive);
         break;
       }
-      case 'wide-basin':
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
+      case 'wide-basin': {
+        const isGraphActive = (sim.graphs || [sim.graph]).some(
+          (g) => g.visible && g.boundContainerIds?.includes(obj.id)
+        );
+        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, isGraphActive);
         break;
+      }
       case 'flask': {
         const parentBasin = sim.objects.find(
           (b) =>
@@ -151,7 +159,10 @@ export function renderHeatSimulation(
             obj.x + obj.width <= b.x + b.width + 20 &&
             obj.y + obj.height >= b.y + 15
         );
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin);
+        const isGraphActive = (sim.graphs || [sim.graph]).some(
+          (g) => g.visible && g.boundContainerIds?.includes(obj.id)
+        );
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin, isGraphActive);
         break;
       }
       case 'thermometer': {
@@ -207,8 +218,16 @@ export function renderHeatSimulation(
   }
 
   // Render Dynamic T-t Graph if enabled (only in 'ui' or 'all' layer)
-  if (sim.graph.visible && (layer === 'all' || layer === 'ui')) {
-    renderThermalGraph(ctx, sim, isDark);
+  if (layer === 'all' || layer === 'ui') {
+    const graphsToRender =
+      sim.graphs && sim.graphs.length > 0
+        ? sim.graphs.filter((g) => g.visible)
+        : sim.graph.visible
+        ? [sim.graph]
+        : [];
+    for (const g of graphsToRender) {
+      renderThermalGraph(ctx, sim, isDark, g);
+    }
   }
 
   ctx.restore();
@@ -1212,7 +1231,10 @@ export function getContainerActionButtonsLocalPos(w: number, h: number) {
   // Pencil stacked vertically ABOVE the droplet
   const pencilX = dropletX;
   const pencilY = dropletY - btnSize - 4;
-  return { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX, glassBottomY };
+  // Graph button stacked vertically ABOVE the pencil ("πανω απο μολυβο")
+  const graphX = dropletX;
+  const graphY = pencilY - btnSize - 4;
+  return { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnSize, btnHalf, glassRightX, glassBottomY };
 }
 
 export function getContainerActionButtonsWorldPos(obj: HeatObject) {
@@ -1222,6 +1244,8 @@ export function getContainerActionButtonsWorldPos(obj: HeatObject) {
     dropletY: obj.y + local.dropletY,
     pencilX: obj.x + local.pencilX,
     pencilY: obj.y + local.pencilY,
+    graphX: obj.x + local.graphX,
+    graphY: obj.y + local.graphY,
     btnSize: local.btnSize,
     btnHalf: local.btnHalf,
     glassRightX: obj.x + local.glassRightX,
@@ -1388,7 +1412,54 @@ function drawPencilIcon(
 }
 
 /**
- * Renders the 2 permanent discreet standalone icons (Droplet & Pencil)
+ * Standalone Graph Action Icon (diagonal line with zig-zag trend curve 📈)
+ * Placed above the pencil icon ("πανω απο μολυβο").
+ */
+function drawGraphIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  isDark: boolean,
+  isActive: boolean
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  if (isActive) {
+    ctx.beginPath();
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+    ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.32)' : 'rgba(99, 102, 241, 0.20)';
+    ctx.fill();
+  }
+
+  // Diagonal line with zig-zag (📈 trendline graph)
+  ctx.beginPath();
+  ctx.moveTo(-5.5, 4.0);
+  ctx.lineTo(-2.0, -0.5);
+  ctx.lineTo(0.5, 2.2);
+  ctx.lineTo(5.5, -4.5);
+
+  ctx.strokeStyle = isActive
+    ? (isDark ? '#818cf8' : '#4f46e5')
+    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.lineWidth = 1.35;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Small dot on apex
+  ctx.beginPath();
+  ctx.arc(5.5, -4.5, 1.1, 0, Math.PI * 2);
+  ctx.fillStyle = isActive
+    ? (isDark ? '#818cf8' : '#4f46e5')
+    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/**
+ * Renders the 3 permanent discreet standalone icons (Droplet, Pencil, and Graph)
  * and the ephemeral 1.5s fade-out volume badge for containers.
  * NO outer frame boxes, NO white background!
  */
@@ -1398,9 +1469,11 @@ function renderContainerActionButtons(
   w: number,
   h: number,
   isDark: boolean,
-  state?: HeatContainerState
+  state?: HeatContainerState,
+  isGraphActive?: boolean
 ): void {
-  const { dropletX, dropletY, pencilX, pencilY, btnHalf, glassRightX } = getContainerActionButtonsLocalPos(w, h);
+  const { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnHalf, glassRightX } =
+    getContainerActionButtonsLocalPos(w, h);
 
   const feedback = objId ? containerFillFeedbackMap.get(objId) : undefined;
   const isFilled = Boolean(state && state.volumeMl > 0);
@@ -1413,6 +1486,9 @@ function renderContainerActionButtons(
 
   // 2. Standalone Pencil Icon (darker grey line art)
   drawPencilIcon(ctx, pencilX, pencilY, isDark);
+
+  // 3. Standalone Graph Icon (diagonal line with zig-zag curve above pencil)
+  drawGraphIcon(ctx, graphX, graphY, isDark, Boolean(isGraphActive));
 
   // 3. Ephemeral 1.5s Fade-out Volume Feedback Badge
   if (objId && feedback) {
@@ -1485,7 +1561,8 @@ function renderBeaker(
   objId?: string,
   objX?: number,
   objY?: number,
-  parentBasin?: HeatObject
+  parentBasin?: HeatObject,
+  isGraphActive?: boolean
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1653,9 +1730,9 @@ function renderBeaker(
     ctx.restore();
   }
 
-  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
   }
 }
 
@@ -1675,7 +1752,8 @@ function renderWideBasin(
   customColor?: string,
   objId?: string,
   objX?: number,
-  objY?: number
+  objY?: number,
+  isGraphActive?: boolean
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1808,9 +1886,9 @@ function renderWideBasin(
     ctx.restore();
   }
 
-  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
   }
 }
 
@@ -1829,7 +1907,8 @@ function renderFlask(
   objId?: string,
   objX?: number,
   objY?: number,
-  parentBasin?: HeatObject
+  parentBasin?: HeatObject,
+  isGraphActive?: boolean
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1996,9 +2075,9 @@ function renderFlask(
     ctx.restore();
   }
 
-  // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
+  // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
   }
 }
 
@@ -2558,9 +2637,9 @@ function renderSteam(
 function renderThermalGraph(
   ctx: CanvasRenderingContext2D,
   sim: HeatSimConfig,
-  isDark: boolean
+  isDark: boolean,
+  g: HeatGraphConfig = sim.graph
 ): void {
-  const g = sim.graph;
   const gx = g.x;
   const gy = g.y;
   const gw = g.width;
@@ -2571,11 +2650,32 @@ function renderThermalGraph(
   // Glass Card Background (iPadOS frosted glass)
   ctx.beginPath();
   ctx.roundRect(gx, gy, gw, gh, 16);
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.82)' : 'rgba(253, 251, 247, 0.86)';
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.82)' : 'rgba(253, 251, 247, 0.88)';
   ctx.fill();
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.90)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+
+  // Close Button '✕' at top right (gx + gw - 18, gy + 17)
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(gx + gw - 18, gy + 17, 9, 0, Math.PI * 2);
+  ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)';
+  ctx.fill();
+  ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.20)' : 'rgba(0, 0, 0, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(gx + gw - 21.5, gy + 13.5);
+  ctx.lineTo(gx + gw - 14.5, gy + 20.5);
+  ctx.moveTo(gx + gw - 14.5, gy + 13.5);
+  ctx.lineTo(gx + gw - 21.5, gy + 20.5);
+  ctx.strokeStyle = isDark ? '#94a3b8' : '#64748b';
+  ctx.lineWidth = 1.35;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
 
   // Header Title - Clean Greek θ - t title
   ctx.font = 'bold 11px system-ui, sans-serif';
@@ -2585,9 +2685,9 @@ function renderThermalGraph(
 
   // Plot Area with ample margin so title and axes never collide!
   const plotX = gx + 46;
-  const plotY = gy + 46;
+  const plotY = gy + 48;
   const plotW = gw - 68;
-  const plotH = gh - 68;
+  const plotH = gh - 72;
 
   // Grid lines (0, 25, 50, 75, 100 °C)
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
@@ -2624,6 +2724,9 @@ function renderThermalGraph(
   ctx.textAlign = 'left';
   ctx.fillText('t (s)', plotX + plotW + 8, plotY + plotH + 3.5);
 
+  const boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
+  const palette = ['#f97316', '#0284c7', '#10b981', '#8b5cf6', '#ec4899'];
+
   // Plot Curves from history
   if (sim.history.length > 1) {
     const lastT = sim.history[sim.history.length - 1].timeSec;
@@ -2652,58 +2755,114 @@ function renderThermalGraph(
       ctx.restore();
     }
 
-    // Curve 1 (Primary container / Inner vessel) - Orange `#f97316`
-    ctx.save();
-    ctx.beginPath();
-    let started1 = false;
-    for (const pt of sim.history) {
-      if (pt.timeSec < startT) continue;
-      const x = mapX(pt.timeSec);
-      const y = mapY(pt.temp1);
-      if (!started1) {
-        ctx.moveTo(x, y);
-        started1 = true;
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.strokeStyle = '#f97316';
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-    ctx.restore();
+    let legendX = plotX + 34;
+    const legendY = gy + 34;
 
-    // Curve 2 (Water bath / Outer basin) if present - Cyan `#0284c7`
-    const hasCurve2 = sim.history.some((p) => p.temp2 !== undefined);
-    if (hasCurve2) {
+    if (boundIds.length > 0) {
+      boundIds.forEach((cId: string, idx: number) => {
+        const color = palette[idx % palette.length];
+        const container = sim.objects.find((o) => o.id === cId);
+        const typeLabel =
+          container?.type === 'beaker'
+            ? 'Ποτήρι'
+            : container?.type === 'flask'
+            ? 'Φιάλη'
+            : container?.type === 'wide-basin'
+            ? 'Λεκάνη'
+            : `Δοχείο ${idx + 1}`;
+        const liquidLabel =
+          container?.containerState?.liquidType === 'oil'
+            ? 'Λάδι'
+            : container?.containerState?.liquidType === 'milk'
+            ? 'Γάλα'
+            : 'Νερό';
+        const currentTemp = container?.containerState?.temperature ?? 20;
+
+        ctx.save();
+        ctx.beginPath();
+        let started = false;
+        for (const pt of sim.history) {
+          if (pt.timeSec < startT) continue;
+          const tempVal =
+            pt.tempsByContainerId?.[cId] ??
+            (idx === 0 ? pt.temp1 : idx === 1 ? pt.temp2 : undefined);
+          if (tempVal === undefined) continue;
+          const x = mapX(pt.timeSec);
+          const y = mapY(tempVal);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+        ctx.restore();
+
+        // Legend item positioned safely away from θ (°C)
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        const itemText = `— ${typeLabel} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
+        ctx.fillText(itemText, legendX, legendY);
+        legendX += ctx.measureText(itemText).width + 12;
+      });
+    } else {
+      // Curve 1 (Primary container / Inner vessel) - Orange `#f97316`
       ctx.save();
       ctx.beginPath();
-      let started2 = false;
+      let started1 = false;
       for (const pt of sim.history) {
-        if (pt.timeSec < startT || pt.temp2 === undefined) continue;
+        if (pt.timeSec < startT) continue;
         const x = mapX(pt.timeSec);
-        const y = mapY(pt.temp2);
-        if (!started2) {
+        const y = mapY(pt.temp1);
+        if (!started1) {
           ctx.moveTo(x, y);
-          started2 = true;
+          started1 = true;
         } else {
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = '#0284c7';
+      ctx.strokeStyle = '#f97316';
       ctx.lineWidth = 2.2;
       ctx.stroke();
       ctx.restore();
-    }
 
-    // Legend
-    ctx.font = 'bold 9px system-ui, sans-serif';
-    ctx.fillStyle = '#f97316';
-    ctx.textAlign = 'left';
-    ctx.fillText('— Δοχείο 1', plotX + 8, gy + 32);
+      // Curve 2 (Water bath / Outer basin) if present - Cyan `#0284c7`
+      const hasCurve2 = sim.history.some((p) => p.temp2 !== undefined);
+      if (hasCurve2) {
+        ctx.save();
+        ctx.beginPath();
+        let started2 = false;
+        for (const pt of sim.history) {
+          if (pt.timeSec < startT || pt.temp2 === undefined) continue;
+          const x = mapX(pt.timeSec);
+          const y = mapY(pt.temp2);
+          if (!started2) {
+            ctx.moveTo(x, y);
+            started2 = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+        ctx.restore();
+      }
 
-    if (hasCurve2) {
-      ctx.fillStyle = '#0284c7';
-      ctx.fillText('— Υδατόλουτρο', plotX + 75, gy + 32);
+      // Legend
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillStyle = '#f97316';
+      ctx.textAlign = 'left';
+      ctx.fillText('— Δοχείο 1', legendX, legendY);
+
+      if (hasCurve2) {
+        ctx.fillStyle = '#0284c7';
+        ctx.fillText('— Υδατόλουτρο', legendX + 75, legendY);
+      }
     }
   }
 

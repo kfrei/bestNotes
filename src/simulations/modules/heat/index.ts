@@ -2,6 +2,7 @@ export * from './types';
 export * from './heatPhysicsEngine';
 export * from './HeatRenderer';
 export * from './HeatLiquidConfigModal';
+export * from './HeatGraphChoiceModal';
 export * from './HeatSketchRecognizer';
 export * from './HeatSimulationModule';
 export * from './HeatControlPanel';

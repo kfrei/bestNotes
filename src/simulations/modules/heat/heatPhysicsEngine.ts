@@ -276,8 +276,18 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   const nextElapsed = sim.elapsedSec + timeStep;
   let nextHistory = sim.history;
 
-  if (sim.graph.visible && containers.length > 0) {
+  const anyGraphVisible = sim.graph.visible || (sim.graphs && sim.graphs.some((g) => g.visible));
+  if (anyGraphVisible && containers.length > 0) {
+    // Record temperatures of ALL containers by ID
+    const tempsMap: Record<string, number> = {};
+    for (const c of containers) {
+      if (c.containerState) {
+        tempsMap[c.id] = Math.round(c.containerState.temperature * 10) / 10;
+      }
+    }
+
     const primaryVessel =
+      (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
       containers.find((c) => c.id === sim.selectedObjectId) ||
       containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
       containers[0];
@@ -315,6 +325,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
           timeSec: Math.round(nextElapsed * 10) / 10,
           temp1: Math.round(temp1 * 10) / 10,
           temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
+          tempsByContainerId: tempsMap,
           tempEquilibrium:
             tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
         };
