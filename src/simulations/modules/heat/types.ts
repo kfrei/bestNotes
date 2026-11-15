@@ -145,6 +145,7 @@ export interface HeatSimConfig {
   selectedObjectIds?: string[];
   isRunning: boolean;
   elapsedSec: number;
+  ambientTemperature?: number; // Ambient room/environment temperature in °C (0 - 50 °C, default 20)
   graph: HeatGraphConfig;
   graphs?: HeatGraphConfig[]; // Supports multiple independent graph windows
   history: HeatGraphDataPoint[];

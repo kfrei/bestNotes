@@ -47,6 +47,7 @@ export interface UseHeatSimulationReturn {
   pauseHeatingAndSim: () => void;
   toggleBurner: (burnerId?: string) => void;
   resetSim: () => void;
+  setAmbientTemperature: (temp: number) => void;
   toggleGraph: () => void;
   handleFillContainer: (containerId?: string) => void;
   handleDeleteSelectedObject: (idOrIds?: string | string[]) => void;
@@ -448,7 +449,7 @@ export function useHeatSimulation(
               ...obj,
               containerState: {
                 ...obj.containerState,
-                temperature: obj.containerState.initialTemp || 20,
+                temperature: obj.containerState.initialTemp || (prev.ambientTemperature ?? 20),
                 isBoiling: false,
                 boilingIntensity: 0,
               },
@@ -459,7 +460,7 @@ export function useHeatSimulation(
               ...obj,
               thermometerState: {
                 ...obj.thermometerState,
-                temperature: 20,
+                temperature: prev.ambientTemperature ?? 20,
               },
             };
           }
@@ -468,7 +469,7 @@ export function useHeatSimulation(
               ...obj,
               tripodState: {
                 ...obj.tripodState,
-                wireGauzeTemp: 20,
+                wireGauzeTemp: prev.ambientTemperature ?? 20,
               },
             };
           }
@@ -479,6 +480,44 @@ export function useHeatSimulation(
       return next;
     });
   }, [updateActiveHeatSim]);
+
+  const handleSetAmbientTemperature = useCallback(
+    (temp: number) => {
+      const clamped = Math.max(0, Math.min(50, Math.round(temp / 5) * 5));
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const next: HeatSimConfig = {
+          ...cur,
+          ambientTemperature: clamped,
+          objects: cur.objects.map((obj) => {
+            // Undipped thermometer in room air adjusts to room ambient immediately when paused
+            if (obj.thermometerState && !obj.thermometerState.dippedVesselId && !cur.isRunning) {
+              return {
+                ...obj,
+                thermometerState: {
+                  ...obj.thermometerState,
+                  temperature: clamped,
+                },
+              };
+            }
+            if (obj.tripodState && !cur.isRunning) {
+              return {
+                ...obj,
+                tripodState: {
+                  ...obj.tripodState,
+                  wireGauzeTemp: clamped,
+                },
+              };
+            }
+            return obj;
+          }),
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+    },
+    [updateActiveHeatSim]
+  );
 
   const toggleGraph = useCallback(() => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
@@ -1574,6 +1613,7 @@ export function useHeatSimulation(
     pauseHeatingAndSim,
     toggleBurner,
     resetSim,
+    setAmbientTemperature: handleSetAmbientTemperature,
     toggleGraph,
     handleFillContainer,
     handleDeleteSelectedObject,

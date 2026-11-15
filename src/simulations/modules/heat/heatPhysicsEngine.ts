@@ -62,6 +62,7 @@ export function calculateEquilibriumTemperature(
 export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfig {
   if (!sim.isRunning || dt <= 0) return sim;
 
+  const ambientTemp = sim.ambientTemperature ?? ROOM_TEMPERATURE_C;
   const timeStep = Math.min(0.1, Math.max(0.001, dt));
   const objects = sim.objects.map((obj) => ({ ...obj }));
 
@@ -76,7 +77,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   // 1. Update Tripod wire gauze temperatures & burner snap states
   for (const tripod of tripods) {
     if (!tripod.tripodState) continue;
-    let targetGauzeTemp = ROOM_TEMPERATURE_C;
+    let targetGauzeTemp = ambientTemp;
 
     // Check if any active burner is positioned directly under the tripod
     const burnerUnderneath = burners.find((b) => {
@@ -88,10 +89,10 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
 
     if (burnerUnderneath && burnerUnderneath.burnerState) {
       const pWatts = getBurnerPowerWatts(burnerUnderneath.burnerState);
-      targetGauzeTemp = ROOM_TEMPERATURE_C + (pWatts / 1150) * 480; // Up to ~500°C
+      targetGauzeTemp = ambientTemp + (pWatts / 1150) * 480; // Up to ~500°C
     }
 
-    const currentGauze = tripod.tripodState.wireGauzeTemp ?? ROOM_TEMPERATURE_C;
+    const currentGauze = tripod.tripodState.wireGauzeTemp ?? ambientTemp;
     const gauzeAlpha = 1.0 - Math.exp(-timeStep * 1.8);
     tripod.tripodState = {
       ...tripod.tripodState,
@@ -114,7 +115,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       return dx < 45 && dy < 28;
     });
 
-    if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ROOM_TEMPERATURE_C) {
+    if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
       // Heat transfer from wire gauze
       const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
       if (deltaTGauze > 0) {
@@ -142,10 +143,13 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       cs.temperature += dQ / heatCapJoulesPerC;
     }
 
-    // Ambient cooling to room temperature
-    const coolDelta = cs.temperature - ROOM_TEMPERATURE_C;
-    if (coolDelta > 0) {
-      cs.temperature -= coolDelta * AMBIENT_COOLING_COEFF * timeStep;
+    // Interaction with ambient environment (Newton's Law of Cooling)
+    // The environment acts as an infinite heat reservoir (its temperature is not affected)
+    const coolDelta = cs.temperature - ambientTemp;
+    if (Math.abs(coolDelta) > 0.005) {
+      // Gentle natural cooling/warming towards ambient:
+      // Rate ~0.014 1/s (a 50°C vessel in 20°C room cools smoothly towards 20°C asymptotically)
+      cs.temperature -= coolDelta * 0.014 * timeStep;
     }
 
     // Boiling plateau check (only if container has liquid!)
@@ -250,7 +254,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       );
     });
 
-    let targetTemp = ROOM_TEMPERATURE_C;
+    let targetTemp = ambientTemp;
     if (vesselDipped?.containerState) {
       targetTemp = vesselDipped.containerState.temperature;
       ts.dippedVesselId = vesselDipped.id;
@@ -316,6 +320,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
             nested.containerState
           );
         }
+      } else {
+        // Single vessel interacting with the ambient environment
+        tempEquilibrium = ambientTemp;
       }
 
       // Sample every 0.1s to record temperature history from t = 0

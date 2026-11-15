@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, Sparkles, Clock } from 'lucide-react';
+import { Play, Pause, RotateCcw, Sparkles, Clock, Thermometer } from 'lucide-react';
 import { SimulationObjectRibbon } from '../../ui/SimulationObjectRibbon';
 import { HEAT_SIMULATION_OBJECTS } from './HeatSimulationModule';
 import { HeatSimConfig, HeatObjectType } from './types';
@@ -13,6 +13,8 @@ export interface HeatControlPanelProps {
   onToggleStopwatch?: () => void;
   onToggleBurner?: () => void;
   onFillContainer?: () => void;
+  ambientTemperature?: number;
+  onSetAmbientTemperature?: (temp: number) => void;
   onAddObject: (type: HeatObjectType) => void;
   selectedStrokeIdsCount: number;
   onConvertLassoSketch: () => void;
@@ -25,12 +27,19 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   onReset,
   showStopwatch = false,
   onToggleStopwatch,
+  ambientTemperature,
+  onSetAmbientTemperature,
   onAddObject,
   selectedStrokeIdsCount,
   onConvertLassoSketch,
   className = '',
 }) => {
   const isRunning = sim?.isRunning ?? false;
+  const currentAmbient = ambientTemperature ?? sim?.ambientTemperature ?? 20;
+
+  const handleAmbientChange = (val: number) => {
+    onSetAmbientTemperature?.(val);
+  };
 
   return (
     <div className={`space-y-3 select-none text-[#2c3e50] ${className}`}>
@@ -77,7 +86,57 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
         </button>
       </div>
 
-      {/* 2. Lasso Sketch Recognition Convert Button */}
+      {/* 2. Large Horizontal Ambient Temperature Control with Slider (0 - 50 °C, step 5) */}
+      <div className="p-3 rounded-2xl bg-white/60 backdrop-blur-md border border-[#dfd8cb] shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#234978] flex items-center justify-center border border-blue-200/60 shadow-2xs">
+              <Thermometer className="w-4 h-4 text-[#234978]" />
+            </div>
+            <div>
+              <span className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">
+                Περιβάλλον
+              </span>
+              <span className="font-extrabold text-xs text-[#2c3e50]">
+                Θερμοκρασία Περιβάλλοντος
+              </span>
+            </div>
+          </div>
+          <span className="py-1 px-2.5 rounded-lg font-black text-xs bg-blue-50 text-[#234978] border border-blue-200 shadow-2xs">
+            {currentAmbient} °C
+          </span>
+        </div>
+
+        {/* Range Slider 0 to 50 with step 5 */}
+        <div className="px-1 pt-0.5 space-y-1.5">
+          <input
+            type="range"
+            min={0}
+            max={50}
+            step={5}
+            value={currentAmbient}
+            onChange={(e) => handleAmbientChange(Number(e.target.value))}
+            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#234978]"
+          />
+          <div className="flex justify-between text-[10px] font-bold text-slate-400 px-0.5 select-none">
+            {[0, 10, 20, 30, 40, 50].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => handleAmbientChange(t)}
+                className={`hover:text-[#234978] cursor-pointer transition ${
+                  currentAmbient === t ? 'text-[#234978] font-extrabold scale-110' : ''
+                }`}
+                title={`Ορισμός σε ${t} °C`}
+              >
+                {t}°
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Lasso Sketch Recognition Convert Button */}
       {selectedStrokeIdsCount > 0 && (
         <button
           type="button"
@@ -90,18 +149,21 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
         </button>
       )}
 
-      {/* 3. Apparatus Ribbon (1-click addition of 6 objects) */}
+      {/* 4. Apparatus Ribbon (1-click addition of 6 objects) */}
       <SimulationObjectRibbon
         objects={HEAT_SIMULATION_OBJECTS}
         onSelectObject={(obj) => onAddObject(obj.id as HeatObjectType)}
       />
 
-      {/* 4. Educational Tip Card */}
+      {/* 5. Educational Tip Card */}
       <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[10.5px] text-amber-900 leading-snug space-y-1">
         <p className="font-bold flex items-center gap-1 text-[#234978]">
           <span>💡 Εργαστηριακός Οδηγός:</span>
         </p>
         <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[10px]">
+          <li>
+            Η <b>Θερμοκρασία Περιβάλλοντος</b> δρα ως σταθερή δεξαμενή θερμότητας: ζεστά δοχεία (π.χ. 50°C) ψύχονται αργά προς τη θερμοκρασία του χώρου (Νόμος Ψύξης Νεύτωνα), ενώ κρύα θερμαίνονται.
+          </li>
           <li>
             Κάνε κλικ στο αχνό μολυβάκι (<b>✎</b>) δίπλα σε κάθε δοχείο για επιλογή υγρού, όγκου και αρχικής θερμοκρασίας.
           </li>

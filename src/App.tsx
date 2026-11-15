@@ -63641,6 +63641,8 @@ export default function App() {
                     }}
                     onToggleGraph={heatSim.toggleGraph}
                     showStopwatch={showStopwatch}
+                    ambientTemperature={heatSim.activeHeatSim?.ambientTemperature ?? 20}
+                    onSetAmbientTemperature={heatSim.setAmbientTemperature}
                     onToggleStopwatch={() => {
                       if (!showStopwatch) {
                         setStopwatchRunning(heatSim.activeHeatSim?.isRunning ?? false);
