@@ -57917,10 +57917,9 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 9.5 4.5 L 7 5 L 9.8 6.8 L 9.8 17.5 C 9.8 19.5 13 20.5 17 20.5 C 21 20.5 24.2 19.5 24.2 17.5 L 24.2 4.5" strokeWidth="1.7" />
-                              <ellipse cx="17" cy="4.5" rx="7.2" ry="2.2" strokeWidth="1.5" />
-                              <ellipse cx="17" cy="4.5" rx="5.8" ry="1.6" strokeWidth="0.9" strokeOpacity="0.4" />
-                              <path d="M 9.8 17.5 C 9.8 18.8 13 19.7 17 19.7 C 21 19.7 24.2 18.8 24.2 17.5" strokeWidth="1.0" strokeOpacity="0.3" />
+                              <path d="M 6.5 4.5 L 9 3.5 L 24.5 3.5" strokeWidth="1.6" />
+                              <line x1="9" y1="5.5" x2="24.5" y2="5.5" strokeWidth="1.0" strokeOpacity="0.4" />
+                              <path d="M 24.5 3.5 L 24.5 17.5 C 24.5 19.5 22.5 20.5 20 20.5 L 13.5 20.5 C 11 20.5 9 19.5 9 17.5 L 9 7.5 L 6.5 4.5" strokeWidth="1.7" />
                             </svg>
                           ),
                         },
@@ -57930,12 +57929,9 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <ellipse cx="17" cy="7" rx="11" ry="3.2" strokeWidth="1.6" />
-                              <ellipse cx="17" cy="7" rx="9" ry="2.4" strokeWidth="0.9" strokeOpacity="0.4" />
-                              <path d="M 5 7 C 4 6 4.5 4.5 6 4.5" strokeWidth="1.3" />
-                              <path d="M 29 7 C 30 6 29.5 4.5 28 4.5" strokeWidth="1.3" />
-                              <path d="M 6 7 L 7 16 C 7 18.5 11.5 20.2 17 20.2 C 22.5 20.2 27 18.5 27 16 L 28 7" strokeWidth="1.7" />
-                              <path d="M 7 16 C 7 17.5 11.5 19.2 17 19.2 C 22.5 19.2 27 17.5 27 16" strokeWidth="1.0" strokeOpacity="0.3" />
+                              <path d="M 4 6.5 C 3 5.5 4.5 4.5 6.5 4.5 L 27.5 4.5 C 29.5 4.5 31 5.5 30 6.5" strokeWidth="1.6" />
+                              <line x1="6.5" y1="6.5" x2="27.5" y2="6.5" strokeWidth="1.0" strokeOpacity="0.4" />
+                              <path d="M 6.5 7 L 6.5 16 C 6.5 19 9 20.5 13.5 20.5 L 20.5 20.5 C 25 20.5 27.5 19 27.5 16 L 27.5 7" strokeWidth="1.7" />
                             </svg>
                           ),
                         },
@@ -57945,9 +57941,8 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <ellipse cx="17" cy="3" rx="3.5" ry="1.2" strokeWidth="1.5" />
-                              <path d="M 14.5 3 L 14.5 8 L 8 18 C 8 20 12 21 17 21 C 22 21 26 20 26 18 L 19.5 8 L 19.5 3" strokeWidth="1.7" />
-                              <path d="M 8 18 C 8 19.2 12 20.1 17 20.1 C 22 20.1 26 19.2 26 18" strokeWidth="1.0" strokeOpacity="0.3" />
+                              <rect x="13.5" y="2.5" width="7" height="3" rx="1.5" strokeWidth="1.5" />
+                              <path d="M 15 5.5 L 15 9.5 L 9.5 18 C 9 19.5 10.5 20.5 12.5 20.5 L 21.5 20.5 C 23.5 20.5 25 19.5 24.5 18 L 19 9.5 L 19 5.5" strokeWidth="1.7" />
                             </svg>
                           ),
                         },

@@ -54,37 +54,29 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
     case 'beaker':
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          {/* Spout on left & outer walls */}
-          <path d="M 9 9 L 6 9.5 L 9.5 12 L 9.5 28 C 9.5 30.5 13.5 31.8 18 31.8 C 22.5 31.8 26.5 30.5 26.5 28 L 26.5 9" strokeWidth="1.9" />
-          {/* Top 2.5D rim ellipse */}
-          <ellipse cx="18" cy="9" rx="8.5" ry="2.8" strokeWidth="1.7" />
-          {/* Inner glass lip */}
-          <ellipse cx="18" cy="9" rx="7" ry="2.1" strokeWidth="1.1" strokeOpacity="0.45" />
-          {/* Bottom depth curve */}
-          <path d="M 9.5 28 C 9.5 29.8 13.5 30.8 18 30.8 C 22.5 30.8 26.5 29.8 26.5 28" strokeWidth="1.2" strokeOpacity="0.35" />
+          {/* Spout on left & horizontal rim with rolled bead */}
+          <path d="M 6 10.5 L 9.5 9 L 26.5 9" strokeWidth="2.0" />
+          <line x1="9.5" y1="12" x2="26.5" y2="12" strokeWidth="1.2" strokeOpacity="0.4" />
+          {/* Walls and rounded bottom base */}
+          <path d="M 26.5 9 L 26.5 27 C 26.5 29.5 24.5 31 22 31 L 14 31 C 11.5 31 9.5 29.5 9.5 27 L 9.5 14 L 6 10.5" strokeWidth="1.9" />
         </svg>
       );
     case 'wide-basin':
       return (
         <svg className="w-11 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          {/* Basin rim ellipse with handles */}
-          <ellipse cx="18" cy="12" rx="13.5" ry="4" strokeWidth="1.8" />
-          <ellipse cx="18" cy="12" rx="11.5" ry="3.2" strokeWidth="1.1" strokeOpacity="0.45" />
-          <path d="M 4 12 C 3 10.5 4 8 5.5 8" strokeWidth="1.6" />
-          <path d="M 32 12 C 33 10.5 32 8 30.5 8" strokeWidth="1.6" />
-          <path d="M 4.5 12 L 5.5 25 C 5.5 28.5 10.5 30.5 18 30.5 C 25.5 30.5 30.5 28.5 30.5 25 L 31.5 12" strokeWidth="1.9" />
-          <path d="M 5.5 25 C 5.5 27.2 10.5 29.2 18 29.2 C 25.5 29.2 30.5 27.2 30.5 25" strokeWidth="1.2" strokeOpacity="0.35" />
+          {/* Rolled rim & side handle lips */}
+          <path d="M 4 13 C 3 12 4.5 11 6.5 11 L 29.5 11 C 31.5 11 33 12 32 13" strokeWidth="1.8" />
+          <line x1="6.5" y1="13.5" x2="29.5" y2="13.5" strokeWidth="1.2" strokeOpacity="0.4" />
+          <path d="M 6.5 14 L 6.5 23 C 6.5 27.5 9.5 29.5 14 29.5 L 22 29.5 C 26.5 29.5 29.5 27.5 29.5 23 L 29.5 14" strokeWidth="1.9" />
         </svg>
       );
     case 'flask':
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          {/* Flared mouth */}
-          <ellipse cx="18" cy="6" rx="4.5" ry="1.6" strokeWidth="1.7" />
-          {/* Conical body down to curved bottom */}
-          <path d="M 15 6 L 15 13 L 7.5 28 C 7.5 30.8 12 32 18 32 C 24 32 28.5 30.8 28.5 28 L 21 13 L 21 6" strokeWidth="1.9" />
-          {/* Bottom depth curve */}
-          <path d="M 7.5 28 C 7.5 29.6 12 30.8 18 30.8 C 24 30.8 28.5 29.6 28.5 28" strokeWidth="1.2" strokeOpacity="0.35" />
+          {/* Rolled mouth collar on top of neck */}
+          <rect x="13" y="6" width="10" height="4" rx="2" strokeWidth="1.8" />
+          {/* Neck & conical body with rounded bottom base */}
+          <path d="M 15 10 L 15 15 L 8.5 27 C 8 28.5 9.5 31 12 31 L 24 31 C 26.5 31 28 28.5 27.5 27 L 21 15 L 21 10" strokeWidth="1.9" />
         </svg>
       );
     case 'thermometer':
