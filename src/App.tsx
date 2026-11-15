@@ -69519,6 +69519,7 @@ export default function App() {
         container={heatSim.editingContainer}
         onClose={() => heatSim.setEditingContainer(null)}
         onSave={(updated) => {
+          heatSim.setEditingContainer(updated);
           heatSim.updateActiveHeatSim((prev) => ({
             ...prev,
             objects: prev.objects.map((o) => (o.id === updated.id ? updated : o)),
