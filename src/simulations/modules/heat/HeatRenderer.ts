@@ -803,6 +803,9 @@ function renderTripod(
   const collarW = w * 0.72;
   const collarH = h * 0.14;
   const topY = 4;
+  const collarCy = topY + collarH * 0.5;
+  const collarRx = collarW / 2;
+  const collarRy = collarH / 2;
   const legBotY = h - 6;
 
   if (layer === 'all' || layer === 'apparatus') {
@@ -813,40 +816,29 @@ function renderTripod(
     ctx.lineJoin = 'round';
 
     // 1. Recessed Back Leg (rotated off-center to the left, rendered faint gray so burner placed underneath remains crystal-clear)
+    // Starts EXACTLY on the upper perimeter of the outer collar ellipse outline!
+    const backRatio = 0.26;
+    const backStartX = cx - collarRx * backRatio;
+    const backStartY = collarCy - collarRy * Math.sqrt(1 - backRatio * backRatio);
+    const backEndX = cx - collarW * 0.24;
+    const backEndY = legBotY - 6;
+
     ctx.save();
-    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.40)';
+    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.42)' : 'rgba(100, 116, 139, 0.38)';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(cx - collarW * 0.20, topY + collarH * 0.20);
-    ctx.lineTo(cx - collarW * 0.30, legBotY - 6);
+    ctx.moveTo(backStartX, backStartY);
+    ctx.lineTo(backEndX, backEndY);
     ctx.stroke();
     ctx.restore();
 
-    // 2. Front Left Leg (crisp foreground line-art)
-    ctx.beginPath();
-    ctx.moveTo(cx - collarW * 0.44, topY + collarH * 0.58);
-    ctx.lineTo(cx - collarW * 0.58, legBotY);
-    ctx.stroke();
-
-    // 3. Front Right Leg (crisp foreground line-art)
-    ctx.beginPath();
-    ctx.moveTo(cx + collarW * 0.34, topY + collarH * 0.54);
-    ctx.lineTo(cx + collarW * 0.50, legBotY);
-    ctx.stroke();
-
-    // Circular Top Collar Ring
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.ellipse(cx, topY + collarH * 0.5, collarW / 2, collarH / 2, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Wire Gauze mesh crosshatch
+    // 2. Wire Gauze mesh crosshatch (contained inside the collar ring)
     const gauzeW = collarW * 0.88;
     const gauzeH = collarH * 0.88;
 
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, topY + collarH * 0.5, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
     ctx.clip();
 
     ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
@@ -865,28 +857,61 @@ function renderTripod(
       ctx.stroke();
     }
 
-    // Central ceramic circle (heats up with burner)
-    const ceramicR = gauzeH * 0.52;
+    // 3. Central ceramic disc (matches exact perspective aspect ratio of outer collar ellipse!)
+    const ceramicScale = 0.38;
+    const ceramicRx = collarRx * ceramicScale;
+    const ceramicRy = collarRy * ceramicScale;
     const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
 
     ctx.beginPath();
-    ctx.ellipse(cx, topY + collarH * 0.5, ceramicR * 1.5, ceramicR, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
     if (heatFraction > 0.05) {
-      const discGlow = ctx.createRadialGradient(cx, topY + collarH * 0.5, 2, cx, topY + collarH * 0.5, ceramicR * 1.5);
+      const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
       discGlow.addColorStop(0, '#fef08a');
       discGlow.addColorStop(0.4, '#f97316');
       discGlow.addColorStop(0.85, '#dc2626');
       discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
       ctx.fillStyle = discGlow;
     } else {
-      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(255, 255, 255, 0.75)';
+      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
     }
     ctx.fill();
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
-    ctx.restore();
+    ctx.restore(); // restore from gauze clip
+
+    // 4. Circular Top Collar Ring (crisp 2.4px outline)
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 5. Front Left and Front Right Legs (crisp foreground line-art)
+    // Both start EXACTLY on the lower perimeter of the collar ellipse outline!
+    // Widened symmetrically for a stable, balanced laboratory tripod stance.
+    const frontRatio = 0.82;
+    const frontYOffset = collarRy * Math.sqrt(1 - frontRatio * frontRatio);
+    const leftStartX = cx - collarRx * frontRatio;
+    const leftStartY = collarCy + frontYOffset;
+    const leftEndX = cx - collarW * 0.62;
+
+    const rightStartX = cx + collarRx * frontRatio;
+    const rightStartY = collarCy + frontYOffset;
+    const rightEndX = cx + collarW * 0.62;
+
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(leftStartX, leftStartY);
+    ctx.lineTo(leftEndX, legBotY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(rightStartX, rightStartY);
+    ctx.lineTo(rightEndX, legBotY);
+    ctx.stroke();
+
     ctx.restore();
   }
 }
@@ -1143,7 +1168,7 @@ function renderFlask(
     ctx.save();
 
     const coneTopY = y + neckH;
-    const coneBotY = y + bh;
+    const coneBotY = y + bh - cornerR;
     const isAboveNeck = liquidTopY < coneTopY;
     const t = isAboveNeck ? 0 : Math.max(0, Math.min(1, (liquidTopY - coneTopY) / Math.max(1, coneBotY - coneTopY)));
     const surfaceHalfW = isAboveNeck ? neckW / 2 : (neckW / 2) + t * (baseHalfW - neckW / 2);
@@ -1152,12 +1177,23 @@ function renderFlask(
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(cx - surfaceHalfW, liquidTopY);
-      ctx.lineTo(cx - baseHalfW, y + bh - cornerR);
+      if (isAboveNeck) {
+        ctx.moveTo(cx - neckW / 2, liquidTopY);
+        ctx.lineTo(cx - neckW / 2, coneTopY);
+        ctx.lineTo(cx - baseHalfW, coneBotY);
+      } else {
+        ctx.moveTo(cx - surfaceHalfW, liquidTopY);
+        ctx.lineTo(cx - baseHalfW, coneBotY);
+      }
       ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW + cornerR, y + bh);
       ctx.lineTo(cx + baseHalfW - cornerR, y + bh);
-      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW, y + bh - cornerR);
-      ctx.lineTo(cx + surfaceHalfW, liquidTopY);
+      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW, coneBotY);
+      if (isAboveNeck) {
+        ctx.lineTo(cx + neckW / 2, coneTopY);
+        ctx.lineTo(cx + neckW / 2, liquidTopY);
+      } else {
+        ctx.lineTo(cx + surfaceHalfW, liquidTopY);
+      }
       ctx.closePath();
       ctx.clip();
 

@@ -57902,12 +57902,12 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="13.5" y1="5.5" x2="11.5" y2="17.5" stroke="#94a3b8" strokeWidth="1.3" strokeOpacity="0.75" />
+                              <line x1="14" y1="3.2" x2="11.5" y2="17.5" stroke="#94a3b8" strokeWidth="1.3" strokeOpacity="0.75" />
                               <ellipse cx="17" cy="5.5" rx="9" ry="2.6" strokeWidth="1.8" />
-                              <ellipse cx="17" cy="5.5" rx="5" ry="1.3" strokeWidth="1.1" strokeDasharray="1.5 1.5" />
-                              <line x1="12" y1="5.5" x2="22" y2="5.5" strokeWidth="1.1" />
-                              <line x1="8.5" y1="6.5" x2="5" y2="20.5" strokeWidth="1.9" />
-                              <line x1="24.5" y1="6.5" x2="28" y2="20.5" strokeWidth="1.9" />
+                              <ellipse cx="17" cy="5.5" rx="7.5" ry="2.0" strokeWidth="0.8" strokeDasharray="1.2 1.2" />
+                              <ellipse cx="17" cy="5.5" rx="3.6" ry="1.0" strokeWidth="1.0" fill="#f8fafc" />
+                              <line x1="9.6" y1="7.0" x2="4.5" y2="20.5" strokeWidth="1.9" />
+                              <line x1="24.4" y1="7.0" x2="29.5" y2="20.5" strokeWidth="1.9" />
                             </svg>
                           ),
                         },

@@ -39,16 +39,17 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
     case 'tripod':
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          {/* Recessed faint back leg shifted off-center to the left */}
-          <line x1="14" y1="8.5" x2="11.5" y2="26" stroke="#94a3b8" strokeWidth="1.6" strokeOpacity="0.65" />
+          {/* Recessed faint back leg starting on upper collar outline */}
+          <line x1="15" y1="5.4" x2="12.5" y2="25" stroke="#94a3b8" strokeWidth="1.6" strokeOpacity="0.65" />
           {/* Top collar ring */}
-          <ellipse cx="18" cy="8.5" rx="11" ry="3.5" strokeWidth="2.0" />
+          <ellipse cx="18" cy="8.5" rx="11" ry="3.2" strokeWidth="2.0" />
           {/* Wire gauze mesh */}
-          <ellipse cx="18" cy="8.5" rx="6.5" ry="1.9" strokeWidth="1.1" strokeDasharray="2 2" />
-          <line x1="11.5" y1="8.5" x2="24.5" y2="8.5" strokeWidth="1.1" />
-          {/* Front Left and Right legs */}
-          <line x1="8" y1="10" x2="4" y2="31" strokeWidth="2.3" />
-          <line x1="26" y1="10" x2="31" y2="31" strokeWidth="2.3" />
+          <ellipse cx="18" cy="8.5" rx="8.8" ry="2.5" strokeWidth="0.9" strokeDasharray="1.5 1.5" />
+          {/* Ceramic center disc matching exact perspective ellipse */}
+          <ellipse cx="18" cy="8.5" rx="4.2" ry="1.2" strokeWidth="1.1" fill="#f8fafc" />
+          {/* Front Left and Right legs starting exactly on the lower collar rim */}
+          <line x1="9" y1="10.4" x2="4.5" y2="31" strokeWidth="2.2" />
+          <line x1="27" y1="10.4" x2="31.5" y2="31" strokeWidth="2.2" />
         </svg>
       );
     case 'beaker':
