@@ -333,10 +333,17 @@ function renderLiquidBody(
   bw: number,
   liquidH: number,
   bottomY: number,
-  meniscusRy: number = 4.5
+  meniscusRy: number = 4.5,
+  fillMinX?: number,
+  fillMaxX?: number
 ): void {
+  const fx = fillMinX ?? (x - 4);
+  const fw = fillMaxX !== undefined ? fillMaxX - fx : bw + 8;
+  const fy = liquidTopY - meniscusRy * 0.5;
+  const fh = Math.max(1, bottomY - fy + 6);
+
   // 1. Vertical linear depth gradient
-  const grad = ctx.createLinearGradient(x, liquidTopY, x, bottomY);
+  const grad = ctx.createLinearGradient(x + bw / 2, liquidTopY, x + bw / 2, bottomY);
   if (liquidType === 'oil') {
     grad.addColorStop(0, 'rgba(254, 249, 195, 0.85)'); // Golden surface sheen
     grad.addColorStop(0.18, 'rgba(250, 204, 21, 0.70)'); // Luminous olive oil
@@ -356,12 +363,12 @@ function renderLiquidBody(
   }
 
   ctx.fillStyle = grad;
-  ctx.fillRect(x - 2, liquidTopY, bw + 6, liquidH + 12);
+  ctx.fillRect(fx, fy, fw, fh);
 
   // 2. Surface Meniscus with 3D elliptical curvature
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x + bw / 2, liquidTopY, bw / 2 - 1, meniscusRy, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + bw / 2, liquidTopY, bw / 2, meniscusRy, 0, 0, Math.PI * 2);
 
   const meniscusGrad = ctx.createRadialGradient(
     x + bw / 2, liquidTopY, 2,
@@ -726,25 +733,27 @@ function renderBeaker(
 
   const maxLiquidFraction = 0.86;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - bottomH / 2) * liquidFrac;
-  const liquidTopY = y + bh - bottomH / 2 - liquidH;
+  const liquidH = (bh - 10) * liquidFrac;
+  const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Beaker & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Draw Liquid Fill if volume > 0
+    // Draw Liquid Fill if volume > 0 - Fills 100% of beaker base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(x, liquidTopY);
       ctx.lineTo(x, y + bh - bottomH / 2);
-      ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, Math.PI, 0, true);
+      ctx.quadraticCurveTo(x, y + bh, x + 10, y + bh);
+      ctx.lineTo(x + bw - 10, y + bh);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
       ctx.lineTo(x + bw, liquidTopY);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.35);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.35, x - 4, x + bw + 4);
 
       // Boiling Bubbles & Steam
       if (state?.isBoiling) {
@@ -836,25 +845,27 @@ function renderWideBasin(
 
   const maxLiquidFraction = 0.85;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - bottomH / 2) * liquidFrac;
-  const liquidTopY = y + bh - bottomH / 2 - liquidH;
+  const liquidH = (bh - 10) * liquidFrac;
+  const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Basin Sketch & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Liquid Fill
+    // Liquid Fill - Fills 100% of basin base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(x, liquidTopY);
       ctx.lineTo(x, y + bh - bottomH / 2);
-      ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, Math.PI, 0, true);
+      ctx.quadraticCurveTo(x, y + bh, x + 14, y + bh);
+      ctx.lineTo(x + bw - 14, y + bh);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
       ctx.lineTo(x + bw, liquidTopY);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.4);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.4, x - 4, x + bw + 4);
 
       if (state?.isBoiling) {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
@@ -928,8 +939,8 @@ function renderFlask(
 
   const maxLiquidFraction = 0.86;
   const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - bottomH / 2) * liquidFrac;
-  const liquidTopY = y + bh - bottomH / 2 - liquidH;
+  const liquidH = (bh - 10) * liquidFrac;
+  const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Flask & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
@@ -949,17 +960,32 @@ function renderFlask(
       ctx.closePath();
     };
 
-    // Liquid Fill
+    // Liquid Fill - Fills 100% of conical flask base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       createFlaskPath();
       ctx.clip();
 
-      const currentSpanW = cx - (cx - neckW / 2) + ((bw / 2 - neckW / 2) * (liquidH / (bh - neckH)));
-      renderLiquidBody(ctx, liquidType, cx - currentSpanW, liquidTopY, currentSpanW * 2, liquidH, y + bh, 4.0);
+      const coneTop = y + neckH;
+      const coneBottom = y + bh - 8;
+      const t = Math.max(0, Math.min(1, (liquidTopY - coneTop) / Math.max(1, coneBottom - coneTop)));
+      const surfaceHalfW = (neckW / 2) + t * (bw / 2 - 6 - neckW / 2);
+
+      renderLiquidBody(
+        ctx,
+        liquidType,
+        cx - surfaceHalfW,
+        liquidTopY,
+        surfaceHalfW * 2,
+        liquidH,
+        y + bh,
+        3.5,
+        x - 4,
+        x + bw + 4
+      );
 
       if (state?.isBoiling) {
-        renderBoilingBubbles(ctx, cx - currentSpanW * 0.7, liquidTopY, currentSpanW * 1.4, liquidH);
+        renderBoilingBubbles(ctx, cx - surfaceHalfW * 0.7, liquidTopY, surfaceHalfW * 1.4, liquidH);
         renderSteam(ctx, cx, y - 4, neckW);
       }
       ctx.restore();
