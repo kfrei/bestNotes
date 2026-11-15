@@ -304,6 +304,7 @@ import {
   COLOR_SLOTS_STORAGE_KEY,
   USER_EDITED_SESSION_STORAGE_KEY,
   LIBRARY_CACHE_STORAGE_KEY,
+  RECENT_SHELF_CACHE_KEY,
   IDB_NAME,
   IDB_STORE,
   FIRESTORE_SINGLE_DOC_LIMIT,
@@ -1372,6 +1373,18 @@ export default function App() {
             .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
         }
       }
+      // 2b. Try ultra-fast recent shelf cache (guaranteed to fit under 250KB for instant 1st-frame render!)
+      const recRaw =
+        (authUid ? localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_${authUid}`) : null) ||
+        localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_latest`);
+      if (recRaw) {
+        const parsed = JSON.parse(recRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+            .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+            .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
+        }
+      }
       // 3. Fast-path cache for instant refresh without editor flash (ONLY when in editor mode!)
       const targetView = initialSession?.viewMode || (initialAuthUid ? 'library' : 'landing');
       if (targetView === 'editor') {
@@ -1424,6 +1437,7 @@ export default function App() {
 
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
+  const [isIndexedDbLoaded, setIsIndexedDbLoaded] = useState<boolean>(() => !initialAuthUid);
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
   const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
   const remoteDeletedIdsRef = useRef<Set<string>>(new Set());
@@ -1513,7 +1527,9 @@ export default function App() {
             // Also check library shelf cache before single active notebook
             const libRaw =
               localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_${user.uid}`) ||
-              localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`);
+              localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`) ||
+              localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_${user.uid}`) ||
+              localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_latest`);
             if (libRaw) {
               try {
                 const parsed = JSON.parse(libRaw);
@@ -1618,6 +1634,7 @@ export default function App() {
 
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
           hasLoadedIndexedDbRef.current = false;
+          setIsIndexedDbLoaded(false);
           void loadNotebooksFromIndexedDB(user.uid)
             .then((idbNbs) => {
               if (!idbNbs || idbNbs.length === 0) return;
@@ -1676,6 +1693,7 @@ export default function App() {
             })
             .finally(() => {
               hasLoadedIndexedDbRef.current = true;
+              setIsIndexedDbLoaded(true);
             });
 
           void loadNotebooksFromIndexedDB(`${user.uid}__recycle_bin`).then((idbBin) => {
@@ -1741,6 +1759,7 @@ export default function App() {
           }
         } else {
           hasLoadedIndexedDbRef.current = true;
+          setIsIndexedDbLoaded(true);
           hasCompletedInitialCloudLoadRef.current = false;
           hasReceivedCloudFoldersRef.current = false;
           allRemotePrimaryIdsRef.current.clear();
@@ -53717,6 +53736,22 @@ export default function App() {
                       .slice(0, 4)
                   : [];
 
+              const hasValidNotebooks = notebooks.some(
+                (n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+              );
+              const isLibraryDataLoading = Boolean(
+                (currentUser || initialAuthUid) &&
+                !isIndexedDbLoaded &&
+                !hasValidNotebooks
+              );
+              const shouldShowRecentLoadingSkeleton =
+                isLibraryDataLoading &&
+                currentFolderPath === '' &&
+                !query &&
+                !showLibraryFavoritesOnly &&
+                effSubjectFilter === 'all' &&
+                (Object.keys(recentOpenedAtMap).length > 0 || !isIndexedDbLoaded);
+
               const totalVisibleBytes = visibleNotebooks.reduce(
                 (acc, nb) => acc + getNotebookSizeBytes(nb),
                 0
@@ -54807,6 +54842,7 @@ export default function App() {
                     onNotebookPointerDrag={startLibraryNotebookPointerDrag}
                     onThumbPointerEnter={handleLibraryThumbPointerEnter}
                     onClearThumbHover={clearLibraryThumbHoverPreview}
+                    isLoading={shouldShowRecentLoadingSkeleton}
                   />
 
                   {/* =================================================================
@@ -55098,10 +55134,12 @@ export default function App() {
                       <div>
                         <div className="flex items-center gap-2.5 mb-3 flex-wrap">
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                            Σημειώσεις ({visibleNotebooks.length})
+                            Σημειώσεις ({isLibraryDataLoading && visibleNotebooks.length === 0 ? '...' : visibleNotebooks.length})
                           </h2>
                           <span className="text-[11px] font-bold text-slate-600 bg-slate-200/80 border border-slate-300/70 px-2.5 py-0.5 rounded-full">
-                            Σύνολο: {formatNotebookSizeLabel(totalVisibleBytes)}
+                            {isLibraryDataLoading && visibleNotebooks.length === 0
+                              ? 'Φόρτωση...'
+                              : `Σύνολο: ${formatNotebookSizeLabel(totalVisibleBytes)}`}
                           </span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
@@ -55203,7 +55241,24 @@ export default function App() {
                             </div>
                           </div>
 
-                          {visibleNotebooks.map((nb) => {
+                          {/* When library data is loading and no notebooks are visible yet, show 7 shimmering skeleton note cards */}
+                          {isLibraryDataLoading && visibleNotebooks.length === 0
+                            ? [0, 1, 2, 3, 4, 5, 6].map((skIdx) => (
+                                <div
+                                  key={`sk-note-${skIdx}`}
+                                  className="flex flex-col items-stretch w-full select-none pointer-events-none bn-fast-fade-in"
+                                >
+                                  <div className="w-full aspect-[3/4] rounded-r-2xl rounded-l-md relative overflow-hidden bn-shimmer border border-slate-200/90 shadow-2xs">
+                                    <div className="absolute left-0 top-0 bottom-0 w-3 bg-slate-300/60" />
+                                  </div>
+                                  <div className="mt-2 w-full px-2.5 py-2 rounded-xl bg-white/80 border border-slate-200/80 flex flex-col gap-1.5 shadow-2xs">
+                                    <div className="h-3.5 w-4/5 rounded bn-shimmer" />
+                                    <div className="h-2.5 w-3/5 rounded bn-shimmer" />
+                                    <div className="h-3 w-1/3 rounded-full bn-shimmer mt-0.5" />
+                                  </div>
+                                </div>
+                              ))
+                            : visibleNotebooks.map((nb) => {
                             const p0 = nb.pages[0];
                             const pW = getPageLogicalWidth(p0);
                             const pH = getPageLogicalHeight(p0);
@@ -56015,7 +56070,25 @@ export default function App() {
                       </div>
 
                       {/* Notes in List Mode */}
-                      {visibleNotebooks.map((nb) => {
+                      {isLibraryDataLoading && visibleNotebooks.length === 0
+                        ? [0, 1, 2, 3, 4].map((skIdx) => (
+                            <div
+                              key={`sk-list-nb-${skIdx}`}
+                              className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200/90 bg-white/95 shadow-2xs select-none pointer-events-none gap-3.5 bn-fast-fade-in"
+                            >
+                              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                                <div className="w-10 h-[52px] rounded-r-lg rounded-l-[4px] relative overflow-hidden bn-shimmer border border-slate-200/80 shrink-0">
+                                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-300/60" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="h-3.5 w-3/5 rounded bn-shimmer mb-1.5" />
+                                  <div className="h-2.5 w-2/5 rounded bn-shimmer" />
+                                </div>
+                              </div>
+                              <div className="w-16 h-4 rounded-md bn-shimmer shrink-0" />
+                            </div>
+                          ))
+                        : visibleNotebooks.map((nb) => {
                         const isDraggingThisNb = draggingLibraryNbId === nb.id;
                         const nbBytes = getNotebookSizeBytes(nb);
                         const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
@@ -56207,7 +56280,7 @@ export default function App() {
                         );
                       })}
 
-                      {visibleFolders.length === 0 && visibleNotebooks.length === 0 && (
+                      {visibleFolders.length === 0 && visibleNotebooks.length === 0 && !isLibraryDataLoading && (
                         <div className="p-8 text-center text-sm text-slate-400">
                           Δεν βρέθηκαν σημειώσεις ή φάκελοι.
                         </div>

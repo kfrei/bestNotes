@@ -13,6 +13,7 @@ export const AUTH_UID_STORAGE_KEY = 'bestnotes_auth_uid';
 export const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
 export const USER_EDITED_SESSION_STORAGE_KEY = 'bestnotes_user_edited_session_ids_v1';
 export const LIBRARY_CACHE_STORAGE_KEY = 'bestnotes_lib_shelf_cache_v2';
+export const RECENT_SHELF_CACHE_KEY = 'bestnotes_recent_shelf_cache_v2';
 
 export const IDB_NAME = 'bestnotes_idb_v1';
 export const IDB_STORE = 'notebooks_by_uid';

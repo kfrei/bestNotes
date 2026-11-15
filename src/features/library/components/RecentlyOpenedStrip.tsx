@@ -17,6 +17,7 @@ export interface RecentlyOpenedStripProps {
   onNotebookPointerDrag: (e: React.PointerEvent<HTMLDivElement>, nb: Notebook) => void;
   onThumbPointerEnter: (e: React.PointerEvent<HTMLDivElement>, nbId: string) => void;
   onClearThumbHover: (nbId?: string) => void;
+  isLoading?: boolean;
 }
 
 export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
@@ -30,7 +31,42 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   onNotebookPointerDrag,
   onThumbPointerEnter,
   onClearThumbHover,
+  isLoading = false,
 }) => {
+  // Skeleton shimmer placeholder while library data is loading (zero CLS, perfectly matching footprint)
+  if (isLoading && recentlyOpenedNotebooks.length === 0) {
+    return (
+      <div className="bn-fast-fade-in select-none pointer-events-none">
+        <div className="flex items-center gap-2 mb-2.5">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Πρόσφατα Ανοιγμένα
+          </h2>
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {[0, 1, 2, 3].map((idx) => (
+            <div
+              key={`recent-skel-${idx}`}
+              className="bg-white/95 rounded-2xl border border-slate-200/90 p-3 shadow-2xs flex items-center gap-3.5"
+            >
+              <div className="w-[76px] h-[102px] rounded-r-xl rounded-l-md shrink-0 relative overflow-hidden bn-shimmer border border-slate-200/80 shadow-2xs">
+                <div className="absolute left-0 top-0 bottom-0 w-2 bg-slate-300/60" />
+              </div>
+              <div className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-1">
+                <div>
+                  <div className="h-4 w-4/5 rounded-md bn-shimmer mb-2" />
+                  <div className="h-3 w-1/2 rounded-md bn-shimmer mb-1.5" />
+                  <div className="h-2.5 w-1/3 rounded-md bn-shimmer" />
+                </div>
+                <div className="h-4 w-20 rounded-md bn-shimmer mt-2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (recentlyOpenedNotebooks.length === 0) return null;
 
   return (

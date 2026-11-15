@@ -11,6 +11,7 @@ import {
   CUSTOM_FOLDERS_STORAGE_KEY,
   UI_SESSION_STORAGE_KEY,
   LIBRARY_CACHE_STORAGE_KEY,
+  RECENT_SHELF_CACHE_KEY,
 } from './storageKeys';
 import {
   cleanNotebookForStorage,
@@ -53,8 +54,34 @@ export function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
   try {
     const valid = nbs.filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0));
     if (valid.length === 0) return;
-    const cached = valid.map(cleanNotebookForLibraryCache);
-    const serialized = JSON.stringify(cached);
+
+    const sortedByRecent = [...valid].sort(
+      (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    );
+
+    // 1. Dedicated ultra-fast recent shelf cache (top 6 most recently updated notebooks)
+    // Always guaranteed to fit in localStorage (< 250KB) so recent notes are instantly ready on refresh!
+    try {
+      const topRecent = sortedByRecent.slice(0, 6).map(cleanNotebookForLibraryCache);
+      const recentSerialized = JSON.stringify(topRecent);
+      if (recentSerialized.length <= 400_000) {
+        localStorage.setItem(`${RECENT_SHELF_CACHE_KEY}_${uid}`, recentSerialized);
+        localStorage.setItem(`${RECENT_SHELF_CACHE_KEY}_latest`, recentSerialized);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Full or progressive library shelf cache (prioritizing recent notes if total > 1.8MB)
+    const cached = sortedByRecent.map(cleanNotebookForLibraryCache);
+    let sliceCount = cached.length;
+    let serialized = JSON.stringify(cached);
+    if (serialized.length > 1_800_000) {
+      while (sliceCount > 4 && serialized.length > 1_800_000) {
+        sliceCount = Math.max(4, Math.floor(sliceCount * 0.7));
+        serialized = JSON.stringify(cached.slice(0, sliceCount));
+      }
+    }
     if (serialized.length <= 1_800_000) {
       localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_${uid}`, serialized);
       localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`, serialized);
