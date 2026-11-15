@@ -277,6 +277,7 @@ import {
   stepHeatSimulation,
   createHeatObjectFromRecognition,
   HeatSimConfig,
+  isPointOnHeatObject,
 } from './simulations';
 import { LassoOcrButtons } from './stem-engines';
 import {
@@ -40083,6 +40084,21 @@ export default function App() {
     const heatObjs = heatSim.activeHeatSim?.objects || [];
     const matchedHeatObjIds = heatObjs
       .filter((obj) => {
+        if (obj.type === 'tripod') {
+          // For tripod, the lasso must enclose or cross its actual lines/legs/collar, NOT merely the empty interior air!
+          const collarCy = obj.y + 4 + Math.round(obj.width * 0.72 * 0.15 * 0.5);
+          const topRingPt = { x: obj.x + obj.width / 2, y: collarCy };
+          const leftFoot = { x: obj.x + obj.width * (0.5 - 0.72 * 0.62), y: obj.y + obj.height - 6 };
+          const rightFoot = { x: obj.x + obj.width * (0.5 + 0.72 * 0.62), y: obj.y + obj.height - 6 };
+          if (
+            isPointInPolygon(topRingPt, poly) &&
+            (isPointInPolygon(leftFoot, poly) || isPointInPolygon(rightFoot, poly))
+          ) {
+            return true;
+          }
+          return densePoly.some((lp) => isPointOnHeatObject(obj, lp.x, lp.y, 8));
+        }
+
         const cx = obj.x + obj.width / 2;
         const cy = obj.y + obj.height / 2;
         if (isPointInPolygon({ x: cx, y: cy }, poly)) return true;
@@ -40091,19 +40107,9 @@ export default function App() {
           { x: obj.x + obj.width, y: obj.y },
           { x: obj.x + obj.width, y: obj.y + obj.height },
           { x: obj.x, y: obj.y + obj.height },
-          { x: cx, y: obj.y },
-          { x: cx, y: obj.y + obj.height },
-          { x: obj.x, y: cy },
-          { x: obj.x + obj.width, y: cy },
         ];
         if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
-        return densePoly.some(
-          (lp) =>
-            lp.x >= obj.x &&
-            lp.x <= obj.x + obj.width &&
-            lp.y >= obj.y &&
-            lp.y <= obj.y + obj.height
-        );
+        return densePoly.some((lp) => isPointOnHeatObject(obj, lp.x, lp.y, 8));
       })
       .map((o) => o.id);
 
@@ -47539,6 +47545,17 @@ export default function App() {
   // - 'step-front': Bring Forward (+1 επίπεδο μπροστά — περνάει μπροστά από το επικαλυπτόμενο αντικείμενο!)
   // - 'to-front': Bring to Front (Εντελώς μπροστά)
   const handleZOrderSelected = (action: 'to-back' | 'step-back' | 'step-front' | 'to-front') => {
+    // 0. Heat simulation objects z-ordering
+    if (
+      heatSim.activeHeatSim?.selectedObjectId ||
+      (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)
+    ) {
+      if (heatSim.handleZOrderSelected(action)) {
+        renderStaticSceneRef.current?.();
+        return;
+      }
+    }
+
     const baseStrokeIds =
       selectedStrokeIds.length > 0
         ? selectedStrokeIds

@@ -18,6 +18,7 @@ import {
   getTripodContainerDockPos,
   getTripodBurnerDockPos,
   getWaterBathNestedDockPos,
+  isPointOnHeatObject,
 } from './HeatRenderer';
 
 export interface UseHeatSimulationReturn {
@@ -56,6 +57,7 @@ export interface UseHeatSimulationReturn {
   handleFillContainer: (containerId?: string) => void;
   handleDeleteSelectedObject: (idOrIds?: string | string[]) => void;
   setSelectedObjectIds: (ids: string[]) => void;
+  handleZOrderSelected: (action: 'to-back' | 'step-back' | 'step-front' | 'to-front') => boolean;
   graphChoicePrompt: {
     isOpen: boolean;
     targetContainer: HeatObject | null;
@@ -986,6 +988,87 @@ export function useHeatSimulation(
     return structuredClone(selected);
   }, [getSelectedObjects, handleDeleteSelectedObject]);
 
+  // Z-Order: Send to Back, -1 Step Backward, +1 Step Forward, Bring to Front
+  const handleZOrderSelected = useCallback(
+    (action: 'to-back' | 'step-back' | 'step-front' | 'to-front'): boolean => {
+      const sim = liveSimRef.current || activeHeatSim;
+      if (!sim) return false;
+
+      const selectedIds =
+        sim.selectedObjectIds && sim.selectedObjectIds.length > 0
+          ? sim.selectedObjectIds
+          : sim.selectedObjectId
+          ? [sim.selectedObjectId]
+          : [];
+
+      if (selectedIds.length === 0) return false;
+
+      const objects = [...sim.objects];
+      const selSet = new Set(selectedIds);
+
+      if (action === 'to-back') {
+        const selected = objects.filter((o) => selSet.has(o.id));
+        const unselected = objects.filter((o) => !selSet.has(o.id));
+        const nextObjects = [...selected, ...unselected];
+        updateActiveHeatSim((prev) => {
+          const next = { ...prev, objects: nextObjects };
+          liveSimRef.current = next;
+          return next;
+        });
+        return true;
+      }
+
+      if (action === 'to-front') {
+        const unselected = objects.filter((o) => !selSet.has(o.id));
+        const selected = objects.filter((o) => selSet.has(o.id));
+        const nextObjects = [...unselected, ...selected];
+        updateActiveHeatSim((prev) => {
+          const next = { ...prev, objects: nextObjects };
+          liveSimRef.current = next;
+          return next;
+        });
+        return true;
+      }
+
+      if (action === 'step-back') {
+        const nextObjects = [...objects];
+        for (let i = 1; i < nextObjects.length; i++) {
+          if (selSet.has(nextObjects[i].id) && !selSet.has(nextObjects[i - 1].id)) {
+            const temp = nextObjects[i];
+            nextObjects[i] = nextObjects[i - 1];
+            nextObjects[i - 1] = temp;
+          }
+        }
+        updateActiveHeatSim((prev) => {
+          const next = { ...prev, objects: nextObjects };
+          liveSimRef.current = next;
+          return next;
+        });
+        return true;
+      }
+
+      if (action === 'step-front') {
+        const nextObjects = [...objects];
+        for (let i = nextObjects.length - 2; i >= 0; i--) {
+          if (selSet.has(nextObjects[i].id) && !selSet.has(nextObjects[i + 1].id)) {
+            const temp = nextObjects[i];
+            nextObjects[i] = nextObjects[i + 1];
+            nextObjects[i + 1] = temp;
+          }
+        }
+        updateActiveHeatSim((prev) => {
+          const next = { ...prev, objects: nextObjects };
+          liveSimRef.current = next;
+          return next;
+        });
+        return true;
+      }
+
+      return false;
+    },
+    [activeHeatSim, updateActiveHeatSim]
+  );
+
   // Pointer interactions on canvas (handles, resizing, selection, actions, dragging)
   const handlePointerDown = useCallback(
     (_e: React.PointerEvent | PointerEvent, lx: number, ly: number, currentTool?: string): boolean => {
@@ -1195,13 +1278,7 @@ export function useHeatSimulation(
         }
 
         // Check if clicked directly on an already-selected object
-        const hitSelectedObj = selectedObjs.find(
-          (o) =>
-            lx >= o.x - 4 &&
-            lx <= o.x + o.width + 4 &&
-            ly >= o.y - 4 &&
-            ly <= o.y + o.height + 4
-        );
+        const hitSelectedObj = selectedObjs.find((o) => isPointOnHeatObject(o, lx, ly));
         if (hitSelectedObj) {
           if (_e.shiftKey) {
             const nextIds = selectedIds.filter((id) => id !== hitSelectedObj.id);
@@ -1228,12 +1305,7 @@ export function useHeatSimulation(
         // Check if clicked inside the group bounding box
         if (lx >= boxX && lx <= boxX + boxW && ly >= boxY && ly <= boxY + boxH) {
           const unselectedObj = sim.objects.find(
-            (o) =>
-              !selectedIds.includes(o.id) &&
-              lx >= o.x - 4 &&
-              lx <= o.x + o.width + 4 &&
-              ly >= o.y - 4 &&
-              ly <= o.y + o.height + 4
+            (o) => !selectedIds.includes(o.id) && isPointOnHeatObject(o, lx, ly)
           );
           if (unselectedObj) {
             if (_e.shiftKey) {
@@ -1344,11 +1416,7 @@ export function useHeatSimulation(
         const reversed = [...sim.objects].reverse();
 
         for (const obj of reversed) {
-          const inside =
-            lx >= obj.x - 4 &&
-            lx <= obj.x + obj.width + 4 &&
-            ly >= obj.y - 4 &&
-            ly <= obj.y + obj.height + 4;
+          const inside = isPointOnHeatObject(obj, lx, ly);
 
           if (!inside) continue;
 
@@ -1879,5 +1947,6 @@ export function useHeatSimulation(
     handlePasteObjects,
     handleDuplicateSelected,
     handleCut,
+    handleZOrderSelected,
   };
 }

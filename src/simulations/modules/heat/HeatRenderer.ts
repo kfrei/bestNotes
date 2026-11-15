@@ -1854,6 +1854,234 @@ export function getBurnerActionButtonWorldPos(obj: HeatObject) {
 }
 
 /**
+ * Distance from point (px, py) to line segment (x1, y1) -> (x2, y2).
+ */
+export function distToSegment(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+/**
+ * Tests if logical canvas point (lx, ly) hits the visible contours, lines, or solid body of a HeatObject.
+ * Specifically for the Tripod, it checks near the wire gauze collar ring and the 3 legs,
+ * returning FALSE for the empty central open space beneath the tripod.
+ */
+export function isPointOnHeatObject(
+  obj: HeatObject,
+  lx: number,
+  ly: number,
+  margin = 12
+): boolean {
+  // Quick AABB rejection
+  if (
+    lx < obj.x - margin ||
+    lx > obj.x + obj.width + margin ||
+    ly < obj.y - margin ||
+    ly > obj.y + obj.height + margin
+  ) {
+    return false;
+  }
+
+  const cx = obj.x + obj.width / 2;
+  const w = obj.width;
+  const h = obj.height;
+
+  switch (obj.type) {
+    case 'tripod': {
+      // 1. Top Collar & Wire Gauze Ring:
+      const collarW = w * 0.72;
+      const collarH = Math.round(collarW * 0.15);
+      const topY = obj.y + 4;
+      const collarCy = topY + collarH * 0.5;
+      const collarRx = collarW / 2;
+      const collarRy = collarH / 2;
+
+      // Top ring / wire gauze area hit test (ellipse with margin)
+      const dxCollar = (lx - cx) / (collarRx + margin);
+      const dyCollar = (ly - collarCy) / (collarRy + margin);
+      if (dxCollar * dxCollar + dyCollar * dyCollar <= 1.0) {
+        return true;
+      }
+
+      // 2. Front Left Leg
+      const legBotY = obj.y + h - 6;
+      const frontRatio = 0.82;
+      const frontYOffset = collarRy * Math.sqrt(1 - frontRatio * frontRatio);
+      const leftStartX = cx - collarRx * frontRatio;
+      const leftStartY = collarCy + frontYOffset;
+      const leftEndX = cx - collarW * 0.62;
+      const leftEndY = legBotY;
+
+      if (distToSegment(lx, ly, leftStartX, leftStartY, leftEndX, leftEndY) <= margin) {
+        return true;
+      }
+
+      // 3. Front Right Leg
+      const rightStartX = cx + collarRx * frontRatio;
+      const rightStartY = collarCy + frontYOffset;
+      const rightEndX = cx + collarW * 0.62;
+      const rightEndY = legBotY;
+
+      if (distToSegment(lx, ly, rightStartX, rightStartY, rightEndX, rightEndY) <= margin) {
+        return true;
+      }
+
+      // 4. Back Leg
+      const backRatio = 0.26;
+      const backStartX = cx - collarRx * backRatio;
+      const backStartY = collarCy + collarRy * Math.sqrt(1 - backRatio * backRatio);
+      const backEndX = cx - collarW * 0.24;
+      const backEndY = legBotY - 6;
+
+      if (distToSegment(lx, ly, backStartX, backStartY, backEndX, backEndY) <= margin) {
+        return true;
+      }
+
+      // Open space inside the tripod is EMPTY!
+      return false;
+    }
+
+    case 'burner': {
+      // 1. Cast-iron Foot Base at bottom
+      const baseW = w * 0.67;
+      const groundY = obj.y + h - 12;
+      const baseTopY = groundY - 26;
+      if (
+        ly >= baseTopY - margin &&
+        ly <= obj.y + h + margin &&
+        Math.abs(lx - cx) <= baseW / 2 + margin
+      ) {
+        return true;
+      }
+
+      // 2. Vertical Chimney / Tube
+      const tubeHalfW = Math.max(12, w * 0.09);
+      const tubeTopY = obj.y + 24;
+      if (
+        ly >= tubeTopY - margin &&
+        ly <= groundY &&
+        Math.abs(lx - cx) <= tubeHalfW + margin
+      ) {
+        return true;
+      }
+
+      // 3. Flame (if on)
+      if (obj.burnerState?.isOn) {
+        const flameHalfW = Math.max(20, w * 0.16);
+        if (
+          ly >= obj.y - margin &&
+          ly <= tubeTopY + 12 &&
+          Math.abs(lx - cx) <= flameHalfW + margin
+        ) {
+          return true;
+        }
+      }
+
+      // 4. Flame toggle button (at bottom-right of base)
+      const { btnCenterX, btnCenterY } = getBurnerActionButtonWorldPos(obj);
+      if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 18) {
+        return true;
+      }
+
+      return false;
+    }
+
+    case 'flask': {
+      const pad = 8;
+      const bw = w - pad * 2;
+      const bh = h - pad * 2;
+      const neckW = Math.max(22, bw * 0.26);
+      const neckH = bh * 0.28;
+      const topLipY = obj.y + pad;
+      const neckBottomY = topLipY + neckH;
+      const baseBottomY = obj.y + h - pad;
+
+      // Neck
+      if (
+        ly >= topLipY - margin &&
+        ly <= neckBottomY + 2 &&
+        Math.abs(lx - cx) <= neckW / 2 + margin
+      ) {
+        return true;
+      }
+
+      // Conical Body: width expands linearly with depth
+      if (ly >= neckBottomY && ly <= baseBottomY + margin) {
+        const t = Math.min(1, Math.max(0, (ly - neckBottomY) / (baseBottomY - neckBottomY)));
+        const halfW = neckW / 2 + t * (bw / 2 - neckW / 2);
+        if (Math.abs(lx - cx) <= halfW + margin) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    case 'beaker': {
+      const pad = 8;
+      const bw = w - pad * 2;
+      const topY = obj.y + pad;
+      const botY = obj.y + h - pad;
+      if (
+        ly >= topY - margin &&
+        ly <= botY + margin &&
+        Math.abs(lx - cx) <= bw / 2 + margin
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    case 'wide-basin': {
+      const pad = 8;
+      const bw = w - pad * 2;
+      const topY = obj.y + pad;
+      const botY = obj.y + h - pad;
+      if (
+        ly >= topY - margin &&
+        ly <= botY + margin &&
+        Math.abs(lx - cx) <= bw / 2 + margin
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    case 'thermometer': {
+      const tubeHalfW = Math.max(12, w * 0.18);
+      if (
+        ly >= obj.y - margin &&
+        ly <= obj.y + obj.height + margin &&
+        Math.abs(lx - cx) <= tubeHalfW + margin
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    default:
+      return (
+        lx >= obj.x - margin &&
+        lx <= obj.x + obj.width + margin &&
+        ly >= obj.y - margin &&
+        ly <= obj.y + obj.height + margin
+      );
+  }
+}
+
+/**
  * Standalone droplet icon: slightly larger, darker grey outline,
  * very pale soft cyan inside when idle, more intense vibrant cyan when pressed/active.
  * (No box, no frame, no white background).
