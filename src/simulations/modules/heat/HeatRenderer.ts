@@ -418,11 +418,11 @@ function renderLiquidBody(
   // 1. Beautiful, tall, smooth linear depth gradient (degrade) - enhanced transition towards the fill level
   const grad = ctx.createLinearGradient(x + bw / 2, liquidTopY, x + bw / 2, bottomY);
   if (liquidType === 'oil') {
-    grad.addColorStop(0, 'rgba(254, 252, 232, 0.95)'); // Soft luminous golden surface sheen
-    grad.addColorStop(0.10, 'rgba(254, 240, 138, 0.90)'); // Pure warm yellow
-    grad.addColorStop(0.35, 'rgba(250, 204, 21, 0.82)'); // Luminous olive oil
-    grad.addColorStop(0.70, 'rgba(245, 158, 11, 0.82)'); // Warm amber midtone
-    grad.addColorStop(1, 'rgba(180, 83, 9, 0.90)'); // Deep rich golden base
+    grad.addColorStop(0, 'rgba(247, 254, 231, 0.96)'); // Luminous pale lime sheen
+    grad.addColorStop(0.12, 'rgba(217, 249, 157, 0.90)'); // Fresh lime olive oil
+    grad.addColorStop(0.38, 'rgba(163, 230, 53, 0.85)'); // Golden-lime green body
+    grad.addColorStop(0.70, 'rgba(101, 163, 13, 0.85)'); // Rich virgin olive oil
+    grad.addColorStop(1, 'rgba(63, 98, 18, 0.92)'); // Deep rich olive base
   } else if (liquidType === 'milk') {
     grad.addColorStop(0, 'rgba(255, 255, 255, 0.98)'); // Pure white cream top
     grad.addColorStop(0.18, 'rgba(254, 252, 232, 0.95)'); // Silky ivory
@@ -440,23 +440,23 @@ function renderLiquidBody(
   ctx.fillStyle = grad;
   ctx.fillRect(fx, fy, fw, fh);
 
-  // 2. Clean, elegant surface line (NO ellipse!)
+  // 2. Ultra-soft, delicate surface line (whisper-faint meniscus without harshness)
   ctx.save();
   ctx.strokeStyle =
     liquidType === 'oil'
-      ? 'rgba(217, 119, 6, 0.80)'
+      ? 'rgba(101, 163, 13, 0.28)'
       : liquidType === 'milk'
-      ? 'rgba(202, 138, 4, 0.75)'
-      : 'rgba(2, 132, 199, 0.80)';
-  ctx.lineWidth = 1.4;
+      ? 'rgba(203, 213, 225, 0.35)'
+      : 'rgba(2, 132, 199, 0.28)'; // Soft, delicate, non-intrusive water meniscus line
+  ctx.lineWidth = 0.9;
   ctx.beginPath();
   ctx.moveTo(x, liquidTopY);
   ctx.lineTo(x + bw, liquidTopY);
   ctx.stroke();
 
   // Subtle luminous reflection highlight just below the surface
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.60)';
-  ctx.lineWidth = 1.0;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+  ctx.lineWidth = 0.75;
   ctx.beginPath();
   ctx.moveTo(x + 3, liquidTopY + 1.2);
   ctx.lineTo(x + bw - 3, liquidTopY + 1.2);

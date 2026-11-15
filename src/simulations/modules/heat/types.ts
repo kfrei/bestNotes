@@ -62,9 +62,9 @@ export const LIQUID_REGISTRY: Record<LiquidType, LiquidPhysicalProperties> = {
     density: 0.92,
     specificHeat: 2.0,
     boilingPoint: 300.0,
-    color: 'rgba(245, 158, 11, 0.55)', // Golden amber translucent
-    deepColor: '#b45309',
-    glowColor: 'rgba(251, 191, 36, 0.6)',
+    color: '#84cc16', // Fresh green-lime olive oil
+    deepColor: '#65a30d',
+    glowColor: 'rgba(190, 242, 100, 0.65)',
     descriptionEl: 'Χαμηλή ειδική θερμοχωρητικότητα c = 2.00 J/(g·°C). Ζεσταίνεται 2 φορές ταχύτερα από το νερό!',
   },
 };
