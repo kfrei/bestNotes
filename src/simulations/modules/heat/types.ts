@@ -138,6 +138,7 @@ export interface HeatSimConfig {
   name: string; // e.g. 'θερμ01'
   objects: HeatObject[];
   selectedObjectId?: string | null;
+  selectedObjectIds?: string[];
   isRunning: boolean;
   elapsedSec: number;
   graph: HeatGraphConfig;

@@ -41,7 +41,8 @@ export interface UseHeatSimulationReturn {
   resetSim: () => void;
   toggleGraph: () => void;
   handleFillContainer: (containerId?: string) => void;
-  handleDeleteSelectedObject: (id?: string) => void;
+  handleDeleteSelectedObject: (idOrIds?: string | string[]) => void;
+  setSelectedObjectIds: (ids: string[]) => void;
 }
 
 export function useHeatSimulation(
@@ -69,6 +70,7 @@ export function useHeatSimulation(
         liveSimRef.current.isRunning = activeHeatSim.isRunning;
         liveSimRef.current.graph = activeHeatSim.graph;
         liveSimRef.current.selectedObjectId = activeHeatSim.selectedObjectId;
+        liveSimRef.current.selectedObjectIds = activeHeatSim.selectedObjectIds;
         // Sync object positions and states
         for (const o of activeHeatSim.objects) {
           const live = liveSimRef.current.objects.find((x) => x.id === o.id);
@@ -102,20 +104,25 @@ export function useHeatSimulation(
 
   // Dragging state
   const dragRef = useRef<{
-    objectId: string;
+    objectId?: string;
+    isGroup?: boolean;
     mode?: 'move' | 'scale-corner' | 'stretch-side';
     handle?: 'nw' | 'ne' | 'se' | 'sw' | 'n' | 'e' | 's' | 'w';
     isGraph?: boolean;
     isGraphResize?: boolean;
     startX: number;
     startY: number;
-    origObjX: number;
-    origObjY: number;
+    origObjX?: number;
+    origObjY?: number;
     origW?: number;
     origH?: number;
     origRatio?: number;
     origGraphW?: number;
     origGraphH?: number;
+    origObjects?: { id: string; x: number; y: number; width: number; height: number }[];
+    origBounds?: { minX: number; minY: number; maxX: number; maxY: number };
+    anchorX?: number;
+    anchorY?: number;
   } | null>(null);
 
   const updateActiveHeatSim = useCallback(
@@ -470,16 +477,42 @@ export function useHeatSimulation(
     [updateActiveHeatSim]
   );
 
-  const handleDeleteSelectedObject = useCallback(
-    (id?: string) => {
+  const setSelectedObjectIds = useCallback(
+    (ids: string[]) => {
       updateActiveHeatSim((prev: HeatSimConfig) => {
         const cur = liveSimRef.current || prev;
-        const targetId = id || cur.selectedObjectId;
-        if (!targetId) return cur;
+        const next = {
+          ...cur,
+          selectedObjectId: ids[0] || null,
+          selectedObjectIds: ids,
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+    },
+    [updateActiveHeatSim]
+  );
+
+  const handleDeleteSelectedObject = useCallback(
+    (idOrIds?: string | string[]) => {
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const targetIds = idOrIds
+          ? Array.isArray(idOrIds)
+            ? idOrIds
+            : [idOrIds]
+          : cur.selectedObjectIds && cur.selectedObjectIds.length > 0
+          ? cur.selectedObjectIds
+          : cur.selectedObjectId
+          ? [cur.selectedObjectId]
+          : [];
+        if (targetIds.length === 0) return cur;
+        const toDelete = new Set(targetIds);
         const next = {
           ...cur,
           selectedObjectId: null,
-          objects: cur.objects.filter((o) => o.id !== targetId),
+          selectedObjectIds: [],
+          objects: cur.objects.filter((o) => !toDelete.has(o.id)),
         };
         liveSimRef.current = next;
         return next;
@@ -533,100 +566,274 @@ export function useHeatSimulation(
       }
 
       // 2. Check if currently selected object's Handles / Action Pills were clicked!
-      if (sim.selectedObjectId) {
-        const selectedObj = sim.objects.find((o) => o.id === sim.selectedObjectId);
-        if (selectedObj) {
-          const pad = 8;
-          const minX = selectedObj.x - pad;
-          const minY = selectedObj.y - pad;
-          const maxX = selectedObj.x + selectedObj.width + pad;
-          const maxY = selectedObj.y + selectedObj.height + pad;
-          const cx = selectedObj.x + selectedObj.width / 2;
-          const cy = selectedObj.y + selectedObj.height / 2;
-          const pillY = minY < 45 ? maxY + 24 : minY - 24;
+      const selectedIds =
+        sim.selectedObjectIds && sim.selectedObjectIds.length > 0
+          ? sim.selectedObjectIds
+          : sim.selectedObjectId
+          ? [sim.selectedObjectId]
+          : [];
+      const selectedObjs = sim.objects.filter((o) => selectedIds.includes(o.id));
 
-          const hasContainer =
-            selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
-          const hasBurner = selectedObj.type === 'burner';
+      // 2A. Multiple objects selected: Check Group Selection Handles, Trash Button, and Group Drag
+      if (selectedObjs.length > 1) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const obj of selectedObjs) {
+          minX = Math.min(minX, obj.x);
+          minY = Math.min(minY, obj.y);
+          maxX = Math.max(maxX, obj.x + obj.width);
+          maxY = Math.max(maxY, obj.y + obj.height);
+        }
 
-          // A. Red Trash Can (🗑️) button
-          const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
-          if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
-            handleDeleteSelectedObject(selectedObj.id);
+        const pad = 10;
+        const boxX = minX - pad;
+        const boxY = minY - pad;
+        const boxW = maxX - minX + pad * 2;
+        const boxH = maxY - minY + pad * 2;
+        const cx = boxX + boxW / 2;
+        const pillY = boxY < 48 ? boxY + boxH + 24 : boxY - 24;
+
+        // Trash Button (🗑️)
+        const trashX = cx + 46;
+        if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
+          handleDeleteSelectedObject(selectedIds);
+          return true;
+        }
+
+        // 4 Corner Handles (proportional scaling of all objects relative to opposite corner)
+        const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number; ax: number; ay: number }[] = [
+          { id: 'nw', x: boxX, y: boxY, ax: boxX + boxW, ay: boxY + boxH },
+          { id: 'ne', x: boxX + boxW, y: boxY, ax: boxX, ay: boxY + boxH },
+          { id: 'se', x: boxX + boxW, y: boxY + boxH, ax: boxX, ay: boxY },
+          { id: 'sw', x: boxX, y: boxY + boxH, ax: boxX + boxW, ay: boxY },
+        ];
+        for (const c of corners) {
+          if (Math.hypot(lx - c.x, ly - c.y) <= 14) {
+            dragRef.current = {
+              isGroup: true,
+              mode: 'scale-corner',
+              handle: c.id,
+              startX: lx,
+              startY: ly,
+              anchorX: c.ax,
+              anchorY: c.ay,
+              origBounds: { minX: boxX, minY: boxY, maxX: boxX + boxW, maxY: boxY + boxH },
+              origObjects: selectedObjs.map((o) => ({
+                id: o.id,
+                x: o.x,
+                y: o.y,
+                width: o.width,
+                height: o.height,
+              })),
+            };
+            return true;
+          }
+        }
+
+        // 4 Side Midpoint Handles (aspect ratio stretch)
+        const sides: { id: 'n' | 'e' | 's' | 'w'; x: number; y: number }[] = [
+          { id: 'n', x: cx, y: boxY },
+          { id: 'e', x: boxX + boxW, y: boxY + boxH / 2 },
+          { id: 's', x: cx, y: boxY + boxH },
+          { id: 'w', x: boxX, y: boxY + boxH / 2 },
+        ];
+        for (const s of sides) {
+          if (Math.hypot(lx - s.x, ly - s.y) <= 14) {
+            dragRef.current = {
+              isGroup: true,
+              mode: 'stretch-side',
+              handle: s.id,
+              startX: lx,
+              startY: ly,
+              anchorX: s.id === 'e' ? boxX : s.id === 'w' ? boxX + boxW : cx,
+              anchorY: s.id === 's' ? boxY : s.id === 'n' ? boxY + boxH : boxY + boxH / 2,
+              origBounds: { minX: boxX, minY: boxY, maxX: boxX + boxW, maxY: boxY + boxH },
+              origObjects: selectedObjs.map((o) => ({
+                id: o.id,
+                x: o.x,
+                y: o.y,
+                width: o.width,
+                height: o.height,
+              })),
+            };
+            return true;
+          }
+        }
+
+        // Check if clicked directly on an already-selected object
+        const hitSelectedObj = selectedObjs.find(
+          (o) =>
+            lx >= o.x - 4 &&
+            lx <= o.x + o.width + 4 &&
+            ly >= o.y - 4 &&
+            ly <= o.y + o.height + 4
+        );
+        if (hitSelectedObj) {
+          if (_e.shiftKey) {
+            const nextIds = selectedIds.filter((id) => id !== hitSelectedObj.id);
+            setSelectedObjectIds(nextIds);
+            return true;
+          }
+          // Normal drag starts collective move
+          dragRef.current = {
+            isGroup: true,
+            mode: 'move',
+            startX: lx,
+            startY: ly,
+            origObjects: selectedObjs.map((o) => ({
+              id: o.id,
+              x: o.x,
+              y: o.y,
+              width: o.width,
+              height: o.height,
+            })),
+          };
+          return true;
+        }
+
+        // Check if clicked inside the group bounding box
+        if (lx >= boxX && lx <= boxX + boxW && ly >= boxY && ly <= boxY + boxH) {
+          const unselectedObj = sim.objects.find(
+            (o) =>
+              !selectedIds.includes(o.id) &&
+              lx >= o.x - 4 &&
+              lx <= o.x + o.width + 4 &&
+              ly >= o.y - 4 &&
+              ly <= o.y + o.height + 4
+          );
+          if (unselectedObj) {
+            if (_e.shiftKey) {
+              setSelectedObjectIds([...selectedIds, unselectedObj.id]);
+              return true;
+            }
+            dragRef.current = {
+              objectId: unselectedObj.id,
+              mode: 'move',
+              startX: lx,
+              startY: ly,
+              origObjX: unselectedObj.x,
+              origObjY: unselectedObj.y,
+              origW: unselectedObj.width,
+              origH: unselectedObj.height,
+              origRatio: unselectedObj.width / unselectedObj.height,
+            };
+            setSelectedObjectIds([unselectedObj.id]);
             return true;
           }
 
-          // B. Floating Action Bar Pills
-          if (hasContainer) {
-            // Fill button [ 💧 Γέμισμα ]
-            const fillX = cx - 24;
-            if (Math.abs(lx - fillX) <= 32 && Math.abs(ly - pillY) <= 13) {
-              handleFillContainer(selectedObj.id);
-              return true;
-            }
-            // Edit pencil [ ✎ ]
-            const editX = cx + 18;
-            if (Math.hypot(lx - editX, ly - pillY) <= 14) {
-              setEditingContainer(selectedObj);
-              return true;
-            }
-          } else if (hasBurner) {
-            // Flame toggle [ 🔥 ON/OFF ]
-            const flameX = cx - 12;
-            if (Math.abs(lx - flameX) <= 36 && Math.abs(ly - pillY) <= 13) {
-              toggleBurner();
-              return true;
-            }
-          }
+          // Otherwise dragging inside the group box moves the group!
+          dragRef.current = {
+            isGroup: true,
+            mode: 'move',
+            startX: lx,
+            startY: ly,
+            origObjects: selectedObjs.map((o) => ({
+              id: o.id,
+              x: o.x,
+              y: o.y,
+              width: o.width,
+              height: o.height,
+            })),
+          };
+          return true;
+        }
+      }
 
-          // C. 4 Corner Handles (proportional scaling)
-          const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number }[] = [
-            { id: 'nw', x: minX, y: minY },
-            { id: 'ne', x: maxX, y: minY },
-            { id: 'se', x: maxX, y: maxY },
-            { id: 'sw', x: minX, y: maxY },
-          ];
-          for (const c of corners) {
-            if (Math.hypot(lx - c.x, ly - c.y) <= 14) {
-              dragRef.current = {
-                objectId: selectedObj.id,
-                mode: 'scale-corner',
-                handle: c.id,
-                startX: lx,
-                startY: ly,
-                origObjX: selectedObj.x,
-                origObjY: selectedObj.y,
-                origW: selectedObj.width,
-                origH: selectedObj.height,
-                origRatio: selectedObj.width / selectedObj.height,
-              };
-              return true;
-            }
-          }
+      // 2B. Single object selected: Check Single Object Handles & Action Pills
+      else if (selectedObjs.length === 1) {
+        const selectedObj = selectedObjs[0];
+        const pad = 8;
+        const minX = selectedObj.x - pad;
+        const minY = selectedObj.y - pad;
+        const maxX = selectedObj.x + selectedObj.width + pad;
+        const maxY = selectedObj.y + selectedObj.height + pad;
+        const cx = selectedObj.x + selectedObj.width / 2;
+        const cy = selectedObj.y + selectedObj.height / 2;
+        const pillY = minY < 45 ? maxY + 24 : minY - 24;
 
-          // D. 4 Side Midpoint Handles (aspect ratio / αναλογία stretch)
-          const sides: { id: 'n' | 'e' | 's' | 'w'; x: number; y: number }[] = [
-            { id: 'n', x: cx, y: minY },
-            { id: 'e', x: maxX, y: cy },
-            { id: 's', x: cx, y: maxY },
-            { id: 'w', x: minX, y: cy },
-          ];
-          for (const s of sides) {
-            if (Math.hypot(lx - s.x, ly - s.y) <= 14) {
-              dragRef.current = {
-                objectId: selectedObj.id,
-                mode: 'stretch-side',
-                handle: s.id,
-                startX: lx,
-                startY: ly,
-                origObjX: selectedObj.x,
-                origObjY: selectedObj.y,
-                origW: selectedObj.width,
-                origH: selectedObj.height,
-                origRatio: selectedObj.width / selectedObj.height,
-              };
-              return true;
-            }
+        const hasContainer =
+          selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
+        const hasBurner = selectedObj.type === 'burner';
+
+        // A. Red Trash Can (🗑️) button
+        const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
+        if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
+          handleDeleteSelectedObject(selectedObj.id);
+          return true;
+        }
+
+        // B. Floating Action Bar Pills
+        if (hasContainer) {
+          // Fill button [ 💧 Γέμισμα ]
+          const fillX = cx - 24;
+          if (Math.abs(lx - fillX) <= 32 && Math.abs(ly - pillY) <= 13) {
+            handleFillContainer(selectedObj.id);
+            return true;
+          }
+          // Edit pencil [ ✎ ]
+          const editX = cx + 18;
+          if (Math.hypot(lx - editX, ly - pillY) <= 14) {
+            setEditingContainer(selectedObj);
+            return true;
+          }
+        } else if (hasBurner) {
+          // Flame toggle [ 🔥 ON/OFF ]
+          const flameX = cx - 12;
+          if (Math.abs(lx - flameX) <= 36 && Math.abs(ly - pillY) <= 13) {
+            toggleBurner();
+            return true;
+          }
+        }
+
+        // C. 4 Corner Handles (proportional scaling)
+        const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number }[] = [
+          { id: 'nw', x: minX, y: minY },
+          { id: 'ne', x: maxX, y: minY },
+          { id: 'se', x: maxX, y: maxY },
+          { id: 'sw', x: minX, y: maxY },
+        ];
+        for (const c of corners) {
+          if (Math.hypot(lx - c.x, ly - c.y) <= 14) {
+            dragRef.current = {
+              objectId: selectedObj.id,
+              mode: 'scale-corner',
+              handle: c.id,
+              startX: lx,
+              startY: ly,
+              origObjX: selectedObj.x,
+              origObjY: selectedObj.y,
+              origW: selectedObj.width,
+              origH: selectedObj.height,
+              origRatio: selectedObj.width / selectedObj.height,
+            };
+            return true;
+          }
+        }
+
+        // D. 4 Side Midpoint Handles (aspect ratio / αναλογία stretch)
+        const sides: { id: 'n' | 'e' | 's' | 'w'; x: number; y: number }[] = [
+          { id: 'n', x: cx, y: minY },
+          { id: 'e', x: maxX, y: cy },
+          { id: 's', x: cx, y: maxY },
+          { id: 'w', x: minX, y: cy },
+        ];
+        for (const s of sides) {
+          if (Math.hypot(lx - s.x, ly - s.y) <= 14) {
+            dragRef.current = {
+              objectId: selectedObj.id,
+              mode: 'stretch-side',
+              handle: s.id,
+              startX: lx,
+              startY: ly,
+              origObjX: selectedObj.x,
+              origObjY: selectedObj.y,
+              origW: selectedObj.width,
+              origH: selectedObj.height,
+              origRatio: selectedObj.width / selectedObj.height,
+            };
+            return true;
           }
         }
       }
@@ -643,7 +850,15 @@ export function useHeatSimulation(
 
         if (!inside) continue;
 
-        // Select and start dragging object
+        if (_e.shiftKey) {
+          const nextIds = selectedIds.includes(obj.id)
+            ? selectedIds.filter((id) => id !== obj.id)
+            : [...selectedIds, obj.id];
+          setSelectedObjectIds(nextIds);
+          return true;
+        }
+
+        // Select and start dragging single object
         dragRef.current = {
           objectId: obj.id,
           mode: 'move',
@@ -656,34 +871,18 @@ export function useHeatSimulation(
           origRatio: obj.width / obj.height,
         };
 
-        updateActiveHeatSim((prev: HeatSimConfig) => {
-          const cur = liveSimRef.current || prev;
-          const next = {
-            ...cur,
-            selectedObjectId: obj.id,
-          };
-          liveSimRef.current = next;
-          return next;
-        });
+        setSelectedObjectIds([obj.id]);
         return true;
       }
 
       // 4. Clicked outside on empty canvas -> Deselect
-      if (sim.selectedObjectId) {
-        updateActiveHeatSim((prev: HeatSimConfig) => {
-          const cur = liveSimRef.current || prev;
-          const next = {
-            ...cur,
-            selectedObjectId: null,
-          };
-          liveSimRef.current = next;
-          return next;
-        });
+      if (sim.selectedObjectId || (sim.selectedObjectIds && sim.selectedObjectIds.length > 0)) {
+        setSelectedObjectIds([]);
       }
 
       return false;
     },
-    [activeHeatSim, updateActiveHeatSim, handleDeleteSelectedObject, handleFillContainer, toggleBurner]
+    [activeHeatSim, updateActiveHeatSim, handleDeleteSelectedObject, handleFillContainer, toggleBurner, setSelectedObjectIds]
   );
 
   const handlePointerMove = useCallback(
@@ -706,12 +905,102 @@ export function useHeatSimulation(
           }
         } else {
           if (liveSimRef.current) {
-            liveSimRef.current.graph.x = drag.origObjX + dx;
-            liveSimRef.current.graph.y = drag.origObjY + dy;
+            liveSimRef.current.graph.x = (drag.origObjX ?? 0) + dx;
+            liveSimRef.current.graph.y = (drag.origObjY ?? 0) + dy;
             liveSimRef.current.graph.customMoved = true;
           }
         }
         return true;
+      }
+
+      // Group manipulation (Move, Proportional Scale, Aspect Ratio Stretch)
+      if (liveSimRef.current && drag.isGroup && drag.origObjects) {
+        if (drag.mode === 'move') {
+          for (const item of drag.origObjects) {
+            const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+            if (obj) {
+              obj.x = item.x + dx;
+              obj.y = item.y + dy;
+            }
+          }
+          return true;
+        }
+
+        if (
+          drag.mode === 'scale-corner' &&
+          drag.origBounds &&
+          drag.anchorX !== undefined &&
+          drag.anchorY !== undefined
+        ) {
+          const origW = drag.origBounds.maxX - drag.origBounds.minX;
+          let currW = origW;
+          if (drag.handle === 'se' || drag.handle === 'ne') {
+            currW = origW + dx;
+          } else {
+            currW = origW - dx;
+          }
+          const scale = Math.max(0.2, Math.min(5.0, currW / origW));
+
+          for (const item of drag.origObjects) {
+            const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+            if (obj) {
+              obj.x = Math.round(drag.anchorX + (item.x - drag.anchorX) * scale);
+              obj.y = Math.round(drag.anchorY + (item.y - drag.anchorY) * scale);
+              obj.width = Math.max(20, Math.round(item.width * scale));
+              obj.height = Math.max(20, Math.round(item.height * scale));
+            }
+          }
+          return true;
+        }
+
+        if (
+          drag.mode === 'stretch-side' &&
+          drag.origBounds &&
+          drag.anchorX !== undefined &&
+          drag.anchorY !== undefined
+        ) {
+          const origW = drag.origBounds.maxX - drag.origBounds.minX;
+          const origH = drag.origBounds.maxY - drag.origBounds.minY;
+
+          if (drag.handle === 'e') {
+            const scaleX = Math.max(0.2, Math.min(5.0, (origW + dx) / origW));
+            for (const item of drag.origObjects) {
+              const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+              if (obj) {
+                obj.x = Math.round(drag.anchorX + (item.x - drag.anchorX) * scaleX);
+                obj.width = Math.max(20, Math.round(item.width * scaleX));
+              }
+            }
+          } else if (drag.handle === 'w') {
+            const scaleX = Math.max(0.2, Math.min(5.0, (origW - dx) / origW));
+            for (const item of drag.origObjects) {
+              const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+              if (obj) {
+                obj.x = Math.round(drag.anchorX - (drag.anchorX - item.x) * scaleX);
+                obj.width = Math.max(20, Math.round(item.width * scaleX));
+              }
+            }
+          } else if (drag.handle === 's') {
+            const scaleY = Math.max(0.2, Math.min(5.0, (origH + dy) / origH));
+            for (const item of drag.origObjects) {
+              const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+              if (obj) {
+                obj.y = Math.round(drag.anchorY + (item.y - drag.anchorY) * scaleY);
+                obj.height = Math.max(20, Math.round(item.height * scaleY));
+              }
+            }
+          } else if (drag.handle === 'n') {
+            const scaleY = Math.max(0.2, Math.min(5.0, (origH - dy) / origH));
+            for (const item of drag.origObjects) {
+              const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
+              if (obj) {
+                obj.y = Math.round(drag.anchorY - (drag.anchorY - item.y) * scaleY);
+                obj.height = Math.max(20, Math.round(item.height * scaleY));
+              }
+            }
+          }
+          return true;
+        }
       }
 
       // Live object manipulation (Move, Proportional Scale, Aspect Ratio Stretch)
@@ -728,20 +1017,20 @@ export function useHeatSimulation(
             } else if (drag.handle === 'ne') {
               const newW = Math.max(50, (drag.origW || 100) + dx);
               const newH = Math.round(newW / ratio);
-              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.y = (drag.origObjY ?? 0) + ((drag.origH || 100) - newH);
               obj.width = newW;
               obj.height = newH;
             } else if (drag.handle === 'sw') {
               const newW = Math.max(50, (drag.origW || 100) - dx);
               const newH = Math.round(newW / ratio);
-              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
+              obj.x = (drag.origObjX ?? 0) + ((drag.origW || 100) - newW);
               obj.width = newW;
               obj.height = newH;
             } else if (drag.handle === 'nw') {
               const newW = Math.max(50, (drag.origW || 100) - dx);
               const newH = Math.round(newW / ratio);
-              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
-              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.x = (drag.origObjX ?? 0) + ((drag.origW || 100) - newW);
+              obj.y = (drag.origObjY ?? 0) + ((drag.origH || 100) - newH);
               obj.width = newW;
               obj.height = newH;
             }
@@ -752,17 +1041,17 @@ export function useHeatSimulation(
               obj.height = Math.max(40, (drag.origH || 100) + dy);
             } else if (drag.handle === 'w') {
               const newW = Math.max(40, (drag.origW || 100) - dx);
-              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
+              obj.x = (drag.origObjX ?? 0) + ((drag.origW || 100) - newW);
               obj.width = newW;
             } else if (drag.handle === 'n') {
               const newH = Math.max(40, (drag.origH || 100) - dy);
-              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.y = (drag.origObjY ?? 0) + ((drag.origH || 100) - newH);
               obj.height = newH;
             }
           } else {
             // mode === 'move'
-            obj.x = drag.origObjX + dx;
-            obj.y = drag.origObjY + dy;
+            obj.x = (drag.origObjX ?? 0) + dx;
+            obj.y = (drag.origObjY ?? 0) + dy;
           }
         }
       }
@@ -873,5 +1162,6 @@ export function useHeatSimulation(
     toggleGraph,
     handleFillContainer,
     handleDeleteSelectedObject,
+    setSelectedObjectIds,
   };
 }

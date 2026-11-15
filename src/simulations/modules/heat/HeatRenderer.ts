@@ -95,12 +95,32 @@ export function renderHeatSimulation(
     return (order[a.type] || 0) - (order[b.type] || 0);
   });
 
+  const selectedIds = isSelectActive
+    ? sim.selectedObjectIds && sim.selectedObjectIds.length > 0
+      ? sim.selectedObjectIds
+      : sim.selectedObjectId
+      ? [sim.selectedObjectId]
+      : []
+    : [];
+
+  const isMultiSelect = selectedIds.length > 1;
+
   for (const obj of sorted) {
     ctx.save();
     ctx.translate(obj.x, obj.y);
 
     const isHovered = options?.hoveredObjectId === obj.id;
-    const isSelected = isSelectActive && sim.selectedObjectId === obj.id;
+    const isSelected = selectedIds.includes(obj.id);
+
+    // Subtle individual highlight outline when part of a multi-selection
+    if (isMultiSelect && isSelected && (layer === 'all' || layer === 'ui')) {
+      ctx.save();
+      ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.45)' : 'rgba(37, 99, 235, 0.40)';
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(-4, -4, obj.width + 8, obj.height + 8);
+      ctx.restore();
+    }
 
     switch (obj.type) {
       case 'burner':
@@ -123,8 +143,8 @@ export function renderHeatSimulation(
         break;
     }
 
-    // Render Unified BestNotes Selection Frame if selected (in 'ui' or 'all' layer)
-    if (isSelected && (layer === 'all' || layer === 'ui')) {
+    // Render Unified BestNotes Selection Frame if single object selected (in 'ui' or 'all' layer)
+    if (!isMultiSelect && isSelected && (layer === 'all' || layer === 'ui')) {
       renderObjectSelectionFrame(
         ctx,
         obj.width,
@@ -137,6 +157,12 @@ export function renderHeatSimulation(
     }
 
     ctx.restore();
+  }
+
+  // Render Unified Group Selection Frame when multiple objects are selected together
+  if (isMultiSelect && (layer === 'all' || layer === 'ui')) {
+    const selectedObjects = sim.objects.filter((o) => selectedIds.includes(o.id));
+    renderGroupSelectionFrame(ctx, selectedObjects, isDark);
   }
 
   // Render Dynamic T-t Graph if enabled (only in 'ui' or 'all' layer)
@@ -318,6 +344,145 @@ export function renderObjectSelectionFrame(
     ctx.fillText(burnerOn ? '🔥 ON' : '🔥 OFF', flameX, pillY);
     ctx.restore();
   }
+
+  ctx.restore();
+}
+
+/**
+ * Unified BestNotes Group Selection Frame for multiple selected objects.
+ * Enables selecting, moving, and proportional scaling of entire apparatus assemblies
+ * (e.g., Beaker + Tripod + Burner together).
+ */
+export function renderGroupSelectionFrame(
+  ctx: CanvasRenderingContext2D,
+  selectedObjects: HeatObject[],
+  isDark?: boolean
+): void {
+  if (selectedObjects.length <= 1) return;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const obj of selectedObjects) {
+    minX = Math.min(minX, obj.x);
+    minY = Math.min(minY, obj.y);
+    maxX = Math.max(maxX, obj.x + obj.width);
+    maxY = Math.max(maxY, obj.y + obj.height);
+  }
+
+  const pad = 10;
+  const boxX = minX - pad;
+  const boxY = minY - pad;
+  const boxW = maxX - minX + pad * 2;
+  const boxH = maxY - minY + pad * 2;
+  const cx = boxX + boxW / 2;
+
+  ctx.save();
+
+  // 1. Group Selection Outer Dashed Frame
+  ctx.strokeStyle = isDark ? '#38bdf8' : '#2563eb';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([7, 4]);
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+  ctx.setLineDash([]);
+
+  // 2. 4 Corner Proportional Scaling Handles (Slate dots with crisp white border)
+  const cornerR = 5.8;
+  const corners = [
+    { x: boxX, y: boxY },
+    { x: boxX + boxW, y: boxY },
+    { x: boxX + boxW, y: boxY + boxH },
+    { x: boxX, y: boxY + boxH },
+  ];
+  for (const c of corners) {
+    ctx.fillStyle = '#64748b';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, cornerR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // 3. 4 Side Midpoint Stretch Handles (Orange dots with crisp white border)
+  const sideR = 5.5;
+  const sides = [
+    { x: cx, y: boxY },
+    { x: boxX + boxW, y: boxY + boxH / 2 },
+    { x: cx, y: boxY + boxH },
+    { x: boxX, y: boxY + boxH / 2 },
+  ];
+  for (const s of sides) {
+    ctx.fillStyle = '#f97316';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, sideR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // 4. Floating Group Action Pill Bar
+  const pillY = boxY < 48 ? boxY + boxH + 24 : boxY - 24;
+
+  // A. Counter Badge Pill [ ✨ N Αντικείμενα ]
+  const badgeW = 96;
+  const badgeH = 22;
+  const badgeX = cx - 18;
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.20)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = isDark ? '#1e293b' : '#ffffff';
+  ctx.strokeStyle = isDark ? '#475569' : '#cbd5e1';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(badgeX - badgeW / 2, pillY - badgeH / 2, badgeW, badgeH, badgeH / 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = 'bold 10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
+  ctx.fillText(`✨ ${selectedObjects.length} Αντικείμενα`, badgeX, pillY);
+  ctx.restore();
+
+  // B. Group Red Trash Can Button [ 🗑️ ]
+  const trashX = cx + 46;
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = '#ef4444';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.arc(trashX, pillY, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // White Trash Can Icon
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(trashX - 5, pillY - 3.5);
+  ctx.lineTo(trashX + 5, pillY - 3.5);
+  ctx.moveTo(trashX - 2, pillY - 3.5);
+  ctx.lineTo(trashX - 2, pillY - 5.5);
+  ctx.lineTo(trashX + 2, pillY - 5.5);
+  ctx.lineTo(trashX + 2, pillY - 3.5);
+  ctx.moveTo(trashX - 4, pillY - 3.5);
+  ctx.lineTo(trashX - 3.2, pillY + 5);
+  ctx.lineTo(trashX + 3.2, pillY + 5);
+  ctx.lineTo(trashX + 4, pillY - 3.5);
+  ctx.stroke();
+  ctx.restore();
 
   ctx.restore();
 }

@@ -8191,14 +8191,15 @@ export default function App() {
   // When switching to drawing tools (pen, pencil, highlighter, eraser), clear any selected simulation object bounding box!
   useEffect(() => {
     if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser') {
-      if (heatSim.activeHeatSim?.selectedObjectId) {
+      if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
         heatSim.updateActiveHeatSim((prev) => ({
           ...prev,
           selectedObjectId: null,
+          selectedObjectIds: [],
         }));
       }
     }
-  }, [activeTool, heatSim.activeHeatSim?.selectedObjectId, heatSim.updateActiveHeatSim]);
+  }, [activeTool, heatSim.activeHeatSim?.selectedObjectId, heatSim.activeHeatSim?.selectedObjectIds, heatSim.updateActiveHeatSim]);
 
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
   useEffect(() => {
@@ -39315,6 +39316,9 @@ export default function App() {
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
+      if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
+        heatSim.setSelectedObjectIds([]);
+      }
       return;
     }
 
@@ -39631,12 +39635,69 @@ export default function App() {
       return;
     }
 
+    // 5. Heat Simulation Objects enclosed or crossed by the Lasso loop
+    const heatObjs = heatSim.activeHeatSim?.objects || [];
+    const matchedHeatObjIds = heatObjs
+      .filter((obj) => {
+        const cx = obj.x + obj.width / 2;
+        const cy = obj.y + obj.height / 2;
+        if (isPointInPolygon({ x: cx, y: cy }, poly)) return true;
+        const checkPts = [
+          { x: obj.x, y: obj.y },
+          { x: obj.x + obj.width, y: obj.y },
+          { x: obj.x + obj.width, y: obj.y + obj.height },
+          { x: obj.x, y: obj.y + obj.height },
+          { x: cx, y: obj.y },
+          { x: cx, y: obj.y + obj.height },
+          { x: obj.x, y: cy },
+          { x: obj.x + obj.width, y: cy },
+        ];
+        if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
+        return densePoly.some(
+          (lp) =>
+            lp.x >= obj.x &&
+            lp.x <= obj.x + obj.width &&
+            lp.y >= obj.y &&
+            lp.y <= obj.y + obj.height
+        );
+      })
+      .map((o) => o.id);
+
+    if (matchedHeatObjIds.length > 0) {
+      const curSelected =
+        heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0
+          ? heatSim.activeHeatSim.selectedObjectIds
+          : heatSim.activeHeatSim?.selectedObjectId
+          ? [heatSim.activeHeatSim.selectedObjectId]
+          : [];
+      const finalHeatIds = isAdditive
+        ? Array.from(new Set([...curSelected, ...matchedHeatObjIds]))
+        : matchedHeatObjIds;
+
+      heatSim.setSelectedObjectIds(finalHeatIds);
+      setSelectedLassoTextIds([]);
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(null);
+      showToast(
+        finalHeatIds.length > 1
+          ? `✨ Επιλέχθηκαν ${finalHeatIds.length} αντικείμενα προσομοίωσης θερμότητας!`
+          : `✨ Επιλέχθηκε αντικείμενο προσομοίωσης θερμότητας!`
+      );
+      return;
+    }
+
     if (!isAdditive) {
       setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
+      if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
+        heatSim.setSelectedObjectIds([]);
+      }
     }
   };
 
@@ -48697,7 +48758,7 @@ export default function App() {
 
       // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, images, or text box!
       if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
-        if (heatSim.activeHeatSim?.selectedObjectId) {
+        if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
           e.preventDefault();
           heatSim.handleDeleteSelectedObject();
           renderStaticSceneRef.current?.();
