@@ -243,51 +243,17 @@ export function renderObjectSelectionFrame(
     ctx.stroke();
   }
 
-  // 4. Floating Action Bar (Pill Handles) positioned cleanly above or below the frame
-  const pillY = minY < 45 ? maxY + 24 : minY - 24;
+  // 4. Floating Action Bar (Pill Handles) positioned cleanly below the frame
+  const pillY = maxY + 24;
   const hasContainer = type === 'beaker' || type === 'wide-basin' || type === 'flask';
   const hasBurner = type === 'burner';
 
-  // Trash Can Button (Red Circle with white trash icon)
-  const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
-  ctx.save();
-  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetY = 1.5;
-  ctx.fillStyle = '#ef4444';
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2.0;
-  ctx.beginPath();
-  ctx.arc(trashX, pillY, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // White Trash Can Icon
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(trashX - 5, pillY - 3.5);
-  ctx.lineTo(trashX + 5, pillY - 3.5);
-  ctx.moveTo(trashX - 2, pillY - 3.5);
-  ctx.lineTo(trashX - 2, pillY - 5.5);
-  ctx.lineTo(trashX + 2, pillY - 5.5);
-  ctx.lineTo(trashX + 2, pillY - 3.5);
-  ctx.moveTo(trashX - 4, pillY - 3.5);
-  ctx.lineTo(trashX - 3.2, pillY + 5);
-  ctx.lineTo(trashX + 3.2, pillY + 5);
-  ctx.lineTo(trashX + 4, pillY - 3.5);
-  ctx.stroke();
-  ctx.restore();
-
-  // Quick Action Pills next to trash button
+  // Quick Action Pills
   if (hasContainer) {
     // Fill Pill [ 💧 Γέμισμα ] / [ 💧 250ml ]
-    const fillX = cx - 24;
-    const pillW = 60;
-    const pillH = 20;
+    const fillX = cx - 14;
+    const pillW = 64;
+    const pillH = 21;
     ctx.save();
     ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
     ctx.shadowBlur = 5;
@@ -307,12 +273,12 @@ export function renderObjectSelectionFrame(
     ctx.fillText(volumeMl && volumeMl > 0 ? `💧 ${volumeMl}ml` : '💧 Γέμισμα', fillX, pillY);
 
     // Edit Pencil Button [ ✎ ]
-    const editX = cx + 18;
+    const editX = cx + 32;
     ctx.fillStyle = '#234978';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(editX, pillY, 10, 0, Math.PI * 2);
+    ctx.arc(editX, pillY, 10.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -321,26 +287,26 @@ export function renderObjectSelectionFrame(
     ctx.fillText('✎', editX, pillY);
     ctx.restore();
   } else if (hasBurner) {
-    // Flame Toggle Pill [ 🔥 ON / OFF ]
-    const flameX = cx - 12;
-    const pillW = 68;
-    const pillH = 20;
+    // Flame Toggle Pill [ 🔥 ON / OFF ] - Clean, centered, easily clickable
+    const flameX = cx;
+    const pillW = 76;
+    const pillH = 22;
     ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = burnerOn ? '#16a34a' : '#ffffff';
-    ctx.strokeStyle = burnerOn ? '#15803d' : '#cbd5e1';
-    ctx.lineWidth = 1.2;
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.20)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fillStyle = burnerOn ? '#16a34a' : isDark ? '#1e293b' : '#ffffff';
+    ctx.strokeStyle = burnerOn ? '#15803d' : '#94a3b8';
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.roundRect(flameX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = 'bold 9.5px system-ui, sans-serif';
+    ctx.font = 'bold 10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = burnerOn ? '#ffffff' : '#1e293b';
+    ctx.fillStyle = burnerOn ? '#ffffff' : isDark ? '#f8fafc' : '#1e293b';
     ctx.fillText(burnerOn ? '🔥 ON' : '🔥 OFF', flameX, pillY);
     ctx.restore();
   }
@@ -427,10 +393,10 @@ export function renderGroupSelectionFrame(
   // 4. Floating Group Action Pill Bar
   const pillY = boxY < 48 ? boxY + boxH + 24 : boxY - 24;
 
-  // A. Counter Badge Pill [ ✨ N Αντικείμενα ]
+  // Counter Badge Pill [ ✨ N Αντικείμενα ]
   const badgeW = 96;
   const badgeH = 22;
-  const badgeX = cx - 18;
+  const badgeX = cx;
   ctx.save();
   ctx.shadowColor = 'rgba(15, 23, 42, 0.20)';
   ctx.shadowBlur = 6;
@@ -448,40 +414,6 @@ export function renderGroupSelectionFrame(
   ctx.textBaseline = 'middle';
   ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
   ctx.fillText(`✨ ${selectedObjects.length} Αντικείμενα`, badgeX, pillY);
-  ctx.restore();
-
-  // B. Group Red Trash Can Button [ 🗑️ ]
-  const trashX = cx + 46;
-  ctx.save();
-  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetY = 1.5;
-  ctx.fillStyle = '#ef4444';
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2.0;
-  ctx.beginPath();
-  ctx.arc(trashX, pillY, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // White Trash Can Icon
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(trashX - 5, pillY - 3.5);
-  ctx.lineTo(trashX + 5, pillY - 3.5);
-  ctx.moveTo(trashX - 2, pillY - 3.5);
-  ctx.lineTo(trashX - 2, pillY - 5.5);
-  ctx.lineTo(trashX + 2, pillY - 5.5);
-  ctx.lineTo(trashX + 2, pillY - 3.5);
-  ctx.moveTo(trashX - 4, pillY - 3.5);
-  ctx.lineTo(trashX - 3.2, pillY + 5);
-  ctx.lineTo(trashX + 3.2, pillY + 5);
-  ctx.lineTo(trashX + 4, pillY - 3.5);
-  ctx.stroke();
   ctx.restore();
 
   ctx.restore();
@@ -853,26 +785,6 @@ function renderBurner(
     ctx.stroke();
     ctx.restore();
 
-    ctx.restore();
-  }
-
-  // 2. Interactive UI Controls (ui / all)
-  if (layer === 'all' || layer === 'ui') {
-    const btnY = cyBot + baseRy + 4;
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(cx - 28, btnY, 56, 17, 8.5);
-    ctx.fillStyle = state?.isOn ? '#16a34a' : isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.92)';
-    ctx.fill();
-    ctx.strokeStyle = state?.isOn ? '#15803d' : 'rgba(100, 116, 139, 0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-
-    ctx.fillStyle = state?.isOn ? '#ffffff' : isDark ? '#f8fafc' : '#334155';
-    ctx.font = 'bold 9px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(state?.isOn ? 'ΦΛΟΓΑ ON' : 'OFF', cx, btnY + 8.5);
     ctx.restore();
   }
 }

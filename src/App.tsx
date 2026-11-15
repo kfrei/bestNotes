@@ -57178,7 +57178,8 @@ export default function App() {
               (activeTool !== 'direct-node' &&
                 (selectedStrokeIds.length > 0 ||
                   selectedLassoTextIds.length > 0 ||
-                  Boolean(selectedImgObj))) ||
+                  Boolean(selectedImgObj) ||
+                  Boolean(heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)))) ||
               activeTool === 'eraser') &&
             showToolSubBar && (
               <div
@@ -58468,7 +58469,10 @@ export default function App() {
                           selectedLassoTextIds.includes(t.id) ||
                           (t.groupId && !t.groupId.startsWith('math-graph-grp-') && activeGrpSet.has(t.groupId))
                       );
-                      const totalSelCount = selStrokes.length + selImgs.length + selTxts.length;
+                      const selHeatCount =
+                        heatSim.activeHeatSim?.selectedObjectIds?.length ||
+                        (heatSim.activeHeatSim?.selectedObjectId ? 1 : 0);
+                      const totalSelCount = selStrokes.length + selImgs.length + selTxts.length + selHeatCount;
                       if (totalSelCount === 0) return null;
                       const hasGroupedItem =
                         selStrokes.some((s) => Boolean(s.groupId)) ||
@@ -58676,9 +58680,23 @@ export default function App() {
                           </>
                         );
                       })()}
-                    {(selectedStrokeIds.length > 0 || selectedImageIds.length > 1) && (
+                    {(selectedStrokeIds.length > 0 ||
+                      selectedImageIds.length > 1 ||
+                      Boolean(
+                        heatSim.activeHeatSim?.selectedObjectId ||
+                          (heatSim.activeHeatSim?.selectedObjectIds &&
+                            heatSim.activeHeatSim.selectedObjectIds.length > 0)
+                      )) && (
                       <button
                         onClick={() => {
+                          if (
+                            heatSim.activeHeatSim?.selectedObjectId ||
+                            (heatSim.activeHeatSim?.selectedObjectIds &&
+                              heatSim.activeHeatSim.selectedObjectIds.length > 0)
+                          ) {
+                            heatSim.handleDeleteSelectedObject();
+                            renderStaticSceneRef.current?.();
+                          }
                           const effectiveImgIds =
                             selectedImageIds.length > 0
                               ? selectedImageIds

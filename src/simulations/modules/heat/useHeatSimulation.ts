@@ -37,7 +37,7 @@ export interface UseHeatSimulationReturn {
   toggleRun: () => void;
   startHeatingAndSim: () => void;
   pauseHeatingAndSim: () => void;
-  toggleBurner: () => void;
+  toggleBurner: (burnerId?: string) => void;
   resetSim: () => void;
   toggleGraph: () => void;
   handleFillContainer: (containerId?: string) => void;
@@ -346,15 +346,21 @@ export function useHeatSimulation(
     });
   }, [updateActiveHeatSim]);
 
-  const toggleBurner = useCallback(() => {
+  const toggleBurner = useCallback((burnerId?: string) => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
       const cur = liveSimRef.current || prev;
-      const burner = cur.objects.find((o) => o.type === 'burner');
-      const nextOn = !burner?.burnerState?.isOn;
+      const targetId =
+        burnerId ||
+        (cur.selectedObjectId && cur.objects.find((o) => o.id === cur.selectedObjectId && o.type === 'burner')?.id);
+      const targetBurner = targetId
+        ? cur.objects.find((o) => o.id === targetId)
+        : cur.objects.find((o) => o.type === 'burner');
+      const nextOn = !targetBurner?.burnerState?.isOn;
       const next = {
         ...cur,
+        isRunning: nextOn ? true : cur.isRunning,
         objects: cur.objects.map((obj) => {
-          if (obj.type === 'burner' && obj.burnerState) {
+          if (obj.type === 'burner' && obj.burnerState && (!targetId || obj.id === targetId)) {
             return {
               ...obj,
               burnerState: {
@@ -595,13 +601,6 @@ export function useHeatSimulation(
         const cx = boxX + boxW / 2;
         const pillY = boxY < 48 ? boxY + boxH + 24 : boxY - 24;
 
-        // Trash Button (🗑️)
-        const trashX = cx + 46;
-        if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
-          handleDeleteSelectedObject(selectedIds);
-          return true;
-        }
-
         // 4 Corner Handles (proportional scaling of all objects relative to opposite corner)
         const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number; ax: number; ay: number }[] = [
           { id: 'nw', x: boxX, y: boxY, ax: boxX + boxW, ay: boxY + boxH },
@@ -751,38 +750,31 @@ export function useHeatSimulation(
         const maxY = selectedObj.y + selectedObj.height + pad;
         const cx = selectedObj.x + selectedObj.width / 2;
         const cy = selectedObj.y + selectedObj.height / 2;
-        const pillY = minY < 45 ? maxY + 24 : minY - 24;
+        const pillY = maxY + 24;
 
         const hasContainer =
           selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
         const hasBurner = selectedObj.type === 'burner';
 
-        // A. Red Trash Can (🗑️) button
-        const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
-        if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
-          handleDeleteSelectedObject(selectedObj.id);
-          return true;
-        }
-
-        // B. Floating Action Bar Pills
+        // Floating Action Bar Pills
         if (hasContainer) {
           // Fill button [ 💧 Γέμισμα ]
-          const fillX = cx - 24;
+          const fillX = cx - 14;
           if (Math.abs(lx - fillX) <= 32 && Math.abs(ly - pillY) <= 13) {
             handleFillContainer(selectedObj.id);
             return true;
           }
           // Edit pencil [ ✎ ]
-          const editX = cx + 18;
+          const editX = cx + 32;
           if (Math.hypot(lx - editX, ly - pillY) <= 14) {
             setEditingContainer(selectedObj);
             return true;
           }
         } else if (hasBurner) {
-          // Flame toggle [ 🔥 ON/OFF ]
-          const flameX = cx - 12;
-          if (Math.abs(lx - flameX) <= 36 && Math.abs(ly - pillY) <= 13) {
-            toggleBurner();
+          // Flame toggle [ 🔥 ON / OFF ]
+          const flameX = cx;
+          if (Math.abs(lx - flameX) <= 42 && Math.abs(ly - pillY) <= 15) {
+            toggleBurner(selectedObj.id);
             return true;
           }
         }
