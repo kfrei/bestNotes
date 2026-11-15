@@ -337,18 +337,6 @@ export function useHeatSimulation(
       const next = {
         ...cur,
         isRunning: true,
-        objects: cur.objects.map((obj) => {
-          if (obj.type === 'burner' && obj.burnerState) {
-            return {
-              ...obj,
-              burnerState: {
-                ...obj.burnerState,
-                isOn: true,
-              },
-            };
-          }
-          return obj;
-        }),
       };
       liveSimRef.current = next;
       return next;
@@ -374,21 +362,6 @@ export function useHeatSimulation(
       const next = {
         ...cur,
         isRunning: willRun,
-        objects: cur.objects.map((obj) => {
-          if (obj.type === 'burner' && obj.burnerState) {
-            // When starting simulation, auto-ignite burner if off so heating begins
-            if (willRun && !obj.burnerState.isOn) {
-              return {
-                ...obj,
-                burnerState: {
-                  ...obj.burnerState,
-                  isOn: true,
-                },
-              };
-            }
-          }
-          return obj;
-        }),
       };
       liveSimRef.current = next;
       return next;
@@ -1579,7 +1552,7 @@ export function useHeatSimulation(
   const stepPhysicsFrame = useCallback(
     (dt: number) => {
       const cur = liveSimRef.current || activeHeatSim;
-      if (!cur || !cur.isRunning) return;
+      if (!cur) return;
       const next = stepHeatSimulation(cur, dt);
       liveSimRef.current = next;
 

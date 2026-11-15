@@ -60,7 +60,7 @@ export function calculateEquilibriumTemperature(
  * Advances physics of all heat objects by dt (seconds).
  */
 export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfig {
-  if (!sim.isRunning || dt <= 0) return sim;
+  if (dt <= 0) return sim;
 
   const ambientTemp = sim.ambientTemperature ?? ROOM_TEMPERATURE_C;
   const timeStep = Math.min(0.1, Math.max(0.001, dt));
@@ -83,8 +83,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const burnerUnderneath = burners.find((b) => {
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
-      const dy = b.y - (tripod.y + tripod.height);
-      return dx < 36 && dy >= -45 && dy < 40;
+      // Bounding check: burner is positioned under the tripod wire gauze
+      const isUnderGauze = b.y >= tripod.y - 40 && b.y <= tripod.y + tripod.height + 60;
+      return dx < Math.max(50, tripod.width * 0.45) && isUnderGauze;
     });
 
     if (burnerUnderneath && burnerUnderneath.burnerState) {
@@ -112,26 +113,32 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const tripodBelow = tripods.find((t) => {
       const dx = Math.abs(container.x + container.width / 2 - (t.x + t.width / 2));
       const dy = Math.abs(container.y + container.height - t.y);
-      return dx < 45 && dy < 28;
+      return dx < Math.max(55, (t.width + container.width) * 0.35) && dy <= 45;
     });
 
     if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
       // Heat transfer from wire gauze
       const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
       if (deltaTGauze > 0) {
-        receivedPowerWatts += deltaTGauze * 1.85; // Watts
+        receivedPowerWatts += deltaTGauze * 2.2; // Watts
       }
-    } else {
-      // B. Direct flame if burner is directly below container (without tripod)
-      const directBurner = burners.find((b) => {
-        if (!b.burnerState?.isOn) return false;
-        const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
-        const dy = b.y - (container.y + container.height);
-        return dx < 40 && dy >= -25 && dy < 45;
-      });
-      if (directBurner && directBurner.burnerState) {
-        receivedPowerWatts += getBurnerPowerWatts(directBurner.burnerState) * 0.7;
-      }
+    }
+
+    // B. Direct flame check (burner positioned directly below container, with or without tripod)
+    const directBurner = burners.find((b) => {
+      if (!b.burnerState?.isOn) return false;
+      const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
+      const flameDist = b.y - (container.y + container.height);
+      return (
+        dx < Math.max(55, (container.width + b.width) * 0.35) &&
+        flameDist >= -40 &&
+        flameDist <= 140
+      );
+    });
+
+    if (directBurner && directBurner.burnerState) {
+      const directPower = getBurnerPowerWatts(directBurner.burnerState) * (tripodBelow ? 0.75 : 0.85);
+      receivedPowerWatts = Math.max(receivedPowerWatts, directPower);
     }
 
     // Apply Q = P·dt => ΔT = dQ / (m·c)
@@ -277,75 +284,87 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   }
 
   // 6. Record history for real-time dynamic graph
-  const nextElapsed = sim.elapsedSec + timeStep;
-  let nextHistory = sim.history;
+  // Only measure elapsed time and record graph points when the stopwatch / simulation is started!
+  // "όμως σε διάγραμμα μετρά μόνο με έναρξη από το χρονόμετρο"
+  if (sim.isRunning) {
+    const nextElapsed = sim.elapsedSec + timeStep;
+    let nextHistory = sim.history;
 
-  const anyGraphVisible = sim.graph.visible || (sim.graphs && sim.graphs.some((g) => g.visible));
-  if (anyGraphVisible && containers.length > 0) {
-    // Record temperatures of ALL containers by ID
-    const tempsMap: Record<string, number> = {};
-    for (const c of containers) {
-      if (c.containerState) {
-        tempsMap[c.id] = Math.round(c.containerState.temperature * 10) / 10;
+    const anyGraphVisible = sim.graph.visible || (sim.graphs && sim.graphs.some((g) => g.visible));
+    if (anyGraphVisible && containers.length > 0) {
+      // Record temperatures of ALL containers by ID
+      const tempsMap: Record<string, number> = {};
+      for (const c of containers) {
+        if (c.containerState) {
+          tempsMap[c.id] = Math.round(c.containerState.temperature * 10) / 10;
+        }
+      }
+
+      const primaryVessel =
+        (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
+        containers.find((c) => c.id === sim.selectedObjectId) ||
+        containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
+        containers[0];
+
+      if (primaryVessel?.containerState) {
+        const temp1 = primaryVessel.containerState.temperature;
+        let temp2: number | undefined;
+        let tempEquilibrium: number | undefined;
+
+        // If in a water bath, record both curves!
+        if (primaryVessel.containerState.parentBasinId) {
+          const basin = containers.find((c) => c.id === primaryVessel.containerState?.parentBasinId);
+          if (basin?.containerState) {
+            temp2 = basin.containerState.temperature;
+            tempEquilibrium = calculateEquilibriumTemperature(
+              primaryVessel.containerState,
+              basin.containerState
+            );
+          }
+        } else if (primaryVessel.containerState.nestedVesselId) {
+          const nested = containers.find((c) => c.id === primaryVessel.containerState?.nestedVesselId);
+          if (nested?.containerState) {
+            temp2 = nested.containerState.temperature;
+            tempEquilibrium = calculateEquilibriumTemperature(
+              primaryVessel.containerState,
+              nested.containerState
+            );
+          }
+        } else {
+          // Single vessel interacting with the ambient environment
+          tempEquilibrium = ambientTemp;
+        }
+
+        // Sample every 0.1s to record temperature history from t = 0
+        const lastPoint = sim.history[sim.history.length - 1];
+        if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.1) {
+          const point = {
+            timeSec: Math.round(nextElapsed * 10) / 10,
+            temp1: Math.round(temp1 * 10) / 10,
+            temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
+            tempsByContainerId: tempsMap,
+            tempEquilibrium:
+              tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
+          };
+          // Retain complete history from t = 0 (up to 6000 points = 10 minutes of continuous recording)
+          nextHistory = [...sim.history.slice(-5999), point];
+        }
       }
     }
 
-    const primaryVessel =
-      (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
-      containers.find((c) => c.id === sim.selectedObjectId) ||
-      containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
-      containers[0];
-
-    if (primaryVessel?.containerState) {
-      const temp1 = primaryVessel.containerState.temperature;
-      let temp2: number | undefined;
-      let tempEquilibrium: number | undefined;
-
-      // If in a water bath, record both curves!
-      if (primaryVessel.containerState.parentBasinId) {
-        const basin = containers.find((c) => c.id === primaryVessel.containerState?.parentBasinId);
-        if (basin?.containerState) {
-          temp2 = basin.containerState.temperature;
-          tempEquilibrium = calculateEquilibriumTemperature(
-            primaryVessel.containerState,
-            basin.containerState
-          );
-        }
-      } else if (primaryVessel.containerState.nestedVesselId) {
-        const nested = containers.find((c) => c.id === primaryVessel.containerState?.nestedVesselId);
-        if (nested?.containerState) {
-          temp2 = nested.containerState.temperature;
-          tempEquilibrium = calculateEquilibriumTemperature(
-            primaryVessel.containerState,
-            nested.containerState
-          );
-        }
-      } else {
-        // Single vessel interacting with the ambient environment
-        tempEquilibrium = ambientTemp;
-      }
-
-      // Sample every 0.1s to record temperature history from t = 0
-      const lastPoint = sim.history[sim.history.length - 1];
-      if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.1) {
-        const point = {
-          timeSec: Math.round(nextElapsed * 10) / 10,
-          temp1: Math.round(temp1 * 10) / 10,
-          temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
-          tempsByContainerId: tempsMap,
-          tempEquilibrium:
-            tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
-        };
-        // Retain complete history from t = 0 (up to 6000 points = 10 minutes of continuous recording)
-        nextHistory = [...sim.history.slice(-5999), point];
-      }
-    }
+    return {
+      ...sim,
+      elapsedSec: nextElapsed,
+      objects,
+      history: nextHistory,
+    };
   }
 
+  // When stopwatch / sim timer is NOT running:
+  // Live physics (temperature changes, flame, thermometer) update in real-time on canvas,
+  // but graph time (elapsedSec) and history remain paused waiting for stopwatch start!
   return {
     ...sim,
-    elapsedSec: nextElapsed,
     objects,
-    history: nextHistory,
   };
 }
