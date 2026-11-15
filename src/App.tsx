@@ -1998,7 +1998,17 @@ export default function App() {
   );
   const [simActiveCategory, setSimActiveCategory] = useState<
     'circuits' | 'springs' | 'forces' | 'atoms' | 'heat' | null
-  >(() => initialSession?.simActiveCategory ?? null);
+  >(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_last_sim_category') as any;
+      if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return initialSession?.simActiveCategory ?? 'heat';
+  });
   const [isSimulating, setIsSimulating] = useState<boolean>(() => Boolean(initialSession?.isSimulating));
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(() =>
     Boolean(initialSession?.isSpringSimulating)
@@ -2538,19 +2548,49 @@ export default function App() {
     };
   } | null>(null);
   const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>(() =>
-    initialSession?.simPanelPos &&
-    typeof initialSession.simPanelPos.x === 'number' &&
-    typeof initialSession.simPanelPos.y === 'number'
+  const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const savedPos = localStorage.getItem('bestnotes_sim_panel_pos');
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return { x: parsed.x, y: parsed.y };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return initialSession?.simPanelPos &&
+      typeof initialSession.simPanelPos.x === 'number' &&
+      typeof initialSession.simPanelPos.y === 'number'
       ? initialSession.simPanelPos
-      : { x: 16, y: 108 }
-  );
+      : { x: 16, y: 108 };
+  });
   const simPanelDragRef = useRef<{
     startClientX: number;
     startClientY: number;
     origX: number;
     origY: number;
+    lastPos?: { x: number; y: number };
   } | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bestnotes_sim_panel_pos', JSON.stringify(simPanelPos));
+    } catch {
+      // ignore
+    }
+  }, [simPanelPos]);
+
+  useEffect(() => {
+    if (simActiveCategory) {
+      try {
+        localStorage.setItem('bestnotes_last_sim_category', simActiveCategory);
+      } catch {
+        // ignore
+      }
+    }
+  }, [simActiveCategory]);
   const [isTvReceiverMode, setIsTvReceiverMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -56862,23 +56902,26 @@ export default function App() {
                       setShowSimulationPanel((v) => {
                         const next = !v;
                         if (next) {
-                          if (activePage.forceSims && activePage.forceSims.length > 0) {
-                            setSimActiveCategory('forces');
-                            if (activePage.forceSims.some((s) => s.mode === 'pendulum')) {
-                              setForceSimSubTab('pendulum');
+                          // When reopening, prioritize preserving the user's last active simulation category!
+                          setSimActiveCategory((cur) => {
+                            if (cur) return cur;
+                            try {
+                              const saved = localStorage.getItem('bestnotes_last_sim_category') as any;
+                              if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat'].includes(saved)) {
+                                return saved;
+                              }
+                            } catch {
+                              // ignore
                             }
-                          } else if (getValidCircuitSims(activePage).length > 0) {
-                            setSimActiveCategory('circuits');
-                          } else if (getValidSpringSims(activePage).length > 0) {
-                            setSimActiveCategory('springs');
-                          } else if ((activePage.atomSims || []).length > 0) {
-                            setSimActiveCategory('atoms');
-                          } else {
-                            setSimActiveCategory(null);
-                          }
-                        } else {
-                          setSimActiveCategory(null);
+                            if (activePage.heatSims && activePage.heatSims.length > 0) return 'heat';
+                            if (activePage.forceSims && activePage.forceSims.length > 0) return 'forces';
+                            if (getValidCircuitSims(activePage).length > 0) return 'circuits';
+                            if (getValidSpringSims(activePage).length > 0) return 'springs';
+                            if ((activePage.atomSims || []).length > 0) return 'atoms';
+                            return 'heat';
+                          });
                         }
+                        // Do NOT reset simActiveCategory when closing, so user's active tab is preserved!
                         return next;
                       });
                     }}
@@ -60827,10 +60870,20 @@ export default function App() {
                       8,
                       Math.min(window.innerHeight - 120, drag.origY + (e.clientY - drag.startClientY))
                     );
-                    setSimPanelPos({ x: nextX, y: nextY });
+                    const nextPos = { x: nextX, y: nextY };
+                    drag.lastPos = nextPos;
+                    setSimPanelPos(nextPos);
                   }}
                   onPointerUp={() => {
+                    const lastPos = simPanelDragRef.current?.lastPos;
                     simPanelDragRef.current = null;
+                    if (lastPos) {
+                      try {
+                        localStorage.setItem('bestnotes_sim_panel_pos', JSON.stringify(lastPos));
+                      } catch {
+                        // ignore
+                      }
+                    }
                   }}
                   onPointerCancel={() => {
                     simPanelDragRef.current = null;
@@ -60850,7 +60903,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setShowSimulationPanel(false);
-                      setSimActiveCategory(null);
+                      // Preserve simActiveCategory so reopening restores the active tab (e.g. 'heat')
                     }}
                     className="p-1 rounded-lg hover:bg-[#efebe3] text-[#64748b] hover:text-[#234978] cursor-pointer transition"
                     title="Κλείσιμο παραθύρου"
@@ -60871,9 +60924,8 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextCat = simActiveCategory === 'circuits' ? null : 'circuits';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'circuits' && !isSimulating) {
+                      setSimActiveCategory('circuits');
+                      if (!isSimulating) {
                         const existingCircuitSim = getActiveCircuitSim(activePage);
                         if (existingCircuitSim) {
                           setSimCircuitSwitchClosed(Boolean(existingCircuitSim.switchClosed));
@@ -60891,9 +60943,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
-                    }
+                    onClick={() => setSimActiveCategory('springs')}
                     className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#234978] text-white shadow-xs'
@@ -60905,9 +60955,8 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextCat = simActiveCategory === 'forces' ? null : 'forces';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'forces' && selectedStrokeIds.length > 0) {
+                      setSimActiveCategory('forces');
+                      if (selectedStrokeIds.length > 0) {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
@@ -60922,11 +60971,8 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'heat') {
-                        heatSim.ensureActiveHeatSim(activePage);
-                      }
+                      setSimActiveCategory('heat');
+                      heatSim.ensureActiveHeatSim(activePage);
                     }}
                     className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'heat'
@@ -60939,9 +60985,8 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextCat = simActiveCategory === 'atoms' ? null : 'atoms';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'atoms' && selectedStrokeIds.length > 0) {
+                      setSimActiveCategory('atoms');
+                      if (selectedStrokeIds.length > 0) {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
