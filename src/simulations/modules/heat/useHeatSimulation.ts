@@ -15,6 +15,9 @@ import {
   getBurnerActionButtonWorldPos,
   triggerContainerFillFeedback,
   notifyContainerSloshMotion,
+  getTripodContainerDockPos,
+  getTripodBurnerDockPos,
+  getWaterBathNestedDockPos,
 } from './HeatRenderer';
 
 export interface UseHeatSimulationReturn {
@@ -1595,8 +1598,63 @@ export function useHeatSimulation(
             }
           } else {
             // mode === 'move'
-            obj.x = (drag.origObjX ?? 0) + dx;
-            obj.y = (drag.origObjY ?? 0) + dy;
+            let nextX = (drag.origObjX ?? 0) + dx;
+            let nextY = (drag.origObjY ?? 0) + dy;
+
+            // Magnetic snap / pull to base (tripod / wire gauze or water bath):
+            if (obj.type === 'beaker' || obj.type === 'flask' || obj.type === 'wide-basin') {
+              const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
+              for (const tripod of tripods) {
+                const { dockX, dockY } = getTripodContainerDockPos(tripod, obj);
+                if (Math.abs(nextX - dockX) <= 42 && Math.abs(nextY - dockY) <= 36) {
+                  nextX = dockX;
+                  nextY = dockY;
+                  break;
+                }
+              }
+
+              if (obj.type !== 'wide-basin') {
+                const basins = liveSimRef.current.objects.filter((o) => o.type === 'wide-basin' && o.id !== obj.id);
+                for (const basin of basins) {
+                  const { dockX, dockY } = getWaterBathNestedDockPos(basin, obj);
+                  if (Math.abs(nextX - dockX) <= 38 && Math.abs(nextY - dockY) <= 32) {
+                    nextX = dockX;
+                    nextY = dockY;
+                    break;
+                  }
+                }
+              }
+            } else if (obj.type === 'tripod') {
+              // Dragging tripod near a sitting container snaps tripod under the container
+              const containers = liveSimRef.current.objects.filter(
+                (o) => (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') && o.id !== obj.id
+              );
+              for (const c of containers) {
+                const { dockX: cDockX, dockY: cDockY } = getTripodContainerDockPos(obj, c);
+                const diffX = c.x - cDockX;
+                const diffY = c.y - cDockY;
+                const targetTripodX = obj.x + diffX;
+                const targetTripodY = obj.y + diffY;
+                if (Math.abs(nextX - targetTripodX) <= 42 && Math.abs(nextY - targetTripodY) <= 36) {
+                  nextX = targetTripodX;
+                  nextY = targetTripodY;
+                  break;
+                }
+              }
+            } else if (obj.type === 'burner') {
+              const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
+              for (const tripod of tripods) {
+                const { dockX, dockY } = getTripodBurnerDockPos(tripod, obj);
+                if (Math.abs(nextX - dockX) <= 38 && Math.abs(nextY - dockY) <= 32) {
+                  nextX = dockX;
+                  nextY = dockY;
+                  break;
+                }
+              }
+            }
+
+            obj.x = nextX;
+            obj.y = nextY;
 
             if (obj.containerState) {
               const now = performance.now();
@@ -1618,8 +1676,64 @@ export function useHeatSimulation(
 
   const handlePointerUp = useCallback((): boolean => {
     if (!dragRef.current) return false;
+    const drag = dragRef.current;
     dragRef.current = null;
     dragMotionHistoryRef.current = null;
+
+    if (liveSimRef.current && drag.mode === 'move' && drag.objectId) {
+      const obj = liveSimRef.current.objects.find((o) => o.id === drag.objectId);
+      if (obj) {
+        if (obj.type === 'beaker' || obj.type === 'flask' || obj.type === 'wide-basin') {
+          const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
+          for (const tripod of tripods) {
+            const { dockX, dockY } = getTripodContainerDockPos(tripod, obj);
+            if (Math.abs(obj.x - dockX) <= 46 && Math.abs(obj.y - dockY) <= 40) {
+              obj.x = dockX;
+              obj.y = dockY;
+              break;
+            }
+          }
+          if (obj.type !== 'wide-basin') {
+            const basins = liveSimRef.current.objects.filter((o) => o.type === 'wide-basin' && o.id !== obj.id);
+            for (const basin of basins) {
+              const { dockX, dockY } = getWaterBathNestedDockPos(basin, obj);
+              if (Math.abs(obj.x - dockX) <= 42 && Math.abs(obj.y - dockY) <= 36) {
+                obj.x = dockX;
+                obj.y = dockY;
+                break;
+              }
+            }
+          }
+        } else if (obj.type === 'tripod') {
+          const containers = liveSimRef.current.objects.filter(
+            (o) => (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') && o.id !== obj.id
+          );
+          for (const c of containers) {
+            const { dockX: cDockX, dockY: cDockY } = getTripodContainerDockPos(obj, c);
+            const diffX = c.x - cDockX;
+            const diffY = c.y - cDockY;
+            const targetTripodX = obj.x + diffX;
+            const targetTripodY = obj.y + diffY;
+            if (Math.abs(obj.x - targetTripodX) <= 48 && Math.abs(obj.y - targetTripodY) <= 42) {
+              obj.x = targetTripodX;
+              obj.y = targetTripodY;
+              break;
+            }
+          }
+        } else if (obj.type === 'burner') {
+          const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
+          for (const tripod of tripods) {
+            const { dockX, dockY } = getTripodBurnerDockPos(tripod, obj);
+            if (Math.abs(obj.x - dockX) <= 42 && Math.abs(obj.y - dockY) <= 36) {
+              obj.x = dockX;
+              obj.y = dockY;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     // Persist final position and dimensions to note page
     if (liveSimRef.current) {
       updateActiveHeatSim(() => liveSimRef.current!);

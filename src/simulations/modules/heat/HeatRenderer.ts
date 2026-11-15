@@ -1770,6 +1770,59 @@ export function getContainerActionButtonsWorldPos(obj: HeatObject, allObjects?: 
 }
 
 /**
+ * Calculates the exact magnetic docking position for a container (flask, beaker, wide-basin)
+ * resting level on the wire gauze ring of the tripod apparatus.
+ */
+export function getTripodContainerDockPos(
+  tripod: HeatObject,
+  container: HeatObject
+): { dockX: number; dockY: number } {
+  const tripodCenterX = tripod.x + tripod.width / 2;
+  const collarW = tripod.width * 0.72;
+  const collarH = Math.round(collarW * 0.15);
+  const topY = 4;
+  const collarCy = topY + collarH * 0.5;
+  const collarRy = collarH / 2;
+
+  const pad = 8;
+  const bw = container.width - pad * 2;
+  const botCurve = Math.round(bw * 0.055);
+
+  const dockX = Math.round(tripodCenterX - container.width / 2);
+  const dockY = Math.round(tripod.y + collarCy + collarRy - (container.height - 10) - botCurve);
+
+  return { dockX, dockY };
+}
+
+/**
+ * Calculates the magnetic docking position for a Bunsen burner centered underneath a tripod.
+ */
+export function getTripodBurnerDockPos(
+  tripod: HeatObject,
+  burner: HeatObject
+): { dockX: number; dockY: number } {
+  const tripodCenterX = tripod.x + tripod.width / 2;
+  const dockX = Math.round(tripodCenterX - burner.width / 2);
+  const dockY = Math.round(tripod.y + tripod.height - burner.height);
+  return { dockX, dockY };
+}
+
+/**
+ * Calculates the magnetic docking position for a nested vessel resting inside a water bath (wide-basin).
+ */
+export function getWaterBathNestedDockPos(
+  basin: HeatObject,
+  vessel: HeatObject
+): { dockX: number; dockY: number } {
+  const basinCenterX = basin.x + basin.width / 2;
+  const dockX = Math.round(basinCenterX - vessel.width / 2);
+  const bPad = 8;
+  const basinBottomY = basin.y + basin.height - bPad - 2;
+  const dockY = Math.round(basinBottomY - (vessel.height - 10));
+  return { dockX, dockY };
+}
+
+/**
  * Coordinate calculators for the permanent flame toggle button
  * positioned at the bottom-right of the Bunsen burner cast-iron base.
  * Shifted slightly more to the left ("και ισως λιγο πιο αριστερα").
