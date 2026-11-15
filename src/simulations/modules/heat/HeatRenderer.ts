@@ -78,24 +78,6 @@ export function renderHeatSimulation(
 
   ctx.save();
 
-  // Render objects sorted by z-order:
-  // 1. Tripod
-  // 2. Burner
-  // 3. Wide Basin
-  // 4. Beaker / Flask
-  // 5. Thermometer
-  const sorted = [...sim.objects].sort((a, b) => {
-    const order: Record<string, number> = {
-      tripod: 1,
-      burner: 2,
-      'wide-basin': 3,
-      beaker: 4,
-      flask: 4,
-      thermometer: 5,
-    };
-    return (order[a.type] || 0) - (order[b.type] || 0);
-  });
-
   const selectedIds = isSelectActive
     ? sim.selectedObjectIds && sim.selectedObjectIds.length > 0
       ? sim.selectedObjectIds
@@ -106,15 +88,15 @@ export function renderHeatSimulation(
 
   const isMultiSelect = selectedIds.length > 1;
 
-  for (const obj of sorted) {
+  // Helper to render an apparatus object
+  const renderSingleObject = (obj: HeatObject, tripodPart?: 'back' | 'front') => {
     ctx.save();
     ctx.translate(obj.x, obj.y);
 
-    const isHovered = options?.hoveredObjectId === obj.id;
     const isSelected = selectedIds.includes(obj.id);
 
     // Subtle individual highlight outline when part of a multi-selection
-    if (isMultiSelect && isSelected && (layer === 'all' || layer === 'ui')) {
+    if (isMultiSelect && isSelected && (layer === 'all' || layer === 'ui') && tripodPart !== 'back') {
       ctx.save();
       ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.45)' : 'rgba(37, 99, 235, 0.40)';
       ctx.lineWidth = 1.3;
@@ -124,11 +106,21 @@ export function renderHeatSimulation(
     }
 
     switch (obj.type) {
+      case 'tripod':
+        renderTripod(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.tripodState?.wireGauzeTemp || 20,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          tripodPart || 'all'
+        );
+        break;
       case 'burner':
         renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected, layer, obj.strokeColor);
-        break;
-      case 'tripod':
-        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'beaker': {
         const parentBasin = sim.objects.find(
@@ -141,14 +133,41 @@ export function renderHeatSimulation(
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin, isGraphActive);
+        renderBeaker(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.containerState,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          obj.id,
+          obj.x,
+          obj.y,
+          parentBasin,
+          isGraphActive
+        );
         break;
       }
       case 'wide-basin': {
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, isGraphActive);
+        renderWideBasin(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.containerState,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          obj.id,
+          obj.x,
+          obj.y,
+          isGraphActive
+        );
         break;
       }
       case 'flask': {
@@ -162,7 +181,21 @@ export function renderHeatSimulation(
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin, isGraphActive);
+        renderFlask(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.containerState,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          obj.id,
+          obj.x,
+          obj.y,
+          parentBasin,
+          isGraphActive
+        );
         break;
       }
       case 'thermometer': {
@@ -195,8 +228,8 @@ export function renderHeatSimulation(
       }
     }
 
-    // Render Unified BestNotes Selection Frame if single object selected (in 'ui' or 'all' layer)
-    if (!isMultiSelect && isSelected && (layer === 'all' || layer === 'ui')) {
+    // Render Unified BestNotes Selection Frame if single object selected (only on front pass for tripod)
+    if (!isMultiSelect && isSelected && (layer === 'all' || layer === 'ui') && tripodPart !== 'back') {
       renderObjectSelectionFrame(
         ctx,
         obj.width,
@@ -209,6 +242,46 @@ export function renderHeatSimulation(
     }
 
     ctx.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // 2.5D Layer Sandwich Rendering Pipeline:
+  // 1. Tripod Back Half (Back Leg, Back Half of Gauze Mesh & Disc, Back Collar Arc)
+  // 2. Burner (Apparatus body + Animated Flame) -> Flame is rendered IN FRONT of the back half of the mesh!
+  // 3. Tripod Front Half (Front Half of Gauze Mesh & Disc, Front Collar Arc, Front Legs) -> Front half is IN FRONT of the flame!
+  // 4. Wide Basin (Water bath)
+  // 5. Beakers & Flasks (Glassware sitting on top of tripod/bath)
+  // 6. Thermometers (Laboratory thermometers in immersion)
+  // ---------------------------------------------------------------------------
+
+  // 1. Tripod Back Half
+  for (const obj of sim.objects) {
+    if (obj.type === 'tripod') renderSingleObject(obj, 'back');
+  }
+
+  // 2. Burner (Body & Flame)
+  for (const obj of sim.objects) {
+    if (obj.type === 'burner') renderSingleObject(obj);
+  }
+
+  // 3. Tripod Front Half
+  for (const obj of sim.objects) {
+    if (obj.type === 'tripod') renderSingleObject(obj, 'front');
+  }
+
+  // 4. Wide Basin (Water bath)
+  for (const obj of sim.objects) {
+    if (obj.type === 'wide-basin') renderSingleObject(obj);
+  }
+
+  // 5. Beakers & Flasks
+  for (const obj of sim.objects) {
+    if (obj.type === 'beaker' || obj.type === 'flask') renderSingleObject(obj);
+  }
+
+  // 6. Thermometers
+  for (const obj of sim.objects) {
+    if (obj.type === 'thermometer') renderSingleObject(obj);
   }
 
   // Render Unified Group Selection Frame when multiple objects are selected together
@@ -1062,6 +1135,10 @@ function renderBurner(
 
 /**
  * 2. Laboratory Tripod - Monochrome line-art with wire gauze crosshatch
+ * Supports 2-pass 2.5D optical sandwich:
+ * - 'back': Recessed back leg, back half of wire gauze mesh & ceramic disc, back collar arc (behind flame)
+ * - 'front': Front half of wire gauze mesh & ceramic disc, front collar arc, front legs (in front of flame)
+ * - 'all': Complete tripod in a single pass
  */
 function renderTripod(
   ctx: CanvasRenderingContext2D,
@@ -1071,7 +1148,8 @@ function renderTripod(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  part: 'all' | 'back' | 'front' = 'all'
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -1083,6 +1161,13 @@ function renderTripod(
   const collarRy = collarH / 2;
   const legBotY = h - 6;
 
+  const gauzeW = collarW * 0.88;
+  const gauzeH = collarH * 0.88;
+  const ceramicScale = 0.38;
+  const ceramicRx = collarRx * ceramicScale;
+  const ceramicRy = collarRy * ceramicScale;
+  const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
+
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
     ctx.strokeStyle = strokeColor;
@@ -1090,102 +1175,175 @@ function renderTripod(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // 1. Recessed Back Leg (rotated off-center to the left, rendered faint gray so burner placed underneath remains crystal-clear)
-    // Starts EXACTLY on the upper perimeter of the outer collar ellipse outline!
-    const backRatio = 0.26;
-    const backStartX = cx - collarRx * backRatio;
-    const backStartY = collarCy - collarRy * Math.sqrt(1 - backRatio * backRatio);
-    const backEndX = cx - collarW * 0.24;
-    const backEndY = legBotY - 6;
+    // -------------------------------------------------------------------------
+    // PASS 1: BACK HALF (Rendered BEHIND burner flame)
+    // -------------------------------------------------------------------------
+    if (part === 'all' || part === 'back') {
+      // 1. Recessed Back Leg (Starts on upper perimeter of outer collar ellipse outline)
+      const backRatio = 0.26;
+      const backStartX = cx - collarRx * backRatio;
+      const backStartY = collarCy - collarRy * Math.sqrt(1 - backRatio * backRatio);
+      const backEndX = cx - collarW * 0.24;
+      const backEndY = legBotY - 6;
 
-    ctx.save();
-    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.42)' : 'rgba(100, 116, 139, 0.38)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(backStartX, backStartY);
-    ctx.lineTo(backEndX, backEndY);
-    ctx.stroke();
-    ctx.restore();
-
-    // 2. Wire Gauze mesh crosshatch (contained inside the collar ring)
-    const gauzeW = collarW * 0.88;
-    const gauzeH = collarH * 0.88;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-    ctx.clip();
-
-    ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
-    ctx.lineWidth = 0.8;
-    const step = 4;
-    for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+      ctx.save();
+      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.42)' : 'rgba(100, 116, 139, 0.38)';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(x, topY);
-      ctx.lineTo(x, topY + collarH);
+      ctx.moveTo(backStartX, backStartY);
+      ctx.lineTo(backEndX, backEndY);
+      ctx.stroke();
+      ctx.restore();
+
+      // 2. Wire Gauze mesh crosshatch & Central ceramic disc (Top/Back half: y <= collarCy + 0.5)
+      ctx.save();
+      if (part === 'back') {
+        ctx.beginPath();
+        ctx.rect(-w, -h, w * 3, collarCy + h + 0.5);
+        ctx.clip();
+      }
+
+      ctx.beginPath();
+      ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+      ctx.clip();
+
+      ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
+      ctx.lineWidth = 0.8;
+      const step = 4;
+      for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, topY + collarH);
+        ctx.stroke();
+      }
+      for (let y = topY; y <= topY + collarH; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(cx - gauzeW / 2, y);
+        ctx.lineTo(cx + gauzeW / 2, y);
+        ctx.stroke();
+      }
+
+      // 3. Central ceramic disc
+      ctx.beginPath();
+      ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+      if (heatFraction > 0.05) {
+        const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
+        discGlow.addColorStop(0, '#fef08a');
+        discGlow.addColorStop(0.4, '#f97316');
+        discGlow.addColorStop(0.85, '#dc2626');
+        discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
+        ctx.fillStyle = discGlow;
+      } else {
+        ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
+      }
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.restore(); // restore from gauze clip and back clip
+
+      // 4. Back Arc of Circular Top Collar Ring
+      ctx.save();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      if (part === 'back') {
+        ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, Math.PI, Math.PI * 2);
+      } else {
+        ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // -------------------------------------------------------------------------
+    // PASS 2: FRONT HALF (Rendered IN FRONT OF burner flame)
+    // -------------------------------------------------------------------------
+    if (part === 'all' || part === 'front') {
+      if (part === 'front') {
+        // Wire Gauze mesh crosshatch & Ceramic disc (Bottom/Front half: y >= collarCy - 0.5)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-w, collarCy - 0.5, w * 3, h * 2);
+        ctx.clip();
+
+        ctx.beginPath();
+        ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+        ctx.clip();
+
+        ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
+        ctx.lineWidth = 0.8;
+        const step = 4;
+        for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x, topY);
+          ctx.lineTo(x, topY + collarH);
+          ctx.stroke();
+        }
+        for (let y = topY; y <= topY + collarH; y += step) {
+          ctx.beginPath();
+          ctx.moveTo(cx - gauzeW / 2, y);
+          ctx.lineTo(cx + gauzeW / 2, y);
+          ctx.stroke();
+        }
+
+        // Central ceramic disc
+        ctx.beginPath();
+        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+        if (heatFraction > 0.05) {
+          const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
+          discGlow.addColorStop(0, '#fef08a');
+          discGlow.addColorStop(0.4, '#f97316');
+          discGlow.addColorStop(0.85, '#dc2626');
+          discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
+          ctx.fillStyle = discGlow;
+        } else {
+          ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
+        }
+        ctx.fill();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.restore(); // restore from front gauze clip
+
+        // Front Arc of Circular Top Collar Ring (from 0 to PI)
+        ctx.save();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 5. Front Left and Front Right Legs (crisp foreground line-art)
+      const frontRatio = 0.82;
+      const frontYOffset = collarRy * Math.sqrt(1 - frontRatio * frontRatio);
+      const leftStartX = cx - collarRx * frontRatio;
+      const leftStartY = collarCy + frontYOffset;
+      const leftEndX = cx - collarW * 0.62;
+
+      const rightStartX = cx + collarRx * frontRatio;
+      const rightStartY = collarCy + frontYOffset;
+      const rightEndX = cx + collarW * 0.62;
+
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(leftStartX, leftStartY);
+      ctx.lineTo(leftEndX, legBotY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(rightStartX, rightStartY);
+      ctx.lineTo(rightEndX, legBotY);
       ctx.stroke();
     }
-    for (let y = topY; y <= topY + collarH; y += step) {
-      ctx.beginPath();
-      ctx.moveTo(cx - gauzeW / 2, y);
-      ctx.lineTo(cx + gauzeW / 2, y);
-      ctx.stroke();
-    }
-
-    // 3. Central ceramic disc (matches exact perspective aspect ratio of outer collar ellipse!)
-    const ceramicScale = 0.38;
-    const ceramicRx = collarRx * ceramicScale;
-    const ceramicRy = collarRy * ceramicScale;
-    const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
-
-    ctx.beginPath();
-    ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
-    if (heatFraction > 0.05) {
-      const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
-      discGlow.addColorStop(0, '#fef08a');
-      discGlow.addColorStop(0.4, '#f97316');
-      discGlow.addColorStop(0.85, '#dc2626');
-      discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
-      ctx.fillStyle = discGlow;
-    } else {
-      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
-    }
-    ctx.fill();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-
-    ctx.restore(); // restore from gauze clip
-
-    // 4. Circular Top Collar Ring (crisp 2.4px outline)
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // 5. Front Left and Front Right Legs (crisp foreground line-art)
-    // Both start EXACTLY on the lower perimeter of the collar ellipse outline!
-    // Widened symmetrically for a stable, balanced laboratory tripod stance.
-    const frontRatio = 0.82;
-    const frontYOffset = collarRy * Math.sqrt(1 - frontRatio * frontRatio);
-    const leftStartX = cx - collarRx * frontRatio;
-    const leftStartY = collarCy + frontYOffset;
-    const leftEndX = cx - collarW * 0.62;
-
-    const rightStartX = cx + collarRx * frontRatio;
-    const rightStartY = collarCy + frontYOffset;
-    const rightEndX = cx + collarW * 0.62;
-
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(leftStartX, leftStartY);
-    ctx.lineTo(leftEndX, legBotY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(rightStartX, rightStartY);
-    ctx.lineTo(rightEndX, legBotY);
-    ctx.stroke();
 
     ctx.restore();
   }
