@@ -1020,7 +1020,9 @@ function renderBeaker(
 }
 
 /**
- * 4. Wide Basin / Water Bath (Υδατόλουτρο) - Plain clean glass (NO measurement lines)
+ * 4. Wide Basin / Water Bath (Υδατόλουτρο / Πλατιά Λεκάνη)
+ * Clean straight rectangular glass elevation with rolled bead rim and spout,
+ * identical to the beaker in style, in a wide low-profile basin aspect ratio.
  */
 function renderWideBasin(
   ctx: CanvasRenderingContext2D,
@@ -1039,6 +1041,7 @@ function renderWideBasin(
   const x = pad;
   const y = pad + 4;
   const beadH = 3.5;
+  const spoutW = 10;
   const cornerR = 12;
 
   const vol = state?.volumeMl ?? 0;
@@ -1054,7 +1057,7 @@ function renderWideBasin(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Liquid Fill - Clean horizontal top + rounded base
+    // Liquid Fill - Clean horizontal top + rounded base (fills 100% with no gaps)
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       ctx.beginPath();
@@ -1076,21 +1079,21 @@ function renderWideBasin(
       ctx.restore();
     }
 
-    // Basin Outer Outline (straight walls with rolled glass rim & side handle lips)
+    // Outer Glass Basin Path (clean rectangular elevation with rolled bead rim and left spout matching beaker)
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2.0;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     ctx.beginPath();
-    // Left handle lip
-    ctx.moveTo(x - 7, y + 2);
-    ctx.quadraticCurveTo(x - 2, y, x, y);
+    // Spout top tip
+    ctx.moveTo(x - spoutW, y + 1.5);
+    // Spout top edge blending into horizontal rim
+    ctx.lineTo(x, y);
     // Top horizontal rim
     ctx.lineTo(x + bw, y);
-    // Right handle lip
-    ctx.quadraticCurveTo(x + bw + 2, y, x + bw + 7, y + 2);
-    ctx.quadraticCurveTo(x + bw + 4, y + 7, x + bw, y + 7);
+    // Rolled right rim bead corner
+    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
     // Right vertical wall
     ctx.lineTo(x + bw, y + bh - cornerR);
     // Bottom right rounded corner
@@ -1099,13 +1102,13 @@ function renderWideBasin(
     ctx.lineTo(x + cornerR, y + bh);
     // Bottom left rounded corner
     ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
-    // Left vertical wall
-    ctx.lineTo(x, y + 7);
-    // Left handle underside
-    ctx.quadraticCurveTo(x - 4, y + 7, x - 7, y + 2);
+    // Left vertical wall up to spout start
+    ctx.lineTo(x, y + 13);
+    // Spout lower diagonal edge
+    ctx.lineTo(x - spoutW, y + 1.5);
     ctx.stroke();
 
-    // Rolled glass rim bead accent line
+    // Rolled glass lip bead line (horizontal line right beneath top rim)
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(x, y + beadH);
@@ -1114,6 +1117,14 @@ function renderWideBasin(
     ctx.lineWidth = 1.3;
     ctx.stroke();
     ctx.restore();
+
+    // Vertical glass reflection sheen strip on right side
+    const reflectGrad = ctx.createLinearGradient(x + bw - 14, y, x + bw - 4, y);
+    reflectGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    reflectGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.35)');
+    reflectGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = reflectGrad;
+    ctx.fillRect(x + bw - 14, y + beadH + 2, 10, bh - beadH - cornerR - 2);
 
     ctx.restore();
   }

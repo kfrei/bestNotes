@@ -65,10 +65,11 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
     case 'wide-basin':
       return (
         <svg className="w-11 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          {/* Rolled rim & side handle lips */}
-          <path d="M 4 13 C 3 12 4.5 11 6.5 11 L 29.5 11 C 31.5 11 33 12 32 13" strokeWidth="1.8" />
-          <line x1="6.5" y1="13.5" x2="29.5" y2="13.5" strokeWidth="1.2" strokeOpacity="0.4" />
-          <path d="M 6.5 14 L 6.5 23 C 6.5 27.5 9.5 29.5 14 29.5 L 22 29.5 C 26.5 29.5 29.5 27.5 29.5 23 L 29.5 14" strokeWidth="1.9" />
+          {/* Spout on left & horizontal rim with rolled bead */}
+          <path d="M 4 15.5 L 7.5 14 L 30 14" strokeWidth="1.9" />
+          <line x1="7.5" y1="16.5" x2="30" y2="16.5" strokeWidth="1.2" strokeOpacity="0.4" />
+          {/* Straight walls and rounded bottom base */}
+          <path d="M 30 14 L 30 24 C 30 26.5 28 28 25.5 28 L 11.5 28 C 9 28 7.5 26.5 7.5 24 L 7.5 18 L 4 15.5" strokeWidth="1.9" />
         </svg>
       );
     case 'flask':
