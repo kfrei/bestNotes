@@ -534,6 +534,23 @@ export function useHeatSimulation(
       const sim = liveSimRef.current || activeHeatSim;
       if (!sim) return false;
 
+      // 0. Permanent Flame Toggle Button (bottom-right of burner cast-iron base, matching media_1794729887270_8981dcf2.png)
+      for (const obj of sim.objects) {
+        if (obj.type === 'burner') {
+          const cx = obj.x + obj.width / 2;
+          const baseW = obj.width * 0.67;
+          const baseRightX = cx + baseW / 2;
+          const groundY = obj.y + obj.height - 12;
+          const cyBot = groundY - 5.2;
+          const btnCenterX = baseRightX + 4;
+          const btnCenterY = cyBot - 6;
+          if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 20) {
+            toggleBurner(obj.id);
+            return true;
+          }
+        }
+      }
+
       // 1. Check Graph window hit
       if (sim.graph.visible) {
         const g = sim.graph;
@@ -755,7 +772,6 @@ export function useHeatSimulation(
 
         const hasContainer =
           selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
-        const hasBurner = selectedObj.type === 'burner';
 
         // Floating Action Bar Pills
         if (hasContainer) {
@@ -775,13 +791,6 @@ export function useHeatSimulation(
             Math.hypot(lx - (cx + 18), ly - pillY) <= 20
           ) {
             setEditingContainer(selectedObj);
-            return true;
-          }
-        } else if (hasBurner) {
-          // Flame toggle [ 🔥 ON / OFF ]
-          const flameX = cx;
-          if (Math.abs(lx - flameX) <= 50 && Math.abs(ly - pillY) <= 22) {
-            toggleBurner(selectedObj.id);
             return true;
           }
         }
@@ -860,11 +869,6 @@ export function useHeatSimulation(
               setEditingContainer(obj);
               return true;
             }
-          }
-          if (obj.type === 'burner' && Math.abs(ly - pY) <= 22 && Math.abs(lx - cX) <= 50) {
-            setSelectedObjectIds([obj.id]);
-            toggleBurner(obj.id);
-            return true;
           }
 
           const inside =

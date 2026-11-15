@@ -246,7 +246,6 @@ export function renderObjectSelectionFrame(
   // 4. Floating Action Bar (Pill Handles) positioned cleanly below the frame
   const pillY = maxY + 24;
   const hasContainer = type === 'beaker' || type === 'wide-basin' || type === 'flask';
-  const hasBurner = type === 'burner';
 
   // Quick Action Pills
   if (hasContainer) {
@@ -285,29 +284,6 @@ export function renderObjectSelectionFrame(
     ctx.fillStyle = '#ffffff';
     ctx.font = '10px system-ui, sans-serif';
     ctx.fillText('✎', editX, pillY);
-    ctx.restore();
-  } else if (hasBurner) {
-    // Flame Toggle Pill [ 🔥 ON / OFF ] - Clean, centered, easily clickable
-    const flameX = cx;
-    const pillW = 76;
-    const pillH = 22;
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.20)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 1.5;
-    ctx.fillStyle = burnerOn ? '#16a34a' : isDark ? '#1e293b' : '#ffffff';
-    ctx.strokeStyle = burnerOn ? '#15803d' : '#94a3b8';
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.roundRect(flameX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = burnerOn ? '#ffffff' : isDark ? '#f8fafc' : '#1e293b';
-    ctx.fillText(burnerOn ? '🔥 ON' : '🔥 OFF', flameX, pillY);
     ctx.restore();
   }
 
@@ -771,6 +747,69 @@ function renderBurner(
     ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.42)' : 'rgba(17, 24, 39, 0.38)';
     ctx.lineWidth = 1.2;
     ctx.stroke();
+    ctx.restore();
+
+    // 5. Permanent Flame Toggle Button at bottom-right of cast-iron base (matching media_1794729887270_8981dcf2.png)
+    const btnSize = 22;
+    const btnHalf = btnSize / 2;
+    const btnCenterX = cx + baseW / 2 + 4;
+    const btnCenterY = cyBot - 6;
+    const isOn = Boolean(state?.isOn);
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.2;
+
+    // Soft grey/beige squircle container
+    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.95)' : '#fdfbf7';
+    ctx.strokeStyle = isDark
+      ? 'rgba(255, 255, 255, 0.22)'
+      : isOn
+      ? 'rgba(234, 88, 12, 0.50)'
+      : 'rgba(203, 213, 225, 0.90)';
+    ctx.lineWidth = 1.3;
+
+    ctx.beginPath();
+    ctx.roundRect(btnCenterX - btnHalf, btnCenterY - btnHalf, btnSize, btnSize, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Small monochrome flame icon inside squircle
+    ctx.save();
+    ctx.translate(btnCenterX, btnCenterY);
+
+    ctx.beginPath();
+    ctx.moveTo(0.5, -6.5);
+    // Right convex curve going down
+    ctx.bezierCurveTo(2.8, -3.0, 4.2, 0.5, 3.6, 3.2);
+    ctx.bezierCurveTo(3.0, 5.5, 0.2, 6.5, -2.2, 5.5);
+    // Bottom left curve
+    ctx.bezierCurveTo(-4.2, 4.5, -4.6, 2.5, -3.6, 0.8);
+    // Inward flick / notch on left
+    ctx.bezierCurveTo(-2.6, -0.4, -1.4, 0.0, -1.8, 1.6);
+    // Curving up to top tip
+    ctx.bezierCurveTo(-2.0, -1.2, -1.0, -3.8, 0.5, -6.5);
+    ctx.closePath();
+
+    if (isOn) {
+      ctx.fillStyle = 'rgba(251, 146, 60, 0.25)';
+      ctx.fill();
+      ctx.strokeStyle = '#ea580c';
+      ctx.lineWidth = 1.7;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(234, 88, 12, 0.45)';
+      ctx.shadowBlur = 3;
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = isDark ? '#94a3b8' : '#64748b';
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
     ctx.restore();
 
     ctx.restore();
