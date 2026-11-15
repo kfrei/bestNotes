@@ -4098,6 +4098,7 @@ export default function App() {
     images?: ImageObject[];
     text?: TextObject;
     texts?: TextObject[];
+    heatObjects?: any[];
     wasCut?: boolean;
   } | null>(null);
   const [copiedLayerClip, setCopiedLayerClip] = useState<{
@@ -13730,6 +13731,38 @@ export default function App() {
 
   // CUT / COPY / PASTE (Supports internal strokes/groups/images/text AND external photos/screenshots from Clipboard!)
   const handleCopySelected = useCallback(() => {
+    // 0. Heat & Thermodynamics simulation apparatus selection
+    const selHeatObjects = heatSim.getSelectedObjects ? heatSim.getSelectedObjects() : [];
+    if (selHeatObjects.length > 0) {
+      internalClipboardRef.current = {
+        strokes: [],
+        heatObjects: heatSim.handleCopy(),
+        wasCut: false,
+      };
+      hasExternalFocusSinceInternalCopyRef.current = false;
+      try {
+        void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
+      } catch {}
+      const label =
+        selHeatObjects.length === 1
+          ? selHeatObjects[0].type === 'thermometer'
+            ? 'θερμομέτρου'
+            : selHeatObjects[0].type === 'beaker'
+            ? 'ποτηριού ζέσεως'
+            : selHeatObjects[0].type === 'flask'
+            ? 'κωνικής φιάλης'
+            : selHeatObjects[0].type === 'burner'
+            ? 'λυχνίας Bunsen'
+            : selHeatObjects[0].type === 'tripod'
+            ? 'τρίποδα'
+            : selHeatObjects[0].type === 'wide-basin'
+            ? 'υδατόλουτρου'
+            : 'αντικειμένου εργαστηρίου'
+          : `${selHeatObjects.length} αντικειμένων εργαστηρίου`;
+      showToast(`📋 Αντιγράφηκε (${label}) στο πρόχειρο! (Cmd+C)`);
+      return;
+    }
+
     const baseIds =
       selectedStrokeIds.length > 0
         ? selectedStrokeIds
@@ -13797,6 +13830,38 @@ export default function App() {
   ]);
 
   const handleCutSelected = useCallback(() => {
+    // 0. Heat & Thermodynamics simulation apparatus selection
+    const selHeatObjects = heatSim.getSelectedObjects ? heatSim.getSelectedObjects() : [];
+    if (selHeatObjects.length > 0) {
+      internalClipboardRef.current = {
+        strokes: [],
+        heatObjects: heatSim.handleCut(),
+        wasCut: true,
+      };
+      hasExternalFocusSinceInternalCopyRef.current = false;
+      try {
+        void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
+      } catch {}
+      const label =
+        selHeatObjects.length === 1
+          ? selHeatObjects[0].type === 'thermometer'
+            ? 'θερμομέτρου'
+            : selHeatObjects[0].type === 'beaker'
+            ? 'ποτηριού ζέσεως'
+            : selHeatObjects[0].type === 'flask'
+            ? 'κωνικής φιάλης'
+            : selHeatObjects[0].type === 'burner'
+            ? 'λυχνίας Bunsen'
+            : selHeatObjects[0].type === 'tripod'
+            ? 'τρίποδα'
+            : selHeatObjects[0].type === 'wide-basin'
+            ? 'υδατόλουτρου'
+            : 'αντικειμένου εργαστηρίου'
+          : `${selHeatObjects.length} αντικειμένων εργαστηρίου`;
+      showToast(`✂️ Αποκόπηκε (${label})! (Cmd+X)`);
+      return;
+    }
+
     const baseIds =
       selectedStrokeIds.length > 0
         ? selectedStrokeIds
@@ -13883,6 +13948,30 @@ export default function App() {
 
   // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shapes/groups and/or images/texts slightly lower and slightly to the right (+28px, +28px)!
   const handleDuplicateSelected = useCallback(() => {
+    // 0. Heat & Thermodynamics simulation apparatus selection
+    const selHeatObjects = heatSim.getSelectedObjects ? heatSim.getSelectedObjects() : [];
+    if (selHeatObjects.length > 0) {
+      heatSim.handleDuplicateSelected();
+      const label =
+        selHeatObjects.length === 1
+          ? selHeatObjects[0].type === 'thermometer'
+            ? 'θερμομέτρου'
+            : selHeatObjects[0].type === 'beaker'
+            ? 'ποτηριού ζέσεως'
+            : selHeatObjects[0].type === 'flask'
+            ? 'κωνικής φιάλης'
+            : selHeatObjects[0].type === 'burner'
+            ? 'λυχνίας Bunsen'
+            : selHeatObjects[0].type === 'tripod'
+            ? 'τρίποδα'
+            : selHeatObjects[0].type === 'wide-basin'
+            ? 'υδατόλουτρου'
+            : 'αντικειμένου εργαστηρίου'
+          : `${selHeatObjects.length} αντικειμένων εργαστηρίου`;
+      showToast(`📑 Δημιουργήθηκε αντίγραφο (${label})! (Cmd+D)`);
+      return;
+    }
+
     const baseIds =
       selectedStrokeIds.length > 0
         ? selectedStrokeIds
@@ -14965,6 +15054,35 @@ export default function App() {
 
   const pasteFromInternalClipboard = useCallback((overrideLayerId?: string): boolean => {
     if (!internalClipboardRef.current) return false;
+
+    // 0. Heat & Thermodynamics simulation apparatus clipboard
+    if (
+      internalClipboardRef.current.heatObjects &&
+      internalClipboardRef.current.heatObjects.length > 0
+    ) {
+      const tapPt = lastLassoEmptyTapPtRef.current;
+      const targetPos = tapPt ? { x: tapPt.x, y: tapPt.y } : undefined;
+      const pastedIds = heatSim.handlePasteObjects(
+        internalClipboardRef.current.heatObjects,
+        targetPos
+      );
+      if (tapPt) {
+        lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
+      }
+      if (internalClipboardRef.current.wasCut) {
+        internalClipboardRef.current = {
+          ...internalClipboardRef.current,
+          wasCut: false,
+        };
+      }
+      const label =
+        pastedIds.length === 1
+          ? 'αντικειμένου εργαστηρίου'
+          : `${pastedIds.length} αντικειμένων εργαστηρίου`;
+      showToast(`📥 Επικόλληση (${label})! (Cmd+V)`);
+      return true;
+    }
+
     const {
       strokes: copiedStrokes,
       image: copiedImg,
@@ -48627,10 +48745,20 @@ export default function App() {
           return;
         }
 
-        // Ctrl+C / Cmd+C -> Copy selected shape/stroke/group, image, or text box
+        // Ctrl+C / Cmd+C -> Copy selected shape/stroke/group, image, text box, or heat object
         if (code === 'KeyC' || key === 'c' || key === 'ψ') {
           const nativeSel = window.getSelection?.()?.toString().trim();
-          if (nativeSel && selectedStrokeIds.length === 0 && !selectedImageId && !selectedTextId && !activeNodeStrokeId) {
+          const hasHeatSelected = Boolean(
+            heatSim.getSelectedObjects && heatSim.getSelectedObjects().length > 0
+          );
+          if (
+            nativeSel &&
+            selectedStrokeIds.length === 0 &&
+            !selectedImageId &&
+            !selectedTextId &&
+            !activeNodeStrokeId &&
+            !hasHeatSelected
+          ) {
             return;
           }
           e.preventDefault();
@@ -58508,7 +58636,8 @@ export default function App() {
                   (selectedStrokeIds.length > 0 ||
                     selectedLassoTextIds.length > 0 ||
                     Boolean(selectedImgObj) ||
-                    Boolean(selectedTextId)) && (
+                    Boolean(selectedTextId) ||
+                    Boolean(heatSim.activeHeatSim?.selectedObjectId || heatSim.activeHeatSim?.selectedObjectIds?.length)) && (
                   <div className="flex items-center gap-1.5">
                     <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
                       <button

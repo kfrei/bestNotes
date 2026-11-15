@@ -62,6 +62,11 @@ export interface UseHeatSimulationReturn {
   handleHover: (canvasLogicalX: number, canvasLogicalY: number) => void;
   clearHover: () => void;
   getHoverPoint: () => { x: number; y: number } | null;
+  getSelectedObjects: () => HeatObject[];
+  handleCopy: () => HeatObject[];
+  handlePasteObjects: (objectsToPaste: HeatObject[], targetPos?: { x: number; y: number }) => string[];
+  handleDuplicateSelected: () => string[];
+  handleCut: () => HeatObject[];
 }
 
 export function useHeatSimulation(
@@ -682,6 +687,159 @@ export function useHeatSimulation(
     },
     [updateActiveHeatSim]
   );
+
+  // Retrieves currently selected heat simulation objects (single or multiple)
+  const getSelectedObjects = useCallback((): HeatObject[] => {
+    const cur = liveSimRef.current || activeHeatSim;
+    if (!cur) return [];
+    const targetIds =
+      cur.selectedObjectIds && cur.selectedObjectIds.length > 0
+        ? cur.selectedObjectIds
+        : cur.selectedObjectId
+        ? [cur.selectedObjectId]
+        : [];
+    if (targetIds.length === 0) return [];
+    const idSet = new Set(targetIds);
+    return cur.objects.filter((o) => idSet.has(o.id));
+  }, [activeHeatSim]);
+
+  // Copy: returns a deep clone of the currently selected objects
+  const handleCopy = useCallback((): HeatObject[] => {
+    const selected = getSelectedObjects();
+    return structuredClone(selected);
+  }, [getSelectedObjects]);
+
+  // Paste: duplicates provided objects into the heat simulation, offsetting or centering at targetPos
+  const handlePasteObjects = useCallback(
+    (objectsToPaste: HeatObject[], targetPos?: { x: number; y: number }): string[] => {
+      if (!objectsToPaste || objectsToPaste.length === 0) return [];
+
+      let createdIds: string[] = [];
+
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+
+        // Compute offset
+        let dx = 28;
+        let dy = 28;
+
+        if (targetPos) {
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          for (const o of objectsToPaste) {
+            if (o.x < minX) minX = o.x;
+            if (o.y < minY) minY = o.y;
+            if (o.x + o.width > maxX) maxX = o.x + o.width;
+            if (o.y + o.height > maxY) maxY = o.y + o.height;
+          }
+          if (Number.isFinite(minX) && Number.isFinite(minY)) {
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            dx = targetPos.x - cx;
+            dy = targetPos.y - cy;
+          }
+        }
+
+        // Mapping oldId -> newId for maintaining container links (e.g. water bath nested vessel)
+        const idMap = new Map<string, string>();
+        const now = Date.now();
+        objectsToPaste.forEach((o, idx) => {
+          const rand = Math.random().toString(36).slice(2, 6);
+          idMap.set(o.id, `${o.type}-${now + idx}-${rand}`);
+        });
+
+        const newObjects: HeatObject[] = objectsToPaste.map((orig) => {
+          const newId = idMap.get(orig.id) || `${orig.type}-${Date.now()}`;
+          const cloned: HeatObject = {
+            ...structuredClone(orig),
+            id: newId,
+            x: Math.round(orig.x + dx),
+            y: Math.round(orig.y + dy),
+          };
+
+          // Container state
+          if (cloned.containerState) {
+            cloned.containerState = {
+              ...cloned.containerState,
+              isBoiling: false,
+              boilingIntensity: 0,
+              parentBasinId:
+                orig.containerState?.parentBasinId && idMap.has(orig.containerState.parentBasinId)
+                  ? idMap.get(orig.containerState.parentBasinId)
+                  : undefined,
+              nestedVesselId:
+                orig.containerState?.nestedVesselId && idMap.has(orig.containerState.nestedVesselId)
+                  ? idMap.get(orig.containerState.nestedVesselId)
+                  : undefined,
+            };
+          }
+
+          // Burner state: starts turned off
+          if (cloned.burnerState) {
+            cloned.burnerState = {
+              ...cloned.burnerState,
+              isOn: false,
+            };
+          }
+
+          // Tripod state: gauze temp resets to 20°C
+          if (cloned.tripodState) {
+            cloned.tripodState = {
+              ...cloned.tripodState,
+              wireGauzeTemp: 20,
+            };
+          }
+
+          // Thermometer state: emergent, ambient
+          if (cloned.thermometerState) {
+            cloned.thermometerState = {
+              ...cloned.thermometerState,
+              temperature: orig.thermometerState?.temperature ?? 20,
+              dippedVesselId:
+                orig.thermometerState?.dippedVesselId && idMap.has(orig.thermometerState.dippedVesselId)
+                  ? idMap.get(orig.thermometerState.dippedVesselId)
+                  : undefined,
+              showBadge: orig.thermometerState?.showBadge ?? true,
+            };
+          }
+
+          return cloned;
+        });
+
+        createdIds = newObjects.map((o) => o.id);
+
+        const next: HeatSimConfig = {
+          ...cur,
+          selectedObjectId: createdIds[0] || null,
+          selectedObjectIds: createdIds,
+          objects: [...cur.objects, ...newObjects],
+        };
+
+        liveSimRef.current = next;
+        return next;
+      });
+
+      return createdIds;
+    },
+    [updateActiveHeatSim]
+  );
+
+  // Instant Duplicate of selected heat objects (+28px, +28px)
+  const handleDuplicateSelected = useCallback((): string[] => {
+    const selected = getSelectedObjects();
+    if (selected.length === 0) return [];
+    return handlePasteObjects(selected);
+  }, [getSelectedObjects, handlePasteObjects]);
+
+  // Cut: copy selected objects then delete them from simulation
+  const handleCut = useCallback((): HeatObject[] => {
+    const selected = getSelectedObjects();
+    if (selected.length === 0) return [];
+    handleDeleteSelectedObject();
+    return structuredClone(selected);
+  }, [getSelectedObjects, handleDeleteSelectedObject]);
 
   // Pointer interactions on canvas (handles, resizing, selection, actions, dragging)
   const handlePointerDown = useCallback(
@@ -1427,5 +1585,10 @@ export function useHeatSimulation(
     handleHover,
     clearHover,
     getHoverPoint,
+    getSelectedObjects,
+    handleCopy,
+    handlePasteObjects,
+    handleDuplicateSelected,
+    handleCut,
   };
 }
