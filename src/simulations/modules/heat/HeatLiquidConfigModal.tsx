@@ -68,6 +68,9 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
   // Real-time live update function so adjustments show instantly on the canvas
   const applyLive = (newCap: number, newVol: number, newType: LiquidType, newTemp: number) => {
     if (!container.containerState) return;
+    const bp = LIQUID_REGISTRY[newType]?.boilingPoint || 100;
+    const isBoil = newTemp >= bp - 2;
+    const intensity = isBoil ? 0.85 : newTemp > 75 ? Math.min(0.8, (newTemp - 75) / (bp - 75)) : 0;
     const updated: HeatObject = {
       ...container,
       containerState: {
@@ -77,6 +80,8 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
         liquidType: newType,
         temperature: newTemp,
         initialTemp: newTemp,
+        isBoiling: isBoil,
+        boilingIntensity: intensity,
       },
     };
     onSave(updated);

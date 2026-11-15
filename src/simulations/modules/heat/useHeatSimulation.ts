@@ -12,6 +12,7 @@ import {
   getContainerActionButtonsWorldPos,
   getBurnerActionButtonWorldPos,
   triggerContainerFillFeedback,
+  notifyContainerSloshMotion,
 } from './HeatRenderer';
 
 export interface UseHeatSimulationReturn {
@@ -135,6 +136,8 @@ export function useHeatSimulation(
     anchorX?: number;
     anchorY?: number;
   } | null>(null);
+
+  const dragMotionHistoryRef = useRef<{ time: number; x: number } | null>(null);
 
   const updateActiveHeatSim = useCallback(
     (updater: (prev: HeatSimConfig) => HeatSimConfig) => {
@@ -783,6 +786,7 @@ export function useHeatSimulation(
               height: o.height,
             })),
           };
+          dragMotionHistoryRef.current = { time: performance.now(), x: lx };
           return true;
         }
       }
@@ -885,6 +889,7 @@ export function useHeatSimulation(
             origH: obj.height,
             origRatio: obj.width / obj.height,
           };
+          dragMotionHistoryRef.current = { time: performance.now(), x: lx };
 
           setSelectedObjectIds([obj.id]);
           return true;
@@ -932,11 +937,23 @@ export function useHeatSimulation(
       // Group manipulation (Move, Proportional Scale, Aspect Ratio Stretch)
       if (liveSimRef.current && drag.isGroup && drag.origObjects) {
         if (drag.mode === 'move') {
+          const now = performance.now();
+          const prev = dragMotionHistoryRef.current;
+          let calculatedVx = 0;
+          if (prev) {
+            const dt = Math.max(0.005, (now - prev.time) / 1000);
+            calculatedVx = (lx - prev.x) / dt;
+          }
+          dragMotionHistoryRef.current = { time: now, x: lx };
+
           for (const item of drag.origObjects) {
             const obj = liveSimRef.current.objects.find((o) => o.id === item.id);
             if (obj) {
               obj.x = item.x + dx;
               obj.y = item.y + dy;
+              if (obj.containerState && calculatedVx !== 0) {
+                notifyContainerSloshMotion(obj.id, calculatedVx);
+              }
             }
           }
           return true;
@@ -1068,6 +1085,17 @@ export function useHeatSimulation(
             // mode === 'move'
             obj.x = (drag.origObjX ?? 0) + dx;
             obj.y = (drag.origObjY ?? 0) + dy;
+
+            if (obj.containerState) {
+              const now = performance.now();
+              const prev = dragMotionHistoryRef.current;
+              if (prev) {
+                const dt = Math.max(0.005, (now - prev.time) / 1000);
+                const vx = (lx - prev.x) / dt;
+                notifyContainerSloshMotion(obj.id, vx);
+              }
+              dragMotionHistoryRef.current = { time: now, x: lx };
+            }
           }
         }
       }
@@ -1079,6 +1107,7 @@ export function useHeatSimulation(
   const handlePointerUp = useCallback((): boolean => {
     if (!dragRef.current) return false;
     dragRef.current = null;
+    dragMotionHistoryRef.current = null;
     // Persist final position and dimensions to note page
     if (liveSimRef.current) {
       updateActiveHeatSim(() => liveSimRef.current!);

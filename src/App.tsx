@@ -11313,7 +11313,8 @@ export default function App() {
             isCurrentActivePage &&
             (liveSim?.isRunning ||
               (heatSim as any).isDragging?.() ||
-              liveSim?.objects?.some((o: any) => o.type === 'burner' && o.burnerState?.isOn))
+              liveSim?.objects?.some((o: any) => o.type === 'burner' && o.burnerState?.isOn) ||
+              liveSim?.objects?.some((o: any) => o.containerState && (o.containerState.temperature > 30 || o.containerState.isBoiling)))
           ) {
             continue;
           }

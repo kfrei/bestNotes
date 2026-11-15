@@ -149,10 +149,21 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     }
 
     // Boiling plateau check (only if container has liquid!)
-    if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint) {
-      cs.temperature = liquidProps.boilingPoint;
-      cs.isBoiling = receivedPowerWatts > 50;
-      cs.boilingIntensity = Math.min(1.0, receivedPowerWatts / 800);
+    if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint - 1.5) {
+      if (cs.temperature > liquidProps.boilingPoint) {
+        cs.temperature = liquidProps.boilingPoint;
+      }
+      cs.isBoiling = true;
+      cs.boilingIntensity = receivedPowerWatts > 0
+        ? Math.min(1.0, Math.max(0.65, receivedPowerWatts / 500))
+        : 0.65;
+    } else if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint * 0.88) {
+      // Simmering / near boil active bubbles
+      cs.isBoiling = true;
+      cs.boilingIntensity = Math.max(
+        0.3,
+        ((cs.temperature - liquidProps.boilingPoint * 0.88) / (liquidProps.boilingPoint * 0.12)) * 0.6
+      );
     } else {
       cs.isBoiling = false;
       cs.boilingIntensity = 0;

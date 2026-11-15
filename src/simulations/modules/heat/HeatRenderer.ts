@@ -416,6 +416,32 @@ export function resetHeatSloshPhysics(containerId?: string): void {
   }
 }
 
+/**
+ * Notifies the slosh physics engine of direct pointer motion velocity during dragging.
+ */
+export function notifyContainerSloshMotion(
+  containerId: string,
+  vx: number,
+  _ax: number = 0
+): void {
+  let state = containerSloshMap.get(containerId);
+  const nowMs = performance.now();
+  if (!state) {
+    state = {
+      lastX: 0,
+      lastY: 0,
+      lastTime: nowMs,
+      filteredVx: vx,
+      sloshAngle: 0,
+      sloshAngularVel: 0,
+    };
+    containerSloshMap.set(containerId, state);
+  } else {
+    state.filteredVx = vx;
+    state.lastTime = nowMs;
+  }
+}
+
 function updateAndGetSloshAngle(
   containerId: string | undefined,
   curX: number,
@@ -438,8 +464,14 @@ function updateAndGetSloshAngle(
     return 0;
   }
 
+  const dtMs = nowMs - state.lastTime;
+  // If called multiple times within the same rendering frame (< 8ms), return current computed angle
+  if (dtMs < 8) {
+    return state.sloshAngle;
+  }
+
   // Handle large pause (tab switch, window resize) gracefully
-  if (nowMs - state.lastTime > 250) {
+  if (dtMs > 300) {
     state.lastX = curX;
     state.lastY = curY;
     state.lastTime = nowMs;
@@ -447,43 +479,51 @@ function updateAndGetSloshAngle(
     return state.sloshAngle;
   }
 
-  const dt = Math.max(0.001, Math.min(0.05, (nowMs - state.lastTime) / 1000));
+  const dt = Math.max(0.005, Math.min(0.05, dtMs / 1000));
   state.lastTime = nowMs;
 
   const dx = curX - state.lastX;
   state.lastX = curX;
   state.lastY = curY;
 
-  const rawVx = Math.max(-1200, Math.min(1200, dx / dt));
-  // Smooth velocity response (time constant ~65ms) to eliminate discrete pointer jitter
-  const alphaV = Math.min(1.0, 15.0 * dt);
+  // Track raw instantaneous velocity
+  const rawVx = Math.max(-2500, Math.min(2500, dx / dt));
+  // Fast responsiveness (~35ms smoothing)
+  const alphaV = Math.min(1.0, 26.0 * dt);
   const prevVx = state.filteredVx;
   state.filteredVx += (rawVx - state.filteredVx) * alphaV;
 
   // Horizontal acceleration from filtered velocity
-  const ax = Math.max(-6000, Math.min(6000, (state.filteredVx - prevVx) / dt));
+  const ax = Math.max(-12000, Math.min(12000, (state.filteredVx - prevVx) / dt));
 
   // Fluid reorients along apparent gravity vector (opposite to acceleration direction)
-  // Positive X motion (dx > 0) causes fluid to surge toward left wall (tilt angle > 0)
-  const targetAngle = Math.max(-0.14, Math.min(0.14, ax * 0.000045 + state.filteredVx * 0.000075));
+  // Enhanced sensitivity so even moderate horizontal dragging produces prominent, natural sloshing!
+  const targetAngle = Math.max(
+    -0.38,
+    Math.min(0.38, ax * 0.00018 + state.filteredVx * 0.00055)
+  );
 
   // Damped harmonic oscillator for natural liquid sloshing
-  // Natural frequency fn ≈ 1.15 Hz => omega_n ≈ 7.2 rad/s
-  // Damping ratio zeta ≈ 0.30 (calm underdamped settling in 2-3 graceful waves)
-  const omegaN = 7.2;
-  const zeta = 0.30;
+  // Natural frequency fn ≈ 0.95 Hz => omega_n ≈ 5.8 rad/s
+  // Damping ratio zeta ≈ 0.16 (underdamped: beautiful 4-6 sloshing waves when stopped)
+  const omegaN = 5.8;
+  const zeta = 0.16;
 
   const springTorque = -omegaN * omegaN * (state.sloshAngle - targetAngle);
   const dampingTorque = -2 * zeta * omegaN * state.sloshAngularVel;
   const angularAcc = springTorque + dampingTorque;
 
   state.sloshAngularVel += angularAcc * dt;
-  state.sloshAngularVel = Math.max(-4.0, Math.min(4.0, state.sloshAngularVel));
+  state.sloshAngularVel = Math.max(-6.5, Math.min(6.5, state.sloshAngularVel));
   state.sloshAngle += state.sloshAngularVel * dt;
-  state.sloshAngle = Math.max(-0.14, Math.min(0.14, state.sloshAngle));
+  state.sloshAngle = Math.max(-0.40, Math.min(0.40, state.sloshAngle));
 
   // Settle to true zero if movement has stopped and oscillations are imperceptible
-  if (Math.abs(state.sloshAngle) < 0.0004 && Math.abs(state.sloshAngularVel) < 0.0015 && Math.abs(state.filteredVx) < 0.5) {
+  if (
+    Math.abs(state.sloshAngle) < 0.001 &&
+    Math.abs(state.sloshAngularVel) < 0.003 &&
+    Math.abs(state.filteredVx) < 0.8
+  ) {
     state.sloshAngle = 0;
     state.sloshAngularVel = 0;
   }
@@ -494,7 +534,7 @@ function updateAndGetSloshAngle(
 /**
  * Calculates dynamic fluid surface profile combining:
  * 1. Inertial sloshing tilt & fluid crest curvature when moved horizontally
- * 2. Thermal convection multi-harmonic rolling waves when heated (CodePen wave style, refined & subtle)
+ * 2. Multi-staged thermal convection & boiling rolling waves
  */
 export function getLiquidSurfaceProfile(
   containerId: string | undefined,
@@ -512,49 +552,80 @@ export function getLiquidSurfaceProfile(
   const sloshAngle = updateAndGetSloshAngle(containerId, curX, curY, nowMs);
   const sinAngle = Math.sin(sloshAngle);
 
-  // Maximum vertical tilt displacement clamped to safe vessel fraction
-  const maxTilt = Math.min(8.5, liquidH * 0.28);
+  // Maximum vertical tilt displacement: up to 24px (visibly sloshing from edge to edge)
+  const maxTilt = Math.min(24, Math.max(8, liquidH * 0.42));
 
-  // Thermal convection waves: ambient <= 25°C is calm, heat builds organic rippling up to 100°C
-  const thermalFrac = Math.max(0, Math.min(1, (temperature - 25) / 75));
-
-  // Amplitude scaling: subtle and elegant ("λιγότερο έντονη", ~0.15px ambient to ~2.4px boiling)
-  let baseAmp = 0.15 + 1.4 * thermalFrac;
-  if (isBoiling) {
-    baseAmp += 0.85 * Math.max(0.35, boilingIntensity);
+  // Multi-staged Thermal Convection & Boiling Waves:
+  // Stage 1 (T < 35°C): Calm fluid (~0.8px subtle life)
+  // Stage 2 (35°C - 60°C): Warm convection rolling (~2.5px - 5.5px)
+  // Stage 3 (60°C - 85°C): Active simmering (~6.0px - 10.0px)
+  // Stage 4 (85°C - 98°C): Vigorous pre-boil ripples (~11.0px - 15.0px)
+  // Stage 5 (98°C - 100°C+): Full rolling boil surge (~15.0px - 22.0px)
+  let baseAmp = 0.8;
+  if (temperature > 25 && temperature <= 50) {
+    baseAmp = 0.8 + ((temperature - 25) / 25) * 3.5;
+  } else if (temperature > 50 && temperature <= 75) {
+    baseAmp = 4.3 + ((temperature - 50) / 25) * 4.7;
+  } else if (temperature > 75 && temperature <= 95) {
+    baseAmp = 9.0 + ((temperature - 75) / 20) * 5.0;
+  } else if (temperature > 95) {
+    baseAmp = 14.0 + Math.min(8.0, ((temperature - 95) / 5) * 6.0);
   }
 
+  const isActuallyBoiling = isBoiling || temperature >= 98;
+  if (isActuallyBoiling) {
+    baseAmp = Math.max(baseAmp, 15.0 + Math.max(0.4, boilingIntensity) * 6.0);
+  }
+
+  // Wave speed accelerates as heat builds up
+  const speedMultiplier =
+    temperature < 35
+      ? 1.4
+      : temperature < 65
+      ? 2.2
+      : temperature < 85
+      ? 3.2
+      : isActuallyBoiling
+      ? 4.6
+      : 3.8;
+
   const tSec = nowMs / 1000;
-  const waveSpeed = 1.6 + thermalFrac * 1.5 + (isBoiling ? 1.0 : 0);
-  const phase1 = tSec * waveSpeed;
-  const phase2 = -tSec * (waveSpeed * 1.35) + 1.2;
-  const phase3 = tSec * (waveSpeed * 0.75) + 2.4;
+  const phase1 = tSec * speedMultiplier;
+  const phase2 = -tSec * (speedMultiplier * 1.45) + 1.2;
+  const phase3 = tSec * (speedMultiplier * 0.72) + 2.5;
+  const phaseChurn = tSec * (speedMultiplier * 2.1) + 4.1;
 
-  const spatialK = (Math.PI * 2) / Math.max(45, surfaceW * 0.85);
+  const spatialK = (Math.PI * 2) / Math.max(35, surfaceW * 0.75);
 
-  const numSamples = 24;
+  const numSamples = 28;
   const points: { x: number; y: number }[] = [];
 
   for (let i = 0; i <= numSamples; i++) {
     const u = i / numSamples; // 0.0 at left wall, 1.0 at right wall
     const px = leftX + u * surfaceW;
 
-    // 1. Inertial sloshing tilt (preserves liquid volume around center u=0.5)
+    // 1. Inertial sloshing tilt with dynamic fluid wall climb
     const rawTiltDelta = (u - 0.5) * surfaceW * sinAngle;
     const clampedTiltDelta = Math.max(-maxTilt, Math.min(maxTilt, rawTiltDelta));
-    // Gentle fluid meniscus crest curvature when tilted
-    const fluidCurvature = 0.12 * Math.sin(Math.PI * 2 * (u - 0.5)) * clampedTiltDelta;
-    const sloshDeltaY = clampedTiltDelta + fluidCurvature;
+    // Dynamic fluid wall surge (liquid piles up against container wall on acceleration)
+    const wallSurge = Math.sin(Math.PI * (u - 0.5)) * Math.abs(sinAngle) * 4.5;
+    const sloshDeltaY = clampedTiltDelta + wallSurge;
 
-    // 2. Multi-harmonic thermal convection ripples (CodePen wave style, refined & subtle)
+    // 2. Multi-harmonic thermal convection & boiling waves
     const xRel = u * surfaceW;
     const w1 = Math.sin(xRel * spatialK + phase1);
-    const w2 = Math.sin(xRel * spatialK * 2.2 + phase2) * 0.38;
-    const w3 = Math.cos(xRel * spatialK * 0.7 + phase3) * 0.22;
-    const rawWave = w1 + w2 + w3;
+    const w2 = Math.sin(xRel * spatialK * 2.2 + phase2) * 0.42;
+    const w3 = Math.cos(xRel * spatialK * 0.75 + phase3) * 0.28;
+    // High-frequency boiling churning ripple when hot (T >= 70°C)
+    const churn =
+      temperature >= 70
+        ? Math.sin(xRel * spatialK * 3.8 + phaseChurn) * 0.32 * Math.min(1.0, (temperature - 65) / 30)
+        : 0;
 
-    // Smooth envelope anchoring to 0 at container walls (glass contact angle boundary condition)
-    const envelope = Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, u))), 0.65);
+    const rawWave = w1 + w2 + w3 + churn;
+
+    // Smooth envelope anchoring cleanly to 0 at container walls (meniscus boundary)
+    const envelope = Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, u))), 0.55);
     const waveDeltaY = rawWave * baseAmp * envelope;
 
     points.push({
@@ -612,15 +683,19 @@ function renderLiquidBody(
   ctx.fillStyle = grad;
   ctx.fillRect(fx, fy, fw, fh);
 
-  // 2. Ultra-soft, delicate surface line following dynamic surface profile (barely perceptible)
+  // 2. High-definition Meniscus and Surface Wave Line (crisp and clearly defined)
   ctx.save();
-  ctx.strokeStyle =
+  const strokeColor =
     liquidType === 'oil'
-      ? 'rgba(101, 163, 13, 0.08)'
+      ? 'rgba(101, 163, 13, 0.78)'
       : liquidType === 'milk'
-      ? 'rgba(209, 213, 219, 0.07)'
-      : 'rgba(2, 132, 199, 0.07)'; // Whisper-faint, barely perceptible meniscus line
-  ctx.lineWidth = 0.5;
+      ? 'rgba(100, 116, 139, 0.65)'
+      : 'rgba(2, 132, 199, 0.75)';
+
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.8;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
   if (surfacePoints && surfacePoints.length > 1) {
     ctx.moveTo(surfacePoints[0].x, surfacePoints[0].y);
@@ -633,18 +708,40 @@ function renderLiquidBody(
   }
   ctx.stroke();
 
-  // Subtle luminous reflection highlight just below the surface (whisper-soft)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-  ctx.lineWidth = 0.5;
+  // Crisp luminous crest highlight right along the surface
+  ctx.strokeStyle =
+    liquidType === 'oil'
+      ? 'rgba(247, 254, 231, 0.92)'
+      : liquidType === 'milk'
+      ? 'rgba(255, 255, 255, 0.98)'
+      : 'rgba(255, 255, 255, 0.90)';
+  ctx.lineWidth = 1.1;
   ctx.beginPath();
   if (surfacePoints && surfacePoints.length > 2) {
-    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 1.0);
+    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 0.8);
     for (let i = 2; i < surfacePoints.length - 1; i++) {
-      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 1.0);
+      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 0.8);
     }
   } else {
-    ctx.moveTo(x + 3, liquidTopY + 1.0);
-    ctx.lineTo(x + bw - 3, liquidTopY + 1.0);
+    ctx.moveTo(x + 3, liquidTopY + 0.8);
+    ctx.lineTo(x + bw - 3, liquidTopY + 0.8);
+  }
+  ctx.stroke();
+
+  // Translucent 3D surface meniscus depth ribbon below the surface line
+  ctx.strokeStyle =
+    liquidType === 'oil'
+      ? 'rgba(163, 230, 53, 0.35)'
+      : liquidType === 'milk'
+      ? 'rgba(226, 232, 240, 0.40)'
+      : 'rgba(56, 189, 248, 0.38)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  if (surfacePoints && surfacePoints.length > 2) {
+    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 2.0);
+    for (let i = 2; i < surfacePoints.length - 1; i++) {
+      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 2.0);
+    }
   }
   ctx.stroke();
   ctx.restore();
@@ -1446,10 +1543,27 @@ function renderBeaker(
 
       renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
 
-      // Boiling Bubbles & Steam (dynamic animation, never on static paper background)
-      if (state?.isBoiling && layer !== 'apparatus') {
-        renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
-        renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
+      // Staged animated thermal convection, rising bubbles & billowing steam (from bottom to top)
+      if (layer !== 'apparatus') {
+        const temp = state?.temperature ?? 20;
+        const isBoil = Boolean(state?.isBoiling || temp >= 98);
+        const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
+        const nowMs = performance.now();
+
+        // 1. Thermal Convection Currents (bottom to top)
+        if (temp >= 32) {
+          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh, temp, liquidType, nowMs);
+        }
+
+        // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
+        if (temp >= 50 || isBoil) {
+          renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH, temp, isBoil, intensity, nowMs);
+        }
+
+        // 3. Billowing Steam (rising above the liquid into the air)
+        if (temp >= 58 || isBoil) {
+          renderSteam(ctx, x + bw / 2, liquidTopY - 4, bw, temp, isBoil, intensity, nowMs);
+        }
       }
 
       ctx.restore();
@@ -1619,9 +1733,27 @@ function renderWideBasin(
 
       renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
 
-      if (state?.isBoiling && layer !== 'apparatus') {
-        renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
-        renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
+      // Staged animated thermal convection, rising bubbles & billowing steam (from bottom to top)
+      if (layer !== 'apparatus') {
+        const temp = state?.temperature ?? 20;
+        const isBoil = Boolean(state?.isBoiling || temp >= 98);
+        const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
+        const nowMs = performance.now();
+
+        // 1. Thermal Convection Currents (bottom to top)
+        if (temp >= 32) {
+          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh, temp, liquidType, nowMs);
+        }
+
+        // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
+        if (temp >= 50 || isBoil) {
+          renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH, temp, isBoil, intensity, nowMs);
+        }
+
+        // 3. Billowing Steam (rising above the liquid into the air)
+        if (temp >= 58 || isBoil) {
+          renderSteam(ctx, x + bw / 2, liquidTopY - 4, bw, temp, isBoil, intensity, nowMs);
+        }
       }
       ctx.restore();
     }
@@ -1783,9 +1915,47 @@ function renderFlask(
         surface
       );
 
-      if (state?.isBoiling && layer !== 'apparatus') {
-        renderBoilingBubbles(ctx, cx - surfaceHalfW * 0.7, liquidTopY, surfaceHalfW * 1.4, liquidH);
-        renderSteam(ctx, cx, y - 4, neckW);
+      // Staged animated thermal convection, rising bubbles & billowing steam (from bottom to top)
+      if (layer !== 'apparatus') {
+        const temp = state?.temperature ?? 20;
+        const isBoil = Boolean(state?.isBoiling || temp >= 98);
+        const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
+        const nowMs = performance.now();
+
+        // 1. Thermal Convection Currents (bottom to top)
+        if (temp >= 32) {
+          renderThermalConvection(
+            ctx,
+            cx - surfaceHalfW,
+            liquidTopY,
+            surfaceHalfW * 2,
+            liquidH,
+            y + bh,
+            temp,
+            liquidType,
+            nowMs
+          );
+        }
+
+        // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
+        if (temp >= 50 || isBoil) {
+          renderBoilingBubbles(
+            ctx,
+            cx - surfaceHalfW * 0.85,
+            liquidTopY,
+            surfaceHalfW * 1.7,
+            liquidH,
+            temp,
+            isBoil,
+            intensity,
+            nowMs
+          );
+        }
+
+        // 3. Billowing Steam (rising above the liquid into the air)
+        if (temp >= 58 || isBoil) {
+          renderSteam(ctx, cx, y - 4, neckW, temp, isBoil, intensity, nowMs);
+        }
       }
       ctx.restore();
     }
@@ -2144,58 +2314,239 @@ function renderThermometer(
 }
 
 /**
- * Animated Boiling Bubbles
+ * Animated Thermal Convection Current Streamlines (from bottom heated base upwards to top surface)
+ */
+function renderThermalConvection(
+  ctx: CanvasRenderingContext2D,
+  lx: number,
+  ly: number,
+  lw: number,
+  lh: number,
+  bottomY: number,
+  temperature: number,
+  liquidType: LiquidType,
+  nowMs: number
+): void {
+  if (temperature < 32 || lh < 8) return;
+
+  ctx.save();
+  const tSec = nowMs / 1000;
+  // Convection intensity and speed scaling with temperature
+  const tFrac = Math.max(0, Math.min(1, (temperature - 30) / 70));
+  const flowSpeed = 1.6 + tFrac * 2.8;
+  const numPlumes = lw > 120 ? 6 : 4;
+  const maxAlpha = Math.min(0.42, 0.08 + tFrac * 0.34);
+
+  const plumeColor =
+    liquidType === 'oil'
+      ? `rgba(247, 254, 231, ${maxAlpha})`
+      : liquidType === 'milk'
+      ? `rgba(255, 255, 255, ${maxAlpha * 0.65})`
+      : `rgba(224, 242, 254, ${maxAlpha})`;
+
+  ctx.strokeStyle = plumeColor;
+  ctx.lineWidth = 1.3;
+  ctx.lineCap = 'round';
+
+  const segStep = 6;
+  const plumeSpacing = lw / (numPlumes + 1);
+
+  for (let p = 0; p < numPlumes; p++) {
+    const basePx = lx + (p + 1) * plumeSpacing;
+    const pPhase = p * 1.35;
+    const pFreq = 0.045 + (p % 2) * 0.015;
+
+    ctx.beginPath();
+    let started = false;
+
+    // Plumes rise from bottom base (bottomY) up towards liquid surface (ly)
+    for (let curY = bottomY - 3; curY >= ly + 2; curY -= segStep) {
+      const heightFrac = (bottomY - curY) / lh;
+      const sway = Math.sin(curY * pFreq - tSec * flowSpeed + pPhase) * (2.0 + heightFrac * 4.5);
+      const px = basePx + sway;
+
+      if (!started) {
+        ctx.moveTo(px, curY);
+        started = true;
+      } else {
+        ctx.lineTo(px, curY);
+      }
+    }
+    ctx.stroke();
+
+    // Subtle upward-moving convection thermal eddies
+    const eddyPhase = (tSec * flowSpeed * 0.45 + p * 0.28) % 1;
+    const eddyY = bottomY - 4 - eddyPhase * (lh - 8);
+    const eddySway = Math.sin(eddyY * pFreq - tSec * flowSpeed + pPhase) * (2.0 + ((bottomY - eddyY) / lh) * 4.5);
+    const eddyX = basePx + eddySway;
+    const eddyR = 1.2 + ((p % 3) * 0.8) + (1.0 - eddyPhase) * 0.6;
+
+    ctx.beginPath();
+    ctx.arc(eddyX, eddyY, eddyR, 0, Math.PI * 2);
+    ctx.fillStyle = plumeColor;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Animated Boiling Bubbles rising from bottom to top with physical gas expansion and wobbling
  */
 function renderBoilingBubbles(
   ctx: CanvasRenderingContext2D,
   lx: number,
   ly: number,
   lw: number,
-  lh: number
+  lh: number,
+  temperature: number,
+  isBoiling: boolean,
+  boilingIntensity: number,
+  nowMs: number
 ): void {
-  ctx.save();
-  const time = Date.now() / 1000;
-  const numBubbles = 8;
-  for (let i = 0; i < numBubbles; i++) {
-    const phase = (time * 1.5 + i * 0.35) % 1;
-    const bx = lx + 8 + ((i * 37) % (lw - 16)) + Math.sin(time * 3 + i) * 3;
-    const by = ly + lh - 4 - phase * (lh - 8);
-    const r = 1.5 + ((i % 3) * 1.2);
+  if (lh < 8) return;
 
+  ctx.save();
+  const time = nowMs / 1000;
+
+  // Staged number of bubbles and rise speed based on temperature & boiling
+  // 50-70°C: 10-14 simmer bubbles
+  // 70-90°C: 20-30 active bubbles
+  // 90-100°C+: 36-48 vigorous boiling bubbles
+  let numBubbles = 10;
+  let riseSpeed = 1.4;
+  let bubbleSizeScale = 1.0;
+
+  if (temperature >= 92 || isBoiling) {
+    numBubbles = Math.min(48, Math.round(28 + Math.max(0.4, boilingIntensity) * 20));
+    riseSpeed = 3.2 + Math.max(0.4, boilingIntensity) * 1.8;
+    bubbleSizeScale = 1.45;
+  } else if (temperature >= 70) {
+    numBubbles = Math.round(18 + ((temperature - 70) / 22) * 14);
+    riseSpeed = 2.2 + ((temperature - 70) / 22) * 1.0;
+    bubbleSizeScale = 1.2;
+  } else if (temperature >= 50) {
+    numBubbles = Math.round(8 + ((temperature - 50) / 20) * 10);
+    riseSpeed = 1.5;
+    bubbleSizeScale = 0.9;
+  }
+
+  for (let i = 0; i < numBubbles; i++) {
+    const seed = (i * 37.7) % 1;
+    const colSeed = (i * 61.3) % Math.max(10, lw - 16);
+    const speedVariation = 0.8 + ((i * 17) % 5) * 0.1;
+    const phase = (time * riseSpeed * speedVariation + seed) % 1;
+
+    // Organic horizontal wobble as bubbles navigate liquid currents
+    const wobble = Math.sin(time * 5.2 + i * 1.7) * (2.0 + phase * 3.5);
+    const bx = lx + 8 + colSeed + wobble;
+    // Rises from bottom base up to liquid surface
+    const by = ly + lh - 4 - phase * (lh - 6);
+
+    // Physical gas expansion: bubbles grow larger as hydrostatic pressure drops near the surface
+    const baseR = (1.2 + (i % 4) * 0.85) * bubbleSizeScale;
+    const r = baseR * (0.8 + phase * 0.7);
+
+    // Glowing translucent bubble body
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.70)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.90)';
-    ctx.lineWidth = 0.8;
+
+    // Luminous glass-like bubble rim
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = Math.max(0.7, r * 0.22);
     ctx.stroke();
+
+    // Specular highlight gleam on top-left of bubble
+    ctx.beginPath();
+    ctx.arc(bx - r * 0.32, by - r * 0.32, Math.max(0.5, r * 0.28), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fill();
+
+    // Micro-splash burst when bubble reaches top surface (phase > 0.94)
+    if (phase > 0.94) {
+      const popFrac = (phase - 0.94) / 0.06;
+      ctx.beginPath();
+      ctx.arc(bx, ly, r * (1.2 + popFrac * 1.5), 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.8 * (1 - popFrac)})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
   }
+
   ctx.restore();
 }
 
 /**
- * Animated Rising Steam Puffs
+ * Animated Billowing Steam Puffs rising into the air from the hot liquid surface
  */
 function renderSteam(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
-  _sw: number
+  sw: number,
+  temperature: number,
+  isBoiling: boolean,
+  boilingIntensity: number,
+  nowMs: number
 ): void {
+  if (temperature < 58 && !isBoiling) return;
+
   ctx.save();
-  const time = Date.now() / 1000;
-  for (let i = 0; i < 4; i++) {
-    const phase = (time * 0.8 + i * 0.25) % 1;
-    const px = sx + Math.sin(time * 2 + i * 1.5) * 12 + (i - 1.5) * 6;
-    const py = sy - phase * 32;
-    const radius = 5 + phase * 10;
-    const opacity = (1.0 - phase) * 0.35;
+  const time = nowMs / 1000;
+
+  // Staged steam puffs:
+  // 60-80°C: 5 gentle vapor puffs
+  // 80-95°C: 9 active steam plumes
+  // 95-100°C+: 14 billowing steam clouds
+  let numPuffs = 5;
+  let riseH = 45;
+  let maxAlpha = 0.22;
+
+  if (temperature >= 95 || isBoiling) {
+    numPuffs = 14;
+    riseH = 85;
+    maxAlpha = 0.40;
+  } else if (temperature >= 80) {
+    numPuffs = 9;
+    riseH = 65;
+    maxAlpha = 0.30;
+  } else {
+    numPuffs = 5;
+    riseH = 45;
+    maxAlpha = 0.18;
+  }
+
+  for (let i = 0; i < numPuffs; i++) {
+    const seed = (i * 29.3) % 1;
+    const speed = 0.7 + ((i * 13) % 5) * 0.12;
+    const phase = (time * speed + seed) % 1;
+
+    // Organic billowing expansion and lateral drift in ambient air
+    const spreadX = ((i - (numPuffs - 1) / 2) / (numPuffs / 2)) * (sw * 0.38);
+    const sway = Math.sin(time * 2.2 + i * 1.6) * 14;
+    const px = sx + spreadX + sway;
+    const py = sy - phase * riseH;
+
+    // Puffs expand as they rise into the air
+    const radius = 6 + phase * (16 + (i % 3) * 6);
+    // Smooth bell-curve opacity: starts soft, reaches apex, then gracefully disperses
+    const fadeIn = Math.min(1.0, phase * 3.5);
+    const fadeOut = Math.max(0, 1.0 - phase);
+    const opacity = fadeIn * fadeOut * maxAlpha;
+
+    const grad = ctx.createRadialGradient(px, py, 2, px, py, radius);
+    grad.addColorStop(0, `rgba(255, 255, 255, ${opacity * 1.2})`);
+    grad.addColorStop(0.55, `rgba(255, 255, 255, ${opacity * 0.7})`);
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
     ctx.beginPath();
     ctx.arc(px, py, radius, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+    ctx.fillStyle = grad;
     ctx.fill();
   }
+
   ctx.restore();
 }
 
