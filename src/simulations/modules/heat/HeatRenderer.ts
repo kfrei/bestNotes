@@ -645,9 +645,11 @@ export function renderGroupSelectionFrame(
 interface ContainerSloshPhysics {
   lastX: number;
   lastY: number;
-  lastTime: number;
+  lastFrameTime: number; // rendering loop frame time
   filteredVx: number; // smoothed velocity (px/s)
-  sloshAngle: number; // surface tilt angle (radians)
+  externalVx: number; // injected velocity from mouse/drag
+  targetAngle: number; // target tilt angle
+  sloshAngle: number; // current surface tilt angle (radians)
   sloshAngularVel: number; // angular velocity (rad/s)
 }
 
@@ -669,22 +671,30 @@ export function notifyContainerSloshMotion(
   vx: number,
   _ax: number = 0
 ): void {
-  let state = containerSloshMap.get(containerId);
   const nowMs = performance.now();
+  let state = containerSloshMap.get(containerId);
   if (!state) {
     state = {
       lastX: 0,
       lastY: 0,
-      lastTime: nowMs,
+      lastFrameTime: nowMs,
       filteredVx: vx,
+      externalVx: vx,
+      targetAngle: 0,
       sloshAngle: 0,
       sloshAngularVel: 0,
     };
     containerSloshMap.set(containerId, state);
-  } else {
-    state.filteredVx = vx;
-    state.lastTime = nowMs;
   }
+
+  // Update external velocity with raw pointer drag speed
+  state.externalVx = vx;
+
+  // Impart an instantaneous angular torque impulse proportional to shaking speed
+  // A fast shake of 1500 px/s injects an immediate noticeable angular surge!
+  const impulse = vx * 0.0035;
+  state.sloshAngularVel += impulse * 0.35;
+  state.sloshAngularVel = Math.max(-12, Math.min(12, state.sloshAngularVel));
 }
 
 function updateAndGetSloshAngle(
@@ -700,8 +710,10 @@ function updateAndGetSloshAngle(
     state = {
       lastX: curX,
       lastY: curY,
-      lastTime: nowMs,
+      lastFrameTime: nowMs,
       filteredVx: 0,
+      externalVx: 0,
+      targetAngle: 0,
       sloshAngle: 0,
       sloshAngularVel: 0,
     };
@@ -709,59 +721,60 @@ function updateAndGetSloshAngle(
     return 0;
   }
 
-  const dtMs = nowMs - state.lastTime;
-  // If called multiple times within the same rendering frame (< 8ms), return current computed angle
-  if (dtMs < 8) {
+  const dtMs = nowMs - state.lastFrameTime;
+  if (dtMs < 4) {
     return state.sloshAngle;
   }
 
-  // Handle large pause (tab switch, window resize) gracefully
   if (dtMs > 300) {
     state.lastX = curX;
     state.lastY = curY;
-    state.lastTime = nowMs;
+    state.lastFrameTime = nowMs;
     state.filteredVx = 0;
+    state.externalVx = 0;
     return state.sloshAngle;
   }
 
   const dt = Math.max(0.005, Math.min(0.05, dtMs / 1000));
-  state.lastTime = nowMs;
+  state.lastFrameTime = nowMs;
 
   const dx = curX - state.lastX;
   state.lastX = curX;
   state.lastY = curY;
 
-  // Track raw instantaneous velocity
-  const rawVx = Math.max(-2500, Math.min(2500, dx / dt));
-  // Fast responsiveness (~35ms smoothing)
-  const alphaV = Math.min(1.0, 26.0 * dt);
-  const prevVx = state.filteredVx;
+  // Instantaneous velocity from object movement
+  const posVx = dt > 0 ? dx / dt : 0;
+  // Blend with external drag velocity
+  const rawVx = Math.abs(state.externalVx) > Math.abs(posVx) ? state.externalVx : posVx;
+
+  // Responsive smoothing (~40ms)
+  const alphaV = Math.min(1.0, 24.0 * dt);
   state.filteredVx += (rawVx - state.filteredVx) * alphaV;
 
-  // Horizontal acceleration from filtered velocity
-  const ax = Math.max(-12000, Math.min(12000, (state.filteredVx - prevVx) / dt));
-
-  // Fluid reorients along apparent gravity vector (opposite to acceleration direction)
-  // Enhanced sensitivity so even moderate horizontal dragging produces prominent, natural sloshing!
+  // Fluid reorients along apparent gravity vector (lagging behind container motion)
+  // Target tilt is directly proportional to how fast the user moves the container left/right!
   const targetAngle = Math.max(
-    -0.38,
-    Math.min(0.38, ax * 0.00018 + state.filteredVx * 0.00055)
+    -0.55,
+    Math.min(0.55, state.filteredVx * 0.00095)
   );
 
-  // Damped harmonic oscillator for natural liquid sloshing
-  // Natural frequency fn ≈ 0.95 Hz => omega_n ≈ 5.8 rad/s
-  // Damping ratio zeta ≈ 0.16 (underdamped: beautiful 4-6 sloshing waves when stopped)
-  const omegaN = 5.8;
-  const zeta = 0.16;
+  // Damped harmonic oscillator for natural, bouncy liquid sloshing
+  // Natural frequency fn ≈ 1.15 Hz => omega_n ≈ 7.2 rad/s
+  // Light damping ratio zeta ≈ 0.13 (underdamped: energetic, lively sloshing that oscillates naturally)
+  const omegaN = 7.2;
+  const zeta = 0.13;
 
   const springTorque = -omegaN * omegaN * (state.sloshAngle - targetAngle);
   const dampingTorque = -2 * zeta * omegaN * state.sloshAngularVel;
   const angularAcc = springTorque + dampingTorque;
 
   state.sloshAngularVel += angularAcc * dt;
-  state.sloshAngularVel = Math.max(-6.5, Math.min(6.5, state.sloshAngularVel));
+  state.sloshAngularVel = Math.max(-12, Math.min(12, state.sloshAngularVel));
   state.sloshAngle += state.sloshAngularVel * dt;
-  state.sloshAngle = Math.max(-0.40, Math.min(0.40, state.sloshAngle));
+  state.sloshAngle = Math.max(-0.55, Math.min(0.55, state.sloshAngle));
+
+  // Decay external drag velocity
+  state.externalVx *= Math.max(0, 1 - 7.5 * dt);
 
   // Settle to true zero if movement has stopped and oscillations are imperceptible
   if (
@@ -797,8 +810,8 @@ export function getLiquidSurfaceProfile(
   const sloshAngle = updateAndGetSloshAngle(containerId, curX, curY, nowMs);
   const sinAngle = Math.sin(sloshAngle);
 
-  // Maximum vertical tilt displacement: up to 24px (visibly sloshing from edge to edge)
-  const maxTilt = Math.min(24, Math.max(8, liquidH * 0.42));
+  // Maximum vertical tilt displacement: up to 36px (very noticeable and exciting wave crests!)
+  const maxTilt = Math.min(36, Math.max(12, liquidH * 0.55));
 
   // Multi-staged Thermal Convection & Boiling Waves:
   // Stage 1 (T < 35°C): Calm fluid (~0.8px subtle life)
@@ -853,8 +866,13 @@ export function getLiquidSurfaceProfile(
     const rawTiltDelta = (u - 0.5) * surfaceW * sinAngle;
     const clampedTiltDelta = Math.max(-maxTilt, Math.min(maxTilt, rawTiltDelta));
     // Dynamic fluid wall surge (liquid piles up against container wall on acceleration)
-    const wallSurge = Math.sin(Math.PI * (u - 0.5)) * Math.abs(sinAngle) * 4.5;
-    const sloshDeltaY = clampedTiltDelta + wallSurge;
+    const wallSurge = Math.sin(Math.PI * (u - 0.5)) * sinAngle * 5.5;
+    // Traveling inertial slosh ripple across the surface when shaken actively
+    const sloshRipple =
+      Math.abs(sinAngle) > 0.03
+        ? Math.sin(u * Math.PI * 3 + nowMs * 0.009) * Math.abs(sinAngle) * 5.5 * Math.sin(Math.PI * u)
+        : 0;
+    const sloshDeltaY = clampedTiltDelta + wallSurge + sloshRipple;
 
     // 2. Multi-harmonic thermal convection & boiling waves
     const xRel = u * surfaceW;
@@ -906,23 +924,23 @@ function renderLiquidBody(
   // 1. Beautiful, tall, smooth linear depth gradient (degrade) - enhanced transition towards the fill level
   const grad = ctx.createLinearGradient(x + bw / 2, liquidTopY, x + bw / 2, bottomY);
   if (liquidType === 'oil') {
-    grad.addColorStop(0, 'rgba(247, 254, 231, 0.96)'); // Luminous pale lime sheen
-    grad.addColorStop(0.12, 'rgba(217, 249, 157, 0.90)'); // Fresh lime olive oil
-    grad.addColorStop(0.38, 'rgba(163, 230, 53, 0.85)'); // Golden-lime green body
-    grad.addColorStop(0.70, 'rgba(101, 163, 13, 0.85)'); // Rich virgin olive oil
-    grad.addColorStop(1, 'rgba(63, 98, 18, 0.92)'); // Deep rich olive base
+    grad.addColorStop(0, 'rgba(101, 163, 13, 0.90)'); // Rich golden-olive at surface
+    grad.addColorStop(0.20, 'rgba(132, 204, 22, 0.88)'); // Fresh lime olive oil
+    grad.addColorStop(0.55, 'rgba(163, 230, 53, 0.84)'); // Golden-lime green body
+    grad.addColorStop(0.85, 'rgba(190, 242, 100, 0.80)'); // Lighter golden olive
+    grad.addColorStop(1, 'rgba(217, 249, 157, 0.82)'); // Pale luminous base
   } else if (liquidType === 'milk') {
-    grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)'); // Pure white top
-    grad.addColorStop(0.40, 'rgba(255, 255, 255, 0.99)'); // Crisp pure white body
-    grad.addColorStop(0.75, 'rgba(248, 249, 250, 0.98)'); // Subtle neutral transition
-    grad.addColorStop(1, 'rgba(229, 231, 235, 0.96)'); // Barely neutral grey at bottom depth (no other hue)
+    grad.addColorStop(0, 'rgba(203, 213, 225, 0.94)'); // Soft slate-grey top matching surface line!
+    grad.addColorStop(0.25, 'rgba(226, 232, 240, 0.95)'); // Transition to cool light grey
+    grad.addColorStop(0.60, 'rgba(241, 245, 249, 0.97)'); // Milky off-white
+    grad.addColorStop(1, 'rgba(248, 250, 252, 0.98)'); // Crisp milky white base
   } else {
     // Water
-    grad.addColorStop(0, 'rgba(240, 249, 255, 0.96)'); // Luminous crystal surface sheen
-    grad.addColorStop(0.10, 'rgba(224, 242, 254, 0.90)'); // Clear sky water
-    grad.addColorStop(0.32, 'rgba(186, 230, 253, 0.82)'); // Aquamarine transition
-    grad.addColorStop(0.65, 'rgba(56, 189, 248, 0.78)'); // Vibrant blue body
-    grad.addColorStop(1, 'rgba(2, 132, 199, 0.90)'); // Deep rich blue base
+    grad.addColorStop(0, 'rgba(2, 132, 199, 0.92)'); // Rich medium-dark blue right under surface! Matches surface stroke!
+    grad.addColorStop(0.22, 'rgba(14, 165, 233, 0.88)'); // Vibrant sky blue
+    grad.addColorStop(0.55, 'rgba(56, 189, 248, 0.82)'); // Clear light cyan/blue (γαλάζιο)
+    grad.addColorStop(0.85, 'rgba(125, 211, 252, 0.78)'); // Light aquamarine sheen
+    grad.addColorStop(1, 'rgba(186, 230, 253, 0.80)'); // Soft clear crystal base
   }
 
   ctx.fillStyle = grad;
@@ -932,10 +950,10 @@ function renderLiquidBody(
   ctx.save();
   const strokeColor =
     liquidType === 'oil'
-      ? 'rgba(101, 163, 13, 0.78)'
+      ? 'rgba(77, 124, 15, 0.90)'
       : liquidType === 'milk'
-      ? 'rgba(100, 116, 139, 0.65)'
-      : 'rgba(2, 132, 199, 0.75)';
+      ? 'rgba(148, 163, 184, 0.92)'
+      : 'rgba(2, 132, 199, 0.92)';
 
   ctx.strokeStyle = strokeColor;
   ctx.lineWidth = 1.8;
@@ -956,10 +974,10 @@ function renderLiquidBody(
   // Crisp luminous crest highlight right along the surface
   ctx.strokeStyle =
     liquidType === 'oil'
-      ? 'rgba(247, 254, 231, 0.92)'
+      ? 'rgba(247, 254, 231, 0.45)'
       : liquidType === 'milk'
-      ? 'rgba(255, 255, 255, 0.98)'
-      : 'rgba(255, 255, 255, 0.90)';
+      ? 'rgba(255, 255, 255, 0.45)'
+      : 'rgba(224, 242, 254, 0.45)';
   ctx.lineWidth = 1.1;
   ctx.beginPath();
   if (surfacePoints && surfacePoints.length > 2) {
