@@ -57705,10 +57705,18 @@ export default function App() {
                           isFirstHeatItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 17 1.5 C 14.5 4 14.8 6.5 17 7.5 C 19.2 6.5 19.5 4 17 1.5 Z" strokeWidth="1.6" />
-                              <rect x="15" y="7.5" width="4" height="8.5" strokeWidth="1.7" />
-                              <line x1="13.5" y1="12" x2="20.5" y2="12" strokeWidth="1.6" />
-                              <polygon points="14,16 9.5,20.5 24.5,20.5 20,16" strokeWidth="1.7" />
+                              <path d="M 17 1.5 C 15 3.5 15.3 5 17 5.8 C 18.7 5 19 3.5 17 1.5 Z" strokeWidth="1.4" />
+                              <ellipse cx="17" cy="6.6" rx="2.4" ry="0.8" strokeWidth="1.3" />
+                              <line x1="14.6" y1="6.6" x2="14.6" y2="8.6" strokeWidth="1.3" />
+                              <line x1="19.4" y1="6.6" x2="19.4" y2="8.6" strokeWidth="1.3" />
+                              <line x1="15.6" y1="8.6" x2="15.6" y2="12.2" strokeWidth="1.4" />
+                              <line x1="18.4" y1="8.6" x2="18.4" y2="12.2" strokeWidth="1.4" />
+                              <ellipse cx="17" cy="12.2" rx="2.2" ry="0.7" strokeWidth="1.2" />
+                              <rect x="14.8" y="12.2" width="4.4" height="2.6" strokeWidth="1.2" />
+                              <ellipse cx="17" cy="14.8" rx="2.2" ry="0.7" strokeWidth="1.2" />
+                              <ellipse cx="17" cy="13.5" rx="0.6" ry="0.8" strokeWidth="1.0" />
+                              <path d="M 14.8 15.2 C 13.8 16.8 11.2 17.8 8.5 18.2 L 8.5 19.5 C 8.5 20.8 12.3 21.6 17 21.6 C 21.7 21.6 25.5 20.8 25.5 19.5 L 25.5 18.2 C 22.8 17.8 20.2 16.8 19.2 15.2" strokeWidth="1.6" />
+                              <path d="M 8.5 18.2 C 8.5 19.5 12.3 20.3 17 20.3 C 21.7 20.3 25.5 19.5 25.5 18.2" strokeWidth="1.3" />
                             </svg>
                           ),
                         },

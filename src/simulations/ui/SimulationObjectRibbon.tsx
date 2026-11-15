@@ -16,10 +16,19 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
     case 'burner':
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M 18 3 C 14.5 7.5 15 11 18 12.5 C 21 11 21.5 7.5 18 3 Z" strokeWidth="1.8" />
-          <rect x="16" y="12.5" width="4" height="13" strokeWidth="1.8" />
-          <line x1="14" y1="19" x2="22" y2="19" strokeWidth="1.8" />
-          <polygon points="15,25.5 8,32 28,32 21,25.5" strokeWidth="1.8" />
+          <path d="M 18 2.5 C 15 6 15.5 8.5 18 9.5 C 20.5 8.5 21 6 18 2.5 Z" strokeWidth="1.6" />
+          <ellipse cx="18" cy="10.5" rx="3.5" ry="1.2" strokeWidth="1.5" />
+          <line x1="14.5" y1="10.5" x2="14.5" y2="13.5" strokeWidth="1.5" />
+          <line x1="21.5" y1="10.5" x2="21.5" y2="13.5" strokeWidth="1.5" />
+          <line x1="16" y1="13.5" x2="16" y2="18.5" strokeWidth="1.6" />
+          <line x1="20" y1="13.5" x2="20" y2="18.5" strokeWidth="1.6" />
+          <ellipse cx="18" cy="18.5" rx="3.2" ry="1.1" strokeWidth="1.4" />
+          <line x1="14.8" y1="18.5" x2="14.8" y2="22.5" strokeWidth="1.4" />
+          <line x1="21.2" y1="18.5" x2="21.2" y2="22.5" strokeWidth="1.4" />
+          <ellipse cx="18" cy="22.5" rx="3.2" ry="1.1" strokeWidth="1.4" />
+          <ellipse cx="18" cy="20.5" rx="0.8" ry="1.1" strokeWidth="1.2" />
+          <path d="M 15 23 C 13.5 25.5 10 27 6.5 27.5 L 6.5 29.5 C 6.5 31.5 11.5 32.8 18 32.8 C 24.5 32.8 29.5 31.5 29.5 29.5 L 29.5 27.5 C 26 27 22.5 25.5 21 23" strokeWidth="1.8" />
+          <path d="M 6.5 27.5 C 6.5 29.5 11.5 30.8 18 30.8 C 24.5 30.8 29.5 29.5 29.5 27.5" strokeWidth="1.5" />
         </svg>
       );
     case 'tripod':

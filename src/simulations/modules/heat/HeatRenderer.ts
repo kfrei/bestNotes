@@ -397,7 +397,7 @@ function renderLiquidBody(
 }
 
 /**
- * 1. Bunsen Burner - Organic swaying flame animation inspired by CodePen YLGjvx
+ * 1. Bunsen Burner - Authentic 2.5D hand-drawn sketch perspective matching reference
  */
 function renderBurner(
   ctx: CanvasRenderingContext2D,
@@ -410,12 +410,27 @@ function renderBurner(
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
   const cx = w / 2;
-  const baseW = w * 0.74;
-  const baseH = h * 0.22;
-  const stemW = w * 0.17;
-  const stemH = h * 0.52;
-  const baseY = h - baseH - 14;
-  const stemY = baseY - stemH;
+
+  // 2.5D Proportions matching reference sketch in media_1794725655308_28bf8f8b.png
+  const groundY = h - 14;
+  const baseW = w * 0.78;
+  const baseRy = 6.2;
+  const footH = 5.5;
+  const cyBot = groundY - baseRy;
+  const cyTop = cyBot - footH;
+
+  const coneTopY = cyTop - 13;
+  const coneTopW = w * 0.18;
+
+  const collarH = 13;
+  const collarTopY = coneTopY - collarH;
+  const collarW = coneTopW * 1.15;
+
+  const stemW = coneTopW * 0.82;
+  const nozzleH = 12.5;
+  const nozzleTopY = Math.max(16, h * 0.22);
+  const nozzleBotY = nozzleTopY + nozzleH;
+  const nozzleW = stemW * 1.35;
 
   // 1. Physical Apparatus Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
@@ -432,14 +447,14 @@ function renderBurner(
       const sway = Math.sin(time * 3.2) * 2.8 + Math.sin(time * 6.5) * 1.2;
       // 2. Flame height breathing
       const breathe = 1.0 + Math.sin(time * 4.0) * 0.08 + Math.cos(time * 7.0) * 0.03;
-      const baseFlameH = state.intensity === 'roaring' ? h * 0.68 : state.intensity === 'normal' ? h * 0.54 : h * 0.42;
+      const baseFlameH = state.intensity === 'roaring' ? h * 0.65 : state.intensity === 'normal' ? h * 0.50 : h * 0.38;
       const flameH = baseFlameH * breathe;
-      const flameTipY = stemY - 5 - flameH;
+      const flameTipY = nozzleTopY - 4 - flameH;
 
       // 3. Soft circular ambient breathing glow (NO rectangular box!)
       ctx.save();
       const glowR = flameH * 0.95;
-      const glowCenterY = stemY - 5 - flameH * 0.45;
+      const glowCenterY = nozzleTopY - 4 - flameH * 0.45;
       const glow = ctx.createRadialGradient(cx, glowCenterY, 3, cx, glowCenterY, glowR);
       const isRoar = state.intensity === 'roaring';
       const glowAlpha = 0.22 + Math.sin(time * 5.0) * 0.05;
@@ -452,35 +467,35 @@ function renderBurner(
       ctx.fill();
       ctx.restore();
 
-      // 4. Fluid teardrop flame silhouette (smooth organic curves)
+      // 4. Fluid teardrop flame silhouette emerging from nozzle mouth
       ctx.save();
-      const flameBaseW = stemW * 0.85;
-      const flameMidW = stemW * 1.35 * (1.0 - (breathe - 1.0) * 0.5);
+      const flameBaseW = nozzleW * 0.72;
+      const flameMidW = nozzleW * 1.35 * (1.0 - (breathe - 1.0) * 0.5);
 
       ctx.beginPath();
-      ctx.moveTo(cx - flameBaseW / 2, stemY - 4);
+      ctx.moveTo(cx - flameBaseW / 2, nozzleTopY);
       // Left convex shoulder
       ctx.bezierCurveTo(
         cx - flameMidW,
-        stemY - flameH * 0.35,
+        nozzleTopY - flameH * 0.35,
         cx - flameMidW * 0.6 + sway * 0.5,
-        stemY - flameH * 0.75,
+        nozzleTopY - flameH * 0.75,
         cx + sway,
         flameTipY
       );
       // Right convex shoulder
       ctx.bezierCurveTo(
         cx + flameMidW * 0.6 + sway * 0.5,
-        stemY - flameH * 0.75,
+        nozzleTopY - flameH * 0.75,
         cx + flameMidW,
-        stemY - flameH * 0.35,
+        nozzleTopY - flameH * 0.35,
         cx + flameBaseW / 2,
-        stemY - 4
+        nozzleTopY
       );
       ctx.closePath();
 
       // Flame Gradient Fill
-      const flameGrad = ctx.createLinearGradient(cx, stemY, cx + sway, flameTipY);
+      const flameGrad = ctx.createLinearGradient(cx, nozzleTopY, cx + sway, flameTipY);
       if (isRoar) {
         flameGrad.addColorStop(0, 'rgba(29, 78, 216, 0.85)');
         flameGrad.addColorStop(0.35, 'rgba(37, 99, 235, 0.75)');
@@ -502,30 +517,30 @@ function renderBurner(
 
       // 5. Inner Bright Flame Core (teardrop)
       const coreH = flameH * 0.52;
-      const coreTipY = stemY - 4 - coreH;
+      const coreTipY = nozzleTopY - coreH;
       const coreMidW = flameMidW * 0.48;
 
       ctx.beginPath();
-      ctx.moveTo(cx - flameBaseW * 0.3, stemY - 4);
+      ctx.moveTo(cx - flameBaseW * 0.3, nozzleTopY);
       ctx.bezierCurveTo(
         cx - coreMidW,
-        stemY - coreH * 0.35,
+        nozzleTopY - coreH * 0.35,
         cx - coreMidW * 0.5 + sway * 0.3,
-        stemY - coreH * 0.75,
+        nozzleTopY - coreH * 0.75,
         cx + sway * 0.5,
         coreTipY
       );
       ctx.bezierCurveTo(
         cx + coreMidW * 0.5 + sway * 0.3,
-        stemY - coreH * 0.75,
+        nozzleTopY - coreH * 0.75,
         cx + coreMidW,
-        stemY - coreH * 0.35,
+        nozzleTopY - coreH * 0.35,
         cx + flameBaseW * 0.3,
-        stemY - 4
+        nozzleTopY
       );
       ctx.closePath();
 
-      const coreGrad = ctx.createLinearGradient(cx, stemY, cx, coreTipY);
+      const coreGrad = ctx.createLinearGradient(cx, nozzleTopY, cx, coreTipY);
       if (isRoar) {
         coreGrad.addColorStop(0, 'rgba(147, 197, 253, 0.85)');
         coreGrad.addColorStop(1, '#ffffff');
@@ -538,52 +553,147 @@ function renderBurner(
       ctx.restore();
     }
 
-    // Flared Conical Base (Clean line art with double rim, matching sketch in media_1794694870640_233b6a5d.jpg)
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.9;
-
-    // Conical base slope
+    // 1. Heavy Cast-Iron 2.5D Base (matching reference sketch)
+    // A. Conical Bell Flare (sweeping concave curves)
     ctx.beginPath();
-    ctx.moveTo(cx - baseW / 2, baseY + baseH * 0.65);
-    ctx.quadraticCurveTo(cx - stemW * 0.95, baseY + baseH * 0.22, cx - stemW * 0.72, baseY);
-    ctx.lineTo(cx + stemW * 0.72, baseY);
-    ctx.quadraticCurveTo(cx + stemW * 0.95, baseY + baseH * 0.22, cx + baseW / 2, baseY + baseH * 0.65);
+    ctx.moveTo(cx - baseW / 2, cyTop);
+    ctx.bezierCurveTo(
+      cx - baseW * 0.32, cyTop - 1,
+      cx - coneTopW * 0.85, coneTopY + 7,
+      cx - coneTopW / 2, coneTopY
+    );
+    ctx.lineTo(cx + coneTopW / 2, coneTopY);
+    ctx.bezierCurveTo(
+      cx + coneTopW * 0.85, coneTopY + 7,
+      cx + baseW * 0.32, cyTop - 1,
+      cx + baseW / 2, cyTop
+    );
     ctx.stroke();
 
-    // Bottom dual rim ellipses (showing the foot rim thickness from sketch)
+    // B. Beveled Rim Edge of Foot
     ctx.beginPath();
-    ctx.ellipse(cx, baseY + baseH * 0.65, baseW / 2, baseH * 0.26, 0, 0, Math.PI * 2);
+    ctx.moveTo(cx - baseW / 2, cyTop);
+    ctx.lineTo(cx - baseW / 2, cyBot);
+    ctx.moveTo(cx + baseW / 2, cyTop);
+    ctx.lineTo(cx + baseW / 2, cyBot);
     ctx.stroke();
 
+    // C. Upper rim front ellipse
     ctx.beginPath();
-    ctx.ellipse(cx, baseY + baseH * 0.78, baseW / 2 - 2, baseH * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cyTop, baseW / 2, baseRy, 0, 0, Math.PI);
+    ctx.stroke();
+
+    // D. Bottom base front ellipse resting on table
+    ctx.beginPath();
+    ctx.ellipse(cx, cyBot, baseW / 2, baseRy, 0, 0, Math.PI);
+    ctx.stroke();
+
+    // E. Bottom base back curve (subtle ground ellipse)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cyBot, baseW / 2, baseRy, 0, Math.PI, 0);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.25)' : 'rgba(17, 24, 39, 0.22)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+
+    // F. Left flare reflection line (hand-drawn sketch accent from reference)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - baseW * 0.34, cyTop - 1);
+    ctx.quadraticCurveTo(cx - coneTopW * 0.9, coneTopY + 8, cx - coneTopW * 0.65, coneTopY + 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.45)' : 'rgba(17, 24, 39, 0.40)';
     ctx.lineWidth = 1.3;
     ctx.stroke();
+    ctx.restore();
 
-    // Vertical Burner Barrel / Tube (Straight clean line art)
-    ctx.lineWidth = 1.9;
-    ctx.strokeRect(cx - stemW / 2, stemY, stemW, stemH);
-
-    // Collar with air intake oval slot near bottom
-    const collarY = stemY + stemH * 0.62;
-    const collarH = stemH * 0.22;
-    ctx.strokeRect(cx - stemW * 0.65, collarY, stemW * 1.3, collarH);
-
-    // Air vent slot (circular/pill slot as in sketch)
+    // 2. Air Collar Sleeve with Vertical Vent Slot
+    // A. Lower collar ring
     ctx.beginPath();
-    ctx.arc(cx, collarY + collarH / 2, collarH * 0.35, 0, Math.PI * 2);
+    ctx.ellipse(cx, coneTopY, collarW / 2, 2.6, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Top nozzle lip collar
-    const nozzleW = stemW * 1.3;
-    ctx.strokeRect(cx - nozzleW / 2, stemY - 5, nozzleW, 6);
+    // B. Collar cylinder sides
+    ctx.beginPath();
+    ctx.moveTo(cx - collarW / 2, collarTopY);
+    ctx.lineTo(cx - collarW / 2, coneTopY);
+    ctx.moveTo(cx + collarW / 2, collarTopY);
+    ctx.lineTo(cx + collarW / 2, coneTopY);
+    ctx.stroke();
+
+    // C. Upper collar ring
+    ctx.beginPath();
+    ctx.ellipse(cx, collarTopY, collarW / 2, 2.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // D. Vertical Oval Air Aperture Slot (exact from reference)
+    ctx.beginPath();
+    ctx.ellipse(cx, collarTopY + collarH * 0.5, 2.3, collarH * 0.28, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // E. Gas inlet knob / nub on right side
+    ctx.beginPath();
+    ctx.rect(cx + collarW / 2, collarTopY + collarH * 0.38, 3.2, collarH * 0.28);
+    ctx.stroke();
+
+    // 3. Vertical Barrel / Chimney Tube
+    ctx.beginPath();
+    ctx.moveTo(cx - stemW / 2, collarTopY);
+    ctx.lineTo(cx - stemW / 2, nozzleBotY);
+    ctx.moveTo(cx + stemW / 2, collarTopY);
+    ctx.lineTo(cx + stemW / 2, nozzleBotY);
+    ctx.stroke();
+
+    // Left vertical tube highlight streak
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - stemW * 0.25, collarTopY - 2);
+    ctx.lineTo(cx - stemW * 0.25, nozzleBotY + 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.42)' : 'rgba(17, 24, 39, 0.38)';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.restore();
+
+    // 4. Top Nozzle Head (Cup & Orifice)
+    // A. Neck step under nozzle
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleBotY, stemW * 0.72, 2.2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // B. Nozzle cylinder sides
+    ctx.beginPath();
+    ctx.moveTo(cx - nozzleW / 2, nozzleBotY);
+    ctx.lineTo(cx - nozzleW / 2, nozzleTopY);
+    ctx.moveTo(cx + nozzleW / 2, nozzleBotY);
+    ctx.lineTo(cx + nozzleW / 2, nozzleTopY);
+    ctx.stroke();
+
+    // C. Top rim 2.5D open mouth ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleTopY, nozzleW / 2, 3.2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // D. Inner orifice depth ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleTopY, nozzleW / 2 - 2, 2.0, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // E. Left nozzle highlight streak
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - nozzleW * 0.3, nozzleBotY - 1);
+    ctx.lineTo(cx - nozzleW * 0.3, nozzleTopY + 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.42)' : 'rgba(17, 24, 39, 0.38)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
 
     ctx.restore();
   }
 
   // 2. Interactive UI Controls (ui / all)
   if (layer === 'all' || layer === 'ui') {
-    const btnY = baseY + baseH + 3;
+    const btnY = cyBot + baseRy + 4;
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(cx - 28, btnY, 56, 17, 8.5);
