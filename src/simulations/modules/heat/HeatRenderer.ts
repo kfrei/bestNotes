@@ -935,67 +935,10 @@ function renderBurner(
     ctx.stroke();
     ctx.restore();
 
-    // 5. Permanent Flame Toggle Button at bottom-right of cast-iron base
-    const { btnCenterX, btnCenterY, btnSize, btnHalf } = getBurnerActionButtonLocalPos(w, h);
+    // 5. Permanent Flame Toggle Icon at bottom-right of cast-iron base (no outer box/frame)
+    const { btnCenterX, btnCenterY } = getBurnerActionButtonLocalPos(w, h);
     const isOn = Boolean(state?.isOn);
-
-    const frameGrey = isDark
-      ? 'rgba(255, 255, 255, 0.22)'
-      : 'rgba(156, 163, 175, 0.68)'; // Soft, faint neutral whisper-grey
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
-    ctx.shadowBlur = 3;
-    ctx.shadowOffsetY = 1.0;
-
-    // Soft grey/beige squircle container
-    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.95)' : '#fdfbf7';
-    ctx.strokeStyle = isOn
-      ? 'rgba(234, 88, 12, 0.60)'
-      : frameGrey;
-    ctx.lineWidth = 1.1;
-
-    ctx.beginPath();
-    ctx.roundRect(btnCenterX - btnHalf, btnCenterY - btnHalf, btnSize, btnSize, 5.5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-
-    // Small monochrome flame icon inside squircle (same grey as frame when OFF)
-    ctx.save();
-    ctx.translate(btnCenterX, btnCenterY);
-
-    ctx.beginPath();
-    ctx.moveTo(0.4, -5.2);
-    // Right convex curve going down
-    ctx.bezierCurveTo(2.3, -2.4, 3.4, 0.4, 2.9, 2.6);
-    ctx.bezierCurveTo(2.4, 4.4, 0.2, 5.2, -1.8, 4.4);
-    // Bottom left curve
-    ctx.bezierCurveTo(-3.4, 3.6, -3.7, 2.0, -2.9, 0.6);
-    // Inward flick / notch on left
-    ctx.bezierCurveTo(-2.1, -0.3, -1.1, 0.0, -1.4, 1.3);
-    // Curving up to top tip
-    ctx.bezierCurveTo(-1.6, -1.0, -0.8, -3.0, 0.4, -5.2);
-    ctx.closePath();
-
-    if (isOn) {
-      ctx.fillStyle = 'rgba(251, 146, 60, 0.25)';
-      ctx.fill();
-      ctx.strokeStyle = '#ea580c';
-      ctx.lineWidth = 1.4;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.shadowColor = 'rgba(234, 88, 12, 0.45)';
-      ctx.shadowBlur = 3;
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = frameGrey;
-      ctx.lineWidth = 1.2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawFlameIcon(ctx, btnCenterX, btnCenterY, isDark, isOn);
 
     ctx.restore();
   }
@@ -1154,6 +1097,7 @@ export function triggerContainerFillFeedback(containerId: string, volumeMl: numb
 /**
  * Coordinate calculators for the permanent discreet action buttons (Droplet & Pencil)
  * positioned at the bottom-right of container glassware (beaker, wide-basin, flask).
+ * Shifted slightly more to the left ("και ισως λιγο πιο αριστερα").
  */
 export function getContainerActionButtonsLocalPos(w: number, h: number) {
   const pad = 8;
@@ -1161,13 +1105,14 @@ export function getContainerActionButtonsLocalPos(w: number, h: number) {
   const bh = h - pad * 2 - 6;
   const glassRightX = pad + bw;
   const glassBottomY = pad + 4 + bh;
-  const btnSize = 19;
+
+  const btnSize = 18;
   const btnHalf = btnSize / 2;
-  // Gap from glass wall: reduced to 7.5px ("λίγο πιο κοντά στο δοχείο .. λίγο")
-  const gap = 7.5;
+  // Gap from glass wall: reduced to 4.5px ("και ισως λιγο πιο αριστερα")
+  const gap = 4.5;
   const dropletX = glassRightX + gap + btnHalf;
   const dropletY = glassBottomY - btnHalf - 1;
-  // Pencil stacked vertically ABOVE the droplet ("φέρε το μολύβι πάνω από τη σταγόνα")
+  // Pencil stacked vertically ABOVE the droplet
   const pencilX = dropletX;
   const pencilY = dropletY - btnSize - 4;
   return { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX, glassBottomY };
@@ -1190,6 +1135,7 @@ export function getContainerActionButtonsWorldPos(obj: HeatObject) {
 /**
  * Coordinate calculators for the permanent flame toggle button
  * positioned at the bottom-right of the Bunsen burner cast-iron base.
+ * Shifted slightly more to the left ("και ισως λιγο πιο αριστερα").
  */
 export function getBurnerActionButtonLocalPos(w: number, h: number) {
   const cx = w / 2;
@@ -1198,8 +1144,8 @@ export function getBurnerActionButtonLocalPos(w: number, h: number) {
   const cyBot = groundY - 5.2;
   const btnSize = 19;
   const btnHalf = btnSize / 2;
-  // 7.5px gap to the right of the cast-iron base edge so it never touches or sticks to the base
-  const btnCenterX = cx + baseW / 2 + btnHalf + 7.5;
+  // Clean 4.5px gap to the right of the cast-iron base edge ("και ισως λιγο πιο αριστερα")
+  const btnCenterX = cx + baseW / 2 + btnHalf + 4.5;
   const btnCenterY = cyBot + 1;
   return { btnCenterX, btnCenterY, btnSize, btnHalf };
 }
@@ -1215,49 +1161,129 @@ export function getBurnerActionButtonWorldPos(obj: HeatObject) {
 }
 
 /**
- * Small monochrome droplet icon outline (no text).
+ * Standalone droplet icon: slightly larger, darker grey outline,
+ * very pale soft cyan inside when idle, more intense vibrant cyan when pressed/active.
+ * (No box, no frame, no white background).
  */
-function drawDropletIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+function drawDropletIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  isDark: boolean,
+  isIntense: boolean
+): void {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.beginPath();
   // Pointed top tip
-  ctx.moveTo(0, -4.8);
+  ctx.moveTo(0, -6.5);
   // Curve down right
-  ctx.bezierCurveTo(2.4, -1.8, 3.5, 0.8, 3.5, 2.2);
+  ctx.bezierCurveTo(3.2, -2.4, 4.8, 1.0, 4.8, 3.0);
   // Bottom rounded base
-  ctx.bezierCurveTo(3.5, 4.3, 2.0, 5.0, 0, 5.0);
-  ctx.bezierCurveTo(-2.0, 5.0, -3.5, 4.3, -3.5, 2.2);
+  ctx.bezierCurveTo(4.8, 5.8, 2.7, 6.8, 0, 6.8);
+  ctx.bezierCurveTo(-2.7, 6.8, -4.8, 5.8, -4.8, 3.0);
   // Curve up left to tip
-  ctx.bezierCurveTo(-3.5, 0.8, -2.4, -1.8, 0, -4.8);
+  ctx.bezierCurveTo(-4.8, 1.0, -3.2, -2.4, 0, -6.5);
   ctx.closePath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.25;
+
+  // Very pale soft cyan inside when idle, more intense vibrant cyan when pressed/active
+  ctx.fillStyle = isIntense
+    ? (isDark ? 'rgba(56, 189, 248, 0.70)' : 'rgba(56, 189, 248, 0.60)')
+    : (isDark ? 'rgba(56, 189, 248, 0.22)' : 'rgba(186, 230, 253, 0.45)');
+  ctx.fill();
+
+  // Slightly darker grey outline
+  ctx.strokeStyle = isIntense
+    ? (isDark ? '#38bdf8' : '#0284c7')
+    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.lineWidth = isIntense ? 1.45 : 1.3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  if (isIntense) {
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.40)';
+    ctx.shadowBlur = 3;
+  }
   ctx.stroke();
+
   ctx.restore();
 }
 
 /**
- * Small monochrome pencil icon outline in grey (on white/beige squircle background, not black).
+ * Standalone flame icon: slightly larger, darker grey outline,
+ * very pale soft pink inside when OFF, more intense vibrant pink/coral when ON/pressed.
+ * (No box, no frame, no white background).
  */
-function drawPencilIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+function drawFlameIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  isDark: boolean,
+  isOn: boolean
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  ctx.beginPath();
+  ctx.moveTo(0.5, -7.0);
+  // Right convex curve going down
+  ctx.bezierCurveTo(3.1, -3.2, 4.6, 0.5, 3.9, 3.5);
+  ctx.bezierCurveTo(3.2, 5.9, 0.3, 7.0, -2.4, 5.9);
+  // Bottom left curve
+  ctx.bezierCurveTo(-4.6, 4.9, -5.0, 2.7, -3.9, 0.8);
+  // Inward flick / notch on left
+  ctx.bezierCurveTo(-2.8, -0.4, -1.5, 0.0, -1.9, 1.8);
+  // Curving up to top tip
+  ctx.bezierCurveTo(-2.2, -1.3, -1.1, -4.0, 0.5, -7.0);
+  ctx.closePath();
+
+  // Very pale soft pink inside when OFF, more intense vibrant pink/coral when ON/pressed
+  ctx.fillStyle = isOn
+    ? (isDark ? 'rgba(251, 113, 133, 0.70)' : 'rgba(244, 63, 94, 0.65)')
+    : (isDark ? 'rgba(251, 113, 133, 0.22)' : 'rgba(254, 205, 211, 0.45)');
+  ctx.fill();
+
+  // Slightly darker grey outline when OFF, vivid rose/coral when ON
+  ctx.strokeStyle = isOn
+    ? (isDark ? '#fb7185' : '#e11d48')
+    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.lineWidth = isOn ? 1.5 : 1.3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (isOn) {
+    ctx.shadowColor = 'rgba(244, 63, 94, 0.45)';
+    ctx.shadowBlur = 4;
+  }
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/**
+ * Standalone pencil icon: slightly larger, darker grey outline.
+ * (No box, no frame, no white background).
+ */
+function drawPencilIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  isDark: boolean
+): void {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(-Math.PI / 4); // tilted 45 degrees
   ctx.beginPath();
   // Pencil body
-  ctx.rect(-1.7, -3.2, 3.4, 5.2);
+  ctx.rect(-2.2, -4.2, 4.4, 6.8);
   // Pointed lead tip
-  ctx.moveTo(-1.7, 2.0);
-  ctx.lineTo(0, 4.7);
-  ctx.lineTo(1.7, 2.0);
+  ctx.moveTo(-2.2, 2.6);
+  ctx.lineTo(0, 6.2);
+  ctx.lineTo(2.2, 2.6);
   // Eraser / ferrule division line
-  ctx.moveTo(-1.7, -1.6);
-  ctx.lineTo(1.7, -1.6);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.15;
+  ctx.moveTo(-2.2, -2.1);
+  ctx.lineTo(2.2, -2.1);
+
+  ctx.strokeStyle = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+  ctx.lineWidth = 1.3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.stroke();
@@ -1265,117 +1291,84 @@ function drawPencilIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, c
 }
 
 /**
- * Renders the 2 permanent discreet monochrome action buttons (Droplet & Pencil)
+ * Renders the 2 permanent discreet standalone icons (Droplet & Pencil)
  * and the ephemeral 1.5s fade-out volume badge for containers.
+ * NO outer frame boxes, NO white background!
  */
 function renderContainerActionButtons(
   ctx: CanvasRenderingContext2D,
   objId: string | undefined,
   w: number,
   h: number,
-  isDark: boolean
+  isDark: boolean,
+  state?: HeatContainerState
 ): void {
-  const { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX } = getContainerActionButtonsLocalPos(w, h);
+  const { dropletX, dropletY, pencilX, pencilY, btnHalf, glassRightX } = getContainerActionButtonsLocalPos(w, h);
 
-  const frameGrey = isDark
-    ? 'rgba(255, 255, 255, 0.22)'
-    : 'rgba(156, 163, 175, 0.68)'; // Soft, faint neutral whisper-grey (matches burner flame button)
+  const feedback = objId ? containerFillFeedbackMap.get(objId) : undefined;
+  const isFilled = Boolean(state && state.volumeMl > 0);
+  const isDropletIntense = isFilled || Boolean(feedback);
 
-  const iconGrey = isDark
-    ? 'rgba(255, 255, 255, 0.65)'
-    : 'rgba(100, 116, 139, 0.88)'; // Soft neutral grey for icons
+  const frameGrey = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(156, 163, 175, 0.68)';
 
-  const bgFill = isDark ? 'rgba(30, 41, 59, 0.95)' : '#fdfbf7';
+  // 1. Standalone Droplet Icon (very pale soft cyan inside when empty, intense cyan when filled/pressed)
+  drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense);
 
-  // 1. Droplet Squircle Button (Fill cycle)
-  ctx.save();
-  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
-  ctx.shadowBlur = 3;
-  ctx.shadowOffsetY = 1.0;
-  ctx.fillStyle = bgFill;
-  ctx.strokeStyle = frameGrey;
-  ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  ctx.roundRect(dropletX - btnHalf, dropletY - btnHalf, btnSize, btnSize, 5.5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  // Droplet icon inside (monochrome outline only, NO text)
-  drawDropletIcon(ctx, dropletX, dropletY, iconGrey);
-
-  // 2. Pencil Squircle Button (Settings)
-  ctx.save();
-  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
-  ctx.shadowBlur = 3;
-  ctx.shadowOffsetY = 1.0;
-  ctx.fillStyle = bgFill;
-  ctx.strokeStyle = frameGrey;
-  ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  ctx.roundRect(pencilX - btnHalf, pencilY - btnHalf, btnSize, btnSize, 5.5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  // Pencil icon inside (grey on soft white/beige background)
-  drawPencilIcon(ctx, pencilX, pencilY, iconGrey);
+  // 2. Standalone Pencil Icon (darker grey line art)
+  drawPencilIcon(ctx, pencilX, pencilY, isDark);
 
   // 3. Ephemeral 1.5s Fade-out Volume Feedback Badge
-  if (objId) {
-    const feedback = containerFillFeedbackMap.get(objId);
-    if (feedback) {
-      const now = performance.now();
-      const elapsed = now - feedback.startTime;
-      const totalDuration = 1500;
-      const fadeDuration = 450;
+  if (objId && feedback) {
+    const now = performance.now();
+    const elapsed = now - feedback.startTime;
+    const totalDuration = 1500;
+    const fadeDuration = 450;
 
-      if (elapsed >= totalDuration) {
-        containerFillFeedbackMap.delete(objId);
-      } else {
-        let alpha = 1.0;
-        if (elapsed > totalDuration - fadeDuration) {
-          alpha = Math.max(0, (totalDuration - elapsed) / fadeDuration);
-        }
-        const floatUp = Math.min(5, (elapsed / totalDuration) * 5);
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-
-        const badgeText = feedback.volumeMl > 0 ? `💧 ${feedback.volumeMl} ml` : '💧 Άδειο (0 ml)';
-
-        ctx.font = 'bold 9.5px system-ui, sans-serif';
-        const textMetrics = ctx.measureText(badgeText);
-        const badgeW = textMetrics.width + 16;
-        const badgeH = 19;
-        let badgeCenterX = dropletX;
-        const minCenterX = glassRightX + 4 + badgeW / 2;
-        if (badgeCenterX < minCenterX) {
-          badgeCenterX = minCenterX;
-        }
-        const badgeCenterY = pencilY - btnHalf - 12 - floatUp;
-
-        // Shadow & pill container
-        ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 1.2;
-
-        ctx.beginPath();
-        ctx.roundRect(badgeCenterX - badgeW / 2, badgeCenterY - badgeH / 2, badgeW, badgeH, badgeH / 2);
-        ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.94)' : 'rgba(255, 255, 255, 0.96)';
-        ctx.fill();
-        ctx.strokeStyle = feedback.volumeMl > 0 ? 'rgba(59, 130, 246, 0.65)' : frameGrey;
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-
-        ctx.shadowColor = 'transparent';
-        ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(badgeText, badgeCenterX, badgeCenterY + 0.5);
-
-        ctx.restore();
+    if (elapsed >= totalDuration) {
+      containerFillFeedbackMap.delete(objId);
+    } else {
+      let alpha = 1.0;
+      if (elapsed > totalDuration - fadeDuration) {
+        alpha = Math.max(0, (totalDuration - elapsed) / fadeDuration);
       }
+      const floatUp = Math.min(5, (elapsed / totalDuration) * 5);
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      const badgeText = feedback.volumeMl > 0 ? `💧 ${feedback.volumeMl} ml` : '💧 Άδειο (0 ml)';
+
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      const textMetrics = ctx.measureText(badgeText);
+      const badgeW = textMetrics.width + 16;
+      const badgeH = 19;
+      let badgeCenterX = dropletX;
+      const minCenterX = glassRightX + 4 + badgeW / 2;
+      if (badgeCenterX < minCenterX) {
+        badgeCenterX = minCenterX;
+      }
+      const badgeCenterY = pencilY - btnHalf - 12 - floatUp;
+
+      // Shadow & pill container
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1.2;
+
+      ctx.beginPath();
+      ctx.roundRect(badgeCenterX - badgeW / 2, badgeCenterY - badgeH / 2, badgeW, badgeH, badgeH / 2);
+      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.94)' : 'rgba(255, 255, 255, 0.96)';
+      ctx.fill();
+      ctx.strokeStyle = feedback.volumeMl > 0 ? 'rgba(59, 130, 246, 0.65)' : frameGrey;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, badgeCenterX, badgeCenterY + 0.5);
+
+      ctx.restore();
     }
   }
 }
@@ -1548,7 +1541,7 @@ function renderBeaker(
 
   // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
   }
 }
 
@@ -1685,7 +1678,7 @@ function renderWideBasin(
 
   // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
   }
 }
 
@@ -1835,7 +1828,7 @@ function renderFlask(
 
   // 2. Permanent Discreet Action Buttons (Droplet & Pencil) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark);
+    renderContainerActionButtons(ctx, objId, w, h, isDark, state);
   }
 }
 
