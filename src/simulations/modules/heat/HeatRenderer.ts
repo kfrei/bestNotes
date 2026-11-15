@@ -1461,7 +1461,6 @@ function renderTripod(
   const ceramicScale = 0.38;
   const ceramicRx = collarRx * ceramicScale;
   const ceramicRy = collarRy * ceramicScale;
-  const heatFraction = Math.max(0, Math.min(1, (gauzeTempC - 20) / 450));
 
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
@@ -1490,7 +1489,8 @@ function renderTripod(
       ctx.stroke();
       ctx.restore();
 
-      // 2. Wire Gauze mesh crosshatch & Central ceramic disc (Top/Back half: y <= collarCy + 0.5)
+      // 2. Wire Gauze mesh crosshatch (Top/Back half: y <= collarCy + 0.5)
+      // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
       ctx.save();
       if (part === 'back') {
         ctx.beginPath();
@@ -1500,7 +1500,8 @@ function renderTripod(
 
       ctx.beginPath();
       ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-      ctx.clip();
+      ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+      ctx.clip('evenodd');
 
       ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
       ctx.lineWidth = 0.8;
@@ -1517,26 +1518,20 @@ function renderTripod(
         ctx.lineTo(cx + gauzeW / 2, y);
         ctx.stroke();
       }
+      ctx.restore(); // restore from gauze donut clip and back clip
 
-      // 3. Central ceramic disc
+      // 3. Central Opening Inner Ring (Back Arc: Math.PI to Math.PI * 2) - NO FILL (100% transparent)
+      ctx.save();
       ctx.beginPath();
-      ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
-      if (heatFraction > 0.05) {
-        const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
-        discGlow.addColorStop(0, '#fef08a');
-        discGlow.addColorStop(0.4, '#f97316');
-        discGlow.addColorStop(0.85, '#dc2626');
-        discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
-        ctx.fillStyle = discGlow;
+      if (part === 'back') {
+        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, Math.PI, Math.PI * 2);
       } else {
-        ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
+        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
       }
-      ctx.fill();
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.3;
       ctx.stroke();
-
-      ctx.restore(); // restore from gauze clip and back clip
+      ctx.restore();
 
       // 4. Back Arc of Circular Top Collar Ring
       ctx.save();
@@ -1559,7 +1554,8 @@ function renderTripod(
     // -------------------------------------------------------------------------
     if (part === 'all' || part === 'front') {
       if (part === 'front') {
-        // Wire Gauze mesh crosshatch & Ceramic disc (Bottom/Front half: y >= collarCy - 0.5)
+        // Wire Gauze mesh crosshatch (Bottom/Front half: y >= collarCy - 0.5)
+        // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
         ctx.save();
         ctx.beginPath();
         ctx.rect(-w, collarCy - 0.5, w * 3, h * 2);
@@ -1567,7 +1563,8 @@ function renderTripod(
 
         ctx.beginPath();
         ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-        ctx.clip();
+        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+        ctx.clip('evenodd');
 
         ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
         ctx.lineWidth = 0.8;
@@ -1584,26 +1581,16 @@ function renderTripod(
           ctx.lineTo(cx + gauzeW / 2, y);
           ctx.stroke();
         }
+        ctx.restore(); // restore from front gauze donut clip
 
-        // Central ceramic disc
+        // Central Opening Inner Ring (Front Arc: 0 to Math.PI) - NO FILL (100% transparent)
+        ctx.save();
         ctx.beginPath();
-        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
-        if (heatFraction > 0.05) {
-          const discGlow = ctx.createRadialGradient(cx, collarCy, 2, cx, collarCy, ceramicRx);
-          discGlow.addColorStop(0, '#fef08a');
-          discGlow.addColorStop(0.4, '#f97316');
-          discGlow.addColorStop(0.85, '#dc2626');
-          discGlow.addColorStop(1, 'rgba(185, 28, 28, 0.4)');
-          ctx.fillStyle = discGlow;
-        } else {
-          ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.75)' : 'rgba(255, 255, 255, 0.85)';
-        }
-        ctx.fill();
+        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI);
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.3;
         ctx.stroke();
-
-        ctx.restore(); // restore from front gauze clip
+        ctx.restore();
 
         // Front Arc of Circular Top Collar Ring (from 0 to PI)
         ctx.save();
