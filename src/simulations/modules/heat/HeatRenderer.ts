@@ -129,18 +129,59 @@ export function renderHeatSimulation(
       case 'tripod':
         renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer, obj.strokeColor);
         break;
-      case 'beaker':
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
+      case 'beaker': {
+        const parentBasin = sim.objects.find(
+          (b) =>
+            b.type === 'wide-basin' &&
+            obj.x >= b.x - 20 &&
+            obj.x + obj.width <= b.x + b.width + 20 &&
+            obj.y + obj.height >= b.y + 15
+        );
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin);
         break;
+      }
       case 'wide-basin':
         renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
         break;
-      case 'flask':
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
+      case 'flask': {
+        const parentBasin = sim.objects.find(
+          (b) =>
+            b.type === 'wide-basin' &&
+            obj.x >= b.x - 20 &&
+            obj.x + obj.width <= b.x + b.width + 20 &&
+            obj.y + obj.height >= b.y + 15
+        );
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y, parentBasin);
         break;
-      case 'thermometer':
-        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected, layer, obj.strokeColor);
+      }
+      case 'thermometer': {
+        const thermCx = obj.x + obj.width / 2;
+        const thermBotY = obj.y + obj.height - 4;
+        const dipped = sim.objects.find((c) => {
+          if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
+          if (!c.containerState || c.containerState.volumeMl <= 0) return false;
+          return (
+            thermCx >= c.x - 4 &&
+            thermCx <= c.x + c.width + 4 &&
+            thermBotY >= c.y + 10 &&
+            obj.y <= c.y + c.height
+          );
+        });
+        renderThermometer(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.thermometerState,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          dipped,
+          obj.x,
+          obj.y
+        );
         break;
+      }
     }
 
     // Render Unified BestNotes Selection Frame if single object selected (in 'ui' or 'all' layer)
@@ -1328,7 +1369,8 @@ function renderBeaker(
   customColor?: string,
   objId?: string,
   objX?: number,
-  objY?: number
+  objY?: number,
+  parentBasin?: HeatObject
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1353,6 +1395,25 @@ function renderBeaker(
   // 1. Physical Beaker & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
+
+    // 0. Solid/Translucent Glass Silhouette Backing
+    // Softly masks background elements behind the beaker (e.g. tripod wire gauze mesh, ceramic disc, basin rear rim)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x - spoutW, y + 1.5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + bw, y);
+    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x + bw, y + bh - cornerR);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
+    ctx.lineTo(x + cornerR, y + bh);
+    ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+    ctx.lineTo(x, y + 13);
+    ctx.lineTo(x - spoutW, y + 1.5);
+    ctx.closePath();
+    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    ctx.fill();
+    ctx.restore();
 
     // Draw Liquid Fill if volume > 0 - Dynamic wave/slosh surface + perfectly filling curved base
     if (vol > 0 && liquidH > 2) {
@@ -1442,6 +1503,40 @@ function renderBeaker(
     ctx.fillStyle = reflectGrad;
     ctx.fillRect(x + bw - 12, y + beadH + 2, 9, bh - beadH - cornerR - 2);
 
+    // If submerged inside a wide-basin water bath, apply water refraction overlay on submerged base
+    if (parentBasin && parentBasin.containerState && parentBasin.containerState.volumeMl > 0) {
+      const bcs = parentBasin.containerState;
+      const bFillRatio = Math.max(0, Math.min(1.0, bcs.volumeMl / bcs.capacityMl));
+      const bPad = 8;
+      const bBh = parentBasin.height - bPad * 2 - 6;
+      const bHeadspace = (0.15 * bBh + 8.5) * 0.40;
+      const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
+      const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
+      const basinWaterGlobalY = parentBasin.y + bLiquidTopY;
+      const basinWaterLocalY = basinWaterGlobalY - (objY ?? 0);
+
+      if (basinWaterLocalY < y + bh) {
+        ctx.save();
+        ctx.beginPath();
+        const subY = Math.max(y, basinWaterLocalY);
+        ctx.moveTo(x - 2, subY);
+        ctx.lineTo(x + bw + 2, subY);
+        ctx.lineTo(x + bw + 2, y + bh - cornerR);
+        ctx.quadraticCurveTo(x + bw + 2, y + bh + 1, x + bw - cornerR, y + bh + 1);
+        ctx.lineTo(x + cornerR, y + bh + 1);
+        ctx.quadraticCurveTo(x - 2, y + bh + 1, x - 2, y + bh - cornerR);
+        ctx.closePath();
+        ctx.fillStyle =
+          bcs.liquidType === 'oil'
+            ? 'rgba(163, 230, 53, 0.22)'
+            : bcs.liquidType === 'milk'
+            ? 'rgba(255, 255, 255, 0.45)'
+            : 'rgba(56, 189, 248, 0.22)';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     ctx.restore();
   }
 
@@ -1492,6 +1587,24 @@ function renderWideBasin(
   // 1. Physical Basin Sketch & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
+
+    // 0. Solid/Translucent Glass Silhouette Backing
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x - spoutW, y + 1.5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + bw, y);
+    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x + bw, y + bh - cornerR);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
+    ctx.lineTo(x + cornerR, y + bh);
+    ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+    ctx.lineTo(x, y + 13);
+    ctx.lineTo(x - spoutW, y + 1.5);
+    ctx.closePath();
+    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    ctx.fill();
+    ctx.restore();
 
     // Liquid Fill - Dynamic wave/slosh surface + rounded base (fills 100% with no gaps)
     if (vol > 0 && liquidH > 2) {
@@ -1602,7 +1715,8 @@ function renderFlask(
   customColor?: string,
   objId?: string,
   objX?: number,
-  objY?: number
+  objY?: number,
+  parentBasin?: HeatObject
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1631,6 +1745,22 @@ function renderFlask(
   // 1. Physical Flask & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
+
+    // 0. Solid/Translucent Glass Silhouette Backing
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx + neckW / 2, y + collarH);
+    ctx.lineTo(cx + neckW / 2, y + neckH);
+    ctx.lineTo(cx + baseHalfW, y + bh - cornerR);
+    ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh);
+    ctx.lineTo(cx - baseHalfW + cornerR, y + bh);
+    ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, y + bh - cornerR);
+    ctx.lineTo(cx - neckW / 2, y + neckH);
+    ctx.lineTo(cx - neckW / 2, y + collarH);
+    ctx.closePath();
+    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    ctx.fill();
+    ctx.restore();
 
     const coneTopY = y + neckH;
     const coneBotY = y + bh - cornerR;
@@ -1748,7 +1878,10 @@ function renderThermometer(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  dippedContainer?: HeatObject,
+  _thermX?: number,
+  thermY?: number
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -1763,6 +1896,23 @@ function renderThermometer(
   const liquidTopY = botY - stemH * tempFrac;
   const liquidColor = getThermometerColor(temp);
 
+  // Compute depth & submerged level if thermometer is dipped into a liquid container
+  let submergedLocalY: number | null = null;
+  let dippedLiquidType: LiquidType = 'water';
+  if (dippedContainer && dippedContainer.containerState && dippedContainer.containerState.volumeMl > 0) {
+    const cs = dippedContainer.containerState;
+    dippedLiquidType = cs.liquidType || 'water';
+    const fillRatio = Math.max(0, Math.min(1.0, cs.volumeMl / cs.capacityMl));
+    const cPad = 8;
+    const cBh = dippedContainer.height - cPad * 2 - 6;
+    const isBasin = dippedContainer.type === 'wide-basin';
+    const cHeadspace = isBasin ? (0.15 * cBh + 8.5) * 0.40 : (0.14 * cBh + 8.6) * 0.40;
+    const cLiquidH = Math.max(0, (cBh - cHeadspace) * fillRatio);
+    const cLiquidTopY = cPad + 4 + cBh - cLiquidH;
+    const containerLiquidTopGlobalY = dippedContainer.y + cLiquidTopY;
+    submergedLocalY = containerLiquidTopGlobalY - (thermY ?? 0);
+  }
+
   // 1. Physical Thermometer Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
@@ -1770,7 +1920,7 @@ function renderThermometer(
     // Glass Outer Stem
     ctx.beginPath();
     ctx.roundRect(cx - stemW / 2, topY, stemW, stemH, stemW / 2);
-    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.4)' : 'rgba(255, 255, 255, 0.55)';
+    ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.4)' : 'rgba(255, 255, 255, 0.65)';
     ctx.fill();
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 1.6;
@@ -1809,25 +1959,56 @@ function renderThermometer(
     }
 
     // Calibration Tick Marks (0 to 100 °C)
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 0.9;
     for (let t = 0; t <= 100; t += 10) {
       const ty = botY - stemH * (t / 100);
+      const isSubmerged = submergedLocalY !== null && ty >= submergedLocalY;
       const isMajor = t === 0 || t === 50 || t === 100;
       const tickLen = isMajor ? 6 : 3.5;
 
       ctx.beginPath();
       ctx.moveTo(cx + stemW / 2, ty);
       ctx.lineTo(cx + stemW / 2 + tickLen, ty);
+      ctx.strokeStyle = isSubmerged
+        ? (isDark ? 'rgba(248, 250, 252, 0.22)' : 'rgba(17, 24, 39, 0.24)')
+        : strokeColor;
+      ctx.lineWidth = isSubmerged ? 0.7 : 0.9;
       ctx.stroke();
 
       if (isMajor) {
         // Soft gentle grey for 0, 50, 100 scale labels
-        ctx.fillStyle = isDark ? 'rgba(248, 250, 252, 0.50)' : '#94a3b8';
+        ctx.fillStyle = isSubmerged
+          ? (isDark ? 'rgba(248, 250, 252, 0.20)' : 'rgba(148, 163, 184, 0.35)')
+          : (isDark ? 'rgba(248, 250, 252, 0.50)' : '#94a3b8');
         ctx.font = 'bold 7.5px system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`${t}`, cx + stemW / 2 + 7.5, ty + 2.5);
       }
+    }
+
+    // If submerged in liquid, apply soft immersion wash and soften the outer glass & bulb stroke
+    if (submergedLocalY !== null && submergedLocalY < botY + bulbR) {
+      const subTop = Math.max(topY, submergedLocalY);
+      const subH = (botY + bulbR + 4) - subTop;
+
+      ctx.save();
+      // 1. Soft immersion veil over the submerged portion of the thermometer
+      ctx.beginPath();
+      ctx.roundRect(cx - bulbR - 4, subTop, (bulbR + 4) * 2, subH, 6);
+      ctx.fillStyle =
+        dippedLiquidType === 'oil'
+          ? 'rgba(163, 230, 53, 0.28)'
+          : dippedLiquidType === 'milk'
+          ? 'rgba(255, 255, 255, 0.55)'
+          : 'rgba(56, 189, 248, 0.28)'; // water
+      ctx.fill();
+
+      // 2. Soften the harsh black outer stroke underwater to simulate light refraction
+      ctx.strokeStyle = isDark
+        ? 'rgba(30, 41, 59, 0.55)'
+        : 'rgba(255, 255, 255, 0.50)';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+      ctx.restore();
     }
 
     ctx.restore();
