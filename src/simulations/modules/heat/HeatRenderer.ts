@@ -1661,7 +1661,8 @@ function drawDropletIcon(
   cx: number,
   cy: number,
   isDark: boolean,
-  isIntense: boolean
+  isIntense: boolean,
+  liquidType: LiquidType = 'water'
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
@@ -1677,21 +1678,52 @@ function drawDropletIcon(
   ctx.bezierCurveTo(-4.8, 1.0, -3.2, -2.4, 0, -6.5);
   ctx.closePath();
 
-  // Very pale soft cyan inside when idle, more intense vibrant cyan when pressed/active
-  ctx.fillStyle = isIntense
-    ? (isDark ? 'rgba(56, 189, 248, 0.70)' : 'rgba(56, 189, 248, 0.60)')
-    : (isDark ? 'rgba(56, 189, 248, 0.22)' : 'rgba(186, 230, 253, 0.45)');
+  // Color matches the liquid contents of the container, slightly softer/fainter ("ισως λιγο πιο αχνο")
+  let fillCol: string;
+  let strokeCol: string;
+  let shadowCol = 'transparent';
+
+  if (liquidType === 'oil') {
+    // Olive Oil: Golden-lime green hue
+    if (isIntense) {
+      fillCol = isDark ? 'rgba(163, 230, 53, 0.35)' : 'rgba(190, 242, 100, 0.45)';
+      strokeCol = isDark ? '#a3e635' : 'rgba(101, 163, 13, 0.88)';
+      shadowCol = 'rgba(132, 204, 22, 0.25)';
+    } else {
+      fillCol = isDark ? 'rgba(163, 230, 53, 0.12)' : 'rgba(217, 249, 157, 0.22)';
+      strokeCol = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+    }
+  } else if (liquidType === 'milk') {
+    // Milk: Soft slate-grey stroke with milky off-white fill
+    if (isIntense) {
+      fillCol = isDark ? 'rgba(226, 232, 240, 0.40)' : 'rgba(241, 245, 249, 0.80)';
+      strokeCol = isDark ? 'rgba(203, 213, 225, 0.90)' : 'rgba(100, 116, 139, 0.82)';
+      shadowCol = 'rgba(148, 163, 184, 0.20)';
+    } else {
+      fillCol = isDark ? 'rgba(226, 232, 240, 0.12)' : 'rgba(241, 245, 249, 0.30)';
+      strokeCol = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+    }
+  } else {
+    // Water: Soft sky blue / cyan, paler and more delicate than previous dark blue
+    if (isIntense) {
+      fillCol = isDark ? 'rgba(56, 189, 248, 0.40)' : 'rgba(125, 211, 252, 0.42)';
+      strokeCol = isDark ? '#38bdf8' : 'rgba(2, 132, 199, 0.82)';
+      shadowCol = 'rgba(56, 189, 248, 0.25)';
+    } else {
+      fillCol = isDark ? 'rgba(56, 189, 248, 0.12)' : 'rgba(186, 230, 253, 0.22)';
+      strokeCol = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+    }
+  }
+
+  ctx.fillStyle = fillCol;
   ctx.fill();
 
-  // Slightly darker grey outline
-  ctx.strokeStyle = isIntense
-    ? (isDark ? '#38bdf8' : '#0284c7')
-    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
-  ctx.lineWidth = isIntense ? 1.45 : 1.3;
+  ctx.strokeStyle = strokeCol;
+  ctx.lineWidth = isIntense ? 1.4 : 1.25;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (isIntense) {
-    ctx.shadowColor = 'rgba(56, 189, 248, 0.40)';
+  if (isIntense && shadowCol !== 'transparent') {
+    ctx.shadowColor = shadowCol;
     ctx.shadowBlur = 3;
   }
   ctx.stroke();
@@ -1849,11 +1881,12 @@ function renderContainerActionButtons(
   const feedback = objId ? containerFillFeedbackMap.get(objId) : undefined;
   const isFilled = Boolean(state && state.volumeMl > 0);
   const isDropletIntense = isFilled || Boolean(feedback);
+  const liquidType: LiquidType = state?.liquidType || 'water';
 
   const frameGrey = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(156, 163, 175, 0.68)';
 
-  // 1. Standalone Droplet Icon (very pale soft cyan inside when empty, intense cyan when filled/pressed)
-  drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense);
+  // 1. Standalone Droplet Icon (matches liquid contents, soft and faint)
+  drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense, liquidType);
 
   // 2. Standalone Pencil Icon (darker grey line art)
   drawPencilIcon(ctx, pencilX, pencilY, isDark);
