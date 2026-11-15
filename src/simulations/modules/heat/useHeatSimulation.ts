@@ -69,7 +69,12 @@ export function useHeatSimulation(
   useEffect(() => {
     if (activeHeatSim) {
       if (!liveSimRef.current || liveSimRef.current.id !== activeHeatSim.id) {
-        liveSimRef.current = JSON.parse(JSON.stringify(activeHeatSim));
+        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(activeHeatSim));
+        cloned.isRunning = false;
+        liveSimRef.current = cloned;
+        if (activeHeatSim.isRunning) {
+          updateActiveHeatSim((prev) => ({ ...prev, isRunning: false }));
+        }
       } else {
         liveSimRef.current.name = activeHeatSim.name;
         liveSimRef.current.isRunning = activeHeatSim.isRunning;
@@ -363,7 +368,7 @@ export function useHeatSimulation(
       const nextOn = !targetBurner?.burnerState?.isOn;
       const next = {
         ...cur,
-        isRunning: nextOn ? true : cur.isRunning,
+        isRunning: cur.isRunning,
         objects: cur.objects.map((obj) => {
           if (obj.type === 'burner' && obj.burnerState && (!targetId || obj.id === targetId)) {
             return {

@@ -60,7 +60,7 @@ export function calculateEquilibriumTemperature(
  * Advances physics of all heat objects by dt (seconds).
  */
 export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfig {
-  if (!sim.isRunning && dt <= 0) return sim;
+  if (!sim.isRunning || dt <= 0) return sim;
 
   const timeStep = Math.min(0.1, Math.max(0.001, dt));
   const objects = sim.objects.map((obj) => ({ ...obj }));

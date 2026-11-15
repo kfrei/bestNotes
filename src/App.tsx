@@ -63499,9 +63499,9 @@ export default function App() {
                     onToggleGraph={heatSim.toggleGraph}
                     showStopwatch={showStopwatch}
                     onToggleStopwatch={() => {
-                      if (!showStopwatch && heatSim.activeHeatSim) {
-                        setStopwatchRunning(heatSim.activeHeatSim.isRunning);
-                        setStopwatchElapsedMs(Math.round((heatSim.activeHeatSim.elapsedSec || 0) * 1000));
+                      if (!showStopwatch) {
+                        setStopwatchRunning(heatSim.activeHeatSim?.isRunning ?? false);
+                        setStopwatchElapsedMs(Math.round((heatSim.activeHeatSim?.elapsedSec || 0) * 1000));
                       }
                       toggleStopwatchWithSmartPlacement();
                     }}
