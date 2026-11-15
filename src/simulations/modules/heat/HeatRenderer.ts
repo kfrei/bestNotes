@@ -2,26 +2,26 @@
  * 2.5D Monochrome Sketch Vector Renderer for the Heat & Thermodynamics Simulation.
  * BestNotes / ExplainBoards.
  *
- * Implements clean hand-drawn monochrome sketch line-art matching notebook ink sketches:
- * 1. Bunsen Burner (monochrome flared base with dual rim, chimney with air collar, sketched line-art flame)
+ * Implements:
+ * 1. Bunsen Burner (organic swaying & breathing flame inspired by CodePen YLGjvx, circular glow, collar with air slot)
  * 2. Laboratory Tripod (line-art cast legs, wire gauze crosshatch, central ceramic disc)
- * 3. Borosilicate Glass Beaker (pouring spout, 2.5D elliptical rim & bottom depth curve, graduation marks)
- * 4. Wide Basin / Water Bath (Υδατόλουτρο, supports nested vessels & thermal equilibrium)
- * 5. Erlenmeyer Flask (narrow neck, conical body, 2.5D bottom curve, graduated marks)
+ * 3. Borosilicate Glass Beaker (plain clean glass with NO measurement lines, 2.5D elliptical rim & bottom depth curve)
+ * 4. Wide Basin / Water Bath (Υδατόλουτρο, plain glass with NO measurement lines)
+ * 5. Erlenmeyer Flask (narrow neck, conical body, plain glass with NO measurement lines)
  * 6. Precision Laboratory Thermometer (0-100°C column, tick marks, digital badge)
- * 7. Quick "Γέμισμα" (Fill) Pill Button & "✎" Edit Pencil Badge for all containers
+ * 7. Unified BestNotes Selection Frame: 4 corner scale handles, 4 side aspect-ratio handles, floating pill bar with red 🗑️ trash button
  * 8. Gorgeous Liquid Depth Gradients (multi-stop translucent surface to rich depth, 3D meniscus)
- * 9. Layer separation: 'apparatus' on paper under pencil strokes, 'ui' for controls & graph on top
+ * 9. Temperature - Time Diagram with Greek title "Διάγραμμα Θερμοκρασίας - Χρόνου (θ - t)" and θ(°C) axis
  */
 
 import {
   HeatBurnerState,
   HeatContainerState,
   HeatObject,
+  HeatObjectType,
   HeatSimConfig,
   HeatThermometerState,
   LiquidType,
-  LIQUID_REGISTRY,
 } from './types';
 
 // Helper: interpolate between two hex colors
@@ -60,14 +60,11 @@ export interface RenderHeatSimulationOptions {
   scale?: number;
   hoveredObjectId?: string | null;
   layer?: 'all' | 'apparatus' | 'ui';
+  isSelectActive?: boolean;
 }
 
 /**
  * Draws the Heat Simulation on a 2D canvas.
- * Supports rendering:
- * - 'apparatus': draws physical objects on paper (under pencil strokes so users can color them)
- * - 'ui': draws interactive buttons ([💧 Γέμισμα], [✎]) and dynamic T-t graph
- * - 'all': draws both (default)
  */
 export function renderHeatSimulation(
   ctx: CanvasRenderingContext2D,
@@ -76,6 +73,7 @@ export function renderHeatSimulation(
 ): void {
   const isDark = Boolean(options?.isDark);
   const layer = options?.layer || 'all';
+  const isSelectActive = options?.isSelectActive !== false;
 
   ctx.save();
 
@@ -102,27 +100,40 @@ export function renderHeatSimulation(
     ctx.translate(obj.x, obj.y);
 
     const isHovered = options?.hoveredObjectId === obj.id;
-    const isSelected = sim.selectedObjectId === obj.id;
+    const isSelected = isSelectActive && sim.selectedObjectId === obj.id;
 
     switch (obj.type) {
       case 'burner':
-        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected || isHovered, layer);
+        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected, layer);
         break;
       case 'tripod':
-        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected || isHovered, layer);
+        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer);
         break;
       case 'beaker':
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
         break;
       case 'wide-basin':
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
+        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
         break;
       case 'flask':
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected || isHovered, layer);
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
         break;
       case 'thermometer':
-        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected || isHovered, layer);
+        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected, layer);
         break;
+    }
+
+    // Render Unified BestNotes Selection Frame if selected (in 'ui' or 'all' layer)
+    if (isSelected && (layer === 'all' || layer === 'ui')) {
+      renderObjectSelectionFrame(
+        ctx,
+        obj.width,
+        obj.height,
+        obj.type,
+        obj.containerState?.volumeMl,
+        obj.burnerState?.isOn,
+        isDark
+      );
     }
 
     ctx.restore();
@@ -131,6 +142,181 @@ export function renderHeatSimulation(
   // Render Dynamic T-t Graph if enabled (only in 'ui' or 'all' layer)
   if (sim.graph.visible && (layer === 'all' || layer === 'ui')) {
     renderThermalGraph(ctx, sim, isDark);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Unified BestNotes Selection Bounding Box & Action Pill Bar
+ * Provides:
+ * - 4 Corner Handles (●) for proportional scaling
+ * - 4 Side Midpoint Handles (●) for aspect-ratio stretch (αναλογία)
+ * - Floating Action Bar with Red Trash Can Button (🗑️) + Quick Action Pills
+ */
+export function renderObjectSelectionFrame(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  type: HeatObjectType,
+  volumeMl?: number,
+  burnerOn?: boolean,
+  isDark?: boolean
+): void {
+  const pad = 8;
+  const minX = -pad;
+  const minY = -pad;
+  const maxX = w + pad;
+  const maxY = h + pad;
+  const cx = w / 2;
+  const boxW = maxX - minX;
+  const boxH = maxY - minY;
+
+  ctx.save();
+
+  // 1. Dashed Selection Border (BestNotes style)
+  ctx.strokeStyle = isDark ? '#38bdf8' : '#2563eb';
+  ctx.lineWidth = 1.45;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(minX, minY, boxW, boxH);
+  ctx.setLineDash([]);
+
+  // 2. 4 Corner Proportional Resize Handles (smooth slate dots with white ring)
+  const cornerR = 5.0;
+  const corners = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+  for (const c of corners) {
+    ctx.fillStyle = '#64748b';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, cornerR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // 3. 4 Side Midpoint Stretch Handles (Orange #f97316 dots for aspect-ratio stretch)
+  const sideR = 5.2;
+  const sideMidpoints = [
+    { x: cx, y: minY }, // Top (height stretch)
+    { x: maxX, y: h / 2 }, // Right (width stretch)
+    { x: cx, y: maxY }, // Bottom (height stretch)
+    { x: minX, y: h / 2 }, // Left (width stretch)
+  ];
+  for (const m of sideMidpoints) {
+    ctx.fillStyle = '#f97316';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, sideR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // 4. Floating Action Bar (Pill Handles) positioned cleanly above or below the frame
+  const pillY = minY < 45 ? maxY + 24 : minY - 24;
+  const hasContainer = type === 'beaker' || type === 'wide-basin' || type === 'flask';
+  const hasBurner = type === 'burner';
+
+  // Trash Can Button (Red Circle with white trash icon)
+  const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1.5;
+  ctx.fillStyle = '#ef4444';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.arc(trashX, pillY, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // White Trash Can Icon
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(trashX - 5, pillY - 3.5);
+  ctx.lineTo(trashX + 5, pillY - 3.5);
+  ctx.moveTo(trashX - 2, pillY - 3.5);
+  ctx.lineTo(trashX - 2, pillY - 5.5);
+  ctx.lineTo(trashX + 2, pillY - 5.5);
+  ctx.lineTo(trashX + 2, pillY - 3.5);
+  ctx.moveTo(trashX - 4, pillY - 3.5);
+  ctx.lineTo(trashX - 3.2, pillY + 5);
+  ctx.lineTo(trashX + 3.2, pillY + 5);
+  ctx.lineTo(trashX + 4, pillY - 3.5);
+  ctx.stroke();
+  ctx.restore();
+
+  // Quick Action Pills next to trash button
+  if (hasContainer) {
+    // Fill Pill [ 💧 Γέμισμα ] / [ 💧 250ml ]
+    const fillX = cx - 24;
+    const pillW = 60;
+    const pillH = 20;
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = volumeMl && volumeMl > 0 ? '#2563eb' : '#ffffff';
+    ctx.strokeStyle = volumeMl && volumeMl > 0 ? '#1d4ed8' : '#cbd5e1';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(fillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = 'bold 9.5px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = volumeMl && volumeMl > 0 ? '#ffffff' : '#1e293b';
+    ctx.fillText(volumeMl && volumeMl > 0 ? `💧 ${volumeMl}ml` : '💧 Γέμισμα', fillX, pillY);
+
+    // Edit Pencil Button [ ✎ ]
+    const editX = cx + 18;
+    ctx.fillStyle = '#234978';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(editX, pillY, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillText('✎', editX, pillY);
+    ctx.restore();
+  } else if (hasBurner) {
+    // Flame Toggle Pill [ 🔥 ON / OFF ]
+    const flameX = cx - 12;
+    const pillW = 68;
+    const pillH = 20;
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = burnerOn ? '#16a34a' : '#ffffff';
+    ctx.strokeStyle = burnerOn ? '#15803d' : '#cbd5e1';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(flameX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = 'bold 9.5px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = burnerOn ? '#ffffff' : '#1e293b';
+    ctx.fillText(burnerOn ? '🔥 ON' : '🔥 OFF', flameX, pillY);
+    ctx.restore();
   }
 
   ctx.restore();
@@ -204,72 +390,7 @@ function renderLiquidBody(
 }
 
 /**
- * On-Canvas Action Badges: Quick Fill Button [💧 Γέμισμα] + Edit Pencil [✎]
- */
-function renderContainerActions(
-  ctx: CanvasRenderingContext2D,
-  topRightX: number,
-  topRightY: number,
-  vol: number,
-  cap: number,
-  pencilHovered?: boolean,
-  fillHovered?: boolean
-): void {
-  ctx.save();
-
-  // 1. Quick Fill Pill Button [ 💧 Γέμισμα ] / [ 💧 250ml ]
-  const pillW = 62;
-  const pillH = 17;
-  const pillX = topRightX - pillW - 12;
-  const pillY = topRightY - pillH / 2;
-
-  ctx.beginPath();
-  ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.fillStyle = fillHovered
-    ? '#234978'
-    : vol > 0
-    ? 'rgba(238, 242, 255, 0.94)'
-    : 'rgba(255, 255, 255, 0.92)';
-  ctx.fill();
-  ctx.strokeStyle = fillHovered
-    ? '#1c3c63'
-    : vol > 0
-    ? '#3b82f6'
-    : 'rgba(100, 116, 139, 0.55)';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-
-  ctx.font = 'bold 9px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = fillHovered ? '#ffffff' : vol > 0 ? '#1d4ed8' : '#334155';
-  const label = vol > 0 ? `💧 ${vol}ml` : '💧 Γέμισμα';
-  ctx.fillText(label, pillX + pillW / 2, pillY + pillH / 2);
-
-  // 2. Pencil Badge [ ✎ ]
-  const pencilR = 8.5;
-  const pencilX = topRightX;
-  const pencilY = topRightY;
-
-  ctx.beginPath();
-  ctx.arc(pencilX, pencilY, pencilR, 0, Math.PI * 2);
-  ctx.fillStyle = pencilHovered ? '#234978' : 'rgba(255, 255, 255, 0.92)';
-  ctx.fill();
-  ctx.strokeStyle = pencilHovered ? '#1c3c63' : 'rgba(100, 116, 139, 0.55)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.fillStyle = pencilHovered ? '#ffffff' : '#475569';
-  ctx.font = '9px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('✎', pencilX, pencilY);
-
-  ctx.restore();
-}
-
-/**
- * 1. Bunsen Burner - Monochrome hand-drawn sketch style matching notebook ink
+ * 1. Bunsen Burner - Organic swaying flame animation inspired by CodePen YLGjvx
  */
 function renderBurner(
   ctx: CanvasRenderingContext2D,
@@ -277,7 +398,7 @@ function renderBurner(
   h: number,
   state: HeatBurnerState | undefined,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -289,16 +410,6 @@ function renderBurner(
   const baseY = h - baseH - 14;
   const stemY = baseY - stemH;
 
-  // Selection outline
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(-4, -4, w + 8, h + 8);
-    ctx.restore();
-  }
-
   // 1. Physical Apparatus Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
@@ -307,83 +418,117 @@ function renderBurner(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Flame when ON (sketched line-art flame with warm inner gradient)
+    // Flame when ON (realistic organic candle flame inspired by CodePen YLGjvx)
     if (state?.isOn) {
-      const cycle = state.flameCycle || 0;
-      const flicker1 = Math.sin(cycle * Math.PI * 2) * 2.2;
-      const flicker2 = Math.cos(cycle * Math.PI * 4) * 1.4;
-      const flameH = state.intensity === 'roaring' ? h * 0.65 : state.intensity === 'normal' ? h * 0.52 : h * 0.40;
-      const flameTipY = stemY - 6 - flameH + flicker1;
+      const time = performance.now() / 1000;
+      // 1. Organic gentle sway (sway like candle in air)
+      const sway = Math.sin(time * 3.2) * 2.8 + Math.sin(time * 6.5) * 1.2;
+      // 2. Flame height breathing
+      const breathe = 1.0 + Math.sin(time * 4.0) * 0.08 + Math.cos(time * 7.0) * 0.03;
+      const baseFlameH = state.intensity === 'roaring' ? h * 0.68 : state.intensity === 'normal' ? h * 0.54 : h * 0.42;
+      const flameH = baseFlameH * breathe;
+      const flameTipY = stemY - 5 - flameH;
 
-      // Ambient thermal glow
-      const glow = ctx.createRadialGradient(cx, stemY - flameH * 0.4, 4, cx, stemY - flameH * 0.4, flameH * 1.3);
-      glow.addColorStop(0, state.intensity === 'roaring' ? 'rgba(59, 130, 246, 0.35)' : 'rgba(245, 158, 11, 0.35)');
-      glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      // 3. Soft circular ambient breathing glow (NO rectangular box!)
+      ctx.save();
+      const glowR = flameH * 0.95;
+      const glowCenterY = stemY - 5 - flameH * 0.45;
+      const glow = ctx.createRadialGradient(cx, glowCenterY, 3, cx, glowCenterY, glowR);
+      const isRoar = state.intensity === 'roaring';
+      const glowAlpha = 0.22 + Math.sin(time * 5.0) * 0.05;
+      glow.addColorStop(0, isRoar ? `rgba(59, 130, 246, ${glowAlpha + 0.15})` : `rgba(249, 115, 22, ${glowAlpha + 0.18})`);
+      glow.addColorStop(0.5, isRoar ? `rgba(96, 165, 250, ${glowAlpha * 0.5})` : `rgba(251, 146, 60, ${glowAlpha * 0.5})`);
+      glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = glow;
-      ctx.fillRect(cx - flameH * 1.4, stemY - flameH * 1.5, flameH * 2.8, flameH * 2.0);
-
-      // Outer flame contour
       ctx.beginPath();
-      ctx.moveTo(cx - stemW * 0.55, stemY - 4);
+      ctx.arc(cx, glowCenterY, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 4. Fluid teardrop flame silhouette (smooth organic curves)
+      ctx.save();
+      const flameBaseW = stemW * 0.85;
+      const flameMidW = stemW * 1.35 * (1.0 - (breathe - 1.0) * 0.5);
+
+      ctx.beginPath();
+      ctx.moveTo(cx - flameBaseW / 2, stemY - 4);
+      // Left convex shoulder
       ctx.bezierCurveTo(
-        cx - stemW * 1.1 + flicker2,
-        stemY - flameH * 0.38,
-        cx - stemW * 0.45 + flicker1,
-        stemY - flameH * 0.78,
-        cx,
+        cx - flameMidW,
+        stemY - flameH * 0.35,
+        cx - flameMidW * 0.6 + sway * 0.5,
+        stemY - flameH * 0.75,
+        cx + sway,
         flameTipY
       );
+      // Right convex shoulder
       ctx.bezierCurveTo(
-        cx + stemW * 0.45 - flicker1,
-        stemY - flameH * 0.78,
-        cx + stemW * 1.1 - flicker2,
-        stemY - flameH * 0.38,
-        cx + stemW * 0.55,
+        cx + flameMidW * 0.6 + sway * 0.5,
+        stemY - flameH * 0.75,
+        cx + flameMidW,
+        stemY - flameH * 0.35,
+        cx + flameBaseW / 2,
         stemY - 4
       );
       ctx.closePath();
 
-      const outerFlameGrad = ctx.createLinearGradient(cx, stemY, cx, flameTipY);
-      if (state.intensity === 'roaring') {
-        outerFlameGrad.addColorStop(0, 'rgba(59, 130, 246, 0.50)');
-        outerFlameGrad.addColorStop(0.6, 'rgba(147, 197, 253, 0.40)');
-        outerFlameGrad.addColorStop(1, 'rgba(219, 234, 254, 0.30)');
+      // Flame Gradient Fill
+      const flameGrad = ctx.createLinearGradient(cx, stemY, cx + sway, flameTipY);
+      if (isRoar) {
+        flameGrad.addColorStop(0, 'rgba(29, 78, 216, 0.85)');
+        flameGrad.addColorStop(0.35, 'rgba(37, 99, 235, 0.75)');
+        flameGrad.addColorStop(0.7, 'rgba(96, 165, 250, 0.65)');
+        flameGrad.addColorStop(1, 'rgba(219, 234, 254, 0.55)');
       } else {
-        outerFlameGrad.addColorStop(0, 'rgba(234, 88, 12, 0.55)');
-        outerFlameGrad.addColorStop(0.65, 'rgba(250, 204, 21, 0.45)');
-        outerFlameGrad.addColorStop(1, 'rgba(254, 240, 138, 0.30)');
+        flameGrad.addColorStop(0, 'rgba(194, 65, 12, 0.90)'); // Deep fire base
+        flameGrad.addColorStop(0.25, 'rgba(234, 88, 12, 0.85)'); // Rich orange
+        flameGrad.addColorStop(0.65, 'rgba(245, 158, 11, 0.80)'); // Golden amber
+        flameGrad.addColorStop(0.9, 'rgba(253, 224, 71, 0.75)'); // Bright yellow
+        flameGrad.addColorStop(1, 'rgba(255, 255, 255, 0.65)'); // White tip
       }
-      ctx.fillStyle = outerFlameGrad;
+      ctx.fillStyle = flameGrad;
       ctx.fill();
-      ctx.strokeStyle = state.intensity === 'roaring' ? '#2563eb' : '#ea580c';
-      ctx.lineWidth = 1.6;
+
+      ctx.strokeStyle = isRoar ? '#2563eb' : '#ea580c';
+      ctx.lineWidth = 1.3;
       ctx.stroke();
 
-      // Inner bright flame core
+      // 5. Inner Bright Flame Core (teardrop)
+      const coreH = flameH * 0.52;
+      const coreTipY = stemY - 4 - coreH;
+      const coreMidW = flameMidW * 0.48;
+
       ctx.beginPath();
-      ctx.moveTo(cx - stemW * 0.3, stemY - 4);
+      ctx.moveTo(cx - flameBaseW * 0.3, stemY - 4);
       ctx.bezierCurveTo(
-        cx - stemW * 0.45,
-        stemY - flameH * 0.22,
-        cx - stemW * 0.18,
-        stemY - flameH * 0.46,
-        cx,
-        stemY - flameH * 0.55
+        cx - coreMidW,
+        stemY - coreH * 0.35,
+        cx - coreMidW * 0.5 + sway * 0.3,
+        stemY - coreH * 0.75,
+        cx + sway * 0.5,
+        coreTipY
       );
       ctx.bezierCurveTo(
-        cx + stemW * 0.18,
-        stemY - flameH * 0.46,
-        cx + stemW * 0.45,
-        stemY - flameH * 0.22,
-        cx + stemW * 0.3,
+        cx + coreMidW * 0.5 + sway * 0.3,
+        stemY - coreH * 0.75,
+        cx + coreMidW,
+        stemY - coreH * 0.35,
+        cx + flameBaseW * 0.3,
         stemY - 4
       );
       ctx.closePath();
-      ctx.fillStyle = state.intensity === 'roaring' ? 'rgba(219, 234, 254, 0.85)' : 'rgba(254, 249, 195, 0.90)';
+
+      const coreGrad = ctx.createLinearGradient(cx, stemY, cx, coreTipY);
+      if (isRoar) {
+        coreGrad.addColorStop(0, 'rgba(147, 197, 253, 0.85)');
+        coreGrad.addColorStop(1, '#ffffff');
+      } else {
+        coreGrad.addColorStop(0, 'rgba(253, 224, 71, 0.95)');
+        coreGrad.addColorStop(1, '#ffffff');
+      }
+      ctx.fillStyle = coreGrad;
       ctx.fill();
-      ctx.strokeStyle = state.intensity === 'roaring' ? '#60a5fa' : '#f59e0b';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      ctx.restore();
     }
 
     // Flared Conical Base (Clean line art with double rim, matching sketch in media_1794694870640_233b6a5d.jpg)
@@ -417,9 +562,9 @@ function renderBurner(
     const collarH = stemH * 0.22;
     ctx.strokeRect(cx - stemW * 0.65, collarY, stemW * 1.3, collarH);
 
-    // Air vent slot (oval/pill slot)
+    // Air vent slot (circular/pill slot as in sketch)
     ctx.beginPath();
-    ctx.roundRect(cx - stemW * 0.28, collarY + collarH * 0.2, stemW * 0.56, collarH * 0.6, collarH * 0.3);
+    ctx.arc(cx, collarY + collarH / 2, collarH * 0.35, 0, Math.PI * 2);
     ctx.stroke();
 
     // Top nozzle lip collar
@@ -459,7 +604,7 @@ function renderTripod(
   h: number,
   gauzeTempC: number,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -468,15 +613,6 @@ function renderTripod(
   const collarH = h * 0.14;
   const topY = 4;
   const legBotY = h - 6;
-
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(-4, -4, w + 8, h + 8);
-    ctx.restore();
-  }
 
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
@@ -562,7 +698,7 @@ function renderTripod(
 }
 
 /**
- * 3. Borosilicate Glass Beaker - Monochrome line-art matching the hand-drawn sketch
+ * 3. Borosilicate Glass Beaker - Plain clean glass (NO measurement lines) matching the hand-drawn sketch
  */
 function renderBeaker(
   ctx: CanvasRenderingContext2D,
@@ -570,7 +706,7 @@ function renderBeaker(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -583,15 +719,6 @@ function renderBeaker(
   const rimH = 14;
   const bottomH = 14;
   const spoutW = 12;
-
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(0, 0, w, h);
-    ctx.restore();
-  }
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
@@ -609,7 +736,6 @@ function renderBeaker(
     // Draw Liquid Fill if volume > 0
     if (vol > 0 && liquidH > 2) {
       ctx.save();
-      // Clip inside beaker cylindrical shape
       ctx.beginPath();
       ctx.moveTo(x, liquidTopY);
       ctx.lineTo(x, y + bh - bottomH / 2);
@@ -678,37 +804,12 @@ function renderBeaker(
     ctx.fillStyle = reflectGrad;
     ctx.fillRect(x + bw - 14, y + rimH, 10, bh - rimH - bottomH);
 
-    // Graduated Measurement Lines (e.g. 100, 200, 300, 400, 500 ml)
-    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
-    ctx.lineWidth = 1.1;
-    const numMarks = 5;
-    for (let i = 1; i <= numMarks; i++) {
-      const markFrac = (i / numMarks) * maxLiquidFraction;
-      const my = y + bh - bottomH / 2 - (bh - bottomH / 2) * markFrac;
-      const markVal = Math.round((i / numMarks) * cap);
-
-      ctx.beginPath();
-      ctx.moveTo(x + 3, my);
-      ctx.lineTo(x + 14, my);
-      ctx.stroke();
-
-      ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
-      ctx.font = 'bold 8.5px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${markVal}`, x + 17, my + 3);
-    }
-
     ctx.restore();
-  }
-
-  // 2. Interactive Action Badges (ui / all)
-  if (layer === 'all' || layer === 'ui') {
-    renderContainerActions(ctx, x + bw - 8, y - 8, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
 }
 
 /**
- * 4. Wide Basin / Water Bath (Υδατόλουτρο) - Monochrome line art
+ * 4. Wide Basin / Water Bath (Υδατόλουτρο) - Plain clean glass (NO measurement lines)
  */
 function renderWideBasin(
   ctx: CanvasRenderingContext2D,
@@ -716,7 +817,7 @@ function renderWideBasin(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -728,15 +829,6 @@ function renderWideBasin(
   const cx = x + bw / 2;
   const rimH = 14;
   const bottomH = 14;
-
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(0, 0, w, h);
-    ctx.restore();
-  }
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 800;
@@ -803,28 +895,12 @@ function renderWideBasin(
     ctx.stroke();
     ctx.restore();
 
-    // Graduated marks on left
-    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
-    ctx.lineWidth = 1.1;
-    for (let i = 1; i <= 3; i++) {
-      const my = y + bh - bottomH / 2 - (bh - bottomH / 2) * 0.85 * (i / 3);
-      ctx.beginPath();
-      ctx.moveTo(x + 3, my);
-      ctx.lineTo(x + 12, my);
-      ctx.stroke();
-    }
-
     ctx.restore();
-  }
-
-  // 2. Interactive Action Badges (ui / all)
-  if (layer === 'all' || layer === 'ui') {
-    renderContainerActions(ctx, x + bw - 8, y - 8, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
 }
 
 /**
- * 5. Erlenmeyer Flask (Κωνική Φιάλη) - Monochrome line art
+ * 5. Erlenmeyer Flask (Κωνική Φιάλη) - Plain clean glass (NO measurement lines)
  */
 function renderFlask(
   ctx: CanvasRenderingContext2D,
@@ -832,7 +908,7 @@ function renderFlask(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -845,15 +921,6 @@ function renderFlask(
   const neckW = bw * 0.28;
   const neckH = bh * 0.36;
   const bottomH = 12;
-
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(0, 0, w, h);
-    ctx.restore();
-  }
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
@@ -920,28 +987,12 @@ function renderFlask(
     ctx.stroke();
     ctx.restore();
 
-    // Graduated marks on lower conical body
-    ctx.strokeStyle = isDark ? '#cbd5e1' : '#334155';
-    ctx.lineWidth = 1.1;
-    for (let i = 1; i <= 4; i++) {
-      const my = y + bh - bh * 0.55 * (i / 4);
-      ctx.beginPath();
-      ctx.moveTo(cx - neckW * 0.9 - i * 3, my);
-      ctx.lineTo(cx - neckW * 0.4, my);
-      ctx.stroke();
-    }
-
     ctx.restore();
-  }
-
-  // 2. Interactive Action Badges (ui / all)
-  if (layer === 'all' || layer === 'ui') {
-    renderContainerActions(ctx, cx + neckW / 2 + 32, y - 6, vol, cap, state?.pencilHovered, state?.fillHovered);
   }
 }
 
 /**
- * 6. Precision Laboratory Thermometer - Monochrome sketch style with dynamic temperature indicator
+ * 6. Precision Laboratory Thermometer
  */
 function renderThermometer(
   ctx: CanvasRenderingContext2D,
@@ -949,7 +1000,7 @@ function renderThermometer(
   h: number,
   state: HeatThermometerState | undefined,
   isDark: boolean,
-  highlight: boolean,
+  _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all'
 ): void {
   const strokeColor = isDark ? '#f8fafc' : '#111827';
@@ -959,15 +1010,6 @@ function renderThermometer(
   const topY = 16;
   const botY = h - bulbR - 4;
   const stemH = botY - topY;
-
-  if (highlight && (layer === 'all' || layer === 'apparatus')) {
-    ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(-4, -4, w + 8, h + 8);
-    ctx.restore();
-  }
 
   const temp = state?.temperature ?? 20.0;
   const tempFrac = Math.max(0, Math.min(1, temp / 100));
@@ -1097,7 +1139,7 @@ function renderSteam(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
-  sw: number
+  _sw: number
 ): void {
   ctx.save();
   const time = Date.now() / 1000;
@@ -1117,7 +1159,9 @@ function renderSteam(
 }
 
 /**
- * 7. Dynamic Transparent T - t Real-Time Graph (Harmonic Oscillation Style)
+ * 7. Dynamic Transparent T - t Real-Time Graph
+ * Title: "Διάγραμμα Θερμοκρασίας - Χρόνου (θ - t)"
+ * Vertical Axis: θ (°C), Horizontal Axis: t (s)
  */
 function renderThermalGraph(
   ctx: CanvasRenderingContext2D,
@@ -1135,23 +1179,23 @@ function renderThermalGraph(
   // Glass Card Background (iPadOS frosted glass)
   ctx.beginPath();
   ctx.roundRect(gx, gy, gw, gh, 16);
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.78)' : 'rgba(253, 251, 247, 0.82)';
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.82)' : 'rgba(253, 251, 247, 0.86)';
   ctx.fill();
-  ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.85)';
+  ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.90)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Header Title
+  // Header Title - Clean Greek θ - t title
   ctx.font = 'bold 11px system-ui, sans-serif';
   ctx.fillStyle = isDark ? '#f8fafc' : '#234978';
   ctx.textAlign = 'left';
-  ctx.fillText('Διάγραμμα Θερμοκρασίας: T(t)', gx + 16, gy + 20);
+  ctx.fillText('Διάγραμμα Θερμοκρασίας - Χρόνου (θ - t)', gx + 16, gy + 19);
 
-  // Plot Area
-  const plotX = gx + 42;
-  const plotY = gy + 32;
-  const plotW = gw - 58;
-  const plotH = gh - 54;
+  // Plot Area with ample margin so title and axes never collide!
+  const plotX = gx + 46;
+  const plotY = gy + 42;
+  const plotW = gw - 68;
+  const plotH = gh - 64;
 
   // Grid lines (0, 25, 50, 75, 100 °C)
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
@@ -1173,19 +1217,20 @@ function renderThermalGraph(
   ctx.strokeStyle = isDark ? '#94a3b8' : '#334155';
   ctx.lineWidth = 1.4;
   ctx.beginPath();
-  // Vertical Axis T
+  // Vertical Axis θ
   ctx.moveTo(plotX, plotY - 4);
   ctx.lineTo(plotX, plotY + plotH);
   // Horizontal Axis t
   ctx.lineTo(plotX + plotW + 4, plotY + plotH);
   ctx.stroke();
 
-  // Axis Labels
+  // Axis Labels - θ (°C) placed cleanly above vertical axis without colliding!
   ctx.fillStyle = isDark ? '#cbd5e1' : '#1e293b';
-  ctx.font = 'bold 9px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('T (°C)', plotX, plotY - 8);
-  ctx.fillText('t (s)', plotX + plotW + 6, plotY + plotH + 14);
+  ctx.font = 'bold 9.5px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('θ (°C)', plotX - 8, plotY - 10);
+  ctx.textAlign = 'left';
+  ctx.fillText('t (s)', plotX + plotW + 8, plotY + plotH + 3.5);
 
   // Plot Curves from history
   if (sim.history.length > 1) {
@@ -1211,7 +1256,7 @@ function renderThermalGraph(
       ctx.fillStyle = '#059669';
       ctx.font = 'bold 8.5px system-ui, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(`Tισορ = ${lastEq.toFixed(1)}°C`, plotX + plotW - 4, eqY - 4);
+      ctx.fillText(`θισορ = ${lastEq.toFixed(1)}°C`, plotX + plotW - 4, eqY - 4);
       ctx.restore();
     }
 
@@ -1262,11 +1307,11 @@ function renderThermalGraph(
     ctx.font = 'bold 9px system-ui, sans-serif';
     ctx.fillStyle = '#f97316';
     ctx.textAlign = 'left';
-    ctx.fillText('— Δοχείο 1', plotX + 8, gy + 19);
+    ctx.fillText('— Δοχείο 1', plotX + 8, gy + 32);
 
     if (hasCurve2) {
       ctx.fillStyle = '#0284c7';
-      ctx.fillText('— Υδατόλουτρο', plotX + 75, gy + 19);
+      ctx.fillText('— Υδατόλουτρο', plotX + 75, gy + 32);
     }
   }
 

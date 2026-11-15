@@ -41,6 +41,7 @@ export interface UseHeatSimulationReturn {
   resetSim: () => void;
   toggleGraph: () => void;
   handleFillContainer: (containerId?: string) => void;
+  handleDeleteSelectedObject: (id?: string) => void;
 }
 
 export function useHeatSimulation(
@@ -102,12 +103,17 @@ export function useHeatSimulation(
   // Dragging state
   const dragRef = useRef<{
     objectId: string;
+    mode?: 'move' | 'scale-corner' | 'stretch-side';
+    handle?: 'nw' | 'ne' | 'se' | 'sw' | 'n' | 'e' | 's' | 'w';
     isGraph?: boolean;
     isGraphResize?: boolean;
     startX: number;
     startY: number;
     origObjX: number;
     origObjY: number;
+    origW?: number;
+    origH?: number;
+    origRatio?: number;
     origGraphW?: number;
     origGraphH?: number;
   } | null>(null);
@@ -209,8 +215,8 @@ export function useHeatSimulation(
 
   const handleAddObject = useCallback(
     (type: HeatObjectType, clientX?: number, clientY?: number) => {
-      const targetX = clientX ?? 340;
-      const targetY = clientY ?? 400;
+      const curSim = liveSimRef.current || activeHeatSim;
+      const existingObjs = curSim?.objects || [];
 
       const defDims: Record<string, { w: number; h: number }> = {
         burner: { w: 70, h: 110 },
@@ -222,6 +228,43 @@ export function useHeatSimulation(
       };
       const def = defDims[type] || { w: 100, h: 120 };
 
+      let targetX = clientX ?? 340;
+      let targetY = clientY ?? 400;
+
+      // Smart Lab Apparatus Auto-Alignment & Staggering:
+      if (existingObjs.length > 0) {
+        const burner = existingObjs.find((o) => o.type === 'burner');
+        const tripod = existingObjs.find((o) => o.type === 'tripod');
+        const containers = existingObjs.filter(
+          (o) => o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin'
+        );
+        const primaryContainer = containers[0];
+
+        if (type === 'tripod' && burner && !tripod) {
+          // Tripod centers over burner!
+          targetX = burner.x + burner.width / 2;
+          targetY = burner.y + burner.height - def.h / 2;
+        } else if (type === 'burner' && tripod && !burner) {
+          // Burner centers under tripod!
+          targetX = tripod.x + tripod.width / 2;
+          targetY = tripod.y + tripod.height - def.h / 2;
+        } else if ((type === 'beaker' || type === 'flask') && tripod && containers.length === 0) {
+          // Container sits on tripod wire gauze!
+          targetX = tripod.x + tripod.width / 2;
+          targetY = tripod.y - def.h / 2 + 10;
+        } else if (type === 'thermometer' && primaryContainer) {
+          // Thermometer dips into primary container!
+          targetX = primaryContainer.x + primaryContainer.width - 30;
+          targetY = primaryContainer.y + def.h / 2 - 40;
+        } else {
+          // Stagger horizontally to the right of all existing objects so they never pile up!
+          const maxRight = Math.max(...existingObjs.map((o) => o.x + o.width));
+          const lastObj = existingObjs[existingObjs.length - 1];
+          targetX = maxRight + 28 + def.w / 2;
+          targetY = (lastObj ? lastObj.y + lastObj.height : 460) - def.h / 2;
+        }
+      }
+
       handleAddObjectWithBounds(type, {
         minX: targetX - def.w / 2,
         minY: targetY - def.h / 2,
@@ -229,7 +272,7 @@ export function useHeatSimulation(
         maxY: targetY + def.h / 2,
       });
     },
-    [handleAddObjectWithBounds]
+    [activeHeatSim, handleAddObjectWithBounds]
   );
 
   const startHeatingAndSim = useCallback(() => {
@@ -427,7 +470,25 @@ export function useHeatSimulation(
     [updateActiveHeatSim]
   );
 
-  // Pointer interactions on canvas (clicking pencil, toggling burner, dragging objects)
+  const handleDeleteSelectedObject = useCallback(
+    (id?: string) => {
+      updateActiveHeatSim((prev: HeatSimConfig) => {
+        const cur = liveSimRef.current || prev;
+        const targetId = id || cur.selectedObjectId;
+        if (!targetId) return cur;
+        const next = {
+          ...cur,
+          selectedObjectId: null,
+          objects: cur.objects.filter((o) => o.id !== targetId),
+        };
+        liveSimRef.current = next;
+        return next;
+      });
+    },
+    [updateActiveHeatSim]
+  );
+
+  // Pointer interactions on canvas (handles, resizing, selection, actions, dragging)
   const handlePointerDown = useCallback(
     (_e: React.PointerEvent | PointerEvent, lx: number, ly: number): boolean => {
       const sim = liveSimRef.current || activeHeatSim;
@@ -471,7 +532,106 @@ export function useHeatSimulation(
         }
       }
 
-      // 2. Check objects in reverse z-order (topmost first)
+      // 2. Check if currently selected object's Handles / Action Pills were clicked!
+      if (sim.selectedObjectId) {
+        const selectedObj = sim.objects.find((o) => o.id === sim.selectedObjectId);
+        if (selectedObj) {
+          const pad = 8;
+          const minX = selectedObj.x - pad;
+          const minY = selectedObj.y - pad;
+          const maxX = selectedObj.x + selectedObj.width + pad;
+          const maxY = selectedObj.y + selectedObj.height + pad;
+          const cx = selectedObj.x + selectedObj.width / 2;
+          const cy = selectedObj.y + selectedObj.height / 2;
+          const pillY = minY < 45 ? maxY + 24 : minY - 24;
+
+          const hasContainer =
+            selectedObj.type === 'beaker' || selectedObj.type === 'wide-basin' || selectedObj.type === 'flask';
+          const hasBurner = selectedObj.type === 'burner';
+
+          // A. Red Trash Can (🗑️) button
+          const trashX = hasContainer ? cx + 46 : hasBurner ? cx + 44 : cx;
+          if (Math.hypot(lx - trashX, ly - pillY) <= 16) {
+            handleDeleteSelectedObject(selectedObj.id);
+            return true;
+          }
+
+          // B. Floating Action Bar Pills
+          if (hasContainer) {
+            // Fill button [ 💧 Γέμισμα ]
+            const fillX = cx - 24;
+            if (Math.abs(lx - fillX) <= 32 && Math.abs(ly - pillY) <= 13) {
+              handleFillContainer(selectedObj.id);
+              return true;
+            }
+            // Edit pencil [ ✎ ]
+            const editX = cx + 18;
+            if (Math.hypot(lx - editX, ly - pillY) <= 14) {
+              setEditingContainer(selectedObj);
+              return true;
+            }
+          } else if (hasBurner) {
+            // Flame toggle [ 🔥 ON/OFF ]
+            const flameX = cx - 12;
+            if (Math.abs(lx - flameX) <= 36 && Math.abs(ly - pillY) <= 13) {
+              toggleBurner();
+              return true;
+            }
+          }
+
+          // C. 4 Corner Handles (proportional scaling)
+          const corners: { id: 'nw' | 'ne' | 'se' | 'sw'; x: number; y: number }[] = [
+            { id: 'nw', x: minX, y: minY },
+            { id: 'ne', x: maxX, y: minY },
+            { id: 'se', x: maxX, y: maxY },
+            { id: 'sw', x: minX, y: maxY },
+          ];
+          for (const c of corners) {
+            if (Math.hypot(lx - c.x, ly - c.y) <= 14) {
+              dragRef.current = {
+                objectId: selectedObj.id,
+                mode: 'scale-corner',
+                handle: c.id,
+                startX: lx,
+                startY: ly,
+                origObjX: selectedObj.x,
+                origObjY: selectedObj.y,
+                origW: selectedObj.width,
+                origH: selectedObj.height,
+                origRatio: selectedObj.width / selectedObj.height,
+              };
+              return true;
+            }
+          }
+
+          // D. 4 Side Midpoint Handles (aspect ratio / αναλογία stretch)
+          const sides: { id: 'n' | 'e' | 's' | 'w'; x: number; y: number }[] = [
+            { id: 'n', x: cx, y: minY },
+            { id: 'e', x: maxX, y: cy },
+            { id: 's', x: cx, y: maxY },
+            { id: 'w', x: minX, y: cy },
+          ];
+          for (const s of sides) {
+            if (Math.hypot(lx - s.x, ly - s.y) <= 14) {
+              dragRef.current = {
+                objectId: selectedObj.id,
+                mode: 'stretch-side',
+                handle: s.id,
+                startX: lx,
+                startY: ly,
+                origObjX: selectedObj.x,
+                origObjY: selectedObj.y,
+                origW: selectedObj.width,
+                origH: selectedObj.height,
+                origRatio: selectedObj.width / selectedObj.height,
+              };
+              return true;
+            }
+          }
+        }
+      }
+
+      // 3. Check objects in reverse z-order (topmost first)
       const reversed = [...sim.objects].reverse();
 
       for (const obj of reversed) {
@@ -483,101 +643,17 @@ export function useHeatSimulation(
 
         if (!inside) continue;
 
-        // Check if Quick Fill button or Pencil icon was clicked (for beaker, basin, flask)
-        if (obj.containerState) {
-          const isFlask = obj.type === 'flask';
-          const neckW = obj.width * 0.28;
-          const topRightX = isFlask ? obj.x + obj.width / 2 + neckW / 2 + 32 : obj.x + obj.width - 8;
-          const topRightY = isFlask ? obj.y - 6 : obj.y - 8;
-
-          // 1. Quick Fill Pill Button [ 💧 Γέμισμα ] / [ 💧 250ml ]
-          const pillW = 62;
-          const pillH = 17;
-          const pillX = topRightX - pillW - 12;
-          const pillY = topRightY - pillH / 2;
-
-          if (
-            lx >= pillX - 6 &&
-            lx <= pillX + pillW + 6 &&
-            ly >= pillY - 6 &&
-            ly <= pillY + pillH + 6
-          ) {
-            updateActiveHeatSim((prev: HeatSimConfig) => {
-              const cur = liveSimRef.current || prev;
-              const next = {
-                ...cur,
-                objects: cur.objects.map((o: HeatObject) => {
-                  if (o.id === obj.id && o.containerState) {
-                    const cap = o.containerState.capacityMl || 500;
-                    const curVol = o.containerState.volumeMl || 0;
-                    let nextVol = 0;
-                    if (curVol === 0) {
-                      nextVol = Math.round(cap * 0.5); // Fill 50%
-                    } else if (curVol < cap) {
-                      nextVol = cap; // Fill 100%
-                    } else {
-                      nextVol = 0; // Empty
-                    }
-                    return {
-                      ...o,
-                      containerState: {
-                        ...o.containerState,
-                        volumeMl: nextVol,
-                      },
-                    };
-                  }
-                  return o;
-                }),
-              };
-              liveSimRef.current = next;
-              return next;
-            });
-            return true;
-          }
-
-          // 2. Edit Pencil Badge [ ✎ ]
-          const distPencil = Math.hypot(lx - topRightX, ly - topRightY);
-          if (distPencil <= 16) {
-            setEditingContainer(obj);
-            return true;
-          }
-        }
-
-        // Check if Burner On/Off button was clicked
-        if (obj.type === 'burner' && obj.burnerState) {
-          const btnX = obj.x + obj.width / 2;
-          const btnY = obj.y + obj.height - 10;
-          if (Math.abs(lx - btnX) <= 32 && Math.abs(ly - btnY) <= 16) {
-            updateActiveHeatSim((prev: HeatSimConfig) => {
-              const cur = liveSimRef.current || prev;
-              const next = {
-                ...cur,
-                objects: cur.objects.map((o: HeatObject) =>
-                  o.id === obj.id
-                    ? {
-                        ...o,
-                        burnerState: {
-                          ...o.burnerState!,
-                          isOn: !o.burnerState?.isOn,
-                        },
-                      }
-                    : o
-                ),
-              };
-              liveSimRef.current = next;
-              return next;
-            });
-            return true;
-          }
-        }
-
-        // Otherwise start dragging this object
+        // Select and start dragging object
         dragRef.current = {
           objectId: obj.id,
+          mode: 'move',
           startX: lx,
           startY: ly,
           origObjX: obj.x,
           origObjY: obj.y,
+          origW: obj.width,
+          origH: obj.height,
+          origRatio: obj.width / obj.height,
         };
 
         updateActiveHeatSim((prev: HeatSimConfig) => {
@@ -592,9 +668,22 @@ export function useHeatSimulation(
         return true;
       }
 
+      // 4. Clicked outside on empty canvas -> Deselect
+      if (sim.selectedObjectId) {
+        updateActiveHeatSim((prev: HeatSimConfig) => {
+          const cur = liveSimRef.current || prev;
+          const next = {
+            ...cur,
+            selectedObjectId: null,
+          };
+          liveSimRef.current = next;
+          return next;
+        });
+      }
+
       return false;
     },
-    [activeHeatSim, updateActiveHeatSim]
+    [activeHeatSim, updateActiveHeatSim, handleDeleteSelectedObject, handleFillContainer, toggleBurner]
   );
 
   const handlePointerMove = useCallback(
@@ -625,12 +714,56 @@ export function useHeatSimulation(
         return true;
       }
 
-      // Dragging an object: update in liveSimRef immediately for smooth 60fps response
+      // Live object manipulation (Move, Proportional Scale, Aspect Ratio Stretch)
       if (liveSimRef.current) {
         const obj = liveSimRef.current.objects.find((o) => o.id === drag.objectId);
         if (obj) {
-          obj.x = drag.origObjX + dx;
-          obj.y = drag.origObjY + dy;
+          if (drag.mode === 'scale-corner') {
+            const ratio = drag.origRatio || (drag.origW! / drag.origH!) || 1;
+            if (drag.handle === 'se') {
+              const newW = Math.max(50, (drag.origW || 100) + dx);
+              const newH = Math.round(newW / ratio);
+              obj.width = newW;
+              obj.height = newH;
+            } else if (drag.handle === 'ne') {
+              const newW = Math.max(50, (drag.origW || 100) + dx);
+              const newH = Math.round(newW / ratio);
+              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.width = newW;
+              obj.height = newH;
+            } else if (drag.handle === 'sw') {
+              const newW = Math.max(50, (drag.origW || 100) - dx);
+              const newH = Math.round(newW / ratio);
+              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
+              obj.width = newW;
+              obj.height = newH;
+            } else if (drag.handle === 'nw') {
+              const newW = Math.max(50, (drag.origW || 100) - dx);
+              const newH = Math.round(newW / ratio);
+              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
+              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.width = newW;
+              obj.height = newH;
+            }
+          } else if (drag.mode === 'stretch-side') {
+            if (drag.handle === 'e') {
+              obj.width = Math.max(40, (drag.origW || 100) + dx);
+            } else if (drag.handle === 's') {
+              obj.height = Math.max(40, (drag.origH || 100) + dy);
+            } else if (drag.handle === 'w') {
+              const newW = Math.max(40, (drag.origW || 100) - dx);
+              obj.x = drag.origObjX + ((drag.origW || 100) - newW);
+              obj.width = newW;
+            } else if (drag.handle === 'n') {
+              const newH = Math.max(40, (drag.origH || 100) - dy);
+              obj.y = drag.origObjY + ((drag.origH || 100) - newH);
+              obj.height = newH;
+            }
+          } else {
+            // mode === 'move'
+            obj.x = drag.origObjX + dx;
+            obj.y = drag.origObjY + dy;
+          }
         }
       }
       return true;
@@ -641,7 +774,7 @@ export function useHeatSimulation(
   const handlePointerUp = useCallback((): boolean => {
     if (!dragRef.current) return false;
     dragRef.current = null;
-    // Persist final position to note page
+    // Persist final position and dimensions to note page
     if (liveSimRef.current) {
       updateActiveHeatSim(() => liveSimRef.current!);
     }
@@ -739,5 +872,6 @@ export function useHeatSimulation(
     resetSim,
     toggleGraph,
     handleFillContainer,
+    handleDeleteSelectedObject,
   };
 }

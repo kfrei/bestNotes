@@ -37,9 +37,6 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
           <path d="M 8 7 L 6.5 8.5 L 9 9.5 L 9 29 C 9 31 10.5 32 12.5 32 L 23.5 32 C 25.5 32 27 31 27 29 L 27 7 L 8 7" strokeWidth="2.0" />
-          <line x1="12" y1="14" x2="17" y2="14" strokeWidth="1.4" />
-          <line x1="12" y1="19" x2="20" y2="19" strokeWidth="1.6" />
-          <line x1="12" y1="24" x2="17" y2="24" strokeWidth="1.4" />
         </svg>
       );
     case 'wide-basin':
@@ -53,8 +50,6 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
           <path d="M 14 5 L 22 5 M 15 5 L 15 13 L 7 28 C 6 29.8 7.2 32 9.5 32 L 26.5 32 C 28.8 32 30 29.8 29 28 L 21 13 L 21 5" strokeWidth="2.0" />
-          <line x1="13" y1="22" x2="17" y2="22" strokeWidth="1.4" />
-          <line x1="11.5" y1="26" x2="17" y2="26" strokeWidth="1.5" />
         </svg>
       );
     case 'thermometer':

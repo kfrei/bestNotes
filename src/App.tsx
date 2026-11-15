@@ -8188,6 +8188,18 @@ export default function App() {
   const heatSim = useHeatSimulation(activePage, updateActivePage);
   const heatSimLastFrameRef = useRef<number | null>(null);
 
+  // When switching to drawing tools (pen, pencil, highlighter, eraser), clear any selected simulation object bounding box!
+  useEffect(() => {
+    if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser') {
+      if (heatSim.activeHeatSim?.selectedObjectId) {
+        heatSim.updateActiveHeatSim((prev) => ({
+          ...prev,
+          selectedObjectId: null,
+        }));
+      }
+    }
+  }, [activeTool, heatSim.activeHeatSim?.selectedObjectId, heatSim.updateActiveHeatSim]);
+
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
   useEffect(() => {
     setUndoStack([]);
@@ -12636,7 +12648,15 @@ export default function App() {
           if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
             continue;
           }
-          renderHeatSimulation(ctx, liveSim || hSim, { isDark, layer: 'ui' });
+          renderHeatSimulation(ctx, liveSim || hSim, {
+            isDark,
+            layer: 'ui',
+            isSelectActive:
+              activeTool === 'lasso' ||
+              activeTool === 'shape' ||
+              activeTool === 'magnetic-lasso' ||
+              (showSimulationPanel && simActiveCategory === 'heat'),
+          });
         }
       }
     });
@@ -32596,7 +32616,14 @@ export default function App() {
         const isDarkPaper = isDarkPaperColor(getEffectivePaperColor(activePage));
         for (const hSim of activePage.heatSims) {
           const liveSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim;
-          renderHeatSimulation(ctx, liveSim || hSim, { isDark: isDarkPaper });
+          renderHeatSimulation(ctx, liveSim || hSim, {
+            isDark: isDarkPaper,
+            isSelectActive:
+              activeTool === 'lasso' ||
+              activeTool === 'shape' ||
+              activeTool === 'magnetic-lasso' ||
+              (showSimulationPanel && simActiveCategory === 'heat'),
+          });
         }
 
         if (heatSimLastFrameRef.current !== null) {
@@ -48670,6 +48697,12 @@ export default function App() {
 
       // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, images, or text box!
       if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
+        if (heatSim.activeHeatSim?.selectedObjectId) {
+          e.preventDefault();
+          heatSim.handleDeleteSelectedObject();
+          renderStaticSceneRef.current?.();
+          return;
+        }
         const effectiveImgIds =
           selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
         const baseIds =
@@ -57696,14 +57729,11 @@ export default function App() {
                         },
                         {
                           id: 'beaker',
-                          title: 'Ποτήρι Ζέσεως με Κλίμακα ml (Προσομοίωση Θερμότητας)',
+                          title: 'Ποτήρι Ζέσεως (Προσομοίωση Θερμότητας)',
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 10 3.5 L 8 4.5 L 10.5 5.5 L 10.5 18 C 10.5 19.8 12 20.5 13.5 20.5 L 21 20.5 C 22.5 20.5 24 19.8 24 18 L 24 3.5 L 10 3.5" strokeWidth="1.8" />
-                              <line x1="13" y1="8" x2="16.5" y2="8" strokeWidth="1.3" />
-                              <line x1="13" y1="12" x2="18" y2="12" strokeWidth="1.5" />
-                              <line x1="13" y1="16" x2="16.5" y2="16" strokeWidth="1.3" />
                             </svg>
                           ),
                         },
@@ -57726,8 +57756,6 @@ export default function App() {
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="14" y1="2.5" x2="20" y2="2.5" strokeWidth="2.0" />
                               <path d="M 15 2.5 L 15 7.5 L 8 18 C 7.2 19.5 8.2 20.5 10 20.5 L 24 20.5 C 25.8 20.5 26.8 19.5 26 18 L 19 7.5 L 19 2.5" strokeWidth="1.8" />
-                              <line x1="11.5" y1="13" x2="15" y2="13" strokeWidth="1.3" />
-                              <line x1="10" y1="16.5" x2="14.5" y2="16.5" strokeWidth="1.3" />
                             </svg>
                           ),
                         },
@@ -60497,7 +60525,7 @@ export default function App() {
                       e.currentTarget.scrollLeft += e.deltaY;
                     }
                   }}
-                  className="flex items-center gap-1 p-0.5 rounded-xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
+                  className="flex items-center gap-1 p-0.5 rounded-lg bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
                 >
                   <button
                     type="button"
@@ -60512,7 +60540,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60525,7 +60553,7 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60542,7 +60570,7 @@ export default function App() {
                         heatSim.ensureActiveHeatSim(activePage);
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'heat'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60559,7 +60587,7 @@ export default function App() {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'forces'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
@@ -60576,7 +60604,7 @@ export default function App() {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
-                    className={`shrink-0 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
