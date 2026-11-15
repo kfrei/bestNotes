@@ -54316,9 +54316,9 @@ export default function App() {
               const activeBreadcrumbParts = currentFolderPath ? currentFolderPath.split('/') : [];
 
               return (
-                <>
+                <div key={currentFolderPath || 'root'} className="space-y-5">
                   {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
-                  <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center justify-between flex-wrap gap-3 bn-library-cascade-1">
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
@@ -54661,7 +54661,7 @@ export default function App() {
 
                   {/* Search Field + Sort Toggle (Alphabetical / Date) + View Toggle (Icons / List) */}
                   <div className="space-y-2.5">
-                    <div className="bg-white/95 border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs">
+                    <div className="bg-white/95 border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs bn-library-cascade-2">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         {/* Search Input */}
                         <div className="relative flex-1 min-w-[220px]">
@@ -54822,7 +54822,7 @@ export default function App() {
 
                     {/* Subject & #Tag Quick Filter Chips Bar */}
                     {libraryFilterChips.length > 0 && (
-                      <div className="flex items-center gap-2 flex-wrap px-0.5">
+                      <div className="flex items-center gap-2 flex-wrap px-0.5 bn-library-cascade-3">
                         <button
                           type="button"
                           onClick={() => setActiveLibrarySubjectFilter('all')}
@@ -54891,11 +54891,11 @@ export default function App() {
                   {libraryLayoutMode === 'grid' ? (
                     <div
                       key={`grid-${activeLibraryFolder || 'root'}`}
-                      className="space-y-6 bn-fast-fade-in"
+                      className="space-y-6"
                     >
                       {/* Folders Section in Grid Mode */}
                       {visibleFolders.length > 0 && (
-                        <div>
+                        <div className="bn-library-cascade-4">
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                             Φάκελοι ({visibleFolders.length})
                           </h2>
@@ -55171,7 +55171,7 @@ export default function App() {
                       )}
 
                       {/* Notes Section in Grid Mode */}
-                      <div>
+                      <div className="bn-library-cascade-5">
                         <div className="flex items-center gap-2.5 mb-3 flex-wrap">
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                             Σημειώσεις ({isLibraryDataLoading && visibleNotebooks.length === 0 ? '...' : visibleNotebooks.length})
@@ -55809,10 +55809,12 @@ export default function App() {
                        ================================================================= */
                     <div
                       key={`list-${activeLibraryFolder || 'root'}`}
-                      className="space-y-2 bn-fast-fade-in"
+                      className="space-y-3"
                     >
                       {/* Folders in List Mode */}
-                      {visibleFolders.map((folder) => {
+                      {visibleFolders.length > 0 && (
+                        <div className="space-y-2 bn-library-cascade-4">
+                          {visibleFolders.map((folder) => {
                         const isDropHover = dragOverFolderName === folder.path;
                         const folderColor = folder.color || '#f59e0b';
                         return (
@@ -56052,8 +56054,12 @@ export default function App() {
                           </div>
                         );
                       })}
+                        </div>
+                      )}
 
-                      {/* Unified Drag & Drop / Open File Row in List Mode (.bestNotes, .pdf, .png, .jpg, .gif) */}
+                      {/* Notes in List Mode */}
+                      <div className="space-y-2 bn-library-cascade-5">
+                        {/* Unified Drag & Drop / Open File Row in List Mode (.bestNotes, .pdf, .png, .jpg, .gif) */}
                       <div
                         onClick={() => {
                           pdfImportModeRef.current = 'new-notebook';
@@ -56319,9 +56325,10 @@ export default function App() {
                           </div>
                         );
                       })}
+                      </div>
 
                       {visibleFolders.length === 0 && visibleNotebooks.length === 0 && !isLibraryDataLoading && (
-                        <div className="p-8 text-center text-sm text-slate-400">
+                        <div className="p-8 text-center text-sm text-slate-400 bn-library-cascade-5">
                           Δεν βρέθηκαν σημειώσεις ή φάκελοι.
                         </div>
                       )}
@@ -56431,7 +56438,7 @@ export default function App() {
                     onCancel={() => setPendingDeleteNotebook(null)}
                     onConfirm={confirmDeleteNotebook}
                   />
-                </>
+                </div>
               );
             })()}
           </div>

@@ -221,3 +221,40 @@ html[data-standalone-app='true'] .bn-safe-top-header {
   background-size: 200% 100%;
   animation: bnShimmer 1.5s ease-in-out infinite;
 }
+
+/* Synchronized Top-to-Bottom Cascading Entrance for Library & Folders */
+@keyframes bnCascadeFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bn-library-cascade-1 {
+  animation: bnCascadeFromTop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0ms;
+}
+
+.bn-library-cascade-2 {
+  animation: bnCascadeFromTop 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 35ms;
+}
+
+.bn-library-cascade-3 {
+  animation: bnCascadeFromTop 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 70ms;
+}
+
+.bn-library-cascade-4 {
+  animation: bnCascadeFromTop 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 105ms;
+}
+
+.bn-library-cascade-5 {
+  animation: bnCascadeFromTop 0.30s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 140ms;
+}

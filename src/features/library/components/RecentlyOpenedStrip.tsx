@@ -36,7 +36,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   // Skeleton shimmer placeholder while library data is loading (zero CLS, perfectly matching footprint)
   if (isLoading && recentlyOpenedNotebooks.length === 0) {
     return (
-      <div className="bn-fast-fade-in select-none pointer-events-none">
+      <div className="bn-library-cascade-4 select-none pointer-events-none">
         <div className="flex items-center gap-2 mb-2.5">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Πρόσφατα Ανοιγμένα
@@ -70,7 +70,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   if (recentlyOpenedNotebooks.length === 0) return null;
 
   return (
-    <div>
+    <div className="bn-library-cascade-4">
       <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
         Πρόσφατα Ανοιγμένα
       </h2>

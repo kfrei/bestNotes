@@ -72,16 +72,75 @@ export function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
       // ignore
     }
 
-    // 2. Full or progressive library shelf cache (prioritizing recent notes if total > 1.8MB)
-    const cached = sortedByRecent.map(cleanNotebookForLibraryCache);
-    let sliceCount = cached.length;
+    // 2. Full library shelf cache (ALWAYS preserving 100% of all notebooks for instant filter chips & scope counts)
+    let cached = sortedByRecent.map(cleanNotebookForLibraryCache);
     let serialized = JSON.stringify(cached);
+
+    // If total exceeds 1.8MB, progressively compress older notes by stripping heavy background images / strokes,
+    // but NEVER drop any notebook from the array!
     if (serialized.length > 1_800_000) {
-      while (sliceCount > 4 && serialized.length > 1_800_000) {
-        sliceCount = Math.max(4, Math.floor(sliceCount * 0.7));
-        serialized = JSON.stringify(cached.slice(0, sliceCount));
-      }
+      cached = cached.map((nb, idx) => {
+        if (idx < 6) return nb;
+        const p0 = nb.pages[0];
+        if (!p0 || !p0.backgroundDataUrl) return nb;
+        return {
+          ...nb,
+          pages: [{ ...p0, backgroundDataUrl: undefined }],
+        };
+      });
+      serialized = JSON.stringify(cached);
     }
+
+    if (serialized.length > 1_800_000) {
+      cached = cached.map((nb, idx) => {
+        if (idx < 3) return nb;
+        const p0 = nb.pages[0];
+        if (!p0 || !p0.backgroundDataUrl) return nb;
+        return {
+          ...nb,
+          pages: [{ ...p0, backgroundDataUrl: undefined }],
+        };
+      });
+      serialized = JSON.stringify(cached);
+    }
+
+    if (serialized.length > 1_800_000) {
+      cached = cached.map((nb) => {
+        const p0 = nb.pages[0];
+        if (!p0 || !p0.backgroundDataUrl) return nb;
+        return {
+          ...nb,
+          pages: [{ ...p0, backgroundDataUrl: undefined }],
+        };
+      });
+      serialized = JSON.stringify(cached);
+    }
+
+    if (serialized.length > 1_800_000) {
+      cached = cached.map((nb, idx) => {
+        if (idx < 4) return nb;
+        const p0 = nb.pages[0];
+        if (!p0 || !p0.strokes?.length) return nb;
+        return {
+          ...nb,
+          pages: [{ ...p0, strokes: [] }],
+        };
+      });
+      serialized = JSON.stringify(cached);
+    }
+
+    if (serialized.length > 1_800_000) {
+      cached = cached.map((nb) => {
+        const p0 = nb.pages[0];
+        if (!p0 || !p0.strokes?.length) return nb;
+        return {
+          ...nb,
+          pages: [{ ...p0, strokes: [] }],
+        };
+      });
+      serialized = JSON.stringify(cached);
+    }
+
     if (serialized.length <= 1_800_000) {
       localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_${uid}`, serialized);
       localStorage.setItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`, serialized);
