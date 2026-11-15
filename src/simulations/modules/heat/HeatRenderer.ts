@@ -1803,7 +1803,10 @@ export function getTripodBurnerDockPos(
 ): { dockX: number; dockY: number } {
   const tripodCenterX = tripod.x + tripod.width / 2;
   const dockX = Math.round(tripodCenterX - burner.width / 2);
-  const dockY = Math.round(tripod.y + tripod.height - burner.height);
+  // Tripod front legs end at legBotY = tripod.height - 6.
+  // Burner base rests on desk at groundY = burner.height - 12.
+  // Aligning both to rest level on the exact same horizontal table baseline:
+  const dockY = Math.round(tripod.y + tripod.height - burner.height + 6);
   return { dockX, dockY };
 }
 
