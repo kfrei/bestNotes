@@ -47,11 +47,11 @@ function lerpColor(c1: string, c2: string, t: number): string {
 export function getThermometerColor(tempC: number): string {
   const clamped = Math.max(0, Math.min(100, tempC));
   if (clamped <= 30) {
-    return lerpColor('#2563eb', '#059669', clamped / 30);
+    return lerpColor('#2563eb', '#10b981', clamped / 30); // Blue (0°C) -> Green (30°C)
   } else if (clamped <= 65) {
-    return lerpColor('#059669', '#d97706', (clamped - 30) / 35);
+    return lerpColor('#10b981', '#f97316', (clamped - 30) / 35); // Green (30°C) -> Orange (65°C)
   } else {
-    return lerpColor('#d97706', '#dc2626', (clamped - 65) / 35);
+    return lerpColor('#f97316', '#ef4444', (clamped - 65) / 35); // Orange (65°C) -> Red (100°C)
   }
 }
 
@@ -1313,7 +1313,7 @@ function renderThermometer(
   const cx = w / 2;
   const stemW = 8;
   const bulbR = 7.5;
-  const topY = 16;
+  const topY = 26; // shifted down so badge has generous breathing room above 100°C mark
   const botY = h - bulbR - 4;
   const stemH = botY - topY;
 
@@ -1338,18 +1338,34 @@ function renderThermometer(
     // Glass Bulb at bottom
     ctx.beginPath();
     ctx.arc(cx, botY + 2, bulbR, 0, Math.PI * 2);
-    ctx.fillStyle = liquidColor;
+    const bulbGrad = ctx.createRadialGradient(cx - 2, botY, 1, cx, botY + 2, bulbR);
+    bulbGrad.addColorStop(0, '#60a5fa');
+    bulbGrad.addColorStop(0.7, '#2563eb');
+    bulbGrad.addColorStop(1, '#1d4ed8');
+    ctx.fillStyle = bulbGrad;
     ctx.fill();
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    // Liquid Column inside stem
+    // Liquid Column inside stem with gradient: Blue (0°C) -> Green (30°C) -> Orange (65°C) -> Red (100°C)
     const colW = stemW - 3;
-    ctx.beginPath();
-    ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
-    ctx.fillStyle = liquidColor;
-    ctx.fill();
+    if (tempFrac > 0.005) {
+      const colGrad = ctx.createLinearGradient(cx, botY + 2, cx, liquidTopY);
+      colGrad.addColorStop(0, '#2563eb'); // Blue at 0°C base
+      if (temp > 30) {
+        colGrad.addColorStop(Math.min(0.85, 30 / temp), '#10b981'); // Green
+      }
+      if (temp > 65) {
+        colGrad.addColorStop(Math.min(0.92, 65 / temp), '#f97316'); // Orange
+      }
+      colGrad.addColorStop(1, liquidColor); // Exact current temperature color at top meniscus
+
+      ctx.beginPath();
+      ctx.roundRect(cx - colW / 2, liquidTopY, colW, botY - liquidTopY + 2, [colW / 2, colW / 2, 0, 0]);
+      ctx.fillStyle = colGrad;
+      ctx.fill();
+    }
 
     // Calibration Tick Marks (0 to 100 °C)
     ctx.strokeStyle = strokeColor;
@@ -1365,10 +1381,11 @@ function renderThermometer(
       ctx.stroke();
 
       if (isMajor) {
-        ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+        // Soft gentle grey for 0, 50, 100 scale labels
+        ctx.fillStyle = isDark ? 'rgba(248, 250, 252, 0.50)' : '#94a3b8';
         ctx.font = 'bold 7.5px system-ui, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`${t}`, cx + stemW / 2 + 8, ty + 2.5);
+        ctx.fillText(`${t}`, cx + stemW / 2 + 7.5, ty + 2.5);
       }
     }
 
@@ -1380,22 +1397,40 @@ function renderThermometer(
     ctx.save();
     const badgeText = `${temp.toFixed(1)} °C`;
     ctx.font = 'bold 10px system-ui, sans-serif';
-    const badgeW = ctx.measureText(badgeText).width + 18;
-    const badgeH = 18;
+    const textW = ctx.measureText(badgeText).width;
+    const badgeW = textW + 20;
+    const badgeH = 19;
     const badgeX = cx - badgeW / 2;
-    const badgeY = topY - badgeH - 3;
+    const badgeY = topY - badgeH - 10; // clearly separated above the 100°C mark
+
+    // Small connecting hairline from badge to thermometer top
+    ctx.save();
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.20)' : 'rgba(17, 24, 39, 0.15)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(cx, badgeY + badgeH);
+    ctx.lineTo(cx, topY);
+    ctx.stroke();
+    ctx.restore();
+
+    // Badge card with subtle drop shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.2;
 
     ctx.beginPath();
-    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.94)';
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6.5);
+    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)';
     ctx.fill();
     ctx.strokeStyle = liquidColor;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.stroke();
+    ctx.restore();
 
-    // Color indicator dot
+    // Color indicator dot in current temperature color
     ctx.beginPath();
-    ctx.arc(badgeX + 8, badgeY + badgeH / 2, 3.5, 0, Math.PI * 2);
+    ctx.arc(badgeX + 8.5, badgeY + badgeH / 2, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = liquidColor;
     ctx.fill();
 
@@ -1403,7 +1438,7 @@ function renderThermometer(
     ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(badgeText, badgeX + 15, badgeY + badgeH / 2);
+    ctx.fillText(badgeText, badgeX + 16, badgeY + badgeH / 2 + 0.5);
     ctx.restore();
   }
 }
