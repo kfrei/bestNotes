@@ -130,13 +130,13 @@ export function renderHeatSimulation(
         renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'beaker':
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
         break;
       case 'wide-basin':
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
+        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
         break;
       case 'flask':
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor, obj.id, obj.x, obj.y);
         break;
       case 'thermometer':
         renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected, layer, obj.strokeColor);
@@ -396,7 +396,181 @@ export function renderGroupSelectionFrame(
 }
 
 /**
- * Helper: renders gorgeous multi-stop liquid depth gradient with 3D elliptical meniscus
+ * Dynamic Fluid Physics & Thermal Convection Simulation
+ * - Real-time Inertial Sloshing: Damped harmonic oscillator tracking container velocity/acceleration on drag
+ * - Thermal Convection Waves: Multi-harmonic sine/bezier wave profiles emerging with rising temperature
+ */
+interface ContainerSloshPhysics {
+  lastX: number;
+  lastY: number;
+  lastTime: number;
+  filteredVx: number; // smoothed velocity (px/s)
+  sloshAngle: number; // surface tilt angle (radians)
+  sloshAngularVel: number; // angular velocity (rad/s)
+}
+
+const containerSloshMap = new Map<string, ContainerSloshPhysics>();
+
+export function resetHeatSloshPhysics(containerId?: string): void {
+  if (containerId) {
+    containerSloshMap.delete(containerId);
+  } else {
+    containerSloshMap.clear();
+  }
+}
+
+function updateAndGetSloshAngle(
+  containerId: string | undefined,
+  curX: number,
+  curY: number,
+  nowMs: number
+): number {
+  if (!containerId) return 0;
+
+  let state = containerSloshMap.get(containerId);
+  if (!state) {
+    state = {
+      lastX: curX,
+      lastY: curY,
+      lastTime: nowMs,
+      filteredVx: 0,
+      sloshAngle: 0,
+      sloshAngularVel: 0,
+    };
+    containerSloshMap.set(containerId, state);
+    return 0;
+  }
+
+  // Handle large pause (tab switch, window resize) gracefully
+  if (nowMs - state.lastTime > 250) {
+    state.lastX = curX;
+    state.lastY = curY;
+    state.lastTime = nowMs;
+    state.filteredVx = 0;
+    return state.sloshAngle;
+  }
+
+  const dt = Math.max(0.001, Math.min(0.05, (nowMs - state.lastTime) / 1000));
+  state.lastTime = nowMs;
+
+  const dx = curX - state.lastX;
+  state.lastX = curX;
+  state.lastY = curY;
+
+  const rawVx = Math.max(-1200, Math.min(1200, dx / dt));
+  // Smooth velocity response (time constant ~65ms) to eliminate discrete pointer jitter
+  const alphaV = Math.min(1.0, 15.0 * dt);
+  const prevVx = state.filteredVx;
+  state.filteredVx += (rawVx - state.filteredVx) * alphaV;
+
+  // Horizontal acceleration from filtered velocity
+  const ax = Math.max(-6000, Math.min(6000, (state.filteredVx - prevVx) / dt));
+
+  // Fluid reorients along apparent gravity vector (opposite to acceleration direction)
+  // Positive X motion (dx > 0) causes fluid to surge toward left wall (tilt angle > 0)
+  const targetAngle = Math.max(-0.14, Math.min(0.14, ax * 0.000045 + state.filteredVx * 0.000075));
+
+  // Damped harmonic oscillator for natural liquid sloshing
+  // Natural frequency fn ≈ 1.15 Hz => omega_n ≈ 7.2 rad/s
+  // Damping ratio zeta ≈ 0.30 (calm underdamped settling in 2-3 graceful waves)
+  const omegaN = 7.2;
+  const zeta = 0.30;
+
+  const springTorque = -omegaN * omegaN * (state.sloshAngle - targetAngle);
+  const dampingTorque = -2 * zeta * omegaN * state.sloshAngularVel;
+  const angularAcc = springTorque + dampingTorque;
+
+  state.sloshAngularVel += angularAcc * dt;
+  state.sloshAngularVel = Math.max(-4.0, Math.min(4.0, state.sloshAngularVel));
+  state.sloshAngle += state.sloshAngularVel * dt;
+  state.sloshAngle = Math.max(-0.14, Math.min(0.14, state.sloshAngle));
+
+  // Settle to true zero if movement has stopped and oscillations are imperceptible
+  if (Math.abs(state.sloshAngle) < 0.0004 && Math.abs(state.sloshAngularVel) < 0.0015 && Math.abs(state.filteredVx) < 0.5) {
+    state.sloshAngle = 0;
+    state.sloshAngularVel = 0;
+  }
+
+  return state.sloshAngle;
+}
+
+/**
+ * Calculates dynamic fluid surface profile combining:
+ * 1. Inertial sloshing tilt & fluid crest curvature when moved horizontally
+ * 2. Thermal convection multi-harmonic rolling waves when heated (CodePen wave style, refined & subtle)
+ */
+export function getLiquidSurfaceProfile(
+  containerId: string | undefined,
+  curX: number,
+  curY: number,
+  leftX: number,
+  surfaceW: number,
+  liquidTopY: number,
+  liquidH: number,
+  temperature: number,
+  isBoiling: boolean,
+  boilingIntensity: number,
+  nowMs: number
+): { x: number; y: number }[] {
+  const sloshAngle = updateAndGetSloshAngle(containerId, curX, curY, nowMs);
+  const sinAngle = Math.sin(sloshAngle);
+
+  // Maximum vertical tilt displacement clamped to safe vessel fraction
+  const maxTilt = Math.min(8.5, liquidH * 0.28);
+
+  // Thermal convection waves: ambient <= 25°C is calm, heat builds organic rippling up to 100°C
+  const thermalFrac = Math.max(0, Math.min(1, (temperature - 25) / 75));
+
+  // Amplitude scaling: subtle and elegant ("λιγότερο έντονη", ~0.15px ambient to ~2.4px boiling)
+  let baseAmp = 0.15 + 1.4 * thermalFrac;
+  if (isBoiling) {
+    baseAmp += 0.85 * Math.max(0.35, boilingIntensity);
+  }
+
+  const tSec = nowMs / 1000;
+  const waveSpeed = 1.6 + thermalFrac * 1.5 + (isBoiling ? 1.0 : 0);
+  const phase1 = tSec * waveSpeed;
+  const phase2 = -tSec * (waveSpeed * 1.35) + 1.2;
+  const phase3 = tSec * (waveSpeed * 0.75) + 2.4;
+
+  const spatialK = (Math.PI * 2) / Math.max(45, surfaceW * 0.85);
+
+  const numSamples = 24;
+  const points: { x: number; y: number }[] = [];
+
+  for (let i = 0; i <= numSamples; i++) {
+    const u = i / numSamples; // 0.0 at left wall, 1.0 at right wall
+    const px = leftX + u * surfaceW;
+
+    // 1. Inertial sloshing tilt (preserves liquid volume around center u=0.5)
+    const rawTiltDelta = (u - 0.5) * surfaceW * sinAngle;
+    const clampedTiltDelta = Math.max(-maxTilt, Math.min(maxTilt, rawTiltDelta));
+    // Gentle fluid meniscus crest curvature when tilted
+    const fluidCurvature = 0.12 * Math.sin(Math.PI * 2 * (u - 0.5)) * clampedTiltDelta;
+    const sloshDeltaY = clampedTiltDelta + fluidCurvature;
+
+    // 2. Multi-harmonic thermal convection ripples (CodePen wave style, refined & subtle)
+    const xRel = u * surfaceW;
+    const w1 = Math.sin(xRel * spatialK + phase1);
+    const w2 = Math.sin(xRel * spatialK * 2.2 + phase2) * 0.38;
+    const w3 = Math.cos(xRel * spatialK * 0.7 + phase3) * 0.22;
+    const rawWave = w1 + w2 + w3;
+
+    // Smooth envelope anchoring to 0 at container walls (glass contact angle boundary condition)
+    const envelope = Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, u))), 0.65);
+    const waveDeltaY = rawWave * baseAmp * envelope;
+
+    points.push({
+      x: px,
+      y: liquidTopY + sloshDeltaY + waveDeltaY,
+    });
+  }
+
+  return points;
+}
+
+/**
+ * Helper: renders gorgeous multi-stop liquid depth gradient with dynamic fluid surface
  */
 function renderLiquidBody(
   ctx: CanvasRenderingContext2D,
@@ -408,11 +582,12 @@ function renderLiquidBody(
   bottomY: number,
   _meniscusRy: number = 4.5,
   fillMinX?: number,
-  fillMaxX?: number
+  fillMaxX?: number,
+  surfacePoints?: { x: number; y: number }[]
 ): void {
   const fx = fillMinX ?? (x - 4);
   const fw = fillMaxX !== undefined ? fillMaxX - fx : bw + 8;
-  const fy = liquidTopY;
+  const fy = liquidTopY - 14;
   const fh = Math.max(1, bottomY - fy + 4);
 
   // 1. Beautiful, tall, smooth linear depth gradient (degrade) - enhanced transition towards the fill level
@@ -440,7 +615,7 @@ function renderLiquidBody(
   ctx.fillStyle = grad;
   ctx.fillRect(fx, fy, fw, fh);
 
-  // 2. Ultra-soft, delicate surface line (whisper-faint meniscus without harshness)
+  // 2. Ultra-soft, delicate surface line following dynamic surface profile
   ctx.save();
   ctx.strokeStyle =
     liquidType === 'oil'
@@ -450,16 +625,30 @@ function renderLiquidBody(
       : 'rgba(2, 132, 199, 0.28)'; // Soft, delicate, non-intrusive water meniscus line
   ctx.lineWidth = 0.9;
   ctx.beginPath();
-  ctx.moveTo(x, liquidTopY);
-  ctx.lineTo(x + bw, liquidTopY);
+  if (surfacePoints && surfacePoints.length > 1) {
+    ctx.moveTo(surfacePoints[0].x, surfacePoints[0].y);
+    for (let i = 1; i < surfacePoints.length; i++) {
+      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y);
+    }
+  } else {
+    ctx.moveTo(x, liquidTopY);
+    ctx.lineTo(x + bw, liquidTopY);
+  }
   ctx.stroke();
 
   // Subtle luminous reflection highlight just below the surface
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
   ctx.lineWidth = 0.75;
   ctx.beginPath();
-  ctx.moveTo(x + 3, liquidTopY + 1.2);
-  ctx.lineTo(x + bw - 3, liquidTopY + 1.2);
+  if (surfacePoints && surfacePoints.length > 2) {
+    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 1.2);
+    for (let i = 2; i < surfacePoints.length - 1; i++) {
+      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 1.2);
+    }
+  } else {
+    ctx.moveTo(x + 3, liquidTopY + 1.2);
+    ctx.lineTo(x + bw - 3, liquidTopY + 1.2);
+  }
   ctx.stroke();
   ctx.restore();
 }
@@ -958,7 +1147,10 @@ function renderBeaker(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  objId?: string,
+  objX?: number,
+  objY?: number
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -983,20 +1175,37 @@ function renderBeaker(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Draw Liquid Fill if volume > 0 - Clean horizontal top + perfectly filling curved base
+    // Draw Liquid Fill if volume > 0 - Dynamic wave/slosh surface + perfectly filling curved base
     if (vol > 0 && liquidH > 2) {
+      const surface = getLiquidSurfaceProfile(
+        objId,
+        objX ?? x,
+        objY ?? y,
+        x,
+        bw,
+        liquidTopY,
+        liquidH,
+        state?.temperature ?? 20,
+        state?.isBoiling ?? false,
+        state?.boilingIntensity ?? 0,
+        performance.now()
+      );
+
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(x, liquidTopY);
-      ctx.lineTo(x, y + bh - cornerR);
-      ctx.quadraticCurveTo(x, y + bh, x + cornerR, y + bh);
-      ctx.lineTo(x + bw - cornerR, y + bh);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - cornerR);
-      ctx.lineTo(x + bw, liquidTopY);
+      ctx.moveTo(surface[0].x, surface[0].y);
+      for (let i = 1; i < surface.length; i++) {
+        ctx.lineTo(surface[i].x, surface[i].y);
+      }
+      ctx.lineTo(x + bw, y + bh - cornerR);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
+      ctx.lineTo(x + cornerR, y + bh);
+      ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+      ctx.lineTo(surface[0].x, surface[0].y);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
 
       // Boiling Bubbles & Steam (dynamic animation, never on static paper background)
       if (state?.isBoiling && layer !== 'apparatus') {
@@ -1071,7 +1280,10 @@ function renderWideBasin(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  objId?: string,
+  objX?: number,
+  objY?: number
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1096,20 +1308,37 @@ function renderWideBasin(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Liquid Fill - Clean horizontal top + rounded base (fills 100% with no gaps)
+    // Liquid Fill - Dynamic wave/slosh surface + rounded base (fills 100% with no gaps)
     if (vol > 0 && liquidH > 2) {
+      const surface = getLiquidSurfaceProfile(
+        objId,
+        objX ?? x,
+        objY ?? y,
+        x,
+        bw,
+        liquidTopY,
+        liquidH,
+        state?.temperature ?? 20,
+        state?.isBoiling ?? false,
+        state?.boilingIntensity ?? 0,
+        performance.now()
+      );
+
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(x, liquidTopY);
-      ctx.lineTo(x, y + bh - cornerR);
-      ctx.quadraticCurveTo(x, y + bh, x + cornerR, y + bh);
-      ctx.lineTo(x + bw - cornerR, y + bh);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - cornerR);
-      ctx.lineTo(x + bw, liquidTopY);
+      ctx.moveTo(surface[0].x, surface[0].y);
+      for (let i = 1; i < surface.length; i++) {
+        ctx.lineTo(surface[i].x, surface[i].y);
+      }
+      ctx.lineTo(x + bw, y + bh - cornerR);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
+      ctx.lineTo(x + cornerR, y + bh);
+      ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+      ctx.lineTo(surface[0].x, surface[0].y);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
 
       if (state?.isBoiling && layer !== 'apparatus') {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
@@ -1180,7 +1409,10 @@ function renderFlask(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  objId?: string,
+  objX?: number,
+  objY?: number
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1215,27 +1447,39 @@ function renderFlask(
     const t = isAboveNeck ? 0 : Math.max(0, Math.min(1, (liquidTopY - coneTopY) / Math.max(1, coneBotY - coneTopY)));
     const surfaceHalfW = isAboveNeck ? neckW / 2 : (neckW / 2) + t * (baseHalfW - neckW / 2);
 
-    // Liquid Fill - Clean horizontal top + smooth conical base
+    // Liquid Fill - Dynamic wave/slosh surface + smooth conical base
     if (vol > 0 && liquidH > 2) {
+      const surface = getLiquidSurfaceProfile(
+        objId,
+        objX ?? cx,
+        objY ?? y,
+        cx - surfaceHalfW,
+        surfaceHalfW * 2,
+        liquidTopY,
+        liquidH,
+        state?.temperature ?? 20,
+        state?.isBoiling ?? false,
+        state?.boilingIntensity ?? 0,
+        performance.now()
+      );
+
       ctx.save();
       ctx.beginPath();
-      if (isAboveNeck) {
-        ctx.moveTo(cx - neckW / 2, liquidTopY);
-        ctx.lineTo(cx - neckW / 2, coneTopY);
-        ctx.lineTo(cx - baseHalfW, coneBotY);
-      } else {
-        ctx.moveTo(cx - surfaceHalfW, liquidTopY);
-        ctx.lineTo(cx - baseHalfW, coneBotY);
+      ctx.moveTo(surface[0].x, surface[0].y);
+      for (let i = 1; i < surface.length; i++) {
+        ctx.lineTo(surface[i].x, surface[i].y);
       }
-      ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW + cornerR, y + bh);
-      ctx.lineTo(cx + baseHalfW - cornerR, y + bh);
-      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW, coneBotY);
       if (isAboveNeck) {
         ctx.lineTo(cx + neckW / 2, coneTopY);
-        ctx.lineTo(cx + neckW / 2, liquidTopY);
-      } else {
-        ctx.lineTo(cx + surfaceHalfW, liquidTopY);
       }
+      ctx.lineTo(cx + baseHalfW, coneBotY);
+      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh);
+      ctx.lineTo(cx - baseHalfW + cornerR, y + bh);
+      ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, coneBotY);
+      if (isAboveNeck) {
+        ctx.lineTo(cx - neckW / 2, coneTopY);
+      }
+      ctx.lineTo(surface[0].x, surface[0].y);
       ctx.closePath();
       ctx.clip();
 
@@ -1249,7 +1493,8 @@ function renderFlask(
         y + bh,
         0,
         cx - baseHalfW - 4,
-        cx + baseHalfW + 4
+        cx + baseHalfW + 4,
+        surface
       );
 
       if (state?.isBoiling && layer !== 'apparatus') {
