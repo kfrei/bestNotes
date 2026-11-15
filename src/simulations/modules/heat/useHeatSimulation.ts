@@ -876,7 +876,7 @@ export function useHeatSimulation(
       for (const obj of sim.objects) {
         if (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') {
           const { dropletX, dropletY, pencilX, pencilY, graphX, graphY } =
-            getContainerActionButtonsWorldPos(obj);
+            getContainerActionButtonsWorldPos(obj, sim.objects);
           const dDroplet = Math.hypot(lx - dropletX, ly - dropletY);
           const dPencil = Math.hypot(lx - pencilX, ly - pencilY);
           const dGraph = Math.hypot(lx - graphX, ly - graphY);
