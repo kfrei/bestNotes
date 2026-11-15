@@ -134,14 +134,26 @@ export function getContainersCurveMeta(
     (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
   );
 
-  const letters = ['A', 'B', 'C', 'D', 'E'];
+  // Containers that currently contain liquid (volumeMl > 0)
+  const filledContainers = containers.filter(
+    (c) => (c.containerState?.volumeMl || 0) > 0
+  );
+
+  // Greek capital letters: Α, Β, Γ, Δ, Ε
+  const letters = ['Α', 'Β', 'Γ', 'Δ', 'Ε'];
   const liquidCounts: Record<string, number> = {};
   const metaMap = new Map<string, ContainerCurveMeta>();
 
-  containers.forEach((c, idx) => {
+  // Only assign letters and badges if there are 2 or more containers with liquid!
+  const hasMultipleFilled = filledContainers.length >= 2;
+
+  containers.forEach((c) => {
+    const isFilled = (c.containerState?.volumeMl || 0) > 0;
     const liquidType = c.containerState?.liquidType || 'water';
     const count = liquidCounts[liquidType] || 0;
-    liquidCounts[liquidType] = count + 1;
+    if (isFilled) {
+      liquidCounts[liquidType] = count + 1;
+    }
 
     let color = '#0284c7';
     if (liquidType === 'oil') {
@@ -155,7 +167,14 @@ export function getContainersCurveMeta(
       color = count === 0 ? '#0284c7' : '#1d4ed8';
     }
 
-    const letter = letters[idx % letters.length];
+    let letter = '';
+    if (hasMultipleFilled && isFilled) {
+      const idx = filledContainers.findIndex((fc) => fc.id === c.id);
+      if (idx >= 0) {
+        letter = letters[idx % letters.length];
+      }
+    }
+
     metaMap.set(c.id, {
       id: c.id,
       letter,
@@ -3559,7 +3578,7 @@ function renderThermalGraph(
     boundIds.forEach((cId: string, idx: number) => {
       const meta = effectiveMeta.get(cId);
       const container = sim.objects.find((o) => o.id === cId);
-      const letter = meta?.letter ?? (idx === 0 ? 'A' : 'B');
+      const letter = meta?.letter ?? '';
       const color = meta?.color ?? (idx === 0 ? '#0284c7' : '#65a30d');
       const liquidType = container?.containerState?.liquidType ?? meta?.liquidType ?? 'water';
       const liquidLabel =
@@ -3570,7 +3589,7 @@ function renderThermalGraph(
         cId,
         letter,
         color,
-        label: `θ${letter}`,
+        label: letter ? `θ${letter}` : 'θ',
         liquidLabel,
         currentTemp,
       });
@@ -3600,11 +3619,12 @@ function renderThermalGraph(
       ctx.stroke();
       ctx.restore();
 
-      // Legend Item: "— θA (Νερό): 24°C"
+      // Legend Item: "— θΑ (Νερό): 24°C" or "— θ (Νερό): 24°C" when single filled container
       ctx.font = 'bold 9.5px system-ui, sans-serif';
       ctx.fillStyle = color;
       ctx.textAlign = 'left';
-      const itemText = `— θ${letter} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
+      const labelPrefix = letter ? `θ${letter}` : 'θ';
+      const itemText = `— ${labelPrefix} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
       ctx.fillText(itemText, legendX, legendY);
       legendX += ctx.measureText(itemText).width + 14;
     });

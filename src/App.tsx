@@ -3930,14 +3930,35 @@ export default function App() {
         if (uid) {
           localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
         }
-        if (notebooks.length > 0) {
+        const allNbs = notebooksRef.current && notebooksRef.current.length > 0 ? notebooksRef.current : notebooks;
+        if (allNbs && allNbs.length > 0) {
           if (uid) {
-            saveLibraryShelfCache(uid, notebooks);
+            saveLibraryShelfCache(uid, allNbs);
           }
           const curActive =
-            notebooks.find((n) => n.id === activeNotebookId) ||
-            notebooks[0];
+            allNbs.find((n) => n.id === activeNotebookId) ||
+            allNbs.find((n) => n.id === activeNotebookLiveRef.current?.id) ||
+            allNbs[0];
           if (curActive) {
+            // Embed latest live heat simulation into the active page so nothing is lost on reload
+            const rawLiveHeat = localStorage.getItem('bestnotes_heat_sim_live_backup');
+            if (rawLiveHeat && Array.isArray(curActive.pages) && curActive.pages.length > 0) {
+              try {
+                const liveHeat = JSON.parse(rawLiveHeat);
+                const pIdx = Math.min(activePageIndexLiveRef.current, curActive.pages.length - 1);
+                const curPage = curActive.pages[pIdx];
+                if (curPage && liveHeat) {
+                  const safeLive = { ...liveHeat, isRunning: false };
+                  const curSims = curPage.heatSims || [];
+                  curPage.heatSims = curSims.some((s) => s.id === safeLive.id)
+                    ? curSims.map((s) => (s.id === safeLive.id ? safeLive : s))
+                    : [safeLive];
+                  curPage.activeHeatSimId = safeLive.id;
+                }
+              } catch {
+                // ignore
+              }
+            }
             const activeStr = JSON.stringify(cleanNotebookForStorage(curActive));
             if (activeStr.length <= 1_800_000) {
               if (uid) localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${uid}`, activeStr);
@@ -7999,8 +8020,23 @@ export default function App() {
             thermometerState: obj.thermometerState ? { ...obj.thermometerState } : undefined,
             tripodState: obj.tripodState ? { ...obj.tripodState } : undefined,
           })),
-          graph: hs.graph ? { ...hs.graph } : { visible: false, x: 0, y: 0, width: 260, height: 180 },
-          history: hs.history ? hs.history.map((h) => ({ ...h })) : [],
+          graph: hs.graph
+            ? { ...hs.graph, boundContainerIds: hs.graph.boundContainerIds ? [...hs.graph.boundContainerIds] : undefined }
+            : { visible: false, x: 0, y: 0, width: 260, height: 180 },
+          graphs: hs.graphs
+            ? hs.graphs.map((g) => ({
+                ...g,
+                boundContainerIds: g.boundContainerIds ? [...g.boundContainerIds] : undefined,
+              }))
+            : undefined,
+          history: hs.history
+            ? hs.history.map((h) => ({
+                ...h,
+                tempsByContainerId: h.tempsByContainerId ? { ...h.tempsByContainerId } : undefined,
+              }))
+            : [],
+          elapsedSec: hs.elapsedSec ?? 0,
+          ambientTemperature: hs.ambientTemperature ?? 20,
         }))
       : undefined,
     activeHeatSimId: p.activeHeatSimId,

@@ -70,6 +70,54 @@ export interface UseHeatSimulationReturn {
   handleCut: () => HeatObject[];
 }
 
+export const HEAT_SIM_BACKUP_KEY = 'bestnotes_heat_sim_live_backup';
+export const HEAT_SIM_BY_ID_PREFIX = 'bestnotes_heat_sim_';
+
+export function persistHeatSimLive(sim: HeatSimConfig): void {
+  try {
+    const safeSim = { ...sim, isRunning: false };
+    const serialized = JSON.stringify(safeSim);
+    localStorage.setItem(HEAT_SIM_BACKUP_KEY, serialized);
+    localStorage.setItem(`${HEAT_SIM_BY_ID_PREFIX}${safeSim.id}`, serialized);
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function restoreHeatSimFromStorage(simFromPage: HeatSimConfig): HeatSimConfig {
+  try {
+    const rawBackup =
+      localStorage.getItem(`${HEAT_SIM_BY_ID_PREFIX}${simFromPage.id}`) ||
+      localStorage.getItem(HEAT_SIM_BACKUP_KEY);
+    if (rawBackup) {
+      const parsed: HeatSimConfig = JSON.parse(rawBackup);
+      if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+        // If the backup has progress (elapsedSec > 0 or history or modified liquid/temp), restore it!
+        const hasPageProgress =
+          (simFromPage.elapsedSec || 0) > 0 || (simFromPage.history && simFromPage.history.length > 1);
+        const hasBackupProgress =
+          (parsed.elapsedSec || 0) > 0 || (parsed.history && parsed.history.length > 1);
+        const hasCustomObjects = parsed.objects.some(
+          (o) =>
+            (o.containerState?.temperature && o.containerState.temperature !== 20) ||
+            (o.containerState?.liquidType && o.containerState.liquidType !== 'water') ||
+            o.type === 'flask'
+        );
+        if (parsed.id === simFromPage.id || (!hasPageProgress && (hasBackupProgress || hasCustomObjects))) {
+          return {
+            ...parsed,
+            id: simFromPage.id,
+            isRunning: false,
+          };
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return simFromPage;
+}
+
 export function useHeatSimulation(
   activePage: NotePage | null,
   updatePage: (updater: (p: NotePage) => NotePage) => void
@@ -101,22 +149,53 @@ export function useHeatSimulation(
 
   const getHoverPoint = useCallback(() => hoverPointRef.current, []);
 
+  // Flush live simulation state to localStorage & page on unload / refresh
+  useEffect(() => {
+    const flushOnUnload = () => {
+      const live = liveSimRef.current;
+      if (live) {
+        persistHeatSimLive(live);
+        updateActiveHeatSim(() => ({ ...live, isRunning: false }));
+      }
+    };
+    window.addEventListener('beforeunload', flushOnUnload);
+    window.addEventListener('pagehide', flushOnUnload);
+    return () => {
+      window.removeEventListener('beforeunload', flushOnUnload);
+      window.removeEventListener('pagehide', flushOnUnload);
+    };
+  }, []);
+
   // Keep liveSimRef synced when activeHeatSim changes from page or user actions
   useEffect(() => {
     if (activeHeatSim) {
       if (!liveSimRef.current || liveSimRef.current.id !== activeHeatSim.id) {
-        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(activeHeatSim));
+        const candidate = restoreHeatSimFromStorage(activeHeatSim);
+        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(candidate));
         cloned.isRunning = false;
         liveSimRef.current = cloned;
         if (activeHeatSim.isRunning) {
           updateActiveHeatSim((prev) => ({ ...prev, isRunning: false }));
         }
+        // If restored candidate has user progress beyond default, sync back to page immediately
+        if (
+          candidate.elapsedSec !== activeHeatSim.elapsedSec ||
+          JSON.stringify(candidate.objects) !== JSON.stringify(activeHeatSim.objects)
+        ) {
+          updateActiveHeatSim(() => cloned);
+        }
       } else {
         liveSimRef.current.name = activeHeatSim.name;
         liveSimRef.current.isRunning = activeHeatSim.isRunning;
         liveSimRef.current.graph = activeHeatSim.graph;
+        liveSimRef.current.graphs = activeHeatSim.graphs;
         liveSimRef.current.selectedObjectId = activeHeatSim.selectedObjectId;
         liveSimRef.current.selectedObjectIds = activeHeatSim.selectedObjectIds;
+        liveSimRef.current.ambientTemperature = activeHeatSim.ambientTemperature;
+        if (!liveSimRef.current.isRunning && activeHeatSim.elapsedSec !== undefined) {
+          liveSimRef.current.elapsedSec = activeHeatSim.elapsedSec;
+          liveSimRef.current.history = activeHeatSim.history;
+        }
         // Sync object positions and states
         for (const o of activeHeatSim.objects) {
           const live = liveSimRef.current.objects.find((x) => x.id === o.id);
@@ -181,8 +260,10 @@ export function useHeatSimulation(
         const activeId = page.activeHeatSimId || curSims[0]?.id;
         if (!activeId || curSims.length === 0) {
           const freshSim = createDefaultHeatSim(320, 380);
-          const updated = updater(freshSim);
+          const candidate = restoreHeatSimFromStorage(freshSim);
+          const updated = updater(candidate);
           liveSimRef.current = JSON.parse(JSON.stringify(updated));
+          persistHeatSimLive(updated);
           return {
             ...page,
             heatSims: [updated],
@@ -194,6 +275,7 @@ export function useHeatSimulation(
         const matched = nextSims.find((s) => s.id === activeId);
         if (matched) {
           liveSimRef.current = JSON.parse(JSON.stringify(matched));
+          persistHeatSimLive(matched);
         }
         return {
           ...page,
@@ -208,11 +290,26 @@ export function useHeatSimulation(
     (page: NotePage): HeatSimConfig => {
       if (page.heatSims && page.heatSims.length > 0) {
         const found = page.heatSims.find((s: HeatSimConfig) => s.id === page.activeHeatSimId) || page.heatSims[0];
-        liveSimRef.current = JSON.parse(JSON.stringify(found));
-        return found;
+        const restored = restoreHeatSimFromStorage(found);
+        liveSimRef.current = JSON.parse(JSON.stringify(restored));
+        return restored;
       }
-      const newSim = createDefaultHeatSim(280, 360);
+      let candidateSim: HeatSimConfig | null = null;
+      try {
+        const raw = localStorage.getItem(HEAT_SIM_BACKUP_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+            candidateSim = { ...parsed, isRunning: false };
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const newSim = candidateSim || createDefaultHeatSim(280, 360);
       liveSimRef.current = JSON.parse(JSON.stringify(newSim));
+      persistHeatSimLive(newSim);
       updatePage((p: NotePage) => ({
         ...p,
         heatSims: [newSim],
@@ -1548,7 +1645,7 @@ export function useHeatSimulation(
     [updatePage]
   );
 
-  // Advances physics frame at 60fps in memory, throttling page state sync
+  // Advances physics frame at 60fps in memory, throttling page state sync & localStorage backup
   const stepPhysicsFrame = useCallback(
     (dt: number) => {
       const cur = liveSimRef.current || activeHeatSim;
@@ -1556,10 +1653,11 @@ export function useHeatSimulation(
       const next = stepHeatSimulation(cur, dt);
       liveSimRef.current = next;
 
-      // Throttle persistent sync to activePage (every 1.5 seconds) so React does not re-render at 60fps
+      // Throttle persistent sync to activePage & localStorage backup (every 800ms)
       const now = performance.now();
-      if (now - lastStateSyncTimeRef.current > 1500) {
+      if (now - lastStateSyncTimeRef.current > 800) {
         lastStateSyncTimeRef.current = now;
+        persistHeatSimLive(next);
         updateActiveHeatSim(() => next);
       }
     },
