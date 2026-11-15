@@ -1319,7 +1319,7 @@ export default function App() {
           activeLayerId?: string;
           showLayersPanel?: boolean;
           showSimulationPanel?: boolean;
-          simActiveCategory?: 'circuits' | 'springs' | 'forces' | 'atoms' | null;
+          simActiveCategory?: 'circuits' | 'springs' | 'forces' | 'heat' | 'atoms' | null;
           simPanelPos?: { x: number; y: number };
           isSimulating?: boolean;
           isSpringSimulating?: boolean;
@@ -60832,23 +60832,6 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
-                      setSimActiveCategory(nextCat);
-                      if (nextCat === 'heat') {
-                        heatSim.ensureActiveHeatSim(activePage);
-                      }
-                    }}
-                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
-                      simActiveCategory === 'heat'
-                        ? 'bg-[#234978] text-white shadow-xs'
-                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
-                    }`}
-                  >
-                    <span>Θερμότητα</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
                       const nextCat = simActiveCategory === 'forces' ? null : 'forces';
                       setSimActiveCategory(nextCat);
                       if (nextCat === 'forces' && selectedStrokeIds.length > 0) {
@@ -60862,6 +60845,23 @@ export default function App() {
                     }`}
                   >
                     <span>Δυνάμεις</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextCat = simActiveCategory === 'heat' ? null : 'heat';
+                      setSimActiveCategory(nextCat);
+                      if (nextCat === 'heat') {
+                        heatSim.ensureActiveHeatSim(activePage);
+                      }
+                    }}
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                      simActiveCategory === 'heat'
+                        ? 'bg-[#234978] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
+                    }`}
+                  >
+                    <span>Θερμότητα</span>
                   </button>
                   <button
                     type="button"
