@@ -599,10 +599,10 @@ function renderLiquidBody(
     grad.addColorStop(0.70, 'rgba(101, 163, 13, 0.85)'); // Rich virgin olive oil
     grad.addColorStop(1, 'rgba(63, 98, 18, 0.92)'); // Deep rich olive base
   } else if (liquidType === 'milk') {
-    grad.addColorStop(0, 'rgba(255, 255, 255, 0.98)'); // Pure white cream top
-    grad.addColorStop(0.18, 'rgba(254, 252, 232, 0.95)'); // Silky ivory
-    grad.addColorStop(0.60, 'rgba(254, 243, 199, 0.92)'); // Soft warm milk
-    grad.addColorStop(1, 'rgba(253, 230, 138, 0.88)'); // Dense base
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)'); // Pure white top
+    grad.addColorStop(0.40, 'rgba(255, 255, 255, 0.99)'); // Crisp pure white body
+    grad.addColorStop(0.75, 'rgba(248, 249, 250, 0.98)'); // Subtle neutral transition
+    grad.addColorStop(1, 'rgba(229, 231, 235, 0.96)'); // Barely neutral grey at bottom depth (no other hue)
   } else {
     // Water
     grad.addColorStop(0, 'rgba(240, 249, 255, 0.96)'); // Luminous crystal surface sheen
@@ -621,7 +621,7 @@ function renderLiquidBody(
     liquidType === 'oil'
       ? 'rgba(101, 163, 13, 0.08)'
       : liquidType === 'milk'
-      ? 'rgba(203, 213, 225, 0.09)'
+      ? 'rgba(209, 213, 219, 0.07)'
       : 'rgba(2, 132, 199, 0.07)'; // Whisper-faint, barely perceptible meniscus line
   ctx.lineWidth = 0.5;
   ctx.beginPath();

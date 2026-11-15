@@ -76,7 +76,7 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
     milk: {
       name: 'Γάλα',
       accent: '#64748b', // slate accent for thumb visibility
-      trackFill: '#e2e8f0', // soft white / ivory cream
+      trackFill: '#f1f5f9', // pure neutral white-grey
       activeBtn: 'bg-white text-slate-800 border-2 border-slate-400 shadow-xs font-bold',
       badgeBg: 'bg-white text-slate-700 border border-slate-300 shadow-2xs',
       cardRing: 'border-slate-400 ring-2 ring-slate-400/20',

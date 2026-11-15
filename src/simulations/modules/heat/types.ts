@@ -51,9 +51,9 @@ export const LIQUID_REGISTRY: Record<LiquidType, LiquidPhysicalProperties> = {
     density: 1.03,
     specificHeat: 3.93,
     boilingPoint: 100.5,
-    color: 'rgba(254, 252, 232, 0.88)', // Milky ivory translucent
-    deepColor: '#ca8a04',
-    glowColor: 'rgba(254, 240, 138, 0.6)',
+    color: '#ffffff', // Pure white
+    deepColor: '#cbd5e1', // Neutral cool slate grey
+    glowColor: 'rgba(241, 245, 249, 0.7)',
     descriptionEl: 'Ειδική θερμοχωρητικότητα c = 3.93 J/(g·°C). Πυκνότητα ελαφρώς μεγαλύτερη από το νερό.',
   },
   oil: {
