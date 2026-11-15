@@ -1670,7 +1670,13 @@ export function isContainerSubmerged(obj: HeatObject, allObjects?: HeatObject[])
  * When normal: positioned at bottom-right of container glassware.
  * When submerged in another container: slides up to the top-right above the outer rim!
  */
-export function getContainerActionButtonsLocalPos(w: number, h: number, isSubmerged?: boolean) {
+export function getContainerActionButtonsLocalPos(
+  w: number,
+  h: number,
+  isSubmerged?: boolean,
+  containerType?: string,
+  outerRimLocalY?: number | null
+) {
   const pad = 8;
   const bw = w - pad * 2;
   const bh = h - pad * 2 - 6;
@@ -1680,26 +1686,47 @@ export function getContainerActionButtonsLocalPos(w: number, h: number, isSubmer
   const btnSize = 18;
   const btnHalf = btnSize / 2;
   const gap = 4.5;
-  const dropletX = glassRightX + gap + btnHalf;
 
   if (isSubmerged) {
     // When submerged in another vessel:
-    // Buttons slide up to the top-right of the upright vessel, in the empty area above the other vessel's rim!
-    const beadH = 3.5;
-    const topMargin = pad + 4 + beadH + 2;
-    // Graph button at the top
-    const graphX = dropletX;
-    const graphY = topMargin + btnHalf;
-    // Pencil stacked below graph
-    const pencilX = dropletX;
-    const pencilY = graphY + btnSize + 4;
-    // Droplet stacked below pencil
-    const dropletY = pencilY + btnSize + 4;
+    // 1. Horizontal position:
+    // For a conical flask (flask), the buttons hug the narrow neck closely ("και πιο κοντα ομως στο λαιμο του κωνικου"),
+    // rather than floating out at the wide base edge!
+    let btnX: number;
+    if (containerType === 'flask') {
+      const cx = pad + bw / 2;
+      const neckW = bw * 0.30;
+      const neckRightX = cx + neckW / 2 + 3.5; // right edge of neck glass + collar
+      btnX = Math.round(neckRightX + gap + btnHalf);
+    } else {
+      btnX = glassRightX + gap + btnHalf;
+    }
+
+    // 2. Vertical position:
+    // The droplet must ALWAYS be slightly above the rim of the wide outer vessel ("η σταγονα του κωνικου δοχειου να ειναι παντα λιγο πιο πανω απο το χειλος του φαρδιου δοχειου")!
+    // And stacked above it: pencil, and stacked above pencil: graph ("και ας ειναι το πιο πανω το διαγραμμα πιο πανω απο το χειλος του κωνικου δεν πειραζει αυτο")!
+    let dropletY: number;
+    if (outerRimLocalY !== undefined && outerRimLocalY !== null) {
+      // Bottom of droplet is ~7px clearly above the outer vessel's rim
+      dropletY = Math.round(outerRimLocalY - btnHalf - 7);
+    } else {
+      // Fallback if outer rim is unknown
+      const beadH = 3.5;
+      const topMargin = pad + 4 + beadH + 2;
+      dropletY = topMargin + btnHalf + (btnSize + 4) * 2;
+    }
+
+    const pencilX = btnX;
+    const pencilY = dropletY - btnSize - 4;
+    const graphX = btnX;
+    const graphY = pencilY - btnSize - 4;
+    const dropletX = btnX;
 
     return { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnSize, btnHalf, glassRightX, glassBottomY };
   }
 
   // Normal position at bottom-right
+  const dropletX = glassRightX + gap + btnHalf;
   const dropletY = glassBottomY - btnHalf - 1;
   const pencilX = dropletX;
   const pencilY = dropletY - btnSize - 4;
@@ -1710,7 +1737,24 @@ export function getContainerActionButtonsLocalPos(w: number, h: number, isSubmer
 
 export function getContainerActionButtonsWorldPos(obj: HeatObject, allObjects?: HeatObject[]) {
   const isSubmerged = allObjects ? isContainerSubmerged(obj, allObjects) : false;
-  const local = getContainerActionButtonsLocalPos(obj.width, obj.height, isSubmerged);
+  let outerRimLocalY: number | null = null;
+  if (isSubmerged && allObjects) {
+    const parentBasin = allObjects.find(
+      (b) =>
+        b.id !== obj.id &&
+        (b.type === 'wide-basin' || b.type === 'beaker') &&
+        obj.x >= b.x - 25 &&
+        obj.x + obj.width <= b.x + b.width + 25 &&
+        obj.y + obj.height >= b.y + 15 &&
+        obj.width <= b.width
+    );
+    if (parentBasin) {
+      const bPad = 8;
+      const basinRimWorldY = parentBasin.y + bPad + 4;
+      outerRimLocalY = basinRimWorldY - obj.y;
+    }
+  }
+  const local = getContainerActionButtonsLocalPos(obj.width, obj.height, isSubmerged, obj.type, outerRimLocalY);
   return {
     dropletX: obj.x + local.dropletX,
     dropletY: obj.y + local.dropletY,
@@ -1995,10 +2039,12 @@ function renderContainerActionButtons(
   isDark: boolean,
   state?: HeatContainerState,
   isGraphActive?: boolean,
-  isSubmerged?: boolean
+  isSubmerged?: boolean,
+  containerType?: string,
+  outerRimLocalY?: number | null
 ): void {
   const { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnHalf, glassRightX } =
-    getContainerActionButtonsLocalPos(w, h, isSubmerged);
+    getContainerActionButtonsLocalPos(w, h, isSubmerged, containerType, outerRimLocalY);
 
   const feedback = objId ? containerFillFeedbackMap.get(objId) : undefined;
   const isFilled = Boolean(state && state.volumeMl > 0);
@@ -2047,7 +2093,7 @@ function renderContainerActionButtons(
         badgeCenterX = minCenterX;
       }
       const badgeCenterY = isSubmerged
-        ? dropletY + btnHalf + badgeH / 2 + 4 + floatUp
+        ? graphY - btnHalf - badgeH / 2 - 4 - floatUp
         : pencilY - btnHalf - 12 - floatUp;
 
       // Shadow & pill container
@@ -2396,7 +2442,24 @@ function renderBeaker(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
   // When submerged, slides smoothly up to the top-right empty area!
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive, isSubmerged);
+    let outerRimLocalY: number | null = null;
+    if (parentBasin) {
+      const bPad = 8;
+      const basinRimGlobalY = parentBasin.y + bPad + 4;
+      outerRimLocalY = basinRimGlobalY - (objY ?? 0);
+    }
+    renderContainerActionButtons(
+      ctx,
+      objId,
+      w,
+      h,
+      isDark,
+      state,
+      isGraphActive,
+      isSubmerged,
+      'beaker',
+      outerRimLocalY
+    );
     if (letter && color) {
       renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
     }
@@ -2951,7 +3014,24 @@ function renderFlask(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
   // When submerged, slides smoothly up to the top-right empty area!
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive, isSubmerged);
+    let outerRimLocalY: number | null = null;
+    if (parentBasin) {
+      const bPad = 8;
+      const basinRimGlobalY = parentBasin.y + bPad + 4;
+      outerRimLocalY = basinRimGlobalY - (objY ?? 0);
+    }
+    renderContainerActionButtons(
+      ctx,
+      objId,
+      w,
+      h,
+      isDark,
+      state,
+      isGraphActive,
+      isSubmerged,
+      'flask',
+      outerRimLocalY
+    );
     if (letter && color) {
       renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
     }
