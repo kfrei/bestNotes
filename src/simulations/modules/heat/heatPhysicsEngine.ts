@@ -86,13 +86,15 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     if (!tripod.tripodState) continue;
     let targetGauzeTemp = ambientTemp;
 
-    // Check if any active burner is positioned directly under the tripod
+    // Check if any active burner is positioned directly under or within the tripod base
     const burnerUnderneath = burners.find((b) => {
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
-      // Bounding check: burner is positioned under the tripod wire gauze
-      const isUnderGauze = b.y >= tripod.y - 40 && b.y <= tripod.y + tripod.height + 60;
-      return dx < Math.max(50, tripod.width * 0.45) && isUnderGauze;
+      const isHoriz = dx < Math.max(70, tripod.width * 0.65);
+      // Burner top is within/under tripod wire gauze
+      const isUnderGauze =
+        b.y <= tripod.y + tripod.height + 70 && b.y + b.height >= tripod.y + 10;
+      return isHoriz && isUnderGauze;
     });
 
     if (burnerUnderneath && burnerUnderneath.burnerState) {
@@ -116,11 +118,14 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
 
     let receivedPowerWatts = 0;
 
-    // A. Check if resting on a heated tripod
+    // A. Check if resting on a tripod (with heated wire gauze)
     const tripodBelow = tripods.find((t) => {
       const dx = Math.abs(container.x + container.width / 2 - (t.x + t.width / 2));
-      const dy = Math.abs(container.y + container.height - t.y);
-      return dx < Math.max(55, (t.width + container.width) * 0.35) && dy <= 45;
+      const cBot = container.y + container.height;
+      const isHorizAligned = dx < Math.max(75, (t.width + container.width) * 0.48);
+      // Container base rests near or on wire gauze
+      const isVertOnGauze = cBot >= t.y - 25 && cBot <= t.y + Math.max(75, t.height * 0.65);
+      return isHorizAligned && isVertOnGauze;
     });
 
     let burnerUnderTripod: HeatObject | undefined;
@@ -128,8 +133,10 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       burnerUnderTripod = burners.find((b) => {
         if (!b.burnerState?.isOn) return false;
         const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
-        const isUnderGauze = b.y >= tripodBelow.y - 40 && b.y <= tripodBelow.y + tripodBelow.height + 60;
-        return dx < Math.max(50, tripodBelow.width * 0.45) && isUnderGauze;
+        const isHoriz = dx < Math.max(70, tripodBelow.width * 0.65);
+        const isUnderGauze =
+          b.y <= tripodBelow.y + tripodBelow.height + 70 && b.y + b.height >= tripodBelow.y + 10;
+        return isHoriz && isUnderGauze;
       });
     }
 
@@ -140,7 +147,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       // Residual cooling heat transfer from the hot wire gauze after burner was turned off
       const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
       if (deltaTGauze > 0) {
-        receivedPowerWatts += deltaTGauze * 1.5;
+        receivedPowerWatts = Math.max(receivedPowerWatts, deltaTGauze * 2.0);
       }
     }
 
@@ -148,12 +155,11 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const directBurner = burners.find((b) => {
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
-      const flameDist = b.y - (container.y + container.height);
-      return (
-        dx < Math.max(55, (container.width + b.width) * 0.35) &&
-        flameDist >= -40 &&
-        flameDist <= 140
-      );
+      const cBot = container.y + container.height;
+      const isHoriz = dx < Math.max(75, (container.width + b.width) * 0.48);
+      // Burner nozzle / flame reaches container base
+      const isVert = b.y >= cBot - 70 && b.y <= cBot + 170;
+      return isHoriz && isVert;
     });
 
     if (directBurner?.burnerState) {
@@ -165,16 +171,27 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const heatCapJoulesPerC = massGrams * liquidProps.specificHeat;
 
     if (receivedPowerWatts > 0) {
+      // Actively being heated by burner / flame!
+      // Per thermodynamic & educational requirements:
+      // As long as a burner is active under the vessel (even on low), the liquid must
+      // steadily heat up until it reaches its boiling point without flatlining.
       const dQ = receivedPowerWatts * timeStep;
-      cs.temperature += dQ / heatCapJoulesPerC;
-    }
+      const heatDT = dQ / heatCapJoulesPerC;
 
-    // Interaction with ambient environment (Newton's Law of Cooling)
-    // Convective cooling k = 0.0008 1/s (a 50°C vessel in 20°C room cools naturally over ~20 mins,
-    // and heating easily surpasses ambient loss to reach and hold 100°C without stalling!)
-    const coolDelta = cs.temperature - ambientTemp;
-    if (Math.abs(coolDelta) > 0.005) {
-      cs.temperature -= coolDelta * 0.0008 * timeStep;
+      // Gentle ambient convective loss:
+      const ambientLossDT = Math.max(0, (cs.temperature - ambientTemp) * 0.00025 * timeStep);
+      // Flame power strictly guarantees continuous upward heating (at least 75% of power)
+      const netDT = Math.max(heatDT * 0.75, heatDT - ambientLossDT);
+
+      if (cs.temperature < liquidProps.boilingPoint) {
+        cs.temperature = Math.min(liquidProps.boilingPoint, cs.temperature + netDT);
+      }
+    } else {
+      // No active heating: Natural cooling towards room ambient temperature (Newton's Law of Cooling)
+      const coolDelta = cs.temperature - ambientTemp;
+      if (Math.abs(coolDelta) > 0.005) {
+        cs.temperature -= coolDelta * 0.0012 * timeStep;
+      }
     }
 
     // Boiling plateau check (only if container has liquid!)
@@ -364,9 +381,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
           });
         }
 
-        // Sample every 0.1s to record temperature history from t = 0 onwards
+        // Sample every 0.25s to record smooth, high-fidelity temperature curves
         const lastPoint = nextHistory[nextHistory.length - 1];
-        if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.1) {
+        if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.25) {
           const point = {
             timeSec: Math.round(nextElapsed * 10) / 10,
             temp1: Math.round(temp1 * 10) / 10,
@@ -375,8 +392,20 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
             tempEquilibrium:
               tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
           };
-          // Retain complete history from t = 0 (up to 7200 points = 12 minutes of continuous recording)
-          nextHistory = [...nextHistory.slice(-7199), point];
+          nextHistory.push(point);
+
+          // Bound memory gracefully while strictly PRESERVING complete history from t = 0 onwards!
+          // Never slice off the beginning of the experiment: if history exceeds 8,000 points
+          // (~33 minutes of continuous 0.25s samples), decimate by keeping every 2nd point,
+          // strictly maintaining the t = 0 origin point and the latest point.
+          if (nextHistory.length > 8000) {
+            const first = nextHistory[0];
+            const downsampled = nextHistory.filter((_, idx) => idx % 2 === 0);
+            if (downsampled.length === 0 || downsampled[0].timeSec !== first.timeSec) {
+              downsampled.unshift(first);
+            }
+            nextHistory = downsampled;
+          }
         }
       }
     }
