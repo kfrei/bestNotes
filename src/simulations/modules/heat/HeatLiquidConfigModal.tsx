@@ -70,9 +70,9 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
   const tempBadgeColor = getThermometerColor(temperature);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm select-none">
       <div
-        className="w-full max-w-lg rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-200 border border-white/90 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.22),0_4px_16px_-2px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-6 text-[#2c3e50] space-y-5 animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-lg rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/90 backdrop-blur-2xl backdrop-saturate-200 border border-white/90 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.25),0_4px_16px_-2px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-6 text-[#2c3e50] space-y-5 animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

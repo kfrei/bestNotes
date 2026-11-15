@@ -759,22 +759,28 @@ export function useHeatSimulation(
 
         // Floating Action Bar Pills
         if (hasContainer) {
-          // Fill button [ 💧 Γέμισμα ]
+          // Fill button [ 💧 Γέμισμα ] / [ 💧 250ml ]
           const fillX = cx - 14;
-          if (Math.abs(lx - fillX) <= 32 && Math.abs(ly - pillY) <= 13) {
+          if (
+            (Math.abs(lx - fillX) <= 44 || Math.abs(lx - (cx - 24)) <= 40) &&
+            Math.abs(ly - pillY) <= 22
+          ) {
             handleFillContainer(selectedObj.id);
             return true;
           }
           // Edit pencil [ ✎ ]
           const editX = cx + 32;
-          if (Math.hypot(lx - editX, ly - pillY) <= 14) {
+          if (
+            Math.hypot(lx - editX, ly - pillY) <= 24 ||
+            Math.hypot(lx - (cx + 18), ly - pillY) <= 20
+          ) {
             setEditingContainer(selectedObj);
             return true;
           }
         } else if (hasBurner) {
           // Flame toggle [ 🔥 ON / OFF ]
           const flameX = cx;
-          if (Math.abs(lx - flameX) <= 42 && Math.abs(ly - pillY) <= 15) {
+          if (Math.abs(lx - flameX) <= 50 && Math.abs(ly - pillY) <= 22) {
             toggleBurner(selectedObj.id);
             return true;
           }
@@ -839,6 +845,28 @@ export function useHeatSimulation(
         const reversed = [...sim.objects].reverse();
 
         for (const obj of reversed) {
+          // Direct tap on container action pills even before selecting
+          const hasCont = obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask';
+          const pY = obj.y + obj.height + 32;
+          const cX = obj.x + obj.width / 2;
+          if (hasCont && Math.abs(ly - pY) <= 22) {
+            if (Math.abs(lx - (cX - 14)) <= 44 || Math.abs(lx - (cX - 24)) <= 40) {
+              setSelectedObjectIds([obj.id]);
+              handleFillContainer(obj.id);
+              return true;
+            }
+            if (Math.hypot(lx - (cX + 32), ly - pY) <= 24 || Math.hypot(lx - (cX + 18), ly - pY) <= 20) {
+              setSelectedObjectIds([obj.id]);
+              setEditingContainer(obj);
+              return true;
+            }
+          }
+          if (obj.type === 'burner' && Math.abs(ly - pY) <= 22 && Math.abs(lx - cX) <= 50) {
+            setSelectedObjectIds([obj.id]);
+            toggleBurner(obj.id);
+            return true;
+          }
+
           const inside =
             lx >= obj.x - 4 &&
             lx <= obj.x + obj.width + 4 &&

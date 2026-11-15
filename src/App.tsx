@@ -8188,15 +8188,19 @@ export default function App() {
   const heatSim = useHeatSimulation(activePage, updateActivePage);
   const heatSimLastFrameRef = useRef<number | null>(null);
 
-  // When switching to drawing tools (pen, pencil, highlighter, eraser), clear any selected simulation object bounding box!
+  // When switching tool to drawing tools (pen, pencil, highlighter, eraser), deselect any simulation object bounding box!
+  const prevActiveToolForSimRef = useRef<ToolType>(activeTool);
   useEffect(() => {
-    if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser') {
-      if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
-        heatSim.updateActiveHeatSim((prev) => ({
-          ...prev,
-          selectedObjectId: null,
-          selectedObjectIds: [],
-        }));
+    if (prevActiveToolForSimRef.current !== activeTool) {
+      prevActiveToolForSimRef.current = activeTool;
+      if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser') {
+        if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
+          heatSim.updateActiveHeatSim((prev) => ({
+            ...prev,
+            selectedObjectId: null,
+            selectedObjectIds: [],
+          }));
+        }
       }
     }
   }, [activeTool, heatSim.activeHeatSim?.selectedObjectId, heatSim.activeHeatSim?.selectedObjectIds, heatSim.updateActiveHeatSim]);
@@ -10049,6 +10053,47 @@ export default function App() {
           ptY <= spHit.massBox.maxY + 10
         ) {
           return true;
+        }
+      }
+
+      // Always allow 1-finger touch on interactive Heat Simulation objects, handles & action pills (even in Pencil-Only Mode!)
+      const curHeatSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : heatSim.activeHeatSim;
+      if (curHeatSim && ptX > -90000) {
+        if (curHeatSim.graph?.visible) {
+          const g = curHeatSim.graph;
+          if (ptX >= g.x - 8 && ptX <= g.x + g.width + 8 && ptY >= g.y - 8 && ptY <= g.y + g.height + 8) {
+            return true;
+          }
+        }
+        const selIds = curHeatSim.selectedObjectIds?.length
+          ? curHeatSim.selectedObjectIds
+          : curHeatSim.selectedObjectId
+          ? [curHeatSim.selectedObjectId]
+          : [];
+        for (const obj of curHeatSim.objects) {
+          const isSel = selIds.includes(obj.id);
+          if (isSel) {
+            const pillY = obj.y + obj.height + 32;
+            const cx = obj.x + obj.width / 2;
+            if (Math.abs(ptY - pillY) <= 30 && Math.abs(ptX - cx) <= obj.width / 2 + 60) {
+              return true;
+            }
+            if (
+              (Math.abs(ptX - (obj.x - 8)) <= 22 || Math.abs(ptX - (obj.x + obj.width + 8)) <= 22) &&
+              (Math.abs(ptY - (obj.y - 8)) <= 22 || Math.abs(ptY - (obj.y + obj.height + 8)) <= 22)
+            ) {
+              return true;
+            }
+          }
+          // Object body or immediate surroundings
+          if (
+            ptX >= obj.x - 12 &&
+            ptX <= obj.x + obj.width + 12 &&
+            ptY >= obj.y - 12 &&
+            ptY <= obj.y + obj.height + 36
+          ) {
+            return true;
+          }
         }
       }
 
@@ -36959,13 +37004,21 @@ export default function App() {
     if (heatSim.activeHeatSim) {
       if (heatSim.handlePointerDown(e, pt.x, pt.y, activeTool)) {
         e.preventDefault();
-        isDrawingRef.current = true;
-        activePointerIdRef.current = e.pointerId;
-        activePointerTypeRef.current = e.pointerType;
-        try {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-          // ignore
+        if (heatSim.isDragging()) {
+          isDrawingRef.current = true;
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+        } else {
+          // Action button was clicked (Fill [💧], Edit pencil [✎], Flame toggle [🔥], or Trash [🗑️])!
+          // Mark drawing as false so pointerUp does not deselect or create unwanted shapes!
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
         }
         return;
       }
