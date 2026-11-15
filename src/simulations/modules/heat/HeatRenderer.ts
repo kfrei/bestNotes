@@ -1421,25 +1421,6 @@ function renderBeaker(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // 0. Solid/Translucent Glass Silhouette Backing
-    // Softly masks background elements behind the beaker (e.g. tripod wire gauze mesh, ceramic disc, basin rear rim)
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x - spoutW, y + 1.5);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + bw, y);
-    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(x + bw, y + bh - cornerR);
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-    ctx.lineTo(x + cornerR, y + bh);
-    ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
-    ctx.lineTo(x, y + 13);
-    ctx.lineTo(x - spoutW, y + 1.5);
-    ctx.closePath();
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    ctx.fill();
-    ctx.restore();
-
     // Draw Liquid Fill if volume > 0 - Dynamic wave/slosh surface + perfectly filling curved base
     if (vol > 0 && liquidH > 2) {
       const surface = getLiquidSurfaceProfile(
@@ -1613,24 +1594,6 @@ function renderWideBasin(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // 0. Solid/Translucent Glass Silhouette Backing
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x - spoutW, y + 1.5);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + bw, y);
-    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(x + bw, y + bh - cornerR);
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-    ctx.lineTo(x + cornerR, y + bh);
-    ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
-    ctx.lineTo(x, y + 13);
-    ctx.lineTo(x - spoutW, y + 1.5);
-    ctx.closePath();
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    ctx.fill();
-    ctx.restore();
-
     // Liquid Fill - Dynamic wave/slosh surface + rounded base (fills 100% with no gaps)
     if (vol > 0 && liquidH > 2) {
       const surface = getLiquidSurfaceProfile(
@@ -1770,22 +1733,6 @@ function renderFlask(
   // 1. Physical Flask & Liquid Body (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
-
-    // 0. Solid/Translucent Glass Silhouette Backing
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(cx + neckW / 2, y + collarH);
-    ctx.lineTo(cx + neckW / 2, y + neckH);
-    ctx.lineTo(cx + baseHalfW, y + bh - cornerR);
-    ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh);
-    ctx.lineTo(cx - baseHalfW + cornerR, y + bh);
-    ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, y + bh - cornerR);
-    ctx.lineTo(cx - neckW / 2, y + neckH);
-    ctx.lineTo(cx - neckW / 2, y + collarH);
-    ctx.closePath();
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    ctx.fill();
-    ctx.restore();
 
     const coneTopY = y + neckH;
     const coneBotY = y + bh - cornerR;
