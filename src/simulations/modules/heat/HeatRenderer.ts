@@ -534,7 +534,8 @@ function renderBurner(
     ctx.lineJoin = 'round';
 
     // Flame when ON (realistic organic candle flame inspired by CodePen YLGjvx)
-    if (state?.isOn) {
+    // Dynamic animated fire: ONLY rendered in 'all' or 'ui' layers, NEVER baked into static paper background ('apparatus')!
+    if (state?.isOn && layer !== 'apparatus') {
       const time = performance.now() / 1000;
       // 1. Organic gentle sway (sway like candle in air)
       const sway = Math.sin(time * 3.2) * 2.8 + Math.sin(time * 6.5) * 1.2;
@@ -967,8 +968,8 @@ function renderBeaker(
 
       renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4);
 
-      // Boiling Bubbles & Steam
-      if (state?.isBoiling) {
+      // Boiling Bubbles & Steam (dynamic animation, never on static paper background)
+      if (state?.isBoiling && layer !== 'apparatus') {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
         renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
       }
@@ -1077,7 +1078,7 @@ function renderWideBasin(
 
       renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4);
 
-      if (state?.isBoiling) {
+      if (state?.isBoiling && layer !== 'apparatus') {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
         renderSteam(ctx, x + bw / 2, liquidTopY - 6, bw);
       }
@@ -1210,7 +1211,7 @@ function renderFlask(
         cx + baseHalfW + 4
       );
 
-      if (state?.isBoiling) {
+      if (state?.isBoiling && layer !== 'apparatus') {
         renderBoilingBubbles(ctx, cx - surfaceHalfW * 0.7, liquidTopY, surfaceHalfW * 1.4, liquidH);
         renderSteam(ctx, cx, y - 4, neckW);
       }

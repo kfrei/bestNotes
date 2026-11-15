@@ -11250,7 +11250,12 @@ export default function App() {
           const liveSim = (isCurrentActivePage && (heatSim as any).getLiveSim)
             ? (heatSim as any).getLiveSim()
             : hSim;
-          if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
+          if (
+            isCurrentActivePage &&
+            (liveSim?.isRunning ||
+              (heatSim as any).isDragging?.() ||
+              liveSim?.objects?.some((o: any) => o.type === 'burner' && o.burnerState?.isOn))
+          ) {
             continue;
           }
           renderHeatSimulation(ctx, liveSim || hSim, { isDark, layer: 'apparatus' });
@@ -12768,8 +12773,8 @@ export default function App() {
           const liveSim = (isCurrentActivePage && (heatSim as any).getLiveSim)
             ? (heatSim as any).getLiveSim()
             : hSim;
-          // While dragging or running on the active page, Layer 1.5 (simCanvas) animates at 60fps
-          if (isCurrentActivePage && (liveSim?.isRunning || (heatSim as any).isDragging?.())) {
+          // On the active page, Layer 1.5 (simCanvas) animates at 60fps and renders UI controls
+          if (isCurrentActivePage) {
             continue;
           }
           renderHeatSimulation(ctx, liveSim || hSim, {
