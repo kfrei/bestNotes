@@ -551,6 +551,7 @@ export function useHeatSimulation(
         if (obj.type === 'burner') {
           const { btnCenterX, btnCenterY } = getBurnerActionButtonWorldPos(obj);
           if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 16) {
+            setSelectedObjectIds([]);
             toggleBurner(obj.id);
             return true;
           }
@@ -558,20 +559,21 @@ export function useHeatSimulation(
       }
 
       // 0b. Permanent Container Action Buttons (Droplet & Pencil at bottom-right of container glassware)
+      // Clicking these action buttons directly toggles liquid fill or opens the edit modal without lasso-selecting the container!
       for (const obj of sim.objects) {
         if (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') {
           const { dropletX, dropletY, pencilX, pencilY } = getContainerActionButtonsWorldPos(obj);
           const dDroplet = Math.hypot(lx - dropletX, ly - dropletY);
           const dPencil = Math.hypot(lx - pencilX, ly - pencilY);
 
-          if (dDroplet <= 14 && dDroplet <= dPencil) {
-            setSelectedObjectIds([obj.id]);
+          if (dDroplet <= 15 && dDroplet <= dPencil) {
+            setSelectedObjectIds([]);
             handleFillContainer(obj.id);
             return true;
           }
 
-          if (dPencil <= 14) {
-            setSelectedObjectIds([obj.id]);
+          if (dPencil <= 15) {
+            setSelectedObjectIds([]);
             setEditingContainer(obj);
             return true;
           }
