@@ -225,10 +225,10 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const vesselDipped = containers.find((c) => {
       if (!c.containerState || c.containerState.volumeMl <= 0) return false;
       const liquidLevelFraction = Math.min(
-        0.92,
+        0.96,
         Math.max(0.08, c.containerState.volumeMl / c.containerState.capacityMl)
       );
-      const liquidTopY = c.y + c.height * (1.0 - liquidLevelFraction * 0.88);
+      const liquidTopY = c.y + c.height * (1.0 - liquidLevelFraction * 0.94);
       const liquidBottomY = c.y + c.height;
 
       return (

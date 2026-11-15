@@ -615,15 +615,15 @@ function renderLiquidBody(
   ctx.fillStyle = grad;
   ctx.fillRect(fx, fy, fw, fh);
 
-  // 2. Ultra-soft, delicate surface line following dynamic surface profile
+  // 2. Ultra-soft, delicate surface line following dynamic surface profile (barely perceptible)
   ctx.save();
   ctx.strokeStyle =
     liquidType === 'oil'
-      ? 'rgba(101, 163, 13, 0.28)'
+      ? 'rgba(101, 163, 13, 0.08)'
       : liquidType === 'milk'
-      ? 'rgba(203, 213, 225, 0.35)'
-      : 'rgba(2, 132, 199, 0.28)'; // Soft, delicate, non-intrusive water meniscus line
-  ctx.lineWidth = 0.9;
+      ? 'rgba(203, 213, 225, 0.09)'
+      : 'rgba(2, 132, 199, 0.07)'; // Whisper-faint, barely perceptible meniscus line
+  ctx.lineWidth = 0.5;
   ctx.beginPath();
   if (surfacePoints && surfacePoints.length > 1) {
     ctx.moveTo(surfacePoints[0].x, surfacePoints[0].y);
@@ -636,18 +636,18 @@ function renderLiquidBody(
   }
   ctx.stroke();
 
-  // Subtle luminous reflection highlight just below the surface
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-  ctx.lineWidth = 0.75;
+  // Subtle luminous reflection highlight just below the surface (whisper-soft)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 0.5;
   ctx.beginPath();
   if (surfacePoints && surfacePoints.length > 2) {
-    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 1.2);
+    ctx.moveTo(surfacePoints[1].x, surfacePoints[1].y + 1.0);
     for (let i = 2; i < surfacePoints.length - 1; i++) {
-      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 1.2);
+      ctx.lineTo(surfacePoints[i].x, surfacePoints[i].y + 1.0);
     }
   } else {
-    ctx.moveTo(x + 3, liquidTopY + 1.2);
-    ctx.lineTo(x + bw - 3, liquidTopY + 1.2);
+    ctx.moveTo(x + 3, liquidTopY + 1.0);
+    ctx.lineTo(x + bw - 3, liquidTopY + 1.0);
   }
   ctx.stroke();
   ctx.restore();
@@ -1166,9 +1166,10 @@ function renderBeaker(
   const cap = state?.capacityMl ?? 500;
   const liquidType = state?.liquidType ?? 'water';
 
-  const maxLiquidFraction = 0.86;
-  const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - 10) * liquidFrac;
+  // Headspace gap at 100% capacity: reduced to ~40% of previous gap so liquid is much closer to the rim
+  const fullHeadspace = (0.14 * bh + 8.6) * 0.40;
+  const fillRatio = Math.max(0, Math.min(1.0, vol / cap));
+  const liquidH = Math.max(0, (bh - fullHeadspace) * fillRatio);
   const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Beaker & Liquid Body (apparatus / all)
@@ -1299,9 +1300,10 @@ function renderWideBasin(
   const cap = state?.capacityMl ?? 800;
   const liquidType = state?.liquidType ?? 'water';
 
-  const maxLiquidFraction = 0.85;
-  const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - 10) * liquidFrac;
+  // Headspace gap at 100% capacity: reduced to ~40% of previous gap so liquid is much closer to the rim
+  const fullHeadspace = (0.15 * bh + 8.5) * 0.40;
+  const fillRatio = Math.max(0, Math.min(1.0, vol / cap));
+  const liquidH = Math.max(0, (bh - fullHeadspace) * fillRatio);
   const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Basin Sketch & Liquid Body (apparatus / all)
@@ -1432,9 +1434,10 @@ function renderFlask(
   const cap = state?.capacityMl ?? 500;
   const liquidType = state?.liquidType ?? 'water';
 
-  const maxLiquidFraction = 0.86;
-  const liquidFrac = Math.min(maxLiquidFraction, (vol / cap) * maxLiquidFraction);
-  const liquidH = (bh - 10) * liquidFrac;
+  // Headspace gap at 100% capacity: reduced to ~40% of previous gap so liquid is much closer to the rim
+  const fullHeadspace = (0.14 * bh + 8.6) * 0.40;
+  const fillRatio = Math.max(0, Math.min(1.0, vol / cap));
+  const liquidH = Math.max(0, (bh - fullHeadspace) * fillRatio);
   const liquidTopY = y + bh - liquidH;
 
   // 1. Physical Flask & Liquid Body (apparatus / all)
