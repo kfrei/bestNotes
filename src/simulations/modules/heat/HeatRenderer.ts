@@ -3972,7 +3972,12 @@ function renderThermalGraph(
       ctx.fillStyle = '#059669';
       ctx.font = 'bold 8.5px system-ui, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(`θισορ = ${lastEq.toFixed(1)}°C`, plotX + plotW - 4, eqY - 4);
+      const ambient = sim.ambientTemperature ?? 20.0;
+      const isAmbient = Math.abs(lastEq - ambient) < 0.05;
+      const eqLabel = isAmbient
+        ? `θπεριβάλλοντος = ${lastEq.toFixed(1)}°C`
+        : `θισορ = ${lastEq.toFixed(1)}°C`;
+      ctx.fillText(eqLabel, plotX + plotW - 4, eqY - 4);
       ctx.restore();
     }
 
