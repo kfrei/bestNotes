@@ -2407,33 +2407,6 @@ function renderBeaker(
         objId, objX, objY, layer, true
       );
       ctx.restore();
-
-      // PASS 3: Ambient Liquid Depth Tint on submerged glass base
-      ctx.save();
-      ctx.beginPath();
-      const subY = Math.max(y, basinWaterLocalY);
-      ctx.moveTo(x - 2, subY);
-      ctx.lineTo(x + bw + 2, subY);
-      ctx.lineTo(x + bw + 2, y + bh - cornerR);
-      ctx.quadraticCurveTo(x + bw + 2, y + bh + 1, x + bw - cornerR, y + bh + 1 + botCurve * 0.25);
-      ctx.bezierCurveTo(
-        x + bw - cornerR - span * 0.28,
-        y + bh + 1 + botCurve * 1.25,
-        x + cornerR + span * 0.28,
-        y + bh + 1 + botCurve * 1.25,
-        x + cornerR,
-        y + bh + 1 + botCurve * 0.25
-      );
-      ctx.quadraticCurveTo(x - 2, y + bh + 1, x - 2, y + bh - cornerR);
-      ctx.closePath();
-      ctx.fillStyle =
-        bcs.liquidType === 'oil'
-          ? 'rgba(132, 204, 22, 0.32)'
-          : bcs.liquidType === 'milk'
-          ? 'rgba(255, 255, 255, 0.45)'
-          : 'rgba(56, 189, 248, 0.24)';
-      ctx.fill();
-      ctx.restore();
     }
 
     ctx.restore();
@@ -2978,33 +2951,6 @@ function renderFlask(
         ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
       );
-      ctx.restore();
-
-      // PASS 3: Ambient Liquid Depth Tint on submerged glass base
-      ctx.save();
-      ctx.beginPath();
-      const subY = Math.max(y, basinWaterLocalY);
-      ctx.moveTo(cx - baseHalfW - 2, subY);
-      ctx.lineTo(cx + baseHalfW + 2, subY);
-      ctx.lineTo(cx + baseHalfW + 2, y + bh - cornerR);
-      ctx.quadraticCurveTo(cx + baseHalfW + 2, y + bh + 1, cx + baseHalfW - cornerR, y + bh + 1 + botCurve * 0.25);
-      ctx.bezierCurveTo(
-        cx + baseHalfW - cornerR - span * 0.28,
-        y + bh + 1 + botCurve * 1.25,
-        cx - baseHalfW + cornerR + span * 0.28,
-        y + bh + 1 + botCurve * 1.25,
-        cx - baseHalfW + cornerR,
-        y + bh + 1 + botCurve * 0.25
-      );
-      ctx.quadraticCurveTo(cx - baseHalfW - 2, y + bh + 1, cx - baseHalfW - 2, y + bh - cornerR);
-      ctx.closePath();
-      ctx.fillStyle =
-        bcs.liquidType === 'oil'
-          ? 'rgba(132, 204, 22, 0.32)'
-          : bcs.liquidType === 'milk'
-          ? 'rgba(255, 255, 255, 0.45)'
-          : 'rgba(56, 189, 248, 0.24)';
-      ctx.fill();
       ctx.restore();
     }
 
