@@ -36115,9 +36115,14 @@ export default function App() {
     if (!aCtx) return;
 
     const EPS = 0.9;
-    const pageCenterX = getPageLogicalWidth(activePage) / 2;
+    const pageW = getPageLogicalWidth(activePage);
     const pageH = getPageLogicalHeight(activePage);
+    const pageCenterX = pageW / 2;
     const isSnappedToPageCenterX = Math.abs(selBox.cx - pageCenterX) <= 1.8;
+    const isSnappedPageLeft = Math.abs(selBox.minX - 0) <= 1.5;
+    const isSnappedPageRight = Math.abs(selBox.maxX - pageW) <= 1.5;
+    const isSnappedPageTop = Math.abs(selBox.minY - 0) <= 1.5;
+    const isSnappedPageBottom = Math.abs(selBox.maxY - pageH) <= 1.5;
     const vLines: { x: number; y1: number; y2: number }[] = [];
     const hLines: { y: number; x1: number; x2: number }[] = [];
     const centerLinks: {
@@ -36191,6 +36196,10 @@ export default function App() {
 
     if (
       !isSnappedToPageCenterX &&
+      !isSnappedPageLeft &&
+      !isSnappedPageRight &&
+      !isSnappedPageTop &&
+      !isSnappedPageBottom &&
       vLines.length === 0 &&
       hLines.length === 0 &&
       centerLinks.length === 0
@@ -36200,23 +36209,33 @@ export default function App() {
 
     aCtx.save();
 
-    if (isSnappedToPageCenterX) {
+    // Helper to draw crisp dashed page edge guides with halo
+    const drawPageEdgeGuide = (x1: number, y1: number, x2: number, y2: number) => {
       aCtx.save();
       aCtx.setLineDash([6, 5]);
       aCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
       aCtx.lineWidth = 3.2;
       aCtx.beginPath();
-      aCtx.moveTo(pageCenterX, 0);
-      aCtx.lineTo(pageCenterX, pageH);
+      aCtx.moveTo(x1, y1);
+      aCtx.lineTo(x2, y2);
       aCtx.stroke();
 
       aCtx.strokeStyle = '#ef4444';
       aCtx.lineWidth = 1.8;
       aCtx.beginPath();
-      aCtx.moveTo(pageCenterX, 0);
-      aCtx.lineTo(pageCenterX, pageH);
+      aCtx.moveTo(x1, y1);
+      aCtx.lineTo(x2, y2);
       aCtx.stroke();
       aCtx.restore();
+    };
+
+    if (isSnappedPageLeft) drawPageEdgeGuide(0, 0, 0, pageH);
+    if (isSnappedPageRight) drawPageEdgeGuide(pageW, 0, pageW, pageH);
+    if (isSnappedPageTop) drawPageEdgeGuide(0, 0, pageW, 0);
+    if (isSnappedPageBottom) drawPageEdgeGuide(0, pageH, pageW, pageH);
+
+    if (isSnappedToPageCenterX) {
+      drawPageEdgeGuide(pageCenterX, 0, pageCenterX, pageH);
     }
 
     // Draw thin red Edge Alignment lines (with subtle white halo for visibility on dark/grey fills)
@@ -36313,6 +36332,12 @@ export default function App() {
         drawRedCenterCrosshair(cl.refCx, cl.refCy, false);
       }
     }
+
+    // Draw magnetic corner crosshairs if snapped flush to any of the 4 page corners
+    if (isSnappedPageLeft && isSnappedPageTop) drawRedCenterCrosshair(0, 0, true);
+    if (isSnappedPageRight && isSnappedPageTop) drawRedCenterCrosshair(pageW, 0, true);
+    if (isSnappedPageLeft && isSnappedPageBottom) drawRedCenterCrosshair(0, pageH, true);
+    if (isSnappedPageRight && isSnappedPageBottom) drawRedCenterCrosshair(pageW, pageH, true);
 
     aCtx.restore();
   };
@@ -42843,10 +42868,19 @@ export default function App() {
         if (tf.mode === 'scale') {
           const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds, selectedLassoTextIds);
           const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds, 0, 0, selectedLassoTextIds);
+          const pW = getPageLogicalWidth(activePage);
+          const pH = getPageLogicalHeight(activePage);
+          const isSingleImgResize =
+            Boolean(selectedImageId) &&
+            selImagesList.length === 1 &&
+            selStrokesList.length === 0 &&
+            selectedLassoTextIds.length === 0;
+
           let currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
           let scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
+          let cornerSnapOverride: { x: number; y: number; w: number; h: number } | null = null;
 
-          if (curBox && refBoxes.length > 0 && Math.abs(tf.frameAngle || 0) < 0.05) {
+          if (curBox && Math.abs(tf.frameAngle || 0) < 0.05) {
             const candMinX = tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor;
             const candMaxX = tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor;
             const candMinY = tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor;
@@ -42854,31 +42888,88 @@ export default function App() {
             const candCx = (candMinX + candMaxX) / 2;
             const candCy = (candMinY + candMaxY) / 2;
 
+            const CORNER_SNAP_T = isSingleImgResize ? 26 : 18;
+            const EDGE_SNAP_T = isSingleImgResize ? 20 : 12;
+
+            const sx = tf.sideSignX || 1;
+            const sy = tf.sideSignY || 1;
+            const targetCornerX = sx === -1 ? 0 : pW;
+            const targetCornerY = sy === -1 ? 0 : pH;
+            const draggedCornerX = sx === -1 ? candMinX : candMaxX;
+            const draggedCornerY = sy === -1 ? candMinY : candMaxY;
+            const curCornerX = sx === -1 ? curBox.minX : curBox.maxX;
+            const curCornerY = sy === -1 ? curBox.minY : curBox.maxY;
+
             let bestScaleSnap: number | null = null;
             let bestDiff = 2.4;
-            const tryScaleCandidate = (candVal: number, curVal: number, anchorVal: number, targetVal: number) => {
+            const tryScaleCandidate = (
+              candVal: number,
+              curVal: number,
+              anchorVal: number,
+              targetVal: number,
+              maxAllowedDiff = 2.4
+            ) => {
               const diff = Math.abs(candVal - targetVal);
               const denom = curVal - anchorVal;
-              if (diff <= bestDiff && Math.abs(denom) > 8) {
+              if (diff <= maxAllowedDiff && Math.abs(denom) > 8) {
                 const reqScale = (targetVal - anchorVal) / denom;
-                if (reqScale >= 0.85 && reqScale <= 1.18) {
+                if (reqScale >= 0.70 && reqScale <= 1.35) {
                   bestDiff = diff;
                   bestScaleSnap = reqScale;
+                  return true;
                 }
               }
+              return false;
             };
 
-            for (const ref of refBoxes) {
-              for (const rx of [ref.minX, ref.maxX]) {
-                tryScaleCandidate(candMinX, curBox.minX, tf.anchorX, rx);
-                tryScaleCandidate(candMaxX, curBox.maxX, tf.anchorX, rx);
+            // 1. Magnetic Snap to the Page Corner when dragging the corner handle near (0, 0), (pW, 0), (0, pH), or (pW, pH)
+            const distToPageCorner = Math.hypot(draggedCornerX - targetCornerX, draggedCornerY - targetCornerY);
+            if (
+              distToPageCorner <= CORNER_SNAP_T ||
+              (Math.abs(draggedCornerX - targetCornerX) <= EDGE_SNAP_T &&
+                Math.abs(draggedCornerY - targetCornerY) <= EDGE_SNAP_T)
+            ) {
+              if (isSingleImgResize) {
+                const targetW = Math.max(24, Math.abs(targetCornerX - tf.anchorX));
+                const targetH = Math.max(24, Math.abs(targetCornerY - tf.anchorY));
+                cornerSnapOverride = {
+                  x: Math.min(targetCornerX, tf.anchorX),
+                  y: Math.min(targetCornerY, tf.anchorY),
+                  w: targetW,
+                  h: targetH,
+                };
+              } else {
+                if (Math.abs(draggedCornerX - targetCornerX) < Math.abs(draggedCornerY - targetCornerY)) {
+                  tryScaleCandidate(draggedCornerX, curCornerX, tf.anchorX, targetCornerX, EDGE_SNAP_T);
+                } else {
+                  tryScaleCandidate(draggedCornerY, curCornerY, tf.anchorY, targetCornerY, EDGE_SNAP_T);
+                }
               }
-              tryScaleCandidate(candCx, curBox.cx, tf.anchorX, ref.cx);
-              for (const ry of [ref.minY, ref.maxY]) {
-                tryScaleCandidate(candMinY, curBox.minY, tf.anchorY, ry);
-                tryScaleCandidate(candMaxY, curBox.maxY, tf.anchorY, ry);
+            } else {
+              // 2. Magnetic Snap to Page Edges (flush to x = 0, x = pW, y = 0, y = pH)
+              let snappedEdge = false;
+              if (Math.abs(draggedCornerX - targetCornerX) <= EDGE_SNAP_T) {
+                snappedEdge = tryScaleCandidate(draggedCornerX, curCornerX, tf.anchorX, targetCornerX, EDGE_SNAP_T);
               }
-              tryScaleCandidate(candCy, curBox.cy, tf.anchorY, ref.cy);
+              if (!snappedEdge && Math.abs(draggedCornerY - targetCornerY) <= EDGE_SNAP_T) {
+                tryScaleCandidate(draggedCornerY, curCornerY, tf.anchorY, targetCornerY, EDGE_SNAP_T);
+              }
+
+              // 3. Snap against other objects (refBoxes)
+              if (bestScaleSnap === null && refBoxes.length > 0) {
+                for (const ref of refBoxes) {
+                  for (const rx of [ref.minX, ref.maxX]) {
+                    tryScaleCandidate(candMinX, curBox.minX, tf.anchorX, rx);
+                    tryScaleCandidate(candMaxX, curBox.maxX, tf.anchorX, rx);
+                  }
+                  tryScaleCandidate(candCx, curBox.cx, tf.anchorX, ref.cx);
+                  for (const ry of [ref.minY, ref.maxY]) {
+                    tryScaleCandidate(candMinY, curBox.minY, tf.anchorY, ry);
+                    tryScaleCandidate(candMaxY, curBox.maxY, tf.anchorY, ry);
+                  }
+                  tryScaleCandidate(candCy, curBox.cy, tf.anchorY, ref.cy);
+                }
+              }
             }
 
             if (bestScaleSnap !== null) {
@@ -42886,22 +42977,30 @@ export default function App() {
               currDist = tf.initialDist * scaleFactor;
             }
 
-            const finalMinX = Math.min(
-              tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
-              tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
-            );
-            const finalMaxX = Math.max(
-              tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
-              tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
-            );
-            const finalMinY = Math.min(
-              tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
-              tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
-            );
-            const finalMaxY = Math.max(
-              tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
-              tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
-            );
+            const finalMinX = cornerSnapOverride
+              ? cornerSnapOverride.x
+              : Math.min(
+                  tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                  tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                );
+            const finalMaxX = cornerSnapOverride
+              ? cornerSnapOverride.x + cornerSnapOverride.w
+              : Math.max(
+                  tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                  tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                );
+            const finalMinY = cornerSnapOverride
+              ? cornerSnapOverride.y
+              : Math.min(
+                  tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                  tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                );
+            const finalMaxY = cornerSnapOverride
+              ? cornerSnapOverride.y + cornerSnapOverride.h
+              : Math.max(
+                  tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                  tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                );
             drawSmartAlignmentGuidesForBox(
               {
                 minX: finalMinX,
@@ -42934,6 +43033,21 @@ export default function App() {
                 ...page,
                 images: page.images.map((im) => {
                   if (im.id !== selectedImageId) return im;
+                  if (cornerSnapOverride) {
+                    const sxRatio = cornerSnapOverride.w / Math.max(1, im.width);
+                    const syRatio = cornerSnapOverride.h / Math.max(1, im.height);
+                    return {
+                      ...im,
+                      x: cornerSnapOverride.x,
+                      y: cornerSnapOverride.y,
+                      width: cornerSnapOverride.w,
+                      height: cornerSnapOverride.h,
+                      clipPolygon: im.clipPolygon?.map((cp) => ({
+                        x: cp.x * sxRatio,
+                        y: cp.y * syRatio,
+                      })),
+                    };
+                  }
                   // Clamp scaleFactor uniformly so the aspect ratio of elongated images NEVER distorts into a square!
                   const minSide = Math.max(1, Math.min(im.width, im.height));
                   const clampedScale = Math.max(24 / minSide, scaleFactor);
@@ -43229,8 +43343,12 @@ export default function App() {
             scaleFactor = Math.max(0.85, Math.min(1.18, dampedSpan / Math.max(1, tf.initialDist)));
 
             // Snap the ACTUAL visual shape edge (curBox.minX/maxX or curBox.minY/maxY — NOT the +10px padded orange handle!)
-            // with a gentle 2.2px snap tolerance so peaks/troughs land 100% flush on dashed guide lines!
-            if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+            // with a gentle 2.2px snap tolerance so peaks/troughs land 100% flush on dashed guide lines,
+            // and magnetic snapping flush to page edges (x = 0, x = pW, y = 0, y = pH)!
+            if (curBox && Math.abs(fAngle) < 0.05) {
+              const pW = getPageLogicalWidth(activePage);
+              const pH = getPageLogicalHeight(activePage);
+              const PAGE_EDGE_SNAP = selImagesList.length > 0 ? 20 : 12;
               const SNAP_T = 2.2;
               if (tf.mode === 'scale-x') {
                 const candMinX = tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor;
@@ -43238,23 +43356,35 @@ export default function App() {
                 const candCx = (candMinX + candMaxX) / 2;
                 let bestDiffX = SNAP_T;
                 let snappedScaleX: number | null = null;
-                const trySnapX = (candVal: number, curVal: number, targetVal: number) => {
+                const trySnapX = (candVal: number, curVal: number, targetVal: number, maxDiff = SNAP_T) => {
                   const diff = Math.abs(candVal - targetVal);
                   const denom = curVal - tf.anchorX;
-                  if (diff <= bestDiffX && Math.abs(denom) > 8) {
+                  if (diff <= maxDiff && Math.abs(denom) > 8) {
                     const reqScale = (targetVal - tf.anchorX) / denom;
-                    if (reqScale >= 0.85 && reqScale <= 1.18) {
+                    if (reqScale >= 0.70 && reqScale <= 1.35) {
                       bestDiffX = diff;
                       snappedScaleX = reqScale;
+                      return true;
                     }
                   }
+                  return false;
                 };
-                for (const ref of refBoxes) {
-                  for (const refX of [ref.minX, ref.maxX]) {
-                    trySnapX(candMinX, curBox.minX, refX);
-                    trySnapX(candMaxX, curBox.maxX, refX);
+
+                // Check page edges first
+                if (tf.sideSignX === -1 && Math.abs(candMinX - 0) <= PAGE_EDGE_SNAP) {
+                  trySnapX(candMinX, curBox.minX, 0, PAGE_EDGE_SNAP);
+                } else if (tf.sideSignX === 1 && Math.abs(candMaxX - pW) <= PAGE_EDGE_SNAP) {
+                  trySnapX(candMaxX, curBox.maxX, pW, PAGE_EDGE_SNAP);
+                }
+
+                if (snappedScaleX === null && refBoxes.length > 0) {
+                  for (const ref of refBoxes) {
+                    for (const refX of [ref.minX, ref.maxX]) {
+                      trySnapX(candMinX, curBox.minX, refX);
+                      trySnapX(candMaxX, curBox.maxX, refX);
+                    }
+                    trySnapX(candCx, curBox.cx, ref.cx);
                   }
-                  trySnapX(candCx, curBox.cx, ref.cx);
                 }
                 if (snappedScaleX !== null) {
                   scaleFactor = snappedScaleX;
@@ -43265,23 +43395,35 @@ export default function App() {
                 const candCy = (candMinY + candMaxY) / 2;
                 let bestDiffY = SNAP_T;
                 let snappedScaleY: number | null = null;
-                const trySnapY = (candVal: number, curVal: number, targetVal: number) => {
+                const trySnapY = (candVal: number, curVal: number, targetVal: number, maxDiff = SNAP_T) => {
                   const diff = Math.abs(candVal - targetVal);
                   const denom = curVal - tf.anchorY;
-                  if (diff <= bestDiffY && Math.abs(denom) > 8) {
+                  if (diff <= maxDiff && Math.abs(denom) > 8) {
                     const reqScale = (targetVal - tf.anchorY) / denom;
-                    if (reqScale >= 0.85 && reqScale <= 1.18) {
+                    if (reqScale >= 0.70 && reqScale <= 1.35) {
                       bestDiffY = diff;
                       snappedScaleY = reqScale;
+                      return true;
                     }
                   }
+                  return false;
                 };
-                for (const ref of refBoxes) {
-                  for (const refY of [ref.minY, ref.maxY]) {
-                    trySnapY(candMinY, curBox.minY, refY);
-                    trySnapY(candMaxY, curBox.maxY, refY);
+
+                // Check page edges first
+                if (tf.sideSignY === -1 && Math.abs(candMinY - 0) <= PAGE_EDGE_SNAP) {
+                  trySnapY(candMinY, curBox.minY, 0, PAGE_EDGE_SNAP);
+                } else if (tf.sideSignY === 1 && Math.abs(candMaxY - pH) <= PAGE_EDGE_SNAP) {
+                  trySnapY(candMaxY, curBox.maxY, pH, PAGE_EDGE_SNAP);
+                }
+
+                if (snappedScaleY !== null && refBoxes.length > 0) {
+                  for (const ref of refBoxes) {
+                    for (const refY of [ref.minY, ref.maxY]) {
+                      trySnapY(candMinY, curBox.minY, refY);
+                      trySnapY(candMaxY, curBox.maxY, refY);
+                    }
+                    trySnapY(candCy, curBox.cy, ref.cy);
                   }
-                  trySnapY(candCy, curBox.cy, ref.cy);
                 }
                 if (snappedScaleY !== null) {
                   scaleFactor = snappedScaleY;
@@ -43298,7 +43440,7 @@ export default function App() {
               tf.curHeight = curH * scaleFactor;
             }
 
-            if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+            if (curBox && Math.abs(fAngle) < 0.05) {
               const finalMinX =
                 tf.mode === 'scale-x'
                   ? Math.min(
@@ -44696,9 +44838,12 @@ export default function App() {
               selectedLassoTextIds.length > 0 &&
               targetStrokeIdList.length === 0 &&
               targetImgIdList.length === 0;
+            const hasImagesInMove = targetImgIdList.length > 0;
+            const pW = getPageLogicalWidth(activePage);
+            const pH = getPageLogicalHeight(activePage);
             const SNAP_T = isPureTextLassoMove ? 3.8 : 2.2;
             const PAGE_CENTER_SNAP_T = 6.5;
-            const pageCenterX = getPageLogicalWidth(activePage) / 2;
+            const pageCenterX = pW / 2;
             const candMinX = curBox.minX + rawDx;
             const candMaxX = curBox.maxX + rawDx;
             const candCx = curBox.cx + rawDx;
@@ -44709,43 +44854,121 @@ export default function App() {
             let bestDiffX = SNAP_T;
             let bestDiffY = SNAP_T;
 
-            // Magnetic Snap to Horizontal Page Center (pW / 2)
-            const dPageCx = Math.abs(candCx - pageCenterX);
-            if (dPageCx <= PAGE_CENTER_SNAP_T) {
-              snapDx = pageCenterX - candCx;
+            // Magnetic Snap to Page Corners & Page Edges (especially for Images and Selection)
+            const PAGE_CORNER_SNAP = hasImagesInMove ? 28 : 20;
+            const PAGE_EDGE_SNAP = hasImagesInMove ? 22 : 14;
+
+            let snappedPageX = false;
+            let snappedPageY = false;
+
+            // 1. Check 4 Page Corners:
+            // Top-Left: (0, 0)
+            if (
+              Math.hypot(candMinX, candMinY) <= PAGE_CORNER_SNAP ||
+              (Math.abs(candMinX) <= PAGE_EDGE_SNAP && Math.abs(candMinY) <= PAGE_EDGE_SNAP)
+            ) {
+              snapDx = -candMinX;
+              snapDy = -candMinY;
+              snappedPageX = true;
+              snappedPageY = true;
+            }
+            // Top-Right: (pW, 0)
+            else if (
+              Math.hypot(candMaxX - pW, candMinY) <= PAGE_CORNER_SNAP ||
+              (Math.abs(candMaxX - pW) <= PAGE_EDGE_SNAP && Math.abs(candMinY) <= PAGE_EDGE_SNAP)
+            ) {
+              snapDx = pW - candMaxX;
+              snapDy = -candMinY;
+              snappedPageX = true;
+              snappedPageY = true;
+            }
+            // Bottom-Left: (0, pH)
+            else if (
+              Math.hypot(candMinX, candMaxY - pH) <= PAGE_CORNER_SNAP ||
+              (Math.abs(candMinX) <= PAGE_EDGE_SNAP && Math.abs(candMaxY - pH) <= PAGE_EDGE_SNAP)
+            ) {
+              snapDx = -candMinX;
+              snapDy = pH - candMaxY;
+              snappedPageX = true;
+              snappedPageY = true;
+            }
+            // Bottom-Right: (pW, pH)
+            else if (
+              Math.hypot(candMaxX - pW, candMaxY - pH) <= PAGE_CORNER_SNAP ||
+              (Math.abs(candMaxX - pW) <= PAGE_EDGE_SNAP && Math.abs(candMaxY - pH) <= PAGE_EDGE_SNAP)
+            ) {
+              snapDx = pW - candMaxX;
+              snapDy = pH - candMaxY;
+              snappedPageX = true;
+              snappedPageY = true;
             }
 
-            for (const ref of refBoxes) {
-              // Center X snap
-              const dCx = Math.abs(candCx - ref.cx);
-              if (dCx <= bestDiffX) {
-                bestDiffX = dCx;
-                snapDx = ref.cx - candCx;
+            // 2. If not corner-snapped, check individual Page Edges:
+            if (!snappedPageX) {
+              if (Math.abs(candMinX) <= PAGE_EDGE_SNAP) {
+                snapDx = -candMinX;
+                snappedPageX = true;
+              } else if (Math.abs(candMaxX - pW) <= PAGE_EDGE_SNAP) {
+                snapDx = pW - candMaxX;
+                snappedPageX = true;
               }
-              // Left / Right edge snaps
-              for (const sx of [candMinX, candMaxX]) {
-                for (const rx of [ref.minX, ref.maxX]) {
-                  const dEdgeX = Math.abs(sx - rx);
-                  if (dEdgeX < bestDiffX) {
-                    bestDiffX = dEdgeX;
-                    snapDx = rx - sx;
+            }
+
+            if (!snappedPageY) {
+              if (Math.abs(candMinY) <= PAGE_EDGE_SNAP) {
+                snapDy = -candMinY;
+                snappedPageY = true;
+              } else if (Math.abs(candMaxY - pH) <= PAGE_EDGE_SNAP) {
+                snapDy = pH - candMaxY;
+                snappedPageY = true;
+              }
+            }
+
+            // 3. Magnetic Snap to Horizontal Page Center (pW / 2) if not already snapped on X
+            if (!snappedPageX) {
+              const dPageCx = Math.abs(candCx - pageCenterX);
+              if (dPageCx <= PAGE_CENTER_SNAP_T) {
+                snapDx = pageCenterX - candCx;
+                snappedPageX = true;
+              }
+            }
+
+            // 4. Check refBoxes (other objects) on unsnapped axes
+            for (const ref of refBoxes) {
+              if (!snappedPageX) {
+                // Center X snap
+                const dCx = Math.abs(candCx - ref.cx);
+                if (dCx <= bestDiffX) {
+                  bestDiffX = dCx;
+                  snapDx = ref.cx - candCx;
+                }
+                // Left / Right edge snaps
+                for (const sx of [candMinX, candMaxX]) {
+                  for (const rx of [ref.minX, ref.maxX]) {
+                    const dEdgeX = Math.abs(sx - rx);
+                    if (dEdgeX < bestDiffX) {
+                      bestDiffX = dEdgeX;
+                      snapDx = rx - sx;
+                    }
                   }
                 }
               }
 
-              // Center Y snap
-              const dCy = Math.abs(candCy - ref.cy);
-              if (dCy <= bestDiffY) {
-                bestDiffY = dCy;
-                snapDy = ref.cy - candCy;
-              }
-              // Top / Bottom edge snaps
-              for (const sy of [candMinY, candMaxY]) {
-                for (const ry of [ref.minY, ref.maxY]) {
-                  const dEdgeY = Math.abs(sy - ry);
-                  if (dEdgeY < bestDiffY) {
-                    bestDiffY = dEdgeY;
-                    snapDy = ry - sy;
+              if (!snappedPageY) {
+                // Center Y snap
+                const dCy = Math.abs(candCy - ref.cy);
+                if (dCy <= bestDiffY) {
+                  bestDiffY = dCy;
+                  snapDy = ref.cy - candCy;
+                }
+                // Top / Bottom edge snaps
+                for (const sy of [candMinY, candMaxY]) {
+                  for (const ry of [ref.minY, ref.maxY]) {
+                    const dEdgeY = Math.abs(sy - ry);
+                    if (dEdgeY < bestDiffY) {
+                      bestDiffY = dEdgeY;
+                      snapDy = ry - sy;
+                    }
                   }
                 }
               }
@@ -46148,6 +46371,48 @@ export default function App() {
         const dragOrigin = isDraggingSelectionRef.current;
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
+
+        if (
+          finishedTf &&
+          (finishedTf.mode === 'move' ||
+            finishedTf.mode === 'scale' ||
+            finishedTf.mode === 'scale-x' ||
+            finishedTf.mode === 'scale-y')
+        ) {
+          const pW = getPageLogicalWidth(activePage);
+          const pH = getPageLogicalHeight(activePage);
+          updateActivePage((page) => {
+            let changed = false;
+            const nextImages = (page.images || []).map((im) => {
+              const matchesSelection =
+                (!finishedTf.targetImageId && !finishedTf.targetImageIds?.length) ||
+                im.id === finishedTf.targetImageId ||
+                finishedTf.targetImageIds?.includes(im.id);
+              if (!matchesSelection) return im;
+
+              let nx = im.x;
+              let ny = im.y;
+              let nw = im.width;
+              let nh = im.height;
+              if (Math.abs(nx) <= 1.5) nx = 0;
+              if (Math.abs(ny) <= 1.5) ny = 0;
+              if (Math.abs(nx + nw - pW) <= 1.5) {
+                if (Math.abs(nx) <= 1.5) nw = pW;
+                else nx = pW - nw;
+              }
+              if (Math.abs(ny + nh - pH) <= 1.5) {
+                if (Math.abs(ny) <= 1.5) nh = pH;
+                else ny = pH - nh;
+              }
+              if (nx !== im.x || ny !== im.y || nw !== im.width || nh !== im.height) {
+                changed = true;
+                return { ...im, x: Math.round(nx), y: Math.round(ny), width: Math.round(nw), height: Math.round(nh) };
+              }
+              return im;
+            });
+            return changed ? { ...page, images: nextImages } : page;
+          }, false);
+        }
         if (finishedTf?.mode === 'crop-side' && finishedTf.cropEdge && (finishedTf.cropInsetPx || 0) >= 4) {
           const targetId = finishedTf.targetImageId || selectedImageId;
           const imgObj = targetId ? activePage.images.find((im) => im.id === targetId) : undefined;
