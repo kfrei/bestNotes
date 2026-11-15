@@ -2613,15 +2613,17 @@ function renderThermometer(
       ctx.clip();
 
       if (dippedLiquidType === 'milk') {
-        ctx.globalAlpha = 0.04;
-        ctx.filter = 'blur(7px)';
-      } else if (dippedLiquidType === 'oil') {
-        ctx.globalAlpha = 0.16;
-        ctx.filter = 'blur(5.5px)';
-      } else {
-        // Water
-        ctx.globalAlpha = 0.44;
+        // Milk: softened & diffused shadow ("πολύ θολό και άχνο", partially discernible)
+        ctx.globalAlpha = 0.22;
         ctx.filter = 'blur(4.5px)';
+      } else if (dippedLiquidType === 'oil') {
+        // Oil: slightly more transparent, diffused & refracted in amber-olive oil
+        ctx.globalAlpha = 0.32;
+        ctx.filter = 'blur(3.8px)';
+      } else {
+        // Water: transparent liquid refraction
+        ctx.globalAlpha = 0.55;
+        ctx.filter = 'blur(3.2px)';
       }
 
       drawThermometerApparatus(
@@ -2640,27 +2642,6 @@ function renderThermometer(
         isDark,
         true
       );
-      ctx.restore();
-
-      // Delicate surface meniscus ring where the glass tube enters the liquid
-      ctx.save();
-      ctx.beginPath();
-      ctx.ellipse(cx, surfaceY, stemW / 2 + 2.5, 2.2, 0, 0, Math.PI * 2);
-      ctx.fillStyle =
-        dippedLiquidType === 'milk'
-          ? 'rgba(255, 255, 255, 0.95)'
-          : dippedLiquidType === 'oil'
-          ? 'rgba(217, 249, 157, 0.60)'
-          : 'rgba(186, 230, 253, 0.60)';
-      ctx.fill();
-      ctx.strokeStyle =
-        dippedLiquidType === 'milk'
-          ? 'rgba(209, 213, 219, 0.85)'
-          : dippedLiquidType === 'oil'
-          ? 'rgba(101, 163, 13, 0.45)'
-          : 'rgba(2, 132, 199, 0.45)';
-      ctx.lineWidth = 1.0;
-      ctx.stroke();
       ctx.restore();
     }
 
