@@ -151,7 +151,7 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
       style={{ left: pos.x, top: pos.y }}
       onPointerDown={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
-      className="fixed z-40 w-[360px] sm:w-[410px] max-h-[88vh] overflow-y-auto rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/42 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.18),0_4px_16px_-2px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-4 text-[#2c3e50] space-y-3 select-none animate-in fade-in zoom-in-95 duration-150"
+      className="fixed z-40 w-[380px] sm:w-[440px] max-h-[88vh] overflow-y-auto rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/42 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.18),0_4px_16px_-2px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 sm:p-4 text-[#2c3e50] space-y-3 select-none animate-in fade-in zoom-in-95 duration-150"
     >
       {/* Draggable Liquid Header */}
       <div
@@ -176,7 +176,7 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
           e.stopPropagation();
           const nextX = Math.max(
             8,
-            Math.min(window.innerWidth - 370, drag.origX + (e.clientX - drag.startClientX))
+            Math.min(window.innerWidth - 390, drag.origX + (e.clientX - drag.startClientX))
           );
           const nextY = Math.max(
             40,
@@ -256,26 +256,48 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
               <div
                 key={type}
                 onClick={() => handleLiquidTypeChange(type)}
-                className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                className={`p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
                   isSel
-                    ? `bg-white/90 ${cardRing} shadow-sm scale-102`
-                    : 'bg-white/55 hover:bg-white/80 border-white/80 hover:border-slate-300'
+                    ? `bg-white/95 ${cardRing} shadow-sm scale-102`
+                    : 'bg-white/60 hover:bg-white/85 border-white/80 hover:border-slate-300'
                 }`}
               >
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11.5px] font-bold text-[#1e293b]">{lp.nameEl}</span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] sm:text-[11.5px] font-bold text-[#1e293b] truncate">
+                      {lp.nameEl}
+                    </span>
                     <span
-                      className="w-3 h-3 rounded-full border border-black/15 shadow-2xs"
+                      className="w-3 h-3 rounded-full border border-black/15 shadow-2xs shrink-0"
                       style={{ backgroundColor: lp.color }}
                     />
                   </div>
-                  <div className="space-y-0.5">
-                    <div className="inline-block text-[9px] font-semibold px-1 py-0.2 rounded bg-blue-50/80 text-blue-700 border border-blue-200/50">
-                      ρ={lp.density}
+
+                  {/* Physical Properties: Density (ρ) & Specific Heat (c) with standard units */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-50/90 text-blue-800 border border-blue-200/60 shadow-2xs">
+                      <span className="font-bold">ρ =</span>
+                      <span>{lp.density} g/cm³</span>
                     </div>
-                    <div className="inline-block text-[9px] font-semibold px-1 py-0.2 rounded bg-amber-50/80 text-amber-800 border border-amber-200/50">
-                      c={lp.specificHeat}
+                    <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-50/90 text-amber-900 border border-amber-200/60 shadow-2xs">
+                      <span className="font-bold">c =</span>
+                      <span>{lp.specificHeat} J/(g·°C)</span>
+                    </div>
+                  </div>
+
+                  {/* Thermal Phase Change Points: Melting Point & Boiling Point */}
+                  <div className="pt-1.5 border-t border-slate-200/70 space-y-0.5 text-[8px] sm:text-[8.5px]">
+                    <div className="flex items-center justify-between gap-0.5 text-slate-600">
+                      <span className="text-slate-500 font-medium" title="Σημείο Τήξης">
+                        <span className="hidden sm:inline">Σημείο </span><span className="sm:hidden">Σ. </span>Τήξης:
+                      </span>
+                      <span className="font-bold text-sky-700">{lp.meltingPoint} °C</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-0.5 text-slate-600">
+                      <span className="text-slate-500 font-medium" title="Σημείο Ζέσεως">
+                        <span className="hidden sm:inline">Σημείο </span><span className="sm:hidden">Σ. </span>Ζέσεως:
+                      </span>
+                      <span className="font-bold text-rose-700">{lp.boilingPoint} °C</span>
                     </div>
                   </div>
                 </div>
@@ -283,6 +305,12 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
             );
           })}
         </div>
+
+        {currentLiquidProps?.descriptionEl && (
+          <p className="text-[9.5px] text-slate-500 italic bg-white/45 px-2.5 py-1 rounded-xl border border-white/70">
+            ℹ️ {currentLiquidProps.descriptionEl}
+          </p>
+        )}
       </div>
 
       {/* 2. Container Capacity */}

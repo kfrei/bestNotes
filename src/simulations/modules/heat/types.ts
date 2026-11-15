@@ -26,7 +26,8 @@ export interface LiquidPhysicalProperties {
   nameEl: string;
   density: number; // g/cm³ (or g/ml)
   specificHeat: number; // J/(g·°C)
-  boilingPoint: number; // °C
+  meltingPoint: number; // °C (Σημείο Τήξης)
+  boilingPoint: number; // °C (Σημείο Ζέσεως)
   color: string; // Base fill color with alpha
   deepColor: string; // Meniscus / edge stroke color
   glowColor: string; // Vapor / thermal tint
@@ -39,17 +40,19 @@ export const LIQUID_REGISTRY: Record<LiquidType, LiquidPhysicalProperties> = {
     nameEl: 'Νερό (H₂O)',
     density: 1.0,
     specificHeat: 4.184,
+    meltingPoint: 0.0,
     boilingPoint: 100.0,
     color: 'rgba(56, 189, 248, 0.45)', // Sky blue translucent
     deepColor: '#0284c7',
     glowColor: 'rgba(186, 230, 253, 0.6)',
-    descriptionEl: 'Υψηλή ειδική θερμοχωρητικότητα c = 4.18 J/(g·°C). Απαιτεί πολλή θερμότητα για να ζεσταθεί.',
+    descriptionEl: 'Υψηλή ειδική θερμοχωρητικότητα c = 4.184 J/(g·°C). Απαιτεί πολλή θερμότητα για να ζεσταθεί.',
   },
   milk: {
     type: 'milk',
     nameEl: 'Γάλα',
     density: 1.03,
     specificHeat: 3.93,
+    meltingPoint: -0.5,
     boilingPoint: 100.5,
     color: '#ffffff', // Pure white
     deepColor: '#cbd5e1', // Neutral cool slate grey
@@ -61,6 +64,7 @@ export const LIQUID_REGISTRY: Record<LiquidType, LiquidPhysicalProperties> = {
     nameEl: 'Ελαιόλαδο',
     density: 0.92,
     specificHeat: 2.0,
+    meltingPoint: -6.0,
     boilingPoint: 300.0,
     color: '#84cc16', // Fresh green-lime olive oil
     deepColor: '#65a30d',
