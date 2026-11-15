@@ -2027,13 +2027,13 @@ function drawBeakerPhysical(
       const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
       const nowMs = performance.now();
 
-      // 1. Thermal Convection Currents (bottom to top)
-      if (temp >= 32) {
+      // 1. Thermal Convection Currents (bottom to top, staged from 50°C with graded motion)
+      if (temp >= 50) {
         renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh + botCurve, temp, liquidType, nowMs);
       }
 
-      // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
-      if (temp >= 50 || isBoil) {
+      // 2. Rising Bubbles (starts very small at 80°C, growing towards 90°C+)
+      if (temp >= 80 || isBoil) {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH, temp, isBoil, intensity, nowMs);
       }
 
@@ -2046,10 +2046,10 @@ function drawBeakerPhysical(
       const isBoil = Boolean(state?.isBoiling || temp >= 98);
       const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
       const nowMs = performance.now();
-      if (temp >= 32) {
+      if (temp >= 50) {
         renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh + botCurve, temp, liquidType, nowMs);
       }
-      if (temp >= 50 || isBoil) {
+      if (temp >= 80 || isBoil) {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH, temp, isBoil, intensity, nowMs);
       }
     }
@@ -2375,13 +2375,13 @@ function renderWideBasin(
         const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
         const nowMs = performance.now();
 
-        // 1. Thermal Convection Currents (bottom to top)
-        if (temp >= 32) {
+        // 1. Thermal Convection Currents (bottom to top, staged from 50°C with graded motion)
+        if (temp >= 50) {
           renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh + botCurve, temp, liquidType, nowMs);
         }
 
-        // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
-        if (temp >= 50 || isBoil) {
+        // 2. Rising Bubbles (starts very small at 80°C, growing towards 90°C+)
+        if (temp >= 80 || isBoil) {
           renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH, temp, isBoil, intensity, nowMs);
         }
 
@@ -2561,8 +2561,8 @@ function drawFlaskPhysical(
       const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
       const nowMs = performance.now();
 
-      // 1. Thermal Convection Currents (bottom to top)
-      if (temp >= 32) {
+      // 1. Thermal Convection Currents (bottom to top, staged from 50°C with graded motion)
+      if (temp >= 50) {
         renderThermalConvection(
           ctx,
           cx - surfaceHalfW,
@@ -2576,8 +2576,8 @@ function drawFlaskPhysical(
         );
       }
 
-      // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
-      if (temp >= 50 || isBoil) {
+      // 2. Rising Bubbles (starts very small at 80°C, growing towards 90°C+)
+      if (temp >= 80 || isBoil) {
         renderBoilingBubbles(
           ctx,
           cx - surfaceHalfW * 0.85,
@@ -2600,7 +2600,7 @@ function drawFlaskPhysical(
       const isBoil = Boolean(state?.isBoiling || temp >= 98);
       const intensity = state?.boilingIntensity ?? (temp >= 98 ? 0.85 : 0);
       const nowMs = performance.now();
-      if (temp >= 32) {
+      if (temp >= 50) {
         renderThermalConvection(
           ctx,
           cx - surfaceHalfW,
@@ -2613,7 +2613,7 @@ function drawFlaskPhysical(
           nowMs
         );
       }
-      if (temp >= 50 || isBoil) {
+      if (temp >= 80 || isBoil) {
         renderBoilingBubbles(
           ctx,
           cx - surfaceHalfW * 0.85,
@@ -3130,6 +3130,7 @@ function renderThermometer(
 
 /**
  * Animated Thermal Convection Current Streamlines (from bottom heated base upwards to top surface)
+ * Active from 50°C to 90°C+ with graded motion (διαβάθμιση κίνησης).
  */
 function renderThermalConvection(
   ctx: CanvasRenderingContext2D,
@@ -3142,15 +3143,16 @@ function renderThermalConvection(
   liquidType: LiquidType,
   nowMs: number
 ): void {
-  if (temperature < 32 || lh < 8) return;
+  if (temperature < 50 || lh < 8) return;
 
   ctx.save();
   const tSec = nowMs / 1000;
-  // Convection intensity and speed scaling with temperature
-  const tFrac = Math.max(0, Math.min(1, (temperature - 30) / 70));
-  const flowSpeed = 1.6 + tFrac * 2.8;
+
+  // Graded motion from 50°C to 90°C+
+  const tFrac = Math.max(0, Math.min(1.25, (temperature - 50) / 40));
+  const flowSpeed = 1.1 + tFrac * 2.2;
   const numPlumes = lw > 120 ? 6 : 4;
-  const maxAlpha = Math.min(0.42, 0.08 + tFrac * 0.34);
+  const maxAlpha = Math.min(0.38, 0.10 + tFrac * 0.25);
 
   const plumeColor =
     liquidType === 'oil'
@@ -3160,11 +3162,15 @@ function renderThermalConvection(
       : `rgba(224, 242, 254, ${maxAlpha})`;
 
   ctx.strokeStyle = plumeColor;
-  ctx.lineWidth = 1.3;
+  ctx.lineWidth = 1.25;
   ctx.lineCap = 'round';
 
   const segStep = 6;
   const plumeSpacing = lw / (numPlumes + 1);
+
+  // Graded sway amplitude based on temperature
+  const swayBase = 1.2 + tFrac * 1.5;
+  const swayHeightScale = 2.0 + tFrac * 3.0;
 
   for (let p = 0; p < numPlumes; p++) {
     const basePx = lx + (p + 1) * plumeSpacing;
@@ -3177,7 +3183,7 @@ function renderThermalConvection(
     // Plumes rise from bottom base (bottomY) up towards liquid surface (ly)
     for (let curY = bottomY - 3; curY >= ly + 2; curY -= segStep) {
       const heightFrac = (bottomY - curY) / lh;
-      const sway = Math.sin(curY * pFreq - tSec * flowSpeed + pPhase) * (2.0 + heightFrac * 4.5);
+      const sway = Math.sin(curY * pFreq - tSec * flowSpeed + pPhase) * (swayBase + heightFrac * swayHeightScale);
       const px = basePx + sway;
 
       if (!started) {
@@ -3189,12 +3195,13 @@ function renderThermalConvection(
     }
     ctx.stroke();
 
-    // Subtle upward-moving convection thermal eddies
+    // Subtle upward-moving convection thermal eddies (δίνες)
     const eddyPhase = (tSec * flowSpeed * 0.45 + p * 0.28) % 1;
     const eddyY = bottomY - 4 - eddyPhase * (lh - 8);
-    const eddySway = Math.sin(eddyY * pFreq - tSec * flowSpeed + pPhase) * (2.0 + ((bottomY - eddyY) / lh) * 4.5);
+    const eddyHeightFrac = (bottomY - eddyY) / lh;
+    const eddySway = Math.sin(eddyY * pFreq - tSec * flowSpeed + pPhase) * (swayBase + eddyHeightFrac * swayHeightScale);
     const eddyX = basePx + eddySway;
-    const eddyR = 1.2 + ((p % 3) * 0.8) + (1.0 - eddyPhase) * 0.6;
+    const eddyR = 0.85 + ((p % 3) * 0.4) * (0.8 + tFrac * 0.35);
 
     ctx.beginPath();
     ctx.arc(eddyX, eddyY, eddyR, 0, Math.PI * 2);
@@ -3206,7 +3213,10 @@ function renderThermalConvection(
 }
 
 /**
- * Animated Boiling Bubbles rising from bottom to top with physical gas expansion and wobbling
+ * Animated Boiling Bubbles:
+ * - < 80°C: No bubbles (only thermal convection eddies).
+ * - 80°C - 90°C: Starts very small ("πολυ πολυ μικρες"), gradually growing ("σιγα σιγα μεγαλωνε τες").
+ * - > 90°C: Obvious bubbles ("φανερες φυσαλιδες"), but kept reasonably small ("και μικρες") expanding with boil.
  */
 function renderBoilingBubbles(
   ctx: CanvasRenderingContext2D,
@@ -3220,30 +3230,32 @@ function renderBoilingBubbles(
   nowMs: number
 ): void {
   if (lh < 8) return;
+  if (temperature < 80 && !isBoiling) return;
 
   ctx.save();
   const time = nowMs / 1000;
 
-  // Staged number of bubbles and rise speed based on temperature & boiling
-  // 50-70°C: 10-14 simmer bubbles
-  // 70-90°C: 20-30 active bubbles
-  // 90-100°C+: 36-48 vigorous boiling bubbles
-  let numBubbles = 10;
-  let riseSpeed = 1.4;
-  let bubbleSizeScale = 1.0;
+  let numBubbles: number;
+  let riseSpeed: number;
+  let bubbleSizeScale: number;
+  let isSimmer = false;
 
-  if (temperature >= 92 || isBoiling) {
-    numBubbles = Math.min(48, Math.round(28 + Math.max(0.4, boilingIntensity) * 20));
-    riseSpeed = 3.2 + Math.max(0.4, boilingIntensity) * 1.8;
-    bubbleSizeScale = 1.45;
-  } else if (temperature >= 70) {
-    numBubbles = Math.round(18 + ((temperature - 70) / 22) * 14);
-    riseSpeed = 2.2 + ((temperature - 70) / 22) * 1.0;
-    bubbleSizeScale = 1.2;
-  } else if (temperature >= 50) {
-    numBubbles = Math.round(8 + ((temperature - 50) / 20) * 10);
-    riseSpeed = 1.5;
-    bubbleSizeScale = 0.9;
+  if (temperature >= 90 || isBoiling) {
+    // Obvious boiling bubbles after 90°C, kept neat and small ("και μικρες")
+    const tBoil = Math.max(0, Math.min(1, (temperature - 90) / 10));
+    const effectiveIntensity = isBoiling ? Math.max(tBoil, Math.max(0.4, boilingIntensity)) : tBoil;
+
+    numBubbles = Math.round(14 + effectiveIntensity * 18);
+    riseSpeed = 2.0 + effectiveIntensity * 1.8;
+    bubbleSizeScale = 0.85 + effectiveIntensity * 0.35; // 0.85 at 90°C, 1.20 at full boil
+  } else {
+    // 80°C to 90°C: Micro-bubbles starting very small and gradually growing
+    isSimmer = true;
+    const tSimmer = Math.max(0, Math.min(1, (temperature - 80) / 10)); // 0.0 at 80°C, 1.0 at 90°C
+
+    numBubbles = Math.round(4 + tSimmer * 9); // 4 at 80°C up to 13 at 90°C
+    riseSpeed = 1.1 + tSimmer * 0.8;
+    bubbleSizeScale = 0.45 + tSimmer * 0.35; // 0.45 at 80°C ("πολυ πολυ μικρες") to 0.80 at 90°C
   }
 
   for (let i = 0; i < numBubbles; i++) {
@@ -3253,39 +3265,41 @@ function renderBoilingBubbles(
     const phase = (time * riseSpeed * speedVariation + seed) % 1;
 
     // Organic horizontal wobble as bubbles navigate liquid currents
-    const wobble = Math.sin(time * 5.2 + i * 1.7) * (2.0 + phase * 3.5);
+    const wobble = Math.sin(time * 5.2 + i * 1.7) * (1.2 + phase * 2.2);
     const bx = lx + 8 + colSeed + wobble;
     // Rises from bottom base up to liquid surface
     const by = ly + lh - 4 - phase * (lh - 6);
 
-    // Physical gas expansion: bubbles grow larger as hydrostatic pressure drops near the surface
-    const baseR = (1.2 + (i % 4) * 0.85) * bubbleSizeScale;
-    const r = baseR * (0.8 + phase * 0.7);
+    // Gas expansion: starts small, expands slightly near the surface
+    const baseR = (1.0 + (i % 4) * 0.45) * bubbleSizeScale;
+    const r = Math.max(0.65, baseR * (0.8 + phase * 0.45));
 
     // Glowing translucent bubble body
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.fillStyle = isSimmer ? 'rgba(255, 255, 255, 0.42)' : 'rgba(255, 255, 255, 0.58)';
     ctx.fill();
 
     // Luminous glass-like bubble rim
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.lineWidth = Math.max(0.7, r * 0.22);
+    ctx.strokeStyle = isSimmer ? 'rgba(255, 255, 255, 0.65)' : 'rgba(255, 255, 255, 0.88)';
+    ctx.lineWidth = Math.max(0.5, r * 0.18);
     ctx.stroke();
 
-    // Specular highlight gleam on top-left of bubble
-    ctx.beginPath();
-    ctx.arc(bx - r * 0.32, by - r * 0.32, Math.max(0.5, r * 0.28), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.fill();
+    // Specular highlight gleam on top-left of bubble (for visible bubbles r >= 1.2)
+    if (r >= 1.2) {
+      ctx.beginPath();
+      ctx.arc(bx - r * 0.32, by - r * 0.32, Math.max(0.4, r * 0.25), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
+      ctx.fill();
+    }
 
-    // Micro-splash burst when bubble reaches top surface (phase > 0.94)
-    if (phase > 0.94) {
+    // Micro-splash burst when bubble reaches top surface (phase > 0.94, after 90°C)
+    if (!isSimmer && phase > 0.94) {
       const popFrac = (phase - 0.94) / 0.06;
       ctx.beginPath();
-      ctx.arc(bx, ly, r * (1.2 + popFrac * 1.5), 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.8 * (1 - popFrac)})`;
-      ctx.lineWidth = 0.8;
+      ctx.arc(bx, ly, r * (1.1 + popFrac * 1.2), 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * (1 - popFrac)})`;
+      ctx.lineWidth = 0.6;
       ctx.stroke();
     }
   }
