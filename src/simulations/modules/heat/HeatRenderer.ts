@@ -628,23 +628,26 @@ function renderTripod(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Left Leg
+    // 1. Recessed Back Leg (rotated off-center to the left, rendered faint gray so burner placed underneath remains crystal-clear)
+    ctx.save();
+    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.52)';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(cx - collarW * 0.38, topY + collarH * 0.5);
-    ctx.lineTo(cx - collarW * 0.55, legBotY);
+    ctx.moveTo(cx - collarW * 0.16, topY + collarH * 0.25);
+    ctx.lineTo(cx - collarW * 0.22, legBotY - 6);
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. Front Left Leg (crisp foreground line-art)
+    ctx.beginPath();
+    ctx.moveTo(cx - collarW * 0.44, topY + collarH * 0.52);
+    ctx.lineTo(cx - collarW * 0.58, legBotY);
     ctx.stroke();
 
-    // Right Leg
+    // 3. Front Right Leg (crisp foreground line-art)
     ctx.beginPath();
-    ctx.moveTo(cx + collarW * 0.38, topY + collarH * 0.5);
-    ctx.lineTo(cx + collarW * 0.55, legBotY);
-    ctx.stroke();
-
-    // Center Back Leg
-    ctx.beginPath();
-    ctx.moveTo(cx, topY + collarH * 0.2);
-    ctx.lineTo(cx, legBotY - 4);
-    ctx.lineWidth = 2.0;
+    ctx.moveTo(cx + collarW * 0.32, topY + collarH * 0.48);
+    ctx.lineTo(cx + collarW * 0.48, legBotY);
     ctx.stroke();
 
     // Circular Top Collar Ring

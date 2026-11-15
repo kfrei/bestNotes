@@ -57718,12 +57718,12 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="14" y1="6" x2="13" y2="18.5" stroke="#94a3b8" strokeWidth="1.3" strokeOpacity="0.75" />
                               <ellipse cx="17" cy="5.5" rx="9" ry="2.6" strokeWidth="1.8" />
                               <ellipse cx="17" cy="5.5" rx="5" ry="1.3" strokeWidth="1.2" strokeDasharray="1.5 1.5" />
                               <line x1="12" y1="5.5" x2="22" y2="5.5" strokeWidth="1.2" />
-                              <line x1="9.5" y1="6.5" x2="6" y2="20" strokeWidth="1.8" />
-                              <line x1="24.5" y1="6.5" x2="28" y2="20" strokeWidth="1.8" />
-                              <line x1="17" y1="7.5" x2="17" y2="18.5" strokeWidth="1.4" strokeOpacity="0.75" />
+                              <line x1="9" y1="6.5" x2="5.5" y2="20" strokeWidth="1.8" />
+                              <line x1="24" y1="6.5" x2="27.5" y2="20" strokeWidth="1.8" />
                             </svg>
                           ),
                         },

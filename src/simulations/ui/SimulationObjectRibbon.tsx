@@ -25,12 +25,12 @@ function getSimulationObjectIcon(id: string): React.ReactNode {
     case 'tripod':
       return (
         <svg className="w-10 h-10" viewBox="0 0 36 36" fill="none" stroke="#0f172a" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="14.5" y1="9" x2="13" y2="28" stroke="#94a3b8" strokeWidth="1.5" strokeOpacity="0.75" />
           <ellipse cx="18" cy="8.5" rx="11" ry="3.5" strokeWidth="2.0" />
           <ellipse cx="18" cy="8.5" rx="6" ry="1.8" strokeWidth="1.3" strokeDasharray="2 2" />
           <line x1="12" y1="8.5" x2="24" y2="8.5" strokeWidth="1.3" />
-          <line x1="9" y1="10" x2="4" y2="32" strokeWidth="2.2" />
-          <line x1="27" y1="10" x2="32" y2="32" strokeWidth="2.2" />
-          <line x1="18" y1="11" x2="18" y2="30" strokeWidth="1.6" strokeOpacity="0.75" />
+          <line x1="8" y1="10" x2="4" y2="32" strokeWidth="2.2" />
+          <line x1="26" y1="10" x2="31" y2="32" strokeWidth="2.2" />
         </svg>
       );
     case 'beaker':
