@@ -505,25 +505,25 @@ function renderBurner(
   const cx = w / 2;
 
   // 2.5D Proportions matching reference sketch in media_1794725655308_28bf8f8b.png
-  const groundY = h - 14;
-  const baseW = w * 0.78;
-  const baseRy = 6.2;
-  const footH = 5.5;
+  const groundY = h - 12;
+  const baseW = w * 0.67; // slightly narrower base
+  const baseRy = 5.2;
+  const footH = 4.8;
   const cyBot = groundY - baseRy;
   const cyTop = cyBot - footH;
 
-  const coneTopY = cyTop - 13;
-  const coneTopW = w * 0.18;
+  const coneTopY = cyTop - 11;
+  const coneTopW = w * 0.17;
 
-  const collarH = 13;
+  const collarH = 12.5;
   const collarTopY = coneTopY - collarH;
-  const collarW = coneTopW * 1.15;
+  const collarW = coneTopW * 1.18;
 
   const stemW = coneTopW * 0.82;
-  const nozzleH = 12.5;
-  const nozzleTopY = Math.max(16, h * 0.22);
+  const nozzleH = 12;
+  const nozzleTopY = Math.max(8, h * 0.11); // taller stem & chimney tube
   const nozzleBotY = nozzleTopY + nozzleH;
-  const nozzleW = stemW * 1.35;
+  const nozzleW = stemW * 1.34;
 
   // 1. Physical Apparatus Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
@@ -682,29 +682,20 @@ function renderBurner(
     ctx.ellipse(cx, cyBot, baseW / 2, baseRy, 0, 0, Math.PI);
     ctx.stroke();
 
-    // E. Bottom base back curve (subtle ground ellipse)
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, cyBot, baseW / 2, baseRy, 0, Math.PI, 0);
-    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.25)' : 'rgba(17, 24, 39, 0.22)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.restore();
-
     // F. Left flare reflection line (hand-drawn sketch accent from reference)
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(cx - baseW * 0.34, cyTop - 1);
-    ctx.quadraticCurveTo(cx - coneTopW * 0.9, coneTopY + 8, cx - coneTopW * 0.65, coneTopY + 2);
+    ctx.quadraticCurveTo(cx - coneTopW * 0.9, coneTopY + 7, cx - coneTopW * 0.65, coneTopY + 2);
     ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.45)' : 'rgba(17, 24, 39, 0.40)';
     ctx.lineWidth = 1.3;
     ctx.stroke();
     ctx.restore();
 
     // 2. Air Collar Sleeve with Vertical Vent Slot
-    // A. Lower collar ring
+    // A. Lower collar ring (front curve only)
     ctx.beginPath();
-    ctx.ellipse(cx, coneTopY, collarW / 2, 2.6, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, coneTopY, collarW / 2, 2.5, 0, 0, Math.PI);
     ctx.stroke();
 
     // B. Collar cylinder sides
@@ -715,14 +706,14 @@ function renderBurner(
     ctx.lineTo(cx + collarW / 2, coneTopY);
     ctx.stroke();
 
-    // C. Upper collar ring
+    // C. Upper collar ring (front curve only)
     ctx.beginPath();
-    ctx.ellipse(cx, collarTopY, collarW / 2, 2.6, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, collarTopY, collarW / 2, 2.5, 0, 0, Math.PI);
     ctx.stroke();
 
     // D. Vertical Oval Air Aperture Slot (exact from reference)
     ctx.beginPath();
-    ctx.ellipse(cx, collarTopY + collarH * 0.5, 2.3, collarH * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, collarTopY + collarH * 0.5, 2.2, collarH * 0.28, 0, 0, Math.PI * 2);
     ctx.stroke();
 
     // E. Gas inlet knob / nub on right side
@@ -749,9 +740,9 @@ function renderBurner(
     ctx.restore();
 
     // 4. Top Nozzle Head (Cup & Orifice)
-    // A. Neck step under nozzle
+    // A. Bottom of nozzle cup (front curve only)
     ctx.beginPath();
-    ctx.ellipse(cx, nozzleBotY, stemW * 0.72, 2.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, nozzleBotY, nozzleW / 2, 2.4, 0, 0, Math.PI);
     ctx.stroke();
 
     // B. Nozzle cylinder sides
@@ -762,17 +753,17 @@ function renderBurner(
     ctx.lineTo(cx + nozzleW / 2, nozzleTopY);
     ctx.stroke();
 
-    // C. Top rim 2.5D open mouth ellipse
+    // C. Top opening: clean top rim with front bevel curve
     ctx.beginPath();
-    ctx.ellipse(cx, nozzleTopY, nozzleW / 2, 3.2, 0, 0, Math.PI * 2);
+    ctx.moveTo(cx - nozzleW / 2, nozzleTopY);
+    ctx.lineTo(cx + nozzleW / 2, nozzleTopY);
     ctx.stroke();
 
-    // D. Inner orifice depth ellipse
     ctx.beginPath();
-    ctx.ellipse(cx, nozzleTopY, nozzleW / 2 - 2, 2.0, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, nozzleTopY + 2.2, nozzleW / 2, 1.9, 0, 0, Math.PI);
     ctx.stroke();
 
-    // E. Left nozzle highlight streak
+    // Left nozzle highlight streak
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(cx - nozzleW * 0.3, nozzleBotY - 1);
