@@ -112,6 +112,49 @@ export function getTimeAxisConfig(elapsedT: number): TimeAxisConfig {
 }
 
 /**
+ * Dynamic Vertical Temperature Axis Configuration (starting strictly from 0 to tempMax)
+ * Adapts dynamically with no upper limit:
+ * - 0 to 50°C: max 50°C, ticks at 0°, 10°, 20°, 30°, 40°, 50°
+ * - 50 to 100°C: max 100°C, ticks at 0°, 25°, 50°, 75°, 100°
+ * - 100 to 150°C: max 150°C, ticks at 0°, 25°, 50°, 75°, 100°, 125°, 150°
+ * - 150 to 250°C: max in steps of 50°C, ticks every 50°C
+ * - 250+°C: expands continuously without upper limit in steps of 50°C or 100°C
+ */
+export interface TempAxisConfig {
+  tempMax: number;
+  ticks: { temp: number; label: string }[];
+}
+
+export function getTempAxisConfig(maxRecordedTemp: number): TempAxisConfig {
+  let tempMax = 50;
+  let tickStep = 10;
+
+  if (maxRecordedTemp <= 50) {
+    tempMax = 50;
+    tickStep = 10;
+  } else if (maxRecordedTemp <= 100) {
+    tempMax = 100;
+    tickStep = 25;
+  } else if (maxRecordedTemp <= 150) {
+    tempMax = 150;
+    tickStep = 25;
+  } else if (maxRecordedTemp <= 250) {
+    tempMax = Math.ceil(maxRecordedTemp / 50) * 50;
+    tickStep = 50;
+  } else {
+    tempMax = Math.ceil(maxRecordedTemp / 50) * 50;
+    tickStep = tempMax > 400 ? 100 : 50;
+  }
+
+  const ticks: { temp: number; label: string }[] = [];
+  for (let temp = 0; temp <= tempMax; temp += tickStep) {
+    ticks.push({ temp, label: `${temp}°` });
+  }
+
+  return { tempMax, ticks };
+}
+
+/**
  * Metadata for container curve styling:
  * - Oil: Olive Green (`#65a30d`, `#4d7c0f`)
  * - Milk: Slate Grey (`#64748b`, `#475569`)
@@ -3873,11 +3916,63 @@ function renderThermalGraph(
   const plotW = gw - 68;
   const plotH = gh - 76;
 
-  // Temperature Grid lines (0, 25, 50, 75, 100 °C)
+  const effectiveMeta = metaMap || getContainersCurveMeta(sim, isDark);
+  let boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
+  if (boundIds.length === 0) {
+    const allContainers = sim.objects.filter(
+      (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
+    );
+    boundIds = allContainers.map((c) => c.id);
+  }
+
+  // Calculate highest recorded temperature among plotted containers to configure dynamic vertical axis
+  let maxRecordedTemp = sim.ambientTemperature ?? 20.0;
+  for (const cId of boundIds) {
+    const cObj = sim.objects.find((o) => o.id === cId);
+    if (cObj?.containerState?.temperature !== undefined) {
+      maxRecordedTemp = Math.max(maxRecordedTemp, cObj.containerState.temperature);
+    }
+  }
+  for (const pt of sim.history) {
+    if (pt.tempEquilibrium !== undefined) {
+      maxRecordedTemp = Math.max(maxRecordedTemp, pt.tempEquilibrium);
+    }
+    if (boundIds.length > 0) {
+      for (let i = 0; i < boundIds.length; i++) {
+        const cId = boundIds[i];
+        const tempVal =
+          pt.tempsByContainerId?.[cId] ??
+          (i === 0 ? pt.temp1 : i === 1 ? pt.temp2 : undefined);
+        if (tempVal !== undefined) {
+          maxRecordedTemp = Math.max(maxRecordedTemp, tempVal);
+        }
+      }
+    } else {
+      if (typeof pt.temp1 === 'number') maxRecordedTemp = Math.max(maxRecordedTemp, pt.temp1);
+      if (typeof pt.temp2 === 'number') maxRecordedTemp = Math.max(maxRecordedTemp, pt.temp2);
+      if (pt.tempsByContainerId) {
+        for (const t of Object.values(pt.tempsByContainerId)) {
+          if (typeof t === 'number') maxRecordedTemp = Math.max(maxRecordedTemp, t);
+        }
+      }
+    }
+  }
+
+  // Dynamic Temperature Axis configuration (50 -> 100 -> 150 -> 200+ without upper limit)
+  const { tempMax, ticks: tempTicks } = getTempAxisConfig(maxRecordedTemp);
+
+  // Time Axis configuration (dynamic, starting strictly from t = 0)
+  const lastT = sim.history.length > 0 ? sim.history[sim.history.length - 1].timeSec : 0;
+  const { tMax, ticks } = getTimeAxisConfig(lastT);
+
+  const mapX = (t: number) => plotX + (Math.max(0, t) / tMax) * plotW;
+  const mapY = (temp: number) => plotY + plotH - (Math.max(0, Math.min(tempMax, temp)) / tempMax) * plotH;
+
+  // Temperature Grid lines (dynamic based on tempTicks)
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
   ctx.lineWidth = 1;
-  for (let temp = 0; temp <= 100; temp += 25) {
-    const py = plotY + plotH - (temp / 100) * plotH;
+  for (const tick of tempTicks) {
+    const py = mapY(tick.temp);
     ctx.beginPath();
     ctx.moveTo(plotX, py);
     ctx.lineTo(plotX + plotW, py);
@@ -3886,16 +3981,8 @@ function renderThermalGraph(
     ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
     ctx.font = '9px system-ui, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`${temp}°`, plotX - 6, py + 3);
+    ctx.fillText(tick.label, plotX - 6, py + 3);
   }
-
-  // Time Axis configuration (dynamic, starting strictly from t = 0)
-  const lastT = sim.history.length > 0 ? sim.history[sim.history.length - 1].timeSec : 0;
-  const { tMax, ticks } = getTimeAxisConfig(lastT);
-  const startT = 0;
-
-  const mapX = (t: number) => plotX + (Math.max(0, t) / tMax) * plotW;
-  const mapY = (temp: number) => plotY + plotH - (Math.max(0, Math.min(100, temp)) / 100) * plotH;
 
   // Vertical grid lines and dynamic time ticks along the horizontal axis
   for (const tick of ticks) {
@@ -3945,15 +4032,6 @@ function renderThermalGraph(
   ctx.fillText('θ (°C)', plotX - 8, plotY - 10);
   ctx.textAlign = 'left';
   ctx.fillText(tMax >= 120 ? 't (min)' : 't (s)', plotX + plotW + 6, plotY + plotH + 3.5);
-
-  const effectiveMeta = metaMap || getContainersCurveMeta(sim, isDark);
-  let boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
-  if (boundIds.length === 0) {
-    const allContainers = sim.objects.filter(
-      (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
-    );
-    boundIds = allContainers.map((c) => c.id);
-  }
 
   // Plot Curves from history
   if (sim.history.length > 1) {
