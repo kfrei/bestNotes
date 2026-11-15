@@ -69,12 +69,13 @@ export const LIQUID_REGISTRY: Record<LiquidType, LiquidPhysicalProperties> = {
   },
 };
 
-export type FlameIntensity = 'off' | 'safety' | 'normal' | 'roaring';
+export type FlameIntensity = 'off' | 'low' | 'medium' | 'high' | 'safety' | 'normal' | 'roaring';
 
 export interface HeatBurnerState {
   isOn: boolean;
-  intensity: FlameIntensity; // safety (yellow, 300W), normal (orange, 600W), roaring (blue, 1000W)
+  intensity: FlameIntensity; // low (Χαμηλή, 470W), medium (Μεσαία, 770W), high (Υψηλή, 1470W), off
   flameCycle: number; // 0..1 for flicker phase
+  noticeUntil?: number; // timestamp until which the Greek intensity pill ("Χαμηλή", "Μεσαία", "Υψηλή") is shown
 }
 
 export interface HeatTripodState {

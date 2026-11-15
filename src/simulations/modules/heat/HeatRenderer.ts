@@ -23,6 +23,7 @@ import {
   HeatSimConfig,
   HeatThermometerState,
   LiquidType,
+  FlameIntensity,
 } from './types';
 
 // Helper: interpolate between two hex colors
@@ -283,7 +284,19 @@ export function renderHeatSimulation(
         );
         break;
       case 'burner':
-        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected, layer, obj.strokeColor);
+        renderBurner(
+          ctx,
+          obj.width,
+          obj.height,
+          obj.burnerState,
+          isDark,
+          isSelected,
+          layer,
+          obj.strokeColor,
+          obj.x,
+          obj.y,
+          options?.hoverPoint
+        );
         break;
       case 'beaker': {
         const parentBasin = sim.objects.find(
@@ -1048,7 +1061,10 @@ function renderBurner(
   isDark: boolean,
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
-  customColor?: string
+  customColor?: string,
+  worldX?: number,
+  worldY?: number,
+  hoverPoint?: { x: number; y: number } | null
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -1090,20 +1106,35 @@ function renderBurner(
       const sway = Math.sin(time * 3.2) * 2.8 + Math.sin(time * 6.5) * 1.2;
       // 2. Flame height breathing
       const breathe = 1.0 + Math.sin(time * 4.0) * 0.08 + Math.cos(time * 7.0) * 0.03;
-      const baseFlameH = state.intensity === 'roaring' ? h * 0.65 : state.intensity === 'normal' ? h * 0.50 : h * 0.38;
+
+      const isLow = state.intensity === 'low' || state.intensity === 'safety';
+      const isHigh = state.intensity === 'high' || state.intensity === 'roaring';
+
+      // "η εικονα της φλογας που εχουμε τωρα ας ειναι η μεσαι και αρα στο μικρο θα εχεις τη φλογα φανερα μικροτερη και στο πιο μεγαλο θα ειναι πιο μεγαλη λιογ..."
+      const baseFlameH = isHigh ? h * 0.68 : isLow ? h * 0.32 : h * 0.50;
       const flameH = baseFlameH * breathe;
       const flameTipY = nozzleTopY - 4 - flameH;
 
       // 3. Soft circular ambient breathing glow (NO rectangular box!)
       ctx.save();
-      const glowR = flameH * 0.95;
+      const glowR = isHigh ? flameH * 1.20 : isLow ? flameH * 0.75 : flameH * 0.95;
       const glowCenterY = nozzleTopY - 4 - flameH * 0.45;
       const glow = ctx.createRadialGradient(cx, glowCenterY, 3, cx, glowCenterY, glowR);
-      const isRoar = state.intensity === 'roaring';
       const glowAlpha = 0.22 + Math.sin(time * 5.0) * 0.05;
-      glow.addColorStop(0, isRoar ? `rgba(59, 130, 246, ${glowAlpha + 0.15})` : `rgba(249, 115, 22, ${glowAlpha + 0.18})`);
-      glow.addColorStop(0.5, isRoar ? `rgba(96, 165, 250, ${glowAlpha * 0.5})` : `rgba(251, 146, 60, ${glowAlpha * 0.5})`);
-      glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+      if (isHigh) {
+        glow.addColorStop(0, `rgba(249, 115, 22, ${glowAlpha + 0.24})`);
+        glow.addColorStop(0.5, `rgba(251, 146, 60, ${glowAlpha * 0.65})`);
+        glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      } else if (isLow) {
+        glow.addColorStop(0, `rgba(245, 158, 11, ${glowAlpha + 0.12})`);
+        glow.addColorStop(0.5, `rgba(251, 191, 36, ${glowAlpha * 0.35})`);
+        glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      } else {
+        glow.addColorStop(0, `rgba(249, 115, 22, ${glowAlpha + 0.18})`);
+        glow.addColorStop(0.5, `rgba(251, 146, 60, ${glowAlpha * 0.5})`);
+        glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      }
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(cx, glowCenterY, glowR, 0, Math.PI * 2);
@@ -1112,8 +1143,9 @@ function renderBurner(
 
       // 4. Fluid teardrop flame silhouette emerging from nozzle mouth
       ctx.save();
-      const flameBaseW = nozzleW * 0.72;
-      const flameMidW = nozzleW * 1.35 * (1.0 - (breathe - 1.0) * 0.5);
+      const widthScale = isHigh ? 1.30 : isLow ? 0.70 : 1.0;
+      const flameBaseW = nozzleW * 0.72 * (isLow ? 0.80 : isHigh ? 1.15 : 1.0);
+      const flameMidW = nozzleW * 1.35 * widthScale * (1.0 - (breathe - 1.0) * 0.5);
 
       ctx.beginPath();
       ctx.moveTo(cx - flameBaseW / 2, nozzleTopY);
@@ -1139,11 +1171,17 @@ function renderBurner(
 
       // Flame Gradient Fill
       const flameGrad = ctx.createLinearGradient(cx, nozzleTopY, cx + sway, flameTipY);
-      if (isRoar) {
-        flameGrad.addColorStop(0, 'rgba(29, 78, 216, 0.85)');
-        flameGrad.addColorStop(0.35, 'rgba(37, 99, 235, 0.75)');
-        flameGrad.addColorStop(0.7, 'rgba(96, 165, 250, 0.65)');
-        flameGrad.addColorStop(1, 'rgba(219, 234, 254, 0.55)');
+      if (isHigh) {
+        flameGrad.addColorStop(0, 'rgba(185, 28, 28, 0.95)'); // Hot crimson base
+        flameGrad.addColorStop(0.2, 'rgba(234, 88, 12, 0.90)'); // Rich orange
+        flameGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.85)'); // Golden amber
+        flameGrad.addColorStop(0.85, 'rgba(253, 224, 71, 0.80)'); // Bright yellow
+        flameGrad.addColorStop(1, 'rgba(255, 255, 255, 0.75)'); // White tip
+      } else if (isLow) {
+        flameGrad.addColorStop(0, 'rgba(194, 65, 12, 0.85)');
+        flameGrad.addColorStop(0.3, 'rgba(234, 88, 12, 0.80)');
+        flameGrad.addColorStop(0.7, 'rgba(245, 158, 11, 0.75)');
+        flameGrad.addColorStop(1, 'rgba(254, 240, 138, 0.60)');
       } else {
         flameGrad.addColorStop(0, 'rgba(194, 65, 12, 0.90)'); // Deep fire base
         flameGrad.addColorStop(0.25, 'rgba(234, 88, 12, 0.85)'); // Rich orange
@@ -1154,12 +1192,12 @@ function renderBurner(
       ctx.fillStyle = flameGrad;
       ctx.fill();
 
-      ctx.strokeStyle = isRoar ? '#2563eb' : '#ea580c';
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = isHigh ? '#dc2626' : isLow ? '#d97706' : '#ea580c';
+      ctx.lineWidth = isHigh ? 1.4 : 1.25;
       ctx.stroke();
 
       // 5. Inner Bright Flame Core (teardrop)
-      const coreH = flameH * 0.52;
+      const coreH = flameH * (isHigh ? 0.58 : isLow ? 0.46 : 0.52);
       const coreTipY = nozzleTopY - coreH;
       const coreMidW = flameMidW * 0.48;
 
@@ -1184,13 +1222,8 @@ function renderBurner(
       ctx.closePath();
 
       const coreGrad = ctx.createLinearGradient(cx, nozzleTopY, cx, coreTipY);
-      if (isRoar) {
-        coreGrad.addColorStop(0, 'rgba(147, 197, 253, 0.85)');
-        coreGrad.addColorStop(1, '#ffffff');
-      } else {
-        coreGrad.addColorStop(0, 'rgba(253, 224, 71, 0.95)');
-        coreGrad.addColorStop(1, '#ffffff');
-      }
+      coreGrad.addColorStop(0, 'rgba(253, 224, 71, 0.95)');
+      coreGrad.addColorStop(1, '#ffffff');
       ctx.fillStyle = coreGrad;
       ctx.fill();
       ctx.restore();
@@ -1323,9 +1356,72 @@ function renderBurner(
     ctx.restore();
 
     // 5. Permanent Flame Toggle Icon at bottom-right of cast-iron base (no outer box/frame)
-    const { btnCenterX, btnCenterY } = getBurnerActionButtonLocalPos(w, h);
+    const { btnCenterX, btnCenterY, btnHalf } = getBurnerActionButtonLocalPos(w, h);
     const isOn = Boolean(state?.isOn);
-    drawFlameIcon(ctx, btnCenterX, btnCenterY, isDark, isOn);
+    drawFlameIcon(ctx, btnCenterX, btnCenterY, isDark, isOn, state?.intensity);
+
+    // 6. Intensity label pill ("Χαμηλή", "Μεσαία", "Υψηλή") next to flame button
+    const btnWorldX = (worldX ?? 0) + btnCenterX;
+    const btnWorldY = (worldY ?? 0) + btnCenterY;
+    const isHovered = Boolean(
+      hoverPoint && Math.hypot(hoverPoint.x - btnWorldX, hoverPoint.y - btnWorldY) <= 18
+    );
+    const nowMs = Date.now();
+    const noticeTimeLeft = (state?.noticeUntil ?? 0) - nowMs;
+    const isNoticeActive = noticeTimeLeft > 0;
+
+    if (isNoticeActive || isHovered) {
+      let labelText = 'Σβηστό';
+      let themeColor = isDark ? '#94a3b8' : '#64748b';
+      let borderColor = 'rgba(148, 163, 184, 0.4)';
+
+      if (isOn) {
+        const int = state?.intensity;
+        if (int === 'low' || int === 'safety') {
+          labelText = 'Χαμηλή';
+          themeColor = isDark ? '#fbbf24' : '#d97706';
+          borderColor = 'rgba(245, 158, 11, 0.45)';
+        } else if (int === 'high' || int === 'roaring') {
+          labelText = 'Υψηλή';
+          themeColor = isDark ? '#fb7185' : '#e11d48';
+          borderColor = 'rgba(225, 29, 72, 0.45)';
+        } else {
+          // medium / normal
+          labelText = 'Μεσαία';
+          themeColor = isDark ? '#fb923c' : '#ea580c';
+          borderColor = 'rgba(234, 88, 12, 0.45)';
+        }
+      }
+
+      ctx.save();
+      // Smooth fade out in the last 400ms when not hovering
+      if (!isHovered && isNoticeActive && noticeTimeLeft < 400) {
+        ctx.globalAlpha = Math.max(0, noticeTimeLeft / 400);
+      }
+
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      const textW = ctx.measureText(labelText).width;
+      const pillW = textW + 12;
+      const pillH = 17;
+      const pillX = btnCenterX + btnHalf + 5;
+      const pillY = btnCenterY - pillH / 2;
+      const r = pillH / 2;
+
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillW, pillH, r);
+      ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.94)';
+      ctx.fill();
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+
+      ctx.fillStyle = themeColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText, pillX + pillW / 2, pillY + pillH / 2 + 0.5);
+
+      ctx.restore();
+    }
 
     ctx.restore();
   }
@@ -1760,7 +1856,8 @@ function drawFlameIcon(
   cx: number,
   cy: number,
   isDark: boolean,
-  isOn: boolean
+  isOn: boolean,
+  intensity?: FlameIntensity
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
@@ -1778,21 +1875,40 @@ function drawFlameIcon(
   ctx.bezierCurveTo(-2.2, -1.3, -1.1, -4.0, 0.5, -7.0);
   ctx.closePath();
 
-  // Very pale soft pink inside when OFF, more intense vibrant pink/coral when ON/pressed
-  ctx.fillStyle = isOn
-    ? (isDark ? 'rgba(251, 113, 133, 0.70)' : 'rgba(244, 63, 94, 0.65)')
-    : (isDark ? 'rgba(251, 113, 133, 0.22)' : 'rgba(254, 205, 211, 0.45)');
+  const isLow = intensity === 'low' || intensity === 'safety';
+  const isHigh = intensity === 'high' || intensity === 'roaring';
+
+  let fillCol: string;
+  let strokeCol: string;
+  let shadowCol = 'transparent';
+
+  if (!isOn) {
+    fillCol = isDark ? 'rgba(251, 113, 133, 0.22)' : 'rgba(254, 205, 211, 0.45)';
+    strokeCol = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+  } else if (isLow) {
+    fillCol = isDark ? 'rgba(251, 191, 36, 0.70)' : 'rgba(245, 158, 11, 0.65)';
+    strokeCol = isDark ? '#fbbf24' : '#d97706';
+    shadowCol = 'rgba(245, 158, 11, 0.45)';
+  } else if (isHigh) {
+    fillCol = isDark ? 'rgba(244, 63, 94, 0.85)' : 'rgba(225, 29, 72, 0.80)';
+    strokeCol = isDark ? '#fb7185' : '#e11d48';
+    shadowCol = 'rgba(225, 29, 72, 0.55)';
+  } else {
+    // Medium
+    fillCol = isDark ? 'rgba(251, 113, 133, 0.70)' : 'rgba(244, 63, 94, 0.65)';
+    strokeCol = isDark ? '#fb7185' : '#e11d48';
+    shadowCol = 'rgba(244, 63, 94, 0.45)';
+  }
+
+  ctx.fillStyle = fillCol;
   ctx.fill();
 
-  // Slightly darker grey outline when OFF, vivid rose/coral when ON
-  ctx.strokeStyle = isOn
-    ? (isDark ? '#fb7185' : '#e11d48')
-    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.strokeStyle = strokeCol;
   ctx.lineWidth = isOn ? 1.5 : 1.3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (isOn) {
-    ctx.shadowColor = 'rgba(244, 63, 94, 0.45)';
+  if (isOn && shadowCol !== 'transparent') {
+    ctx.shadowColor = shadowCol;
     ctx.shadowBlur = 4;
   }
   ctx.stroke();

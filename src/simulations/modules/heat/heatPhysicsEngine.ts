@@ -18,18 +18,25 @@ const WATER_BATH_HEAT_TRANSFER_COEFF = 18.0; // W / °C effective contact transf
 
 /**
  * Returns power output in Watts for a burner state.
+ * Calibrated for 500ml water (C = 2092 J/°C):
+ * - Low (Χαμηλή, 470W): reaches 100°C in ~7 min
+ * - Medium (Μεσαία, 770W): reaches 100°C in ~4 min
+ * - High (Υψηλή, 1470W): reaches 100°C in ~2 min
  */
 export function getBurnerPowerWatts(burner?: HeatBurnerState): number {
   if (!burner || !burner.isOn) return 0;
   switch (burner.intensity) {
+    case 'low':
     case 'safety':
-      return 320;
+      return 470;
+    case 'medium':
     case 'normal':
-      return 680;
+      return 770;
+    case 'high':
     case 'roaring':
-      return 1150;
+      return 1470;
     default:
-      return 680;
+      return 770;
   }
 }
 
@@ -90,7 +97,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
 
     if (burnerUnderneath && burnerUnderneath.burnerState) {
       const pWatts = getBurnerPowerWatts(burnerUnderneath.burnerState);
-      targetGauzeTemp = ambientTemp + (pWatts / 1150) * 480; // Up to ~500°C
+      targetGauzeTemp = ambientTemp + (pWatts / 1470) * 580; // Up to ~600°C
     }
 
     const currentGauze = tripod.tripodState.wireGauzeTemp ?? ambientTemp;
@@ -116,11 +123,24 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       return dx < Math.max(55, (t.width + container.width) * 0.35) && dy <= 45;
     });
 
-    if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
-      // Heat transfer from wire gauze
+    let burnerUnderTripod: HeatObject | undefined;
+    if (tripodBelow) {
+      burnerUnderTripod = burners.find((b) => {
+        if (!b.burnerState?.isOn) return false;
+        const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
+        const isUnderGauze = b.y >= tripodBelow.y - 40 && b.y <= tripodBelow.y + tripodBelow.height + 60;
+        return dx < Math.max(50, tripodBelow.width * 0.45) && isUnderGauze;
+      });
+    }
+
+    if (burnerUnderTripod?.burnerState) {
+      // Direct heat transfer from active burner through the tripod wire gauze
+      receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(burnerUnderTripod.burnerState));
+    } else if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
+      // Residual cooling heat transfer from the hot wire gauze after burner was turned off
       const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
       if (deltaTGauze > 0) {
-        receivedPowerWatts += deltaTGauze * 2.2; // Watts
+        receivedPowerWatts += deltaTGauze * 1.5;
       }
     }
 
@@ -136,9 +156,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       );
     });
 
-    if (directBurner && directBurner.burnerState) {
-      const directPower = getBurnerPowerWatts(directBurner.burnerState) * (tripodBelow ? 0.75 : 0.85);
-      receivedPowerWatts = Math.max(receivedPowerWatts, directPower);
+    if (directBurner?.burnerState) {
+      receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(directBurner.burnerState));
     }
 
     // Apply Q = P·dt => ΔT = dQ / (m·c)
@@ -151,12 +170,11 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     }
 
     // Interaction with ambient environment (Newton's Law of Cooling)
-    // The environment acts as an infinite heat reservoir (its temperature is not affected)
+    // Convective cooling k = 0.0008 1/s (a 50°C vessel in 20°C room cools naturally over ~20 mins,
+    // and heating easily surpasses ambient loss to reach and hold 100°C without stalling!)
     const coolDelta = cs.temperature - ambientTemp;
     if (Math.abs(coolDelta) > 0.005) {
-      // Gentle natural cooling/warming towards ambient:
-      // Rate ~0.014 1/s (a 50°C vessel in 20°C room cools smoothly towards 20°C asymptotically)
-      cs.temperature -= coolDelta * 0.014 * timeStep;
+      cs.temperature -= coolDelta * 0.0008 * timeStep;
     }
 
     // Boiling plateau check (only if container has liquid!)
@@ -288,10 +306,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   // "όμως σε διάγραμμα μετρά μόνο με έναρξη από το χρονόμετρο"
   if (sim.isRunning) {
     const nextElapsed = sim.elapsedSec + timeStep;
-    let nextHistory = sim.history;
+    let nextHistory = sim.history ? [...sim.history] : [];
 
-    const anyGraphVisible = sim.graph.visible || (sim.graphs && sim.graphs.some((g) => g.visible));
-    if (anyGraphVisible && containers.length > 0) {
+    if (containers.length > 0) {
       // Record temperatures of ALL containers by ID
       const tempsMap: Record<string, number> = {};
       for (const c of containers) {
@@ -335,8 +352,20 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
           tempEquilibrium = ambientTemp;
         }
 
-        // Sample every 0.1s to record temperature history from t = 0
-        const lastPoint = sim.history[sim.history.length - 1];
+        // If history is empty at the start of stopwatch run, insert the t = 0 starting point!
+        if (nextHistory.length === 0) {
+          nextHistory.push({
+            timeSec: 0,
+            temp1: Math.round(temp1 * 10) / 10,
+            temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
+            tempsByContainerId: { ...tempsMap },
+            tempEquilibrium:
+              tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
+          });
+        }
+
+        // Sample every 0.1s to record temperature history from t = 0 onwards
+        const lastPoint = nextHistory[nextHistory.length - 1];
         if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.1) {
           const point = {
             timeSec: Math.round(nextElapsed * 10) / 10,
@@ -346,8 +375,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
             tempEquilibrium:
               tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
           };
-          // Retain complete history from t = 0 (up to 6000 points = 10 minutes of continuous recording)
-          nextHistory = [...sim.history.slice(-5999), point];
+          // Retain complete history from t = 0 (up to 7200 points = 12 minutes of continuous recording)
+          nextHistory = [...nextHistory.slice(-7199), point];
         }
       }
     }

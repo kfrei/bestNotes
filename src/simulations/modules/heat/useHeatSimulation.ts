@@ -5,6 +5,7 @@ import {
   HeatGraphConfig,
   HeatObject,
   HeatObjectType,
+  FlameIntensity,
 } from './types';
 import { stepHeatSimulation } from './heatPhysicsEngine';
 import { createDefaultHeatSim } from './HeatSimulationModule';
@@ -474,7 +475,35 @@ export function useHeatSimulation(
       const targetBurner = targetId
         ? cur.objects.find((o) => o.id === targetId)
         : cur.objects.find((o) => o.type === 'burner');
-      const nextOn = !targetBurner?.burnerState?.isOn;
+
+      // 4-step cycling: Off -> Low (Χαμηλή) -> Medium (Μεσαία) -> High (Υψηλή) -> Off
+      const curState = targetBurner?.burnerState;
+      let nextOn = true;
+      let nextIntensity: FlameIntensity = 'medium';
+
+      if (!curState || !curState.isOn) {
+        // Off -> Low
+        nextOn = true;
+        nextIntensity = 'low';
+      } else {
+        const curInt = curState.intensity;
+        if (curInt === 'low' || curInt === 'safety') {
+          // Low -> Medium
+          nextOn = true;
+          nextIntensity = 'medium';
+        } else if (curInt === 'medium' || curInt === 'normal') {
+          // Medium -> High
+          nextOn = true;
+          nextIntensity = 'high';
+        } else {
+          // High -> Off
+          nextOn = false;
+          nextIntensity = 'off';
+        }
+      }
+
+      const noticeUntil = Date.now() + 3000;
+
       const next = {
         ...cur,
         isRunning: cur.isRunning,
@@ -485,6 +514,8 @@ export function useHeatSimulation(
               burnerState: {
                 ...obj.burnerState,
                 isOn: nextOn,
+                intensity: nextIntensity,
+                noticeUntil,
               },
             };
           }
@@ -511,6 +542,8 @@ export function useHeatSimulation(
                 ...obj.burnerState,
                 isOn: false,
                 flameCycle: 0,
+                intensity: 'medium' as const,
+                noticeUntil: undefined,
               },
             };
           }
