@@ -1325,7 +1325,8 @@ function renderTripod(
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
   const collarW = w * 0.72;
-  const collarH = h * 0.14;
+  // Reduce vertical perspective for a gentler, more authentic 2.5D elevation
+  const collarH = Math.round(collarW * 0.15); // ~13px (flatter 2.5D ellipse with Ry ≈ 6.5px)
   const topY = 4;
   const collarCy = topY + collarH * 0.5;
   const collarRx = collarW / 2;
@@ -1904,6 +1905,8 @@ function renderBeaker(
   const beadH = 3.5;
   const cornerR = 9;
   const spoutW = 12;
+  // Subtle 2.5D downward curve for container bottom to match tripod base perspective
+  const botCurve = Math.round(bw * 0.055);
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
@@ -1935,6 +1938,7 @@ function renderBeaker(
         performance.now()
       );
 
+      const span = bw - 2 * cornerR;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(surface[0].x, surface[0].y);
@@ -1942,14 +1946,21 @@ function renderBeaker(
         ctx.lineTo(surface[i].x, surface[i].y);
       }
       ctx.lineTo(x + bw, y + bh - cornerR);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-      ctx.lineTo(x + cornerR, y + bh);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+      ctx.bezierCurveTo(
+        x + bw - cornerR - span * 0.28,
+        y + bh + botCurve * 1.25,
+        x + cornerR + span * 0.28,
+        y + bh + botCurve * 1.25,
+        x + cornerR,
+        y + bh + botCurve * 0.25
+      );
       ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
       ctx.lineTo(surface[0].x, surface[0].y);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh + botCurve, 0, x - 4, x + bw + 4, surface);
 
       // Staged animated thermal convection, rising bubbles & billowing steam (from bottom to top)
       if (layer !== 'apparatus') {
@@ -1960,7 +1971,7 @@ function renderBeaker(
 
         // 1. Thermal Convection Currents (bottom to top)
         if (temp >= 32) {
-          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh, temp, liquidType, nowMs);
+          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh + botCurve, temp, liquidType, nowMs);
         }
 
         // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
@@ -1983,6 +1994,7 @@ function renderBeaker(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    const span = bw - 2 * cornerR;
     ctx.beginPath();
     // Spout top tip
     ctx.moveTo(x - spoutW, y + 1.5);
@@ -1995,9 +2007,16 @@ function renderBeaker(
     // Right vertical wall
     ctx.lineTo(x + bw, y + bh - cornerR);
     // Bottom right rounded corner
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-    // Flat resting base
-    ctx.lineTo(x + cornerR, y + bh);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+    // Subtle 2.5D downward curved base (matching tripod wire gauze ring curvature)
+    ctx.bezierCurveTo(
+      x + bw - cornerR - span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR + span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR,
+      y + bh + botCurve * 0.25
+    );
     // Bottom left rounded corner
     ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
     // Left vertical wall up to spout start
@@ -2036,15 +2055,22 @@ function renderBeaker(
       const basinWaterGlobalY = parentBasin.y + bLiquidTopY;
       const basinWaterLocalY = basinWaterGlobalY - (objY ?? 0);
 
-      if (basinWaterLocalY < y + bh) {
+      if (basinWaterLocalY < y + bh + botCurve) {
         ctx.save();
         ctx.beginPath();
         const subY = Math.max(y, basinWaterLocalY);
         ctx.moveTo(x - 2, subY);
         ctx.lineTo(x + bw + 2, subY);
         ctx.lineTo(x + bw + 2, y + bh - cornerR);
-        ctx.quadraticCurveTo(x + bw + 2, y + bh + 1, x + bw - cornerR, y + bh + 1);
-        ctx.lineTo(x + cornerR, y + bh + 1);
+        ctx.quadraticCurveTo(x + bw + 2, y + bh + 1, x + bw - cornerR, y + bh + 1 + botCurve * 0.25);
+        ctx.bezierCurveTo(
+          x + bw - cornerR - span * 0.28,
+          y + bh + 1 + botCurve * 1.25,
+          x + cornerR + span * 0.28,
+          y + bh + 1 + botCurve * 1.25,
+          x + cornerR,
+          y + bh + 1 + botCurve * 0.25
+        );
         ctx.quadraticCurveTo(x - 2, y + bh + 1, x - 2, y + bh - cornerR);
         ctx.closePath();
         ctx.fillStyle =
@@ -2100,6 +2126,8 @@ function renderWideBasin(
   const beadH = 3.5;
   const spoutW = 10;
   const cornerR = 12;
+  // Subtle 2.5D downward curve for container bottom to match tripod base perspective
+  const botCurve = Math.round(bw * 0.035);
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 800;
@@ -2131,6 +2159,7 @@ function renderWideBasin(
         performance.now()
       );
 
+      const span = bw - 2 * cornerR;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(surface[0].x, surface[0].y);
@@ -2138,14 +2167,21 @@ function renderWideBasin(
         ctx.lineTo(surface[i].x, surface[i].y);
       }
       ctx.lineTo(x + bw, y + bh - cornerR);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-      ctx.lineTo(x + cornerR, y + bh);
+      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+      ctx.bezierCurveTo(
+        x + bw - cornerR - span * 0.28,
+        y + bh + botCurve * 1.25,
+        x + cornerR + span * 0.28,
+        y + bh + botCurve * 1.25,
+        x + cornerR,
+        y + bh + botCurve * 0.25
+      );
       ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
       ctx.lineTo(surface[0].x, surface[0].y);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, 0, x - 4, x + bw + 4, surface);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh + botCurve, 0, x - 4, x + bw + 4, surface);
 
       // Staged animated thermal convection, rising bubbles & billowing steam (from bottom to top)
       if (layer !== 'apparatus') {
@@ -2156,7 +2192,7 @@ function renderWideBasin(
 
         // 1. Thermal Convection Currents (bottom to top)
         if (temp >= 32) {
-          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh, temp, liquidType, nowMs);
+          renderThermalConvection(ctx, x, liquidTopY, bw, liquidH, y + bh + botCurve, temp, liquidType, nowMs);
         }
 
         // 2. Rising Bubbles (bottom to top, staged from 50°C to 100°C)
@@ -2178,6 +2214,7 @@ function renderWideBasin(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    const span = bw - 2 * cornerR;
     ctx.beginPath();
     // Spout top tip
     ctx.moveTo(x - spoutW, y + 1.5);
@@ -2190,9 +2227,16 @@ function renderWideBasin(
     // Right vertical wall
     ctx.lineTo(x + bw, y + bh - cornerR);
     // Bottom right rounded corner
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh);
-    // Flat resting base
-    ctx.lineTo(x + cornerR, y + bh);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+    // Subtle 2.5D downward curved base (matching tripod wire gauze ring curvature)
+    ctx.bezierCurveTo(
+      x + bw - cornerR - span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR + span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR,
+      y + bh + botCurve * 0.25
+    );
     // Bottom left rounded corner
     ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
     // Left vertical wall up to spout start
@@ -2264,6 +2308,8 @@ function renderFlask(
   const collarExt = 3.5;
   const cornerR = 9;
   const baseHalfW = bw / 2;
+  // Subtle 2.5D downward curve for container bottom to match tripod base perspective
+  const botCurve = Math.round(bw * 0.055);
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
@@ -2301,6 +2347,7 @@ function renderFlask(
         performance.now()
       );
 
+      const span = baseHalfW * 2 - 2 * cornerR;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(surface[0].x, surface[0].y);
@@ -2311,8 +2358,15 @@ function renderFlask(
         ctx.lineTo(cx + neckW / 2, coneTopY);
       }
       ctx.lineTo(cx + baseHalfW, coneBotY);
-      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh);
-      ctx.lineTo(cx - baseHalfW + cornerR, y + bh);
+      ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh + botCurve * 0.25);
+      ctx.bezierCurveTo(
+        cx + baseHalfW - cornerR - span * 0.28,
+        y + bh + botCurve * 1.25,
+        cx - baseHalfW + cornerR + span * 0.28,
+        y + bh + botCurve * 1.25,
+        cx - baseHalfW + cornerR,
+        y + bh + botCurve * 0.25
+      );
       ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, coneBotY);
       if (isAboveNeck) {
         ctx.lineTo(cx - neckW / 2, coneTopY);
@@ -2328,7 +2382,7 @@ function renderFlask(
         liquidTopY,
         surfaceHalfW * 2,
         liquidH,
-        y + bh,
+        y + bh + botCurve,
         0,
         cx - baseHalfW - 4,
         cx + baseHalfW + 4,
@@ -2350,7 +2404,7 @@ function renderFlask(
             liquidTopY,
             surfaceHalfW * 2,
             liquidH,
-            y + bh,
+            y + bh + botCurve,
             temp,
             liquidType,
             nowMs
@@ -2388,6 +2442,7 @@ function renderFlask(
 
     const collarLeft = cx - neckW / 2 - collarExt;
     const collarRight = cx + neckW / 2 + collarExt;
+    const span = baseHalfW * 2 - 2 * cornerR;
 
     // Body & Neck Outline
     ctx.beginPath();
@@ -2397,9 +2452,16 @@ function renderFlask(
     // Conical right wall
     ctx.lineTo(cx + baseHalfW, y + bh - cornerR);
     // Bottom right corner
-    ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh);
-    // Flat resting base
-    ctx.lineTo(cx - baseHalfW + cornerR, y + bh);
+    ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh + botCurve * 0.25);
+    // Subtle 2.5D downward curved base (matching tripod wire gauze ring curvature)
+    ctx.bezierCurveTo(
+      cx + baseHalfW - cornerR - span * 0.28,
+      y + bh + botCurve * 1.25,
+      cx - baseHalfW + cornerR + span * 0.28,
+      y + bh + botCurve * 1.25,
+      cx - baseHalfW + cornerR,
+      y + bh + botCurve * 0.25
+    );
     // Bottom left corner
     ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, y + bh - cornerR);
     // Conical left wall
