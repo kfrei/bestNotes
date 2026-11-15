@@ -542,9 +542,9 @@ export function useHeatSimulation(
           const baseRightX = cx + baseW / 2;
           const groundY = obj.y + obj.height - 12;
           const cyBot = groundY - 5.2;
-          const btnCenterX = baseRightX + 4;
-          const btnCenterY = cyBot - 6;
-          if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 20) {
+          const btnCenterX = baseRightX + 8;
+          const btnCenterY = cyBot + 1;
+          if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 18) {
             toggleBurner(obj.id);
             return true;
           }

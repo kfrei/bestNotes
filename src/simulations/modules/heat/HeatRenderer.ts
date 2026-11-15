@@ -939,62 +939,64 @@ function renderBurner(
     ctx.restore();
 
     // 5. Permanent Flame Toggle Button at bottom-right of cast-iron base (matching media_1794729887270_8981dcf2.png)
-    const btnSize = 22;
+    const btnSize = 19;
     const btnHalf = btnSize / 2;
-    const btnCenterX = cx + baseW / 2 + 4;
-    const btnCenterY = cyBot - 6;
+    const btnCenterX = cx + baseW / 2 + 8;
+    const btnCenterY = cyBot + 1;
     const isOn = Boolean(state?.isOn);
 
+    const frameGrey = isDark
+      ? 'rgba(255, 255, 255, 0.22)'
+      : 'rgba(156, 163, 175, 0.68)'; // Soft, faint neutral whisper-grey
+
     ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1.2;
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetY = 1.0;
 
     // Soft grey/beige squircle container
     ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.95)' : '#fdfbf7';
-    ctx.strokeStyle = isDark
-      ? 'rgba(255, 255, 255, 0.22)'
-      : isOn
-      ? 'rgba(234, 88, 12, 0.50)'
-      : 'rgba(203, 213, 225, 0.90)';
-    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = isOn
+      ? 'rgba(234, 88, 12, 0.60)'
+      : frameGrey;
+    ctx.lineWidth = 1.1;
 
     ctx.beginPath();
-    ctx.roundRect(btnCenterX - btnHalf, btnCenterY - btnHalf, btnSize, btnSize, 6);
+    ctx.roundRect(btnCenterX - btnHalf, btnCenterY - btnHalf, btnSize, btnSize, 5.5);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
 
-    // Small monochrome flame icon inside squircle
+    // Small monochrome flame icon inside squircle (same grey as frame when OFF)
     ctx.save();
     ctx.translate(btnCenterX, btnCenterY);
 
     ctx.beginPath();
-    ctx.moveTo(0.5, -6.5);
+    ctx.moveTo(0.4, -5.2);
     // Right convex curve going down
-    ctx.bezierCurveTo(2.8, -3.0, 4.2, 0.5, 3.6, 3.2);
-    ctx.bezierCurveTo(3.0, 5.5, 0.2, 6.5, -2.2, 5.5);
+    ctx.bezierCurveTo(2.3, -2.4, 3.4, 0.4, 2.9, 2.6);
+    ctx.bezierCurveTo(2.4, 4.4, 0.2, 5.2, -1.8, 4.4);
     // Bottom left curve
-    ctx.bezierCurveTo(-4.2, 4.5, -4.6, 2.5, -3.6, 0.8);
+    ctx.bezierCurveTo(-3.4, 3.6, -3.7, 2.0, -2.9, 0.6);
     // Inward flick / notch on left
-    ctx.bezierCurveTo(-2.6, -0.4, -1.4, 0.0, -1.8, 1.6);
+    ctx.bezierCurveTo(-2.1, -0.3, -1.1, 0.0, -1.4, 1.3);
     // Curving up to top tip
-    ctx.bezierCurveTo(-2.0, -1.2, -1.0, -3.8, 0.5, -6.5);
+    ctx.bezierCurveTo(-1.6, -1.0, -0.8, -3.0, 0.4, -5.2);
     ctx.closePath();
 
     if (isOn) {
       ctx.fillStyle = 'rgba(251, 146, 60, 0.25)';
       ctx.fill();
       ctx.strokeStyle = '#ea580c';
-      ctx.lineWidth = 1.7;
+      ctx.lineWidth = 1.4;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.shadowColor = 'rgba(234, 88, 12, 0.45)';
       ctx.shadowBlur = 3;
       ctx.stroke();
     } else {
-      ctx.strokeStyle = isDark ? '#94a3b8' : '#64748b';
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = frameGrey;
+      ctx.lineWidth = 1.2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
