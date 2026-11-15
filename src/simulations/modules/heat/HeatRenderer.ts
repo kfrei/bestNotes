@@ -740,24 +740,24 @@ function renderTripod(
 
     // 1. Recessed Back Leg (rotated off-center to the left, rendered faint gray so burner placed underneath remains crystal-clear)
     ctx.save();
-    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.52)';
+    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.40)';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(cx - collarW * 0.16, topY + collarH * 0.25);
-    ctx.lineTo(cx - collarW * 0.22, legBotY - 6);
+    ctx.moveTo(cx - collarW * 0.20, topY + collarH * 0.20);
+    ctx.lineTo(cx - collarW * 0.30, legBotY - 6);
     ctx.stroke();
     ctx.restore();
 
     // 2. Front Left Leg (crisp foreground line-art)
     ctx.beginPath();
-    ctx.moveTo(cx - collarW * 0.44, topY + collarH * 0.52);
+    ctx.moveTo(cx - collarW * 0.44, topY + collarH * 0.58);
     ctx.lineTo(cx - collarW * 0.58, legBotY);
     ctx.stroke();
 
     // 3. Front Right Leg (crisp foreground line-art)
     ctx.beginPath();
-    ctx.moveTo(cx + collarW * 0.32, topY + collarH * 0.48);
-    ctx.lineTo(cx + collarW * 0.48, legBotY);
+    ctx.moveTo(cx + collarW * 0.34, topY + collarH * 0.54);
+    ctx.lineTo(cx + collarW * 0.50, legBotY);
     ctx.stroke();
 
     // Circular Top Collar Ring
@@ -837,7 +837,9 @@ function renderBeaker(
   const y = pad + 4;
   const cx = x + bw / 2;
   const rimH = 14;
-  const bottomH = 14;
+  const bottomRy = 6.5;
+  const cyBot = y + bh - bottomRy;
+  const baseRx = bw / 2;
   const spoutW = 12;
 
   const vol = state?.volumeMl ?? 0;
@@ -853,16 +855,15 @@ function renderBeaker(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Draw Liquid Fill if volume > 0 - Fills 100% of beaker base with NO white gaps!
+    // Draw Liquid Fill if volume > 0 - Fills 100% of curved beaker base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(x, liquidTopY);
-      ctx.lineTo(x, y + bh - bottomH / 2);
-      ctx.quadraticCurveTo(x, y + bh, x + 10, y + bh);
-      ctx.lineTo(x + bw - 10, y + bh);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
+      ctx.lineTo(x, cyBot);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
       ctx.lineTo(x + bw, liquidTopY);
+      ctx.ellipse(cx, liquidTopY, baseRx, rimH * 0.35, 0, 0, Math.PI, true);
       ctx.closePath();
       ctx.clip();
 
@@ -892,11 +893,9 @@ function renderBeaker(
     ctx.lineTo(x + bw - 4, y);
     ctx.quadraticCurveTo(x + bw + 3, y + 2, x + bw, y + rimH / 2);
     // Right vertical wall
-    ctx.lineTo(x + bw, y + bh - bottomH / 2);
-    // Bottom outer curve (base)
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - 10, y + bh);
-    ctx.lineTo(x + 10, y + bh);
-    ctx.quadraticCurveTo(x, y + bh, x, y + bh - bottomH / 2);
+    ctx.lineTo(x + bw, cyBot);
+    // Bottom outer curve (base 2.5D ellipse)
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
     // Left vertical wall
     ctx.lineTo(x, y + rimH / 2 + 5);
     // Spout under-curve
@@ -909,10 +908,19 @@ function renderBeaker(
     ctx.lineWidth = 1.8;
     ctx.stroke();
 
+    // Inner Glass Lip (Double lip from reference sketch)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, y + rimH / 2, bw / 2 - 2.2, rimH / 2 - 1.6, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
+
     // Bottom 2.5D Depth Curve (visible through glass, exactly as in media_1794694870640_233b6a5d.jpg)
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, 0, Math.PI);
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, false);
     ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
@@ -924,7 +932,7 @@ function renderBeaker(
     reflectGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.35)');
     reflectGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = reflectGrad;
-    ctx.fillRect(x + bw - 14, y + rimH, 10, bh - rimH - bottomH);
+    ctx.fillRect(x + bw - 14, y + rimH, 10, bh - rimH - bottomRy * 2);
 
     ctx.restore();
   }
@@ -950,7 +958,9 @@ function renderWideBasin(
   const y = pad + 4;
   const cx = x + bw / 2;
   const rimH = 14;
-  const bottomH = 14;
+  const bottomRy = 7.0;
+  const cyBot = y + bh - bottomRy;
+  const baseRx = bw / 2;
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 800;
@@ -970,11 +980,10 @@ function renderWideBasin(
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(x, liquidTopY);
-      ctx.lineTo(x, y + bh - bottomH / 2);
-      ctx.quadraticCurveTo(x, y + bh, x + 14, y + bh);
-      ctx.lineTo(x + bw - 14, y + bh);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
+      ctx.lineTo(x, cyBot);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
       ctx.lineTo(x + bw, liquidTopY);
+      ctx.ellipse(cx, liquidTopY, baseRx, rimH * 0.4, 0, 0, Math.PI, true);
       ctx.closePath();
       ctx.clip();
 
@@ -996,10 +1005,9 @@ function renderWideBasin(
     ctx.beginPath();
     ctx.moveTo(x - 8, y + 2);
     ctx.quadraticCurveTo(x, y + 4, x, y + 14);
-    ctx.lineTo(x, y + bh - bottomH / 2);
-    ctx.quadraticCurveTo(x, y + bh, x + 14, y + bh);
-    ctx.lineTo(x + bw - 14, y + bh);
-    ctx.quadraticCurveTo(x + bw, y + bh, x + bw, y + bh - bottomH / 2);
+    ctx.lineTo(x, cyBot);
+    // Bottom outer curve
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
     ctx.lineTo(x + bw, y + 14);
     ctx.quadraticCurveTo(x + bw, y + 4, x + bw + 8, y + 2);
     ctx.stroke();
@@ -1010,10 +1018,19 @@ function renderWideBasin(
     ctx.lineWidth = 1.8;
     ctx.stroke();
 
+    // Inner rim line
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, y + rimH / 2, bw / 2 - 2, rimH / 2 - 1.5, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
+
     // Bottom 2.5D Depth Curve
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2, bottomH / 2, 0, 0, Math.PI);
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, false);
     ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
     ctx.lineWidth = 1.3;
     ctx.stroke();
@@ -1044,7 +1061,9 @@ function renderFlask(
   const cx = x + bw / 2;
   const neckW = bw * 0.28;
   const neckH = bh * 0.36;
-  const bottomH = 12;
+  const bottomRy = 6.5;
+  const cyBot = y + bh - bottomRy;
+  const baseRx = bw / 2 - 5;
 
   const vol = state?.volumeMl ?? 0;
   const cap = state?.capacityMl ?? 500;
@@ -1059,30 +1078,22 @@ function renderFlask(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    // Flask Path
-    const createFlaskPath = () => {
-      ctx.beginPath();
-      ctx.moveTo(cx - neckW * 0.65, y);
-      ctx.lineTo(cx + neckW * 0.65, y);
-      ctx.lineTo(cx + neckW / 2, y + neckH);
-      ctx.lineTo(x + bw - 6, y + bh - 8);
-      ctx.quadraticCurveTo(x + bw, y + bh, x + bw - 10, y + bh);
-      ctx.lineTo(x + 10, y + bh);
-      ctx.quadraticCurveTo(x, y + bh, x + 6, y + bh - 8);
-      ctx.lineTo(cx - neckW / 2, y + neckH);
-      ctx.closePath();
-    };
+    const coneTop = y + neckH;
+    const coneBottom = cyBot;
+    const t = Math.max(0, Math.min(1, (liquidTopY - coneTop) / Math.max(1, coneBottom - coneTop)));
+    const surfaceHalfW = (neckW / 2) + t * (baseRx - neckW / 2);
 
-    // Liquid Fill - Fills 100% of conical flask base with NO white gaps!
+    // Liquid Fill - Fills 100% of conical flask base conforming to 2.5D bottom ellipse with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
-      createFlaskPath();
+      ctx.beginPath();
+      ctx.moveTo(cx - surfaceHalfW, liquidTopY);
+      ctx.lineTo(cx - baseRx, cyBot);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
+      ctx.lineTo(cx + surfaceHalfW, liquidTopY);
+      ctx.ellipse(cx, liquidTopY, surfaceHalfW, 3.5, 0, 0, Math.PI, true);
+      ctx.closePath();
       ctx.clip();
-
-      const coneTop = y + neckH;
-      const coneBottom = y + bh - 8;
-      const t = Math.max(0, Math.min(1, (liquidTopY - coneTop) / Math.max(1, coneBottom - coneTop)));
-      const surfaceHalfW = (neckW / 2) + t * (bw / 2 - 6 - neckW / 2);
 
       renderLiquidBody(
         ctx,
@@ -1109,7 +1120,17 @@ function renderFlask(
     ctx.lineWidth = 2.0;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    createFlaskPath();
+
+    ctx.beginPath();
+    ctx.moveTo(cx - neckW * 0.65, y + 2);
+    ctx.lineTo(cx + neckW * 0.65, y + 2);
+    ctx.lineTo(cx + neckW / 2, y + neckH);
+    ctx.lineTo(cx + baseRx, cyBot);
+    // Lower front ellipse curve (base)
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
+    // Left conical wall up to neck
+    ctx.lineTo(cx - neckW / 2, y + neckH);
+    ctx.closePath();
     ctx.stroke();
 
     // Flared top rim ellipse
@@ -1117,10 +1138,19 @@ function renderFlask(
     ctx.ellipse(cx, y + 2, neckW * 0.65, 3.5, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Bottom 2.5D Depth Curve
+    // Inner rim line
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx, y + bh - bottomH / 2, bw / 2 - 6, bottomH / 2, 0, 0, Math.PI);
+    ctx.ellipse(cx, y + 2, neckW * 0.65 - 2, 2.2, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Bottom 2.5D Depth Curve (visible through glass, exactly matching baseRx & bottomRy)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, false);
     ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.40)' : 'rgba(17, 24, 39, 0.35)';
     ctx.lineWidth = 1.3;
     ctx.stroke();
@@ -1332,9 +1362,9 @@ function renderThermalGraph(
 
   // Plot Area with ample margin so title and axes never collide!
   const plotX = gx + 46;
-  const plotY = gy + 42;
+  const plotY = gy + 46;
   const plotW = gw - 68;
-  const plotH = gh - 64;
+  const plotH = gh - 68;
 
   // Grid lines (0, 25, 50, 75, 100 °C)
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';

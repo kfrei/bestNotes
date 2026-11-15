@@ -57705,18 +57705,18 @@ export default function App() {
                           isFirstHeatItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 17 1.5 C 15 3.5 15.3 5 17 5.8 C 18.7 5 19 3.5 17 1.5 Z" strokeWidth="1.4" />
-                              <ellipse cx="17" cy="6.6" rx="2.4" ry="0.8" strokeWidth="1.3" />
-                              <line x1="14.6" y1="6.6" x2="14.6" y2="8.6" strokeWidth="1.3" />
-                              <line x1="19.4" y1="6.6" x2="19.4" y2="8.6" strokeWidth="1.3" />
-                              <line x1="15.6" y1="8.6" x2="15.6" y2="12.2" strokeWidth="1.4" />
-                              <line x1="18.4" y1="8.6" x2="18.4" y2="12.2" strokeWidth="1.4" />
-                              <ellipse cx="17" cy="12.2" rx="2.2" ry="0.7" strokeWidth="1.2" />
-                              <rect x="14.8" y="12.2" width="4.4" height="2.6" strokeWidth="1.2" />
-                              <ellipse cx="17" cy="14.8" rx="2.2" ry="0.7" strokeWidth="1.2" />
-                              <ellipse cx="17" cy="13.5" rx="0.6" ry="0.8" strokeWidth="1.0" />
-                              <path d="M 14.8 15.2 C 13.8 16.8 11.2 17.8 8.5 18.2 L 8.5 19.5 C 8.5 20.8 12.3 21.6 17 21.6 C 21.7 21.6 25.5 20.8 25.5 19.5 L 25.5 18.2 C 22.8 17.8 20.2 16.8 19.2 15.2" strokeWidth="1.6" />
-                              <path d="M 8.5 18.2 C 8.5 19.5 12.3 20.3 17 20.3 C 21.7 20.3 25.5 19.5 25.5 18.2" strokeWidth="1.3" />
+                              <ellipse cx="17" cy="4" rx="2.4" ry="0.8" strokeWidth="1.3" />
+                              <line x1="14.6" y1="4" x2="14.6" y2="6.2" strokeWidth="1.3" />
+                              <line x1="19.4" y1="4" x2="19.4" y2="6.2" strokeWidth="1.3" />
+                              <ellipse cx="17" cy="6.2" rx="1.8" ry="0.6" strokeWidth="1.1" />
+                              <line x1="15.6" y1="6.2" x2="15.6" y2="10.8" strokeWidth="1.4" />
+                              <line x1="18.4" y1="6.2" x2="18.4" y2="10.8" strokeWidth="1.4" />
+                              <ellipse cx="17" cy="10.8" rx="2.2" ry="0.7" strokeWidth="1.2" />
+                              <rect x="14.8" y="10.8" width="4.4" height="3" strokeWidth="1.2" />
+                              <ellipse cx="17" cy="13.8" rx="2.2" ry="0.7" strokeWidth="1.2" />
+                              <ellipse cx="17" cy="12.3" rx="0.6" ry="0.8" strokeWidth="1.0" />
+                              <path d="M 14.8 14.2 C 13.8 16 11.2 17.2 8.5 17.6 L 8.5 19.2 C 8.5 20.8 12.3 21.6 17 21.6 C 21.7 21.6 25.5 20.8 25.5 19.2 L 25.5 17.6 C 22.8 17.2 20.2 16 19.2 14.2" strokeWidth="1.6" />
+                              <path d="M 8.5 17.6 C 8.5 19.2 12.3 20.2 17 20.2 C 21.7 20.2 25.5 19.2 25.5 17.6" strokeWidth="1.3" />
                             </svg>
                           ),
                         },
@@ -57726,12 +57726,12 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="14" y1="6" x2="13" y2="18.5" stroke="#94a3b8" strokeWidth="1.3" strokeOpacity="0.75" />
+                              <line x1="13.5" y1="5.5" x2="11.5" y2="17.5" stroke="#94a3b8" strokeWidth="1.3" strokeOpacity="0.75" />
                               <ellipse cx="17" cy="5.5" rx="9" ry="2.6" strokeWidth="1.8" />
-                              <ellipse cx="17" cy="5.5" rx="5" ry="1.3" strokeWidth="1.2" strokeDasharray="1.5 1.5" />
-                              <line x1="12" y1="5.5" x2="22" y2="5.5" strokeWidth="1.2" />
-                              <line x1="9" y1="6.5" x2="5.5" y2="20" strokeWidth="1.8" />
-                              <line x1="24" y1="6.5" x2="27.5" y2="20" strokeWidth="1.8" />
+                              <ellipse cx="17" cy="5.5" rx="5" ry="1.3" strokeWidth="1.1" strokeDasharray="1.5 1.5" />
+                              <line x1="12" y1="5.5" x2="22" y2="5.5" strokeWidth="1.1" />
+                              <line x1="8.5" y1="6.5" x2="5" y2="20.5" strokeWidth="1.9" />
+                              <line x1="24.5" y1="6.5" x2="28" y2="20.5" strokeWidth="1.9" />
                             </svg>
                           ),
                         },
@@ -57741,7 +57741,10 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 10 3.5 L 8 4.5 L 10.5 5.5 L 10.5 18 C 10.5 19.8 12 20.5 13.5 20.5 L 21 20.5 C 22.5 20.5 24 19.8 24 18 L 24 3.5 L 10 3.5" strokeWidth="1.8" />
+                              <path d="M 9.5 4.5 L 7 5 L 9.8 6.8 L 9.8 17.5 C 9.8 19.5 13 20.5 17 20.5 C 21 20.5 24.2 19.5 24.2 17.5 L 24.2 4.5" strokeWidth="1.7" />
+                              <ellipse cx="17" cy="4.5" rx="7.2" ry="2.2" strokeWidth="1.5" />
+                              <ellipse cx="17" cy="4.5" rx="5.8" ry="1.6" strokeWidth="0.9" strokeOpacity="0.4" />
+                              <path d="M 9.8 17.5 C 9.8 18.8 13 19.7 17 19.7 C 21 19.7 24.2 18.8 24.2 17.5" strokeWidth="1.0" strokeOpacity="0.3" />
                             </svg>
                           ),
                         },
@@ -57751,8 +57754,12 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 4 8.5 C 5.5 8.5 5.5 9.5 5.5 11 L 5.5 16.5 C 5.5 19.2 7.5 20.5 10 20.5 L 24 20.5 C 26.5 20.5 28.5 19.2 28.5 16.5 L 28.5 11 C 28.5 9.5 28.5 8.5 30 8.5" strokeWidth="1.85" />
-                              <path d="M 5.5 11 C 9 12.5 25 12.5 28.5 11" strokeWidth="1.2" strokeOpacity="0.4" />
+                              <ellipse cx="17" cy="7" rx="11" ry="3.2" strokeWidth="1.6" />
+                              <ellipse cx="17" cy="7" rx="9" ry="2.4" strokeWidth="0.9" strokeOpacity="0.4" />
+                              <path d="M 5 7 C 4 6 4.5 4.5 6 4.5" strokeWidth="1.3" />
+                              <path d="M 29 7 C 30 6 29.5 4.5 28 4.5" strokeWidth="1.3" />
+                              <path d="M 6 7 L 7 16 C 7 18.5 11.5 20.2 17 20.2 C 22.5 20.2 27 18.5 27 16 L 28 7" strokeWidth="1.7" />
+                              <path d="M 7 16 C 7 17.5 11.5 19.2 17 19.2 C 22.5 19.2 27 17.5 27 16" strokeWidth="1.0" strokeOpacity="0.3" />
                             </svg>
                           ),
                         },
@@ -57762,8 +57769,9 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="14" y1="2.5" x2="20" y2="2.5" strokeWidth="2.0" />
-                              <path d="M 15 2.5 L 15 7.5 L 8 18 C 7.2 19.5 8.2 20.5 10 20.5 L 24 20.5 C 25.8 20.5 26.8 19.5 26 18 L 19 7.5 L 19 2.5" strokeWidth="1.8" />
+                              <ellipse cx="17" cy="3" rx="3.5" ry="1.2" strokeWidth="1.5" />
+                              <path d="M 14.5 3 L 14.5 8 L 8 18 C 8 20 12 21 17 21 C 22 21 26 20 26 18 L 19.5 8 L 19.5 3" strokeWidth="1.7" />
+                              <path d="M 8 18 C 8 19.2 12 20.1 17 20.1 C 22 20.1 26 19.2 26 18" strokeWidth="1.0" strokeOpacity="0.3" />
                             </svg>
                           ),
                         },
@@ -57773,9 +57781,9 @@ export default function App() {
                           isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="15" y="2" width="4" height="13" rx="2" strokeWidth="1.7" />
-                              <circle cx="17" cy="17" r="3.5" strokeWidth="1.7" />
-                              <line x1="17" y1="6" x2="17" y2="17" strokeWidth="1.4" />
+                              <rect x="15" y="2" width="4" height="13" rx="2" strokeWidth="1.6" />
+                              <circle cx="17" cy="17.5" r="3.5" strokeWidth="1.6" />
+                              <line x1="17" y1="5" x2="17" y2="15" strokeWidth="1.1" strokeOpacity="0.45" />
                               <line x1="20.5" y1="4.5" x2="23" y2="4.5" strokeWidth="1.2" />
                               <line x1="20.5" y1="7.5" x2="24" y2="7.5" strokeWidth="1.4" />
                               <line x1="20.5" y1="10.5" x2="23" y2="10.5" strokeWidth="1.2" />
