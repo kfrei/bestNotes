@@ -32808,6 +32808,7 @@ export default function App() {
           const liveSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim;
           renderHeatSimulation(ctx, liveSim || hSim, {
             isDark: isDarkPaper,
+            hoverPoint: heatSim.getHoverPoint(),
             isSelectActive:
               activeTool === 'lasso' ||
               activeTool === 'shape' ||
@@ -40048,6 +40049,10 @@ export default function App() {
       }
     }
     if (!isDrawingRef.current) {
+      if (activePage.heatSims && activePage.heatSims.length > 0) {
+        const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+        heatSim.handleHover(hoverPt.x, hoverPt.y);
+      }
       // Apple Pencil Pro Hover Barrel Roll (`twist` sensor in Safari):
       // Rotating the Apple Pencil Pro >= 46° between the fingers while hovering in place opens the Floating Squeeze Palette!
       if (e.pointerType === 'pen') {
@@ -64940,6 +64945,7 @@ export default function App() {
                         }
                       }}
                       onPointerLeave={(e) => {
+                        heatSim.clearHover();
                         if (hoverAddNodePreviewRef.current) {
                           hoverAddNodePreviewRef.current = null;
                           e.currentTarget.style.cursor = '';

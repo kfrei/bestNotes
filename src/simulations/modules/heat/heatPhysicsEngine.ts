@@ -318,7 +318,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
         }
       }
 
-      // Sample every 0.1s to avoid overflowing history array
+      // Sample every 0.1s to record temperature history from t = 0
       const lastPoint = sim.history[sim.history.length - 1];
       if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.1) {
         const point = {
@@ -329,8 +329,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
           tempEquilibrium:
             tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
         };
-        // Keep up to 600 points (~60 seconds running buffer)
-        nextHistory = [...sim.history.slice(-599), point];
+        // Retain complete history from t = 0 (up to 6000 points = 10 minutes of continuous recording)
+        nextHistory = [...sim.history.slice(-5999), point];
       }
     }
   }

@@ -56,10 +56,153 @@ export function getThermometerColor(tempC: number): string {
   }
 }
 
+/**
+ * Dynamic Horizontal Time Axis Configuration (starting strictly from t = 0 to tMax)
+ * Adapts dynamically:
+ * - 0 to 30s: ticks at 10s, 20s, 30s
+ * - 30 to 60s: ticks at 15s, 30s, 45s, 60s (1m)
+ * - 60 to 120s: ticks at 30s, 1m, 1.5m, 2m
+ * - 2 to 4+ min: ticks at 1m, 2m, 3m, 4m...
+ */
+export interface TimeAxisConfig {
+  tMax: number;
+  ticks: { t: number; label: string }[];
+}
+
+export function getTimeAxisConfig(elapsedT: number): TimeAxisConfig {
+  let tMax = 30;
+  let tickStep = 10;
+
+  if (elapsedT <= 30) {
+    tMax = 30;
+    tickStep = 10;
+  } else if (elapsedT <= 60) {
+    tMax = 60;
+    tickStep = 15;
+  } else if (elapsedT <= 90) {
+    tMax = 90;
+    tickStep = 30;
+  } else if (elapsedT <= 120) {
+    tMax = 120;
+    tickStep = 30;
+  } else if (elapsedT <= 240) {
+    tMax = Math.ceil(elapsedT / 60) * 60;
+    tickStep = 60;
+  } else {
+    const mins = Math.ceil(elapsedT / 60);
+    tMax = mins * 60;
+    tickStep = mins > 8 ? 120 : 60;
+  }
+
+  const ticks: { t: number; label: string }[] = [];
+  for (let t = tickStep; t <= tMax; t += tickStep) {
+    let label = '';
+    if (t < 60) {
+      label = `${t}s`;
+    } else if (t % 60 === 0) {
+      label = `${t / 60}m`;
+    } else {
+      label = `${(t / 60).toFixed(1)}m`;
+    }
+    ticks.push({ t, label });
+  }
+
+  return { tMax, ticks };
+}
+
+/**
+ * Metadata for container curve styling:
+ * - Oil: Olive Green (`#65a30d`, `#4d7c0f`)
+ * - Milk: Slate Grey (`#64748b`, `#475569`)
+ * - Water: Sky Blue (`#0284c7`, `#1d4ed8`)
+ * - Letter designation: 'A', 'B', 'C'...
+ */
+export interface ContainerCurveMeta {
+  id: string;
+  letter: string;
+  color: string;
+  liquidType: string;
+  type: string;
+  temperature: number;
+}
+
+export function getContainersCurveMeta(
+  sim: HeatSimConfig,
+  isDark: boolean
+): Map<string, ContainerCurveMeta> {
+  const containers = sim.objects.filter(
+    (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
+  );
+
+  const letters = ['A', 'B', 'C', 'D', 'E'];
+  const liquidCounts: Record<string, number> = {};
+  const metaMap = new Map<string, ContainerCurveMeta>();
+
+  containers.forEach((c, idx) => {
+    const liquidType = c.containerState?.liquidType || 'water';
+    const count = liquidCounts[liquidType] || 0;
+    liquidCounts[liquidType] = count + 1;
+
+    let color = '#0284c7';
+    if (liquidType === 'oil') {
+      color = count === 0 ? '#65a30d' : '#4d7c0f';
+    } else if (liquidType === 'milk') {
+      color = count === 0
+        ? (isDark ? '#cbd5e1' : '#64748b')
+        : (isDark ? '#94a3b8' : '#475569');
+    } else {
+      // Water
+      color = count === 0 ? '#0284c7' : '#1d4ed8';
+    }
+
+    const letter = letters[idx % letters.length];
+    metaMap.set(c.id, {
+      id: c.id,
+      letter,
+      color,
+      liquidType,
+      type: c.type,
+      temperature: c.containerState?.temperature ?? 20,
+    });
+  });
+
+  return metaMap;
+}
+
+/**
+ * Renders a crisp letter badge (A, B...) inside the container at the bottom-left of its base.
+ */
+function renderContainerLetterBadge(
+  ctx: CanvasRenderingContext2D,
+  letter: string,
+  color: string,
+  badgeX: number,
+  badgeY: number,
+  isDark: boolean
+): void {
+  ctx.save();
+  const r = 7.5;
+  ctx.beginPath();
+  ctx.arc(badgeX, badgeY, r, 0, Math.PI * 2);
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.76)' : 'rgba(255, 255, 255, 0.88)';
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.35;
+  ctx.stroke();
+
+  ctx.fillStyle = color;
+  ctx.font = 'bold 9.5px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(letter, badgeX, badgeY + 0.5);
+  ctx.restore();
+}
+
 export interface RenderHeatSimulationOptions {
   isDark?: boolean;
   scale?: number;
   hoveredObjectId?: string | null;
+  hoverPoint?: { x: number; y: number } | null;
   layer?: 'all' | 'apparatus' | 'ui';
   isSelectActive?: boolean;
 }
@@ -87,6 +230,7 @@ export function renderHeatSimulation(
     : [];
 
   const isMultiSelect = selectedIds.length > 1;
+  const metaMap = getContainersCurveMeta(sim, isDark);
 
   // Helper to render an apparatus object
   const renderSingleObject = (obj: HeatObject, tripodPart?: 'back' | 'front') => {
@@ -133,6 +277,7 @@ export function renderHeatSimulation(
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
+        const curveMeta = metaMap.get(obj.id);
         renderBeaker(
           ctx,
           obj.width,
@@ -146,7 +291,9 @@ export function renderHeatSimulation(
           obj.x,
           obj.y,
           parentBasin,
-          isGraphActive
+          isGraphActive,
+          curveMeta?.letter,
+          curveMeta?.color
         );
         break;
       }
@@ -154,6 +301,7 @@ export function renderHeatSimulation(
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
+        const curveMeta = metaMap.get(obj.id);
         renderWideBasin(
           ctx,
           obj.width,
@@ -166,7 +314,9 @@ export function renderHeatSimulation(
           obj.id,
           obj.x,
           obj.y,
-          isGraphActive
+          isGraphActive,
+          curveMeta?.letter,
+          curveMeta?.color
         );
         break;
       }
@@ -181,6 +331,7 @@ export function renderHeatSimulation(
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
+        const curveMeta = metaMap.get(obj.id);
         renderFlask(
           ctx,
           obj.width,
@@ -194,7 +345,9 @@ export function renderHeatSimulation(
           obj.x,
           obj.y,
           parentBasin,
-          isGraphActive
+          isGraphActive,
+          curveMeta?.letter,
+          curveMeta?.color
         );
         break;
       }
@@ -299,7 +452,7 @@ export function renderHeatSimulation(
         ? [sim.graph]
         : [];
     for (const g of graphsToRender) {
-      renderThermalGraph(ctx, sim, isDark, g);
+      renderThermalGraph(ctx, sim, isDark, g, options?.hoverPoint, metaMap);
     }
   }
 
@@ -1720,7 +1873,9 @@ function renderBeaker(
   objX?: number,
   objY?: number,
   parentBasin?: HeatObject,
-  isGraphActive?: boolean
+  isGraphActive?: boolean,
+  letter?: string,
+  color?: string
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -1891,6 +2046,9 @@ function renderBeaker(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
     renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
+    if (letter && color) {
+      renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
+    }
   }
 }
 
@@ -1911,7 +2069,9 @@ function renderWideBasin(
   objId?: string,
   objX?: number,
   objY?: number,
-  isGraphActive?: boolean
+  isGraphActive?: boolean,
+  letter?: string,
+  color?: string
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -2047,6 +2207,9 @@ function renderWideBasin(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
     renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
+    if (letter && color) {
+      renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
+    }
   }
 }
 
@@ -2066,7 +2229,9 @@ function renderFlask(
   objX?: number,
   objY?: number,
   parentBasin?: HeatObject,
-  isGraphActive?: boolean
+  isGraphActive?: boolean,
+  letter?: string,
+  color?: string
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
@@ -2236,6 +2401,9 @@ function renderFlask(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
     renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
+    if (letter && color) {
+      renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
+    }
   }
 }
 
@@ -2796,7 +2964,9 @@ function renderThermalGraph(
   ctx: CanvasRenderingContext2D,
   sim: HeatSimConfig,
   isDark: boolean,
-  g: HeatGraphConfig = sim.graph
+  g: HeatGraphConfig = sim.graph,
+  hoverPoint?: { x: number; y: number } | null,
+  metaMap?: Map<string, ContainerCurveMeta>
 ): void {
   const gx = g.x;
   const gy = g.y;
@@ -2845,9 +3015,9 @@ function renderThermalGraph(
   const plotX = gx + 46;
   const plotY = gy + 48;
   const plotW = gw - 68;
-  const plotH = gh - 72;
+  const plotH = gh - 76;
 
-  // Grid lines (0, 25, 50, 75, 100 °C)
+  // Temperature Grid lines (0, 25, 50, 75, 100 °C)
   ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
   ctx.lineWidth = 1;
   for (let temp = 0; temp <= 100; temp += 25) {
@@ -2861,6 +3031,44 @@ function renderThermalGraph(
     ctx.font = '9px system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${temp}°`, plotX - 6, py + 3);
+  }
+
+  // Time Axis configuration (dynamic, starting strictly from t = 0)
+  const lastT = sim.history.length > 0 ? sim.history[sim.history.length - 1].timeSec : 0;
+  const { tMax, ticks } = getTimeAxisConfig(lastT);
+  const startT = 0;
+
+  const mapX = (t: number) => plotX + (Math.max(0, t) / tMax) * plotW;
+  const mapY = (temp: number) => plotY + plotH - (Math.max(0, Math.min(100, temp)) / 100) * plotH;
+
+  // Vertical grid lines and dynamic time ticks along the horizontal axis
+  for (const tick of ticks) {
+    const tx = mapX(tick.t);
+    if (tx > plotX + plotW) continue;
+
+    // Faint vertical grid line
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(tx, plotY);
+    ctx.lineTo(tx, plotY + plotH);
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Axis tick mark
+    ctx.beginPath();
+    ctx.moveTo(tx, plotY + plotH);
+    ctx.lineTo(tx, plotY + plotH + 4);
+    ctx.strokeStyle = isDark ? '#94a3b8' : '#475569';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Dynamic Time Label
+    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(tick.label, tx, plotY + plotH + 13);
   }
 
   // Time & Temp Axes
@@ -2880,20 +3088,19 @@ function renderThermalGraph(
   ctx.textAlign = 'left';
   ctx.fillText('θ (°C)', plotX - 8, plotY - 10);
   ctx.textAlign = 'left';
-  ctx.fillText('t (s)', plotX + plotW + 8, plotY + plotH + 3.5);
+  ctx.fillText(tMax >= 120 ? 't (min)' : 't (s)', plotX + plotW + 6, plotY + plotH + 3.5);
 
-  const boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
-  const palette = ['#f97316', '#0284c7', '#10b981', '#8b5cf6', '#ec4899'];
+  const effectiveMeta = metaMap || getContainersCurveMeta(sim, isDark);
+  let boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
+  if (boundIds.length === 0) {
+    const allContainers = sim.objects.filter(
+      (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
+    );
+    boundIds = allContainers.map((c) => c.id);
+  }
 
   // Plot Curves from history
   if (sim.history.length > 1) {
-    const lastT = sim.history[sim.history.length - 1].timeSec;
-    const windowSec = Math.max(30, lastT);
-    const startT = Math.max(0, lastT - windowSec);
-
-    const mapX = (t: number) => plotX + ((t - startT) / windowSec) * plotW;
-    const mapY = (temp: number) => plotY + plotH - (Math.max(0, Math.min(100, temp)) / 100) * plotH;
-
     // Asymptote line if thermal equilibrium exists
     const lastEq = sim.history[sim.history.length - 1].tempEquilibrium;
     if (lastEq !== undefined) {
@@ -2913,113 +3120,156 @@ function renderThermalGraph(
       ctx.restore();
     }
 
-    let legendX = plotX + 34;
+    let legendX = plotX + 32;
     const legendY = gy + 34;
 
-    if (boundIds.length > 0) {
-      boundIds.forEach((cId: string, idx: number) => {
-        const color = palette[idx % palette.length];
-        const container = sim.objects.find((o) => o.id === cId);
-        const typeLabel =
-          container?.type === 'beaker'
-            ? 'Ποτήρι'
-            : container?.type === 'flask'
-            ? 'Φιάλη'
-            : container?.type === 'wide-basin'
-            ? 'Λεκάνη'
-            : `Δοχείο ${idx + 1}`;
-        const liquidLabel =
-          container?.containerState?.liquidType === 'oil'
-            ? 'Λάδι'
-            : container?.containerState?.liquidType === 'milk'
-            ? 'Γάλα'
-            : 'Νερό';
-        const currentTemp = container?.containerState?.temperature ?? 20;
+    const curvesToPlot: {
+      cId: string;
+      letter: string;
+      color: string;
+      label: string;
+      liquidLabel: string;
+      currentTemp: number;
+    }[] = [];
 
-        ctx.save();
-        ctx.beginPath();
-        let started = false;
-        for (const pt of sim.history) {
-          if (pt.timeSec < startT) continue;
-          const tempVal =
-            pt.tempsByContainerId?.[cId] ??
-            (idx === 0 ? pt.temp1 : idx === 1 ? pt.temp2 : undefined);
-          if (tempVal === undefined) continue;
-          const x = mapX(pt.timeSec);
-          const y = mapY(tempVal);
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else {
-            ctx.lineTo(x, y);
-          }
-        }
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.2;
-        ctx.stroke();
-        ctx.restore();
+    boundIds.forEach((cId: string, idx: number) => {
+      const meta = effectiveMeta.get(cId);
+      const container = sim.objects.find((o) => o.id === cId);
+      const letter = meta?.letter ?? (idx === 0 ? 'A' : 'B');
+      const color = meta?.color ?? (idx === 0 ? '#0284c7' : '#65a30d');
+      const liquidType = container?.containerState?.liquidType ?? meta?.liquidType ?? 'water';
+      const liquidLabel =
+        liquidType === 'oil' ? 'Λάδι' : liquidType === 'milk' ? 'Γάλα' : 'Νερό';
+      const currentTemp = container?.containerState?.temperature ?? 20;
 
-        // Legend item positioned safely away from θ (°C)
-        ctx.font = 'bold 9px system-ui, sans-serif';
-        ctx.fillStyle = color;
-        ctx.textAlign = 'left';
-        const itemText = `— ${typeLabel} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
-        ctx.fillText(itemText, legendX, legendY);
-        legendX += ctx.measureText(itemText).width + 12;
+      curvesToPlot.push({
+        cId,
+        letter,
+        color,
+        label: `θ${letter}`,
+        liquidLabel,
+        currentTemp,
       });
-    } else {
-      // Curve 1 (Primary container / Inner vessel) - Orange `#f97316`
+
+      // Draw Curve Line
       ctx.save();
       ctx.beginPath();
-      let started1 = false;
+      let started = false;
       for (const pt of sim.history) {
-        if (pt.timeSec < startT) continue;
+        const tempVal =
+          pt.tempsByContainerId?.[cId] ??
+          (idx === 0 ? pt.temp1 : idx === 1 ? pt.temp2 : undefined);
+        if (tempVal === undefined) continue;
         const x = mapX(pt.timeSec);
-        const y = mapY(pt.temp1);
-        if (!started1) {
+        const y = mapY(tempVal);
+        if (!started) {
           ctx.moveTo(x, y);
-          started1 = true;
+          started = true;
         } else {
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = '#f97316';
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.stroke();
       ctx.restore();
 
-      // Curve 2 (Water bath / Outer basin) if present - Cyan `#0284c7`
-      const hasCurve2 = sim.history.some((p) => p.temp2 !== undefined);
-      if (hasCurve2) {
-        ctx.save();
-        ctx.beginPath();
-        let started2 = false;
-        for (const pt of sim.history) {
-          if (pt.timeSec < startT || pt.temp2 === undefined) continue;
-          const x = mapX(pt.timeSec);
-          const y = mapY(pt.temp2);
-          if (!started2) {
-            ctx.moveTo(x, y);
-            started2 = true;
-          } else {
-            ctx.lineTo(x, y);
-          }
+      // Legend Item: "— θA (Νερό): 24°C"
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left';
+      const itemText = `— θ${letter} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
+      ctx.fillText(itemText, legendX, legendY);
+      legendX += ctx.measureText(itemText).width + 14;
+    });
+
+    // -------------------------------------------------------------------------
+    // Clean Hover Inspection (Frameless Temperature Readout & Faint Dashed Projections)
+    // -------------------------------------------------------------------------
+    if (
+      hoverPoint &&
+      hoverPoint.x >= plotX &&
+      hoverPoint.x <= plotX + plotW &&
+      hoverPoint.y >= plotY - 12 &&
+      hoverPoint.y <= plotY + plotH + 12
+    ) {
+      const hoverT = Math.max(0, Math.min(tMax, ((hoverPoint.x - plotX) / plotW) * tMax));
+
+      // Find closest history point
+      let closestPt = sim.history[0];
+      let minDiff = Math.abs(closestPt.timeSec - hoverT);
+      for (let i = 1; i < sim.history.length; i++) {
+        const diff = Math.abs(sim.history[i].timeSec - hoverT);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestPt = sim.history[i];
         }
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 2.2;
-        ctx.stroke();
-        ctx.restore();
       }
 
-      // Legend
-      ctx.font = 'bold 9px system-ui, sans-serif';
-      ctx.fillStyle = '#f97316';
-      ctx.textAlign = 'left';
-      ctx.fillText('— Δοχείο 1', legendX, legendY);
+      if (closestPt) {
+        curvesToPlot.forEach((curve, idx) => {
+          const tempVal =
+            closestPt.tempsByContainerId?.[curve.cId] ??
+            (idx === 0 ? closestPt.temp1 : idx === 1 ? closestPt.temp2 : undefined);
+          if (tempVal === undefined) return;
 
-      if (hasCurve2) {
-        ctx.fillStyle = '#0284c7';
-        ctx.fillText('— Υδατόλουτρο', legendX + 75, legendY);
+          const cx = mapX(closestPt.timeSec);
+          const cy = mapY(tempVal);
+
+          ctx.save();
+          // Faint dashed projection lines parallel to axes
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.40)' : 'rgba(0, 0, 0, 0.32)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          // Projection to vertical temperature axis (parallel to horizontal time axis)
+          ctx.moveTo(plotX, cy);
+          ctx.lineTo(cx, cy);
+          // Projection to horizontal time axis (parallel to vertical temperature axis)
+          ctx.lineTo(cx, plotY + plotH);
+          ctx.stroke();
+          ctx.restore();
+
+          // Small circular dot on the curve
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = curve.color;
+          ctx.fill();
+          ctx.strokeStyle = isDark ? '#0f172a' : '#ffffff';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          // Frameless small temperature text (no box, simple small number)
+          ctx.fillStyle = curve.color;
+          ctx.font = 'bold 9.5px system-ui, sans-serif';
+          ctx.textAlign = 'left';
+          // Offset text slightly so it doesn't collide with the curve or other curves
+          const textOffsetY = idx % 2 === 0 ? -6 : 12;
+          ctx.fillText(`${tempVal.toFixed(1)}°`, cx + 6, cy + textOffsetY);
+
+          // Axis projection readout on the vertical axis
+          ctx.fillStyle = curve.color;
+          ctx.font = 'bold 8.5px system-ui, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(`${tempVal.toFixed(1)}°`, plotX - 5, cy + 3);
+          ctx.restore();
+        });
+
+        // Time readout at bottom axis
+        ctx.save();
+        const timeLabel =
+          closestPt.timeSec < 60
+            ? `${closestPt.timeSec.toFixed(1)}s`
+            : `${(closestPt.timeSec / 60).toFixed(2)}m`;
+        const cx = mapX(closestPt.timeSec);
+        ctx.fillStyle = isDark ? '#cbd5e1' : '#1e293b';
+        ctx.font = 'bold 8.5px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(timeLabel, cx, plotY + plotH + 24);
+        ctx.restore();
       }
     }
   }

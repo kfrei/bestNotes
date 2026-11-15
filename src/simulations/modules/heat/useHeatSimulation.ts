@@ -59,6 +59,9 @@ export interface UseHeatSimulationReturn {
   handleGraphChoice: (choice: 'existing' | 'new') => void;
   cancelGraphChoice: () => void;
   handleToggleContainerGraph: (targetContainer: HeatObject) => void;
+  handleHover: (canvasLogicalX: number, canvasLogicalY: number) => void;
+  clearHover: () => void;
+  getHoverPoint: () => { x: number; y: number } | null;
 }
 
 export function useHeatSimulation(
@@ -80,6 +83,17 @@ export function useHeatSimulation(
   // In-memory live simulation state ref for smooth 60fps canvas rendering without React re-render thrashing
   const liveSimRef = useRef<HeatSimConfig | null>(null);
   const lastStateSyncTimeRef = useRef<number>(0);
+  const hoverPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleHover = useCallback((canvasLogicalX: number, canvasLogicalY: number) => {
+    hoverPointRef.current = { x: canvasLogicalX, y: canvasLogicalY };
+  }, []);
+
+  const clearHover = useCallback(() => {
+    hoverPointRef.current = null;
+  }, []);
+
+  const getHoverPoint = useCallback(() => hoverPointRef.current, []);
 
   // Keep liveSimRef synced when activeHeatSim changes from page or user actions
   useEffect(() => {
@@ -1410,5 +1424,8 @@ export function useHeatSimulation(
     handleGraphChoice,
     cancelGraphChoice,
     handleToggleContainerGraph,
+    handleHover,
+    clearHover,
+    getHoverPoint,
   };
 }
