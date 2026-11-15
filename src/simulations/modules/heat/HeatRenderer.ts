@@ -1166,12 +1166,13 @@ export function getContainerActionButtonsLocalPos(w: number, h: number) {
   const glassBottomY = pad + 4 + bh;
   const btnSize = 19;
   const btnHalf = btnSize / 2;
-  // 12px gap from glass wall so buttons are distinct and never glued ("χωρίς να είναι κολλημένα")
-  const dropletX = glassRightX + 12 + btnHalf;
+  // Gap from glass wall: reduced to 7.5px ("λίγο πιο κοντά στο δοχείο .. λίγο")
+  const gap = 7.5;
+  const dropletX = glassRightX + gap + btnHalf;
   const dropletY = glassBottomY - btnHalf - 1;
-  // 4px gap between droplet and pencil squircle buttons
-  const pencilX = dropletX + btnSize + 4;
-  const pencilY = dropletY;
+  // Pencil stacked vertically ABOVE the droplet ("φέρε το μολύβι πάνω από τη σταγόνα")
+  const pencilX = dropletX;
+  const pencilY = dropletY - btnSize - 4;
   return { dropletX, dropletY, pencilX, pencilY, btnSize, btnHalf, glassRightX, glassBottomY };
 }
 
@@ -1323,12 +1324,12 @@ function renderContainerActionButtons(
         const textMetrics = ctx.measureText(badgeText);
         const badgeW = textMetrics.width + 16;
         const badgeH = 19;
-        let badgeCenterX = (dropletX + pencilX) / 2;
+        let badgeCenterX = dropletX;
         const minCenterX = glassRightX + 4 + badgeW / 2;
         if (badgeCenterX < minCenterX) {
           badgeCenterX = minCenterX;
         }
-        const badgeCenterY = dropletY - btnHalf - 12 - floatUp;
+        const badgeCenterY = pencilY - btnHalf - 12 - floatUp;
 
         // Shadow & pill container
         ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
