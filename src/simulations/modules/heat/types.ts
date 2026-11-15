@@ -111,6 +111,7 @@ export interface HeatObject {
   y: number;
   width: number;
   height: number;
+  strokeColor?: string;
   burnerState?: HeatBurnerState;
   tripodState?: HeatTripodState;
   containerState?: HeatContainerState;

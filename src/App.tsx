@@ -11082,6 +11082,79 @@ export default function App() {
   // (Only runs on mounted viewport canvases when page state changes, NEVER while Apple Pencil is moving!)
   const renderStaticSceneRef = useRef<() => void>(() => {});
   const pendingStaticRenderRafRef = useRef<number | null>(null);
+  const isReadyMadeSimComponent = (strokes: StrokeObject[], page?: NotePage | null): boolean => {
+    if (!strokes || strokes.length === 0) return false;
+    return strokes.some((s) => {
+      // 1. Circuit Component shapes & stencils (bulb, battery, switch, fan, meters, resistor)
+      if (
+        s.shapeType === 'bulb' ||
+        s.shapeType === 'lightbulb' ||
+        s.shapeType === 'battery' ||
+        s.shapeType === 'voltage-source' ||
+        s.shapeType === 'resistor' ||
+        s.shapeType === 'switch' ||
+        s.shapeType === 'switch-knob' ||
+        s.shapeType === 'switch-blade' ||
+        s.shapeType === 'fan' ||
+        s.shapeType === 'fan-blade' ||
+        s.shapeType === 'ammeter' ||
+        s.shapeType === 'voltmeter'
+      ) {
+        return true;
+      }
+      // 2. Physics & Stencil shapes (Axes, Waves, Inclined Plane)
+      if (
+        s.shapeType === 'wave-axis-x' ||
+        s.shapeType === 'wave-axis-y' ||
+        s.shapeType === 'wave-guide-top' ||
+        s.shapeType === 'wave-guide-bottom' ||
+        s.shapeType === 'inclined-plane' ||
+        s.shapeType === 'axes' ||
+        s.shapeType === 'axis-x' ||
+        s.shapeType === 'axis-y'
+      ) {
+        return true;
+      }
+      // 3. Springs & Weights
+      if (
+        s.shapeType === 'spring' ||
+        s.shapeType === 'hooked-weight' ||
+        s.shapeType === 'spring-pointer' ||
+        Boolean(s.attachedToWeightId) ||
+        Boolean(s.attachedToSpringId)
+      ) {
+        return true;
+      }
+      // 4. Group ID patterns for simulation stencils
+      if (
+        s.groupId &&
+        (s.groupId.startsWith('switch-grp-') ||
+          s.groupId.startsWith('fan-grp-') ||
+          s.groupId.startsWith('ammeter-grp-') ||
+          s.groupId.startsWith('voltmeter-grp-') ||
+          s.groupId.startsWith('wave-axes-grp-') ||
+          s.groupId.startsWith('incline-grp-') ||
+          s.groupId.startsWith('math-graph-grp-') ||
+          s.groupId.startsWith('atom-') ||
+          s.groupId.startsWith('reaction-'))
+      ) {
+        return true;
+      }
+      // 5. Force / Pendulum Sims
+      if (
+        page?.forceSims?.some(
+          (fs) =>
+            fs.primaryStrokeId === s.id ||
+            fs.secondaryStrokeId === s.id ||
+            fs.supportStrokeId === s.id
+        )
+      ) {
+        return true;
+      }
+      return false;
+    });
+  };
+
   const scheduleCoalescedStaticRender = useCallback(() => {
     if (pendingStaticRenderRafRef.current !== null) return;
     pendingStaticRenderRafRef.current = window.requestAnimationFrame(() => {
@@ -11988,70 +12061,75 @@ export default function App() {
               selStrokesList.every((st) => st.groupId === firstGrpId) &&
               selImagesList.every((im) => im.groupId === firstGrpId) &&
               selTextsList.every((t) => t.groupId === firstGrpId);
-            const hasMixedTextAndShapes =
-              selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
-            const grpPillW = allSameGroup ? 80 : 68;
-            const txtOnlyPillW = 80;
-            const cntPillW = 64;
-            const pillGap = 5;
-            const pillH = 22;
-            const pillY = bcy + hh + 38 > getPageLogicalHeight(pageObj) ? -hh - 22 : hh + 22;
-            const totalRowW = hasMixedTextAndShapes
-              ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
-              : grpPillW + pillGap + cntPillW;
-            const rowStartX = -totalRowW / 2;
-            const grpCx = rowStartX + grpPillW / 2;
-            const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
-            const cntCx = hasMixedTextAndShapes
-              ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
-              : rowStartX + grpPillW + pillGap + cntPillW / 2;
+            const isSimComponent =
+              isReadyMadeSimComponent(selStrokesList, pageObj);
 
-            ctx.save();
-            ctx.setLineDash([]);
-            // Left Pill: Group / Ungroup
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-            ctx.shadowBlur = 7;
-            ctx.shadowOffsetY = 2;
-            ctx.fillStyle = allSameGroup ? '#475569' : '#234978';
-            ctx.beginPath();
-            ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 11);
-            ctx.fill();
+            if (!isSimComponent) {
+              const hasMixedTextAndShapes =
+                selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
+              const grpPillW = allSameGroup ? 80 : 68;
+              const txtOnlyPillW = 80;
+              const cntPillW = 64;
+              const pillGap = 5;
+              const pillH = 22;
+              const pillY = bcy + hh + 38 > getPageLogicalHeight(pageObj) ? -hh - 22 : hh + 22;
+              const totalRowW = hasMixedTextAndShapes
+                ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
+                : grpPillW + pillGap + cntPillW;
+              const rowStartX = -totalRowW / 2;
+              const grpCx = rowStartX + grpPillW / 2;
+              const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
+              const cntCx = hasMixedTextAndShapes
+                ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
+                : rowStartX + grpPillW + pillGap + cntPillW / 2;
 
-            // Middle Pill (when both Texts and Shapes/Images are selected): Κείμενο μόνο
-            if (hasMixedTextAndShapes) {
+              ctx.save();
+              ctx.setLineDash([]);
+              // Left Pill: Group / Ungroup
+              ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+              ctx.shadowBlur = 7;
+              ctx.shadowOffsetY = 2;
+              ctx.fillStyle = allSameGroup ? '#475569' : '#234978';
+              ctx.beginPath();
+              ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 11);
+              ctx.fill();
+
+              // Middle Pill (when both Texts and Shapes/Images are selected): Κείμενο μόνο
+              if (hasMixedTextAndShapes) {
+                ctx.fillStyle = '#334155';
+                ctx.beginPath();
+                ctx.roundRect(
+                  txtOnlyCx - txtOnlyPillW / 2,
+                  pillY - pillH / 2,
+                  txtOnlyPillW,
+                  pillH,
+                  11
+                );
+                ctx.fill();
+              }
+
+              // Right Pill: Κέντραρε (Center X+Y)
               ctx.fillStyle = '#334155';
               ctx.beginPath();
-              ctx.roundRect(
-                txtOnlyCx - txtOnlyPillW / 2,
-                pillY - pillH / 2,
-                txtOnlyPillW,
-                pillH,
-                11
-              );
+              ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 11);
               ctx.fill();
-            }
 
-            // Right Pill: Κέντραρε (Center X+Y)
-            ctx.fillStyle = '#334155';
-            ctx.beginPath();
-            ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 11);
-            ctx.fill();
-
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(
-              allSameGroup ? `Ungroup (${totalSelObjects})` : `Group (${totalSelObjects})`,
-              grpCx,
-              pillY + 0.5
-            );
-            if (hasMixedTextAndShapes) {
-              ctx.fillText('Κείμενο μόνο', txtOnlyCx, pillY + 0.5);
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(
+                allSameGroup ? `Ungroup (${totalSelObjects})` : `Group (${totalSelObjects})`,
+                grpCx,
+                pillY + 0.5
+              );
+              if (hasMixedTextAndShapes) {
+                ctx.fillText('Κείμενο μόνο', txtOnlyCx, pillY + 0.5);
+              }
+              ctx.fillText('Κέντραρε', cntCx, pillY + 0.5);
+              ctx.restore();
             }
-            ctx.fillText('Κέντραρε', cntCx, pillY + 0.5);
-            ctx.restore();
           }
           }
 
@@ -36878,8 +36956,8 @@ export default function App() {
     }
 
     // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (Pencil click, burner on/off, dragging objects & graph)
-    if (heatSim.activeHeatSim && (simActiveCategory === 'heat' || activeTool === 'lasso' || activeTool === 'pan' || activeTool === 'pen' || activeTool === 'shape')) {
-      if (heatSim.handlePointerDown(e, pt.x, pt.y)) {
+    if (heatSim.activeHeatSim) {
+      if (heatSim.handlePointerDown(e, pt.x, pt.y, activeTool)) {
         e.preventDefault();
         isDrawingRef.current = true;
         activePointerIdRef.current = e.pointerId;
@@ -38444,52 +38522,57 @@ export default function App() {
             selStrokesList.every((st) => st.groupId === firstGrpId) &&
             selImagesList.every((im) => im.groupId === firstGrpId) &&
             selTextsList.every((t) => t.groupId === firstGrpId);
-          const hasMixedTextAndShapes =
-            selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
-          const grpPillW = allSameGroup ? 80 : 68;
-          const txtOnlyPillW = 80;
-          const cntPillW = 64;
-          const pillGap = 5;
-          const totalRowW = hasMixedTextAndShapes
-            ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
-            : grpPillW + pillGap + cntPillW;
-          const rowStartX = -totalRowW / 2;
-          const grpCx = rowStartX + grpPillW / 2;
-          const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
-          const cntCx = hasMixedTextAndShapes
-            ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
-            : rowStartX + grpPillW + pillGap + cntPillW / 2;
+          const isSimComponent =
+            isReadyMadeSimComponent(selStrokesList, activePage);
 
-          if (Math.abs(localX - grpCx) <= grpPillW / 2 + 2.5) {
-            if (allSameGroup) {
-              handleUngroupSelected();
-            } else {
-              handleGroupSelected();
+          if (!isSimComponent) {
+            const hasMixedTextAndShapes =
+              selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
+            const grpPillW = allSameGroup ? 80 : 68;
+            const txtOnlyPillW = 80;
+            const cntPillW = 64;
+            const pillGap = 5;
+            const totalRowW = hasMixedTextAndShapes
+              ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
+              : grpPillW + pillGap + cntPillW;
+            const rowStartX = -totalRowW / 2;
+            const grpCx = rowStartX + grpPillW / 2;
+            const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
+            const cntCx = hasMixedTextAndShapes
+              ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
+              : rowStartX + grpPillW + pillGap + cntPillW / 2;
+
+            if (Math.abs(localX - grpCx) <= grpPillW / 2 + 2.5) {
+              if (allSameGroup) {
+                handleUngroupSelected();
+              } else {
+                handleGroupSelected();
+              }
+              return;
             }
-            return;
-          }
-          if (hasMixedTextAndShapes && Math.abs(localX - txtOnlyCx) <= txtOnlyPillW / 2 + 2.5) {
-            setSelectedStrokeIds([]);
-            setSelectedImageIds([]);
-            setSelectedImageId(null);
-            setActiveNodeStrokeId(null);
-            setShowToolSubBar(true);
-            if (selTextsList.length === 1) {
-              setSelectedLassoTextIds([]);
-              const singleTxt = selTextsList[0];
-              const txtLen = (singleTxt.text || '').length;
-              focusAndPlaceCaretInTextBox(singleTxt.id, txtLen, txtLen);
-            } else {
-              setSelectedLassoTextIds(selTextsList.map((t) => t.id));
-              const firstTxt = selTextsList[0];
-              const txtLen = (firstTxt.text || '').length;
-              focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
+            if (hasMixedTextAndShapes && Math.abs(localX - txtOnlyCx) <= txtOnlyPillW / 2 + 2.5) {
+              setSelectedStrokeIds([]);
+              setSelectedImageIds([]);
+              setSelectedImageId(null);
+              setActiveNodeStrokeId(null);
+              setShowToolSubBar(true);
+              if (selTextsList.length === 1) {
+                setSelectedLassoTextIds([]);
+                const singleTxt = selTextsList[0];
+                const txtLen = (singleTxt.text || '').length;
+                focusAndPlaceCaretInTextBox(singleTxt.id, txtLen, txtLen);
+              } else {
+                setSelectedLassoTextIds(selTextsList.map((t) => t.id));
+                const firstTxt = selTextsList[0];
+                const txtLen = (firstTxt.text || '').length;
+                focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
+              }
+              return;
             }
-            return;
-          }
-          if (Math.abs(localX - cntCx) <= cntPillW / 2 + 2.5) {
-            handleAlignSelected('center-both');
-            return;
+            if (Math.abs(localX - cntCx) <= cntPillW / 2 + 2.5) {
+              handleAlignSelected('center-both');
+              return;
+            }
           }
         }
 
@@ -47032,46 +47115,56 @@ export default function App() {
         grpSet.add(t.groupId);
       }
     }
-    updateActivePage((page) => {
-      const targetStrokes = page.strokes.filter(
-        (s) => selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
-      );
-      const comps = getCircuitComponentsWithTerminals(targetStrokes);
-      const isMacroCircuitGroup =
-        comps.length > 1 ||
-        (comps.length === 1 &&
-          targetStrokes.some((s) => !comps[0].strokeIds.includes(s.id)));
-      const compGroupMap = new Map<string, string>();
-      if (isMacroCircuitGroup) {
-        for (const c of comps) {
-          if (c.strokeIds.length > 1) {
-            const subGrpId = `grp-comp-${c.kind}-${c.strokeIds[0]}`;
-            for (const sid of c.strokeIds) {
-              compGroupMap.set(sid, subGrpId);
-            }
+    const targetStrokes = activePage.strokes.filter(
+      (s) => selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
+    );
+    const comps = getCircuitComponentsWithTerminals(targetStrokes);
+    const isMacroCircuitGroup =
+      comps.length > 1 ||
+      (comps.length === 1 &&
+        targetStrokes.some((s) => !comps[0].strokeIds.includes(s.id)));
+
+    // Prevent ungrouping a single ready-made simulation component / stencil
+    if (
+      effectiveImgIds.length === 0 &&
+      effectiveTextIds.length === 0 &&
+      !isMacroCircuitGroup &&
+      isReadyMadeSimComponent(targetStrokes, activePage)
+    ) {
+      showToast('ℹ️ Τα έτοιμα στοιχεία προσομοίωσης παραμένουν ενιαία σχήματα.');
+      return;
+    }
+
+    const compGroupMap = new Map<string, string>();
+    if (isMacroCircuitGroup) {
+      for (const c of comps) {
+        if (c.strokeIds.length > 1) {
+          const subGrpId = `grp-comp-${c.kind}-${c.strokeIds[0]}`;
+          for (const sid of c.strokeIds) {
+            compGroupMap.set(sid, subGrpId);
           }
         }
       }
-      return {
-        ...page,
-        strokes: page.strokes.map((s) =>
-          selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
-            ? { ...s, groupId: compGroupMap.get(s.id) }
-            : s
-        ),
-        images: (page.images || []).map((im) =>
-          effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
-            ? { ...im, groupId: undefined }
-            : im
-        ),
-        texts: (page.texts || []).map((t) =>
-          effectiveTextIds.includes(t.id) ||
-          (t.groupId && !t.groupId.startsWith('math-graph-grp-') && grpSet.has(t.groupId))
-            ? { ...t, groupId: undefined }
-            : t
-        ),
-      };
-    });
+    }
+    updateActivePage((page) => ({
+      ...page,
+      strokes: page.strokes.map((s) =>
+        selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
+          ? { ...s, groupId: compGroupMap.get(s.id) }
+          : s
+      ),
+      images: (page.images || []).map((im) =>
+        effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
+          ? { ...im, groupId: undefined }
+          : im
+      ),
+      texts: (page.texts || []).map((t) =>
+        effectiveTextIds.includes(t.id) ||
+        (t.groupId && !t.groupId.startsWith('math-graph-grp-') && grpSet.has(t.groupId))
+          ? { ...t, groupId: undefined }
+          : t
+      ),
+    }));
     showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
 
@@ -47552,6 +47645,26 @@ export default function App() {
             }));
           });
         }
+      }
+
+      // Recolor ready-made heat simulation apparatus objects (burner, beaker, tripod, flask, basin, thermometer)
+      if (
+        heatSim.activeHeatSim?.selectedObjectId ||
+        (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)
+      ) {
+        const selIds =
+          heatSim.activeHeatSim.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0
+            ? heatSim.activeHeatSim.selectedObjectIds
+            : heatSim.activeHeatSim.selectedObjectId
+            ? [heatSim.activeHeatSim.selectedObjectId]
+            : [];
+        heatSim.updateActiveHeatSim((prev) => ({
+          ...prev,
+          objects: prev.objects.map((o) =>
+            selIds.includes(o.id) ? { ...o, strokeColor: c } : o
+          ),
+        }));
+        renderStaticSceneRef.current?.();
       }
 
       const baseIds =
@@ -56366,6 +56479,7 @@ export default function App() {
                           setSelectedStrokeIds([]);
                           setActiveNodeStrokeId(null);
                           setSelectedImageId(null);
+                          heatSim.setSelectedObjectIds([]);
                         }
                         if (tool.id !== 'text') {
                           setEditingCaretRange(null);
@@ -58486,18 +58600,24 @@ export default function App() {
                         selStrokes.every((s) => s.groupId === firstGrpId) &&
                         selImgs.every((im) => im.groupId === firstGrpId) &&
                         selTxts.every((t) => t.groupId === firstGrpId);
+                      const isSimComponent =
+                        isReadyMadeSimComponent(selStrokes, activePage) &&
+                        selTxts.length === 0 &&
+                        selImgs.length === 0;
 
                       return (
                         <>
                           {hasGroupedItem && allAlreadyInSameGroup ? (
-                            <button
-                              onClick={handleUngroupSelected}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                              title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
-                            >
-                              <Ungroup className="w-3.5 h-3.5" />
-                              <span>Ungroup</span>
-                            </button>
+                            !isSimComponent ? (
+                              <button
+                                onClick={handleUngroupSelected}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
+                                title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                              >
+                                <Ungroup className="w-3.5 h-3.5" />
+                                <span>Ungroup</span>
+                              </button>
+                            ) : null
                           ) : totalSelCount >= 2 ? (
                             <button
                               onClick={handleGroupSelected}
@@ -58507,7 +58627,7 @@ export default function App() {
                               <Group className="w-3.5 h-3.5" />
                               <span>Group ({totalSelCount})</span>
                             </button>
-                          ) : hasGroupedItem ? (
+                          ) : hasGroupedItem && !isSimComponent ? (
                             <button
                               onClick={handleUngroupSelected}
                               className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ece7dc] hover:bg-[#e2dccf] border border-[#dfd8cb] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
@@ -58543,7 +58663,7 @@ export default function App() {
                               <span>Κείμενο μόνο</span>
                             </button>
                           )}
-                          {totalSelCount >= 2 && (
+                          {totalSelCount >= 2 && !isSimComponent && (
                             <button
                               onClick={() => handleAlignSelected('center-both')}
                               className="flex items-center px-2.5 py-1 rounded-full bg-[#fdfbf7] hover:bg-[#ece7dc] border border-[#dfd8cb] text-[#234978] font-medium cursor-pointer whitespace-nowrap transition"

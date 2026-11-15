@@ -24,7 +24,8 @@ export interface UseHeatSimulationReturn {
   handlePointerDown: (
     e: React.PointerEvent | PointerEvent,
     canvasLogicalX: number,
-    canvasLogicalY: number
+    canvasLogicalY: number,
+    currentTool?: string
   ) => boolean;
   handlePointerMove: (
     canvasLogicalX: number,
@@ -529,7 +530,7 @@ export function useHeatSimulation(
 
   // Pointer interactions on canvas (handles, resizing, selection, actions, dragging)
   const handlePointerDown = useCallback(
-    (_e: React.PointerEvent | PointerEvent, lx: number, ly: number): boolean => {
+    (_e: React.PointerEvent | PointerEvent, lx: number, ly: number, currentTool?: string): boolean => {
       const sim = liveSimRef.current || activeHeatSim;
       if (!sim) return false;
 
@@ -831,40 +832,45 @@ export function useHeatSimulation(
       }
 
       // 3. Check objects in reverse z-order (topmost first)
-      const reversed = [...sim.objects].reverse();
+      const isDrawingTool =
+        currentTool === 'pen' || currentTool === 'pencil' || currentTool === 'highlighter';
 
-      for (const obj of reversed) {
-        const inside =
-          lx >= obj.x - 4 &&
-          lx <= obj.x + obj.width + 4 &&
-          ly >= obj.y - 4 &&
-          ly <= obj.y + obj.height + 4;
+      if (!isDrawingTool) {
+        const reversed = [...sim.objects].reverse();
 
-        if (!inside) continue;
+        for (const obj of reversed) {
+          const inside =
+            lx >= obj.x - 4 &&
+            lx <= obj.x + obj.width + 4 &&
+            ly >= obj.y - 4 &&
+            ly <= obj.y + obj.height + 4;
 
-        if (_e.shiftKey) {
-          const nextIds = selectedIds.includes(obj.id)
-            ? selectedIds.filter((id) => id !== obj.id)
-            : [...selectedIds, obj.id];
-          setSelectedObjectIds(nextIds);
+          if (!inside) continue;
+
+          if (_e.shiftKey) {
+            const nextIds = selectedIds.includes(obj.id)
+              ? selectedIds.filter((id) => id !== obj.id)
+              : [...selectedIds, obj.id];
+            setSelectedObjectIds(nextIds);
+            return true;
+          }
+
+          // Select and start dragging single object
+          dragRef.current = {
+            objectId: obj.id,
+            mode: 'move',
+            startX: lx,
+            startY: ly,
+            origObjX: obj.x,
+            origObjY: obj.y,
+            origW: obj.width,
+            origH: obj.height,
+            origRatio: obj.width / obj.height,
+          };
+
+          setSelectedObjectIds([obj.id]);
           return true;
         }
-
-        // Select and start dragging single object
-        dragRef.current = {
-          objectId: obj.id,
-          mode: 'move',
-          startX: lx,
-          startY: ly,
-          origObjX: obj.x,
-          origObjY: obj.y,
-          origW: obj.width,
-          origH: obj.height,
-          origRatio: obj.width / obj.height,
-        };
-
-        setSelectedObjectIds([obj.id]);
-        return true;
       }
 
       // 4. Clicked outside on empty canvas -> Deselect

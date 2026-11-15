@@ -124,22 +124,22 @@ export function renderHeatSimulation(
 
     switch (obj.type) {
       case 'burner':
-        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected, layer);
+        renderBurner(ctx, obj.width, obj.height, obj.burnerState, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'tripod':
-        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer);
+        renderTripod(ctx, obj.width, obj.height, obj.tripodState?.wireGauzeTemp || 20, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'beaker':
-        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
+        renderBeaker(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'wide-basin':
-        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
+        renderWideBasin(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'flask':
-        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer);
+        renderFlask(ctx, obj.width, obj.height, obj.containerState, isDark, isSelected, layer, obj.strokeColor);
         break;
       case 'thermometer':
-        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected, layer);
+        renderThermometer(ctx, obj.width, obj.height, obj.thermometerState, isDark, isSelected, layer, obj.strokeColor);
         break;
     }
 
@@ -503,9 +503,10 @@ function renderBurner(
   state: HeatBurnerState | undefined,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
 
   // 2.5D Proportions matching reference sketch in media_1794725655308_28bf8f8b.png
@@ -799,9 +800,10 @@ function renderTripod(
   gauzeTempC: number,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
   const collarW = w * 0.72;
   const collarH = h * 0.14;
@@ -904,9 +906,10 @@ function renderBeaker(
   state: HeatContainerState | undefined,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = w - pad * 2;
   const bh = h - pad * 2 - 6;
@@ -935,16 +938,19 @@ function renderBeaker(
     // Draw Liquid Fill if volume > 0 - Fills 100% of curved beaker base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
+      // Clip exactly to beaker interior outline
       ctx.beginPath();
-      ctx.moveTo(x, liquidTopY);
-      ctx.lineTo(x, cyBot);
-      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
-      ctx.lineTo(x + bw, liquidTopY);
-      ctx.ellipse(cx, liquidTopY, baseRx, rimH * 0.35, 0, 0, Math.PI, true);
+      ctx.moveTo(x - spoutW, y + 2);
+      ctx.quadraticCurveTo(x - 2, y, x + 4, y);
+      ctx.lineTo(x + bw - 4, y);
+      ctx.quadraticCurveTo(x + bw + 3, y + 2, x + bw, y + rimH / 2);
+      ctx.lineTo(x + bw, cyBot);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
+      ctx.lineTo(x, y + rimH / 2 + 5);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.35, x - 4, x + bw + 4);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh + 10, rimH * 0.35, x - 12, x + bw + 12);
 
       // Boiling Bubbles & Steam
       if (state?.isBoiling) {
@@ -1025,9 +1031,10 @@ function renderWideBasin(
   state: HeatContainerState | undefined,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = w - pad * 2;
   const bh = h - pad * 2 - 6;
@@ -1055,16 +1062,18 @@ function renderWideBasin(
     // Liquid Fill - Fills 100% of basin base with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
+      // Clip exactly to basin interior outline
       ctx.beginPath();
-      ctx.moveTo(x, liquidTopY);
+      ctx.moveTo(x - 8, y + 2);
+      ctx.quadraticCurveTo(x, y + 4, x, y + 14);
       ctx.lineTo(x, cyBot);
-      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
-      ctx.lineTo(x + bw, liquidTopY);
-      ctx.ellipse(cx, liquidTopY, baseRx, rimH * 0.4, 0, 0, Math.PI, true);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
+      ctx.lineTo(x + bw, y + 14);
+      ctx.quadraticCurveTo(x + bw, y + 4, x + bw + 8, y + 2);
       ctx.closePath();
       ctx.clip();
 
-      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh, rimH * 0.4, x - 4, x + bw + 4);
+      renderLiquidBody(ctx, liquidType, x, liquidTopY, bw, liquidH, y + bh + 10, rimH * 0.4, x - 12, x + bw + 12);
 
       if (state?.isBoiling) {
         renderBoilingBubbles(ctx, x, liquidTopY, bw, liquidH);
@@ -1127,9 +1136,10 @@ function renderFlask(
   state: HeatContainerState | undefined,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = w - pad * 2;
   const bh = h - pad * 2 - 6;
@@ -1163,12 +1173,14 @@ function renderFlask(
     // Liquid Fill - Fills 100% of conical flask base conforming to 2.5D bottom ellipse with NO white gaps!
     if (vol > 0 && liquidH > 2) {
       ctx.save();
+      // Clip exactly to flask interior outline
       ctx.beginPath();
-      ctx.moveTo(cx - surfaceHalfW, liquidTopY);
-      ctx.lineTo(cx - baseRx, cyBot);
-      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, Math.PI, 0, true);
-      ctx.lineTo(cx + surfaceHalfW, liquidTopY);
-      ctx.ellipse(cx, liquidTopY, surfaceHalfW, 3.5, 0, 0, Math.PI, true);
+      ctx.moveTo(cx - neckW * 0.65, y + 2);
+      ctx.lineTo(cx + neckW * 0.65, y + 2);
+      ctx.lineTo(cx + neckW / 2, y + neckH);
+      ctx.lineTo(cx + baseRx, cyBot);
+      ctx.ellipse(cx, cyBot, baseRx, bottomRy, 0, 0, Math.PI, false);
+      ctx.lineTo(cx - neckW / 2, y + neckH);
       ctx.closePath();
       ctx.clip();
 
@@ -1179,10 +1191,10 @@ function renderFlask(
         liquidTopY,
         surfaceHalfW * 2,
         liquidH,
-        y + bh,
+        y + bh + 10,
         3.5,
-        x - 4,
-        x + bw + 4
+        cx - bw - 10,
+        cx + bw + 10
       );
 
       if (state?.isBoiling) {
@@ -1247,9 +1259,10 @@ function renderThermometer(
   state: HeatThermometerState | undefined,
   isDark: boolean,
   _isSelected: boolean,
-  layer: 'all' | 'apparatus' | 'ui' = 'all'
+  layer: 'all' | 'apparatus' | 'ui' = 'all',
+  customColor?: string
 ): void {
-  const strokeColor = isDark ? '#f8fafc' : '#111827';
+  const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
   const stemW = 8;
   const bulbR = 7.5;
