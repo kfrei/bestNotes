@@ -1351,10 +1351,10 @@ function renderTripod(
     // PASS 1: BACK HALF (Rendered BEHIND burner flame)
     // -------------------------------------------------------------------------
     if (part === 'all' || part === 'back') {
-      // 1. Recessed Back Leg (Starts on upper perimeter of outer collar ellipse outline)
+      // 1. Recessed Back Leg (Starts on bottom edge of outer collar, underneath wire gauze)
       const backRatio = 0.26;
       const backStartX = cx - collarRx * backRatio;
-      const backStartY = collarCy - collarRy * Math.sqrt(1 - backRatio * backRatio);
+      const backStartY = collarCy + collarRy * Math.sqrt(1 - backRatio * backRatio);
       const backEndX = cx - collarW * 0.24;
       const backEndY = legBotY - 6;
 
