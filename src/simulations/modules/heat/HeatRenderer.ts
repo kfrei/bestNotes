@@ -935,11 +935,8 @@ function renderBurner(
     ctx.stroke();
     ctx.restore();
 
-    // 5. Permanent Flame Toggle Button at bottom-right of cast-iron base (matching media_1794729887270_8981dcf2.png)
-    const btnSize = 19;
-    const btnHalf = btnSize / 2;
-    const btnCenterX = cx + baseW / 2 + 8;
-    const btnCenterY = cyBot + 1;
+    // 5. Permanent Flame Toggle Button at bottom-right of cast-iron base
+    const { btnCenterX, btnCenterY, btnSize, btnHalf } = getBurnerActionButtonLocalPos(w, h);
     const isOn = Boolean(state?.isOn);
 
     const frameGrey = isDark
@@ -1187,6 +1184,33 @@ export function getContainerActionButtonsWorldPos(obj: HeatObject) {
     btnHalf: local.btnHalf,
     glassRightX: obj.x + local.glassRightX,
     glassBottomY: obj.y + local.glassBottomY,
+  };
+}
+
+/**
+ * Coordinate calculators for the permanent flame toggle button
+ * positioned at the bottom-right of the Bunsen burner cast-iron base.
+ */
+export function getBurnerActionButtonLocalPos(w: number, h: number) {
+  const cx = w / 2;
+  const baseW = w * 0.67;
+  const groundY = h - 12;
+  const cyBot = groundY - 5.2;
+  const btnSize = 19;
+  const btnHalf = btnSize / 2;
+  // 7.5px gap to the right of the cast-iron base edge so it never touches or sticks to the base
+  const btnCenterX = cx + baseW / 2 + btnHalf + 7.5;
+  const btnCenterY = cyBot + 1;
+  return { btnCenterX, btnCenterY, btnSize, btnHalf };
+}
+
+export function getBurnerActionButtonWorldPos(obj: HeatObject) {
+  const local = getBurnerActionButtonLocalPos(obj.width, obj.height);
+  return {
+    btnCenterX: obj.x + local.btnCenterX,
+    btnCenterY: obj.y + local.btnCenterY,
+    btnSize: local.btnSize,
+    btnHalf: local.btnHalf,
   };
 }
 

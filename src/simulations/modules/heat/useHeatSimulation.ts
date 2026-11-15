@@ -10,6 +10,7 @@ import { createDefaultHeatSim } from './HeatSimulationModule';
 import { recognizeHeatSketch, createHeatObjectFromRecognition } from './HeatSketchRecognizer';
 import {
   getContainerActionButtonsWorldPos,
+  getBurnerActionButtonWorldPos,
   triggerContainerFillFeedback,
 } from './HeatRenderer';
 
@@ -545,17 +546,11 @@ export function useHeatSimulation(
       const sim = liveSimRef.current || activeHeatSim;
       if (!sim) return false;
 
-      // 0. Permanent Flame Toggle Button (bottom-right of burner cast-iron base, matching media_1794729887270_8981dcf2.png)
+      // 0. Permanent Flame Toggle Button (bottom-right of burner cast-iron base)
       for (const obj of sim.objects) {
         if (obj.type === 'burner') {
-          const cx = obj.x + obj.width / 2;
-          const baseW = obj.width * 0.67;
-          const baseRightX = cx + baseW / 2;
-          const groundY = obj.y + obj.height - 12;
-          const cyBot = groundY - 5.2;
-          const btnCenterX = baseRightX + 8;
-          const btnCenterY = cyBot + 1;
-          if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 18) {
+          const { btnCenterX, btnCenterY } = getBurnerActionButtonWorldPos(obj);
+          if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 16) {
             toggleBurner(obj.id);
             return true;
           }
