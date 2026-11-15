@@ -10,6 +10,9 @@ export interface StopwatchWidgetProps {
   onClose: () => void;
   onTogglePlayPause: () => void;
   onReset: () => void;
+  sourceTitle?: string;
+  sourceBadgeColor?: 'blue' | 'amber' | 'emerald';
+  storagePrefix?: string;
   className?: string;
 }
 
@@ -34,7 +37,14 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
   onClose,
   onTogglePlayPause,
   onReset,
+  sourceTitle,
+  sourceBadgeColor = 'blue',
+  storagePrefix,
 }) => {
+  const widthKey = storagePrefix ? `bestnotes_stopwatch_${storagePrefix}_width_v1` : 'bestnotes_stopwatch_width_v1';
+  const posKey = storagePrefix ? `bestnotes_stopwatch_${storagePrefix}_pos_v1` : 'bestnotes_stopwatch_pos_v1';
+  const customKey = storagePrefix ? `bestnotes_stopwatch_${storagePrefix}_customized_v1` : 'bestnotes_stopwatch_customized_v1';
+
   const dragRef = useRef<{
     startClientX: number;
     startClientY: number;
@@ -85,9 +95,9 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
       onPosChange({ x: nextX, y: pos.y });
 
       try {
-        localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
-        localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify({ x: nextX, y: pos.y }));
-        localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+        localStorage.setItem(widthKey, String(nextW));
+        localStorage.setItem(posKey, JSON.stringify({ x: nextX, y: pos.y }));
+        localStorage.setItem(customKey, 'true');
       } catch {}
     } else {
       const dx = e.clientX - rz.startX;
@@ -98,8 +108,8 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
       onWidthChange(nextW);
 
       try {
-        localStorage.setItem('bestnotes_stopwatch_width_v1', String(nextW));
-        localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+        localStorage.setItem(widthKey, String(nextW));
+        localStorage.setItem(customKey, 'true');
       } catch {}
     }
   };
@@ -160,8 +170,8 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
           const nextPos = { x: nextX, y: nextY };
           onPosChange(nextPos);
           try {
-            localStorage.setItem('bestnotes_stopwatch_pos_v1', JSON.stringify(nextPos));
-            localStorage.setItem('bestnotes_stopwatch_customized_v1', 'true');
+            localStorage.setItem(posKey, JSON.stringify(nextPos));
+            localStorage.setItem(customKey, 'true');
           } catch {}
         }}
         onPointerUp={(e) => {
@@ -178,6 +188,18 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
         >
           <span style={{ fontSize: `${Math.round(14 * swScale)}px` }}>⏱️</span>
           <span>Χρονόμετρο</span>
+          {sourceTitle && (
+            <span
+              style={{ fontSize: `${Math.max(8.5, Math.round(9.5 * swScale))}px` }}
+              className={`font-black px-1.5 py-0.5 rounded-md border tracking-tight shadow-2xs ${
+                sourceBadgeColor === 'amber'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-blue-100 text-[#234978] border-blue-200'
+              }`}
+            >
+              {sourceTitle}
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -188,7 +210,7 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
             fontSize: `${Math.max(9, Math.round(11 * swScale))}px`,
           }}
           className="flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] font-bold transition cursor-pointer"
-          title="Κλείσιμο χρονομέτρου"
+          title={`Κλείσιμο χρονομέτρου ${sourceTitle ? `(${sourceTitle})` : ''}`}
         >
           ✕
         </button>

@@ -2051,25 +2051,26 @@ export default function App() {
     startTime: number;
   } | null>(null);
 
-  // Digital Stopwatch State (⏱️) for Physics Experiments (WarmStudio Beige & Dark Navy)
-  const hasUserCustomizedStopwatchRef = useRef<boolean>(
+  // Digital Stopwatch State (⏱️) for Pendulum (Εκκρεμές)
+  const hasUserCustomizedPendulumStopwatchRef = useRef<boolean>(
     typeof window !== 'undefined' &&
-      localStorage.getItem('bestnotes_stopwatch_customized_v1') === 'true'
+      (localStorage.getItem('bestnotes_stopwatch_pendulum_customized_v1') === 'true' ||
+       localStorage.getItem('bestnotes_stopwatch_customized_v1') === 'true')
   );
-  const [showStopwatch, setShowStopwatch] = useState<boolean>(false);
-  const [stopwatchWidth, setStopwatchWidth] = useState<number>(() => {
+  const [showPendulumStopwatch, setShowPendulumStopwatch] = useState<boolean>(false);
+  const [pendulumStopwatchWidth, setPendulumStopwatchWidth] = useState<number>(() => {
     try {
-      const savedW = localStorage.getItem('bestnotes_stopwatch_width_v1');
+      const savedW = localStorage.getItem('bestnotes_stopwatch_pendulum_width_v1') || localStorage.getItem('bestnotes_stopwatch_width_v1');
       if (savedW) {
         const parsed = Number(savedW);
         if (!isNaN(parsed) && parsed >= 160 && parsed <= 500) return parsed;
       }
     } catch {}
-    return 304; // Matches Tailwind w-76 (19rem = 304px) of the top simulation window
+    return 304;
   });
-  const [stopwatchPos, setStopwatchPos] = useState<{ x: number; y: number }>(() => {
+  const [pendulumStopwatchPos, setPendulumStopwatchPos] = useState<{ x: number; y: number }>(() => {
     try {
-      const savedPos = localStorage.getItem('bestnotes_stopwatch_pos_v1');
+      const savedPos = localStorage.getItem('bestnotes_stopwatch_pendulum_pos_v1') || localStorage.getItem('bestnotes_stopwatch_pos_v1');
       if (savedPos) {
         const parsed = JSON.parse(savedPos);
         if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
@@ -2085,35 +2086,73 @@ export default function App() {
       y: 540,
     };
   });
-  const [stopwatchRunning, setStopwatchRunning] = useState<boolean>(false);
-  const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState<number>(0);
-  const stopwatchDragRef = useRef<{
-    startClientX: number;
-    startClientY: number;
-    origX: number;
-    origY: number;
-  } | null>(null);
-  const stopwatchResizeRef = useRef<{
-    corner: 'br' | 'bl';
-    startX: number;
-    startY: number;
-    origW: number;
-    origX: number;
-  } | null>(null);
+  const [pendulumStopwatchRunning, setPendulumStopwatchRunning] = useState<boolean>(false);
+  const [pendulumStopwatchElapsedMs, setPendulumStopwatchElapsedMs] = useState<number>(0);
 
   useEffect(() => {
-    if (!stopwatchRunning) return;
+    if (!pendulumStopwatchRunning) return;
     let animId: number;
     let lastTime = performance.now();
     const loop = (now: number) => {
       const delta = now - lastTime;
       lastTime = now;
-      setStopwatchElapsedMs((prev) => prev + delta);
+      setPendulumStopwatchElapsedMs((prev) => prev + delta);
       animId = requestAnimationFrame(loop);
     };
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [stopwatchRunning]);
+  }, [pendulumStopwatchRunning]);
+
+  // Digital Stopwatch State (⏱️) for Heat & Thermodynamics (Θερμότητα)
+  const hasUserCustomizedHeatStopwatchRef = useRef<boolean>(
+    typeof window !== 'undefined' &&
+      localStorage.getItem('bestnotes_stopwatch_heat_customized_v1') === 'true'
+  );
+  const [showHeatStopwatch, setShowHeatStopwatch] = useState<boolean>(false);
+  const [heatStopwatchWidth, setHeatStopwatchWidth] = useState<number>(() => {
+    try {
+      const savedW = localStorage.getItem('bestnotes_stopwatch_heat_width_v1');
+      if (savedW) {
+        const parsed = Number(savedW);
+        if (!isNaN(parsed) && parsed >= 160 && parsed <= 500) return parsed;
+      }
+    } catch {}
+    return 304;
+  });
+  const [heatStopwatchPos, setHeatStopwatchPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const savedPos = localStorage.getItem('bestnotes_stopwatch_heat_pos_v1');
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(10, Math.min(typeof window !== 'undefined' ? window.innerWidth - 60 : 800, parsed.x)),
+            y: Math.max(10, Math.min(typeof window !== 'undefined' ? window.innerHeight - 60 : 600, parsed.y)),
+          };
+        }
+      }
+    } catch {}
+    return {
+      x: 16,
+      y: 540,
+    };
+  });
+  const [heatStopwatchRunning, setHeatStopwatchRunning] = useState<boolean>(false);
+  const [heatStopwatchElapsedMs, setHeatStopwatchElapsedMs] = useState<number>(0);
+
+  useEffect(() => {
+    if (!heatStopwatchRunning) return;
+    let animId: number;
+    let lastTime = performance.now();
+    const loop = (now: number) => {
+      const delta = now - lastTime;
+      lastTime = now;
+      setHeatStopwatchElapsedMs((prev) => prev + delta);
+      animId = requestAnimationFrame(loop);
+    };
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [heatStopwatchRunning]);
 
   const formatStopwatch = (ms: number): string => {
     const totalSec = Math.floor(ms / 1000);
@@ -3831,9 +3870,12 @@ export default function App() {
       showSimulationPanel,
       simActiveCategory,
       simPanelPos,
-      showStopwatch,
-      stopwatchPos,
-      stopwatchWidth,
+      showPendulumStopwatch,
+      pendulumStopwatchPos,
+      pendulumStopwatchWidth,
+      showHeatStopwatch,
+      heatStopwatchPos,
+      heatStopwatchWidth,
       isSimulating,
       isSpringSimulating,
       isSpringPaused,
@@ -3887,9 +3929,12 @@ export default function App() {
       showSimulationPanel,
       simActiveCategory,
       simPanelPos,
-      showStopwatch,
-      stopwatchPos,
-      stopwatchWidth,
+      showPendulumStopwatch,
+      pendulumStopwatchPos,
+      pendulumStopwatchWidth,
+      showHeatStopwatch,
+      heatStopwatchPos,
+      heatStopwatchWidth,
       isSimulating,
       isSpringSimulating,
       isSpringPaused,
@@ -19728,11 +19773,11 @@ export default function App() {
     });
   };
 
-  const toggleStopwatchWithSmartPlacement = () => {
-    setShowStopwatch((prev) => {
+  const togglePendulumStopwatch = () => {
+    setShowPendulumStopwatch((prev) => {
       const next = !prev;
       if (next) {
-        if (!hasUserCustomizedStopwatchRef.current) {
+        if (!hasUserCustomizedPendulumStopwatchRef.current) {
           let simEl: HTMLElement | null = null;
           if (typeof document !== 'undefined') {
             simEl = document.querySelector('[data-popover-panel="simulation"]');
@@ -19742,17 +19787,59 @@ export default function App() {
           const simLeft = simRect ? Math.round(simRect.left) : simPanelPos.x;
           const simBottom = simRect ? Math.round(simRect.bottom) : simPanelPos.y + 430;
           const targetY = Math.max(16, Math.min(window.innerHeight - 200, simBottom + 12));
-          setStopwatchWidth(simW);
-          setStopwatchPos({ x: simLeft, y: targetY });
+          setPendulumStopwatchWidth(simW);
+          setPendulumStopwatchPos({ x: simLeft, y: targetY });
         } else {
-          setStopwatchPos((cur) => {
+          setPendulumStopwatchPos((cur) => {
             if (
               cur.x > window.innerWidth - 60 ||
               cur.y > window.innerHeight - 60 ||
               cur.x < 10
             ) {
               return {
-                x: Math.max(10, Math.min(window.innerWidth - stopwatchWidth - 10, cur.x)),
+                x: Math.max(10, Math.min(window.innerWidth - pendulumStopwatchWidth - 10, cur.x)),
+                y: Math.max(10, Math.min(window.innerHeight - 120, cur.y)),
+              };
+            }
+            return cur;
+          });
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleHeatStopwatch = () => {
+    setShowHeatStopwatch((prev) => {
+      const next = !prev;
+      if (next) {
+        setHeatStopwatchRunning(heatSim.activeHeatSim?.isRunning ?? false);
+        if (heatSim.activeHeatSim?.elapsedSec) {
+          setHeatStopwatchElapsedMs(Math.round(heatSim.activeHeatSim.elapsedSec * 1000));
+        }
+        if (!hasUserCustomizedHeatStopwatchRef.current) {
+          let simEl: HTMLElement | null = null;
+          if (typeof document !== 'undefined') {
+            simEl = document.querySelector('[data-popover-panel="simulation"]');
+          }
+          const simRect = simEl?.getBoundingClientRect();
+          const simW = simRect ? Math.round(simRect.width) : 304;
+          const simLeft = simRect ? Math.round(simRect.left) : simPanelPos.x;
+          const simBottom = simRect ? Math.round(simRect.bottom) : simPanelPos.y + 430;
+          // Offset slightly if pendulum stopwatch is already open so both can be seen simultaneously
+          const offsetY = showPendulumStopwatch ? 160 : 12;
+          const targetY = Math.max(16, Math.min(window.innerHeight - 200, simBottom + offsetY));
+          setHeatStopwatchWidth(simW);
+          setHeatStopwatchPos({ x: simLeft, y: targetY });
+        } else {
+          setHeatStopwatchPos((cur) => {
+            if (
+              cur.x > window.innerWidth - 60 ||
+              cur.y > window.innerHeight - 60 ||
+              cur.x < 10
+            ) {
+              return {
+                x: Math.max(10, Math.min(window.innerWidth - heatStopwatchWidth - 10, cur.x)),
                 y: Math.max(10, Math.min(window.innerHeight - 120, cur.y)),
               };
             }
@@ -20121,8 +20208,8 @@ export default function App() {
         forceSimAnimRef.current = null;
         setForceSimAnim(null);
       }
-      if (showStopwatch && sim.mode === 'pendulum') {
-        setStopwatchRunning(!nextPaused);
+      if (showPendulumStopwatch && sim.mode === 'pendulum') {
+        setPendulumStopwatchRunning(!nextPaused);
       }
       // Also sync static rod & bob strokes on pause!
       const curAng = pState ? pState.ang : (sim.pendulumAngleRad ?? Math.PI / 4);
@@ -20383,7 +20470,7 @@ export default function App() {
       );
       triggerForceSimStep(sim.id, 1, undefined, 620);
     } else if (action === 'toggle-stopwatch') {
-      toggleStopwatchWithSmartPlacement();
+      togglePendulumStopwatch();
     } else if (action.startsWith('set-rod-length:')) {
       const newL = Number(action.slice('set-rod-length:'.length));
       if (!isNaN(newL) && newL >= 69 && newL <= 460 && sim) {
@@ -45792,15 +45879,15 @@ export default function App() {
           const absA = Math.abs(curA);
           pState.av = 0;
           pState.lastTime = performance.now();
-          // When stopwatch is open, releasing the bob starts oscillation & starts the stopwatch automatically!
+          // When pendulum stopwatch is open, releasing the bob starts oscillation & starts the stopwatch automatically!
           const shouldStartOscillation =
-            showStopwatch || (!fSim.isPaused && (!fSim.anMode || fSim.anMode === 'none'));
+            showPendulumStopwatch || (!fSim.isPaused && (!fSim.anMode || fSim.anMode === 'none'));
           const shouldStayPaused = !shouldStartOscillation;
           if (absA > 0.04) {
             pState.maxAngleRad = absA;
-            if (showStopwatch) {
-              setStopwatchElapsedMs(0);
-              setStopwatchRunning(true);
+            if (showPendulumStopwatch) {
+              setPendulumStopwatchElapsedMs(0);
+              setPendulumStopwatchRunning(true);
             }
             updateActivePage(
               (p) => ({
@@ -45825,9 +45912,9 @@ export default function App() {
             pState.ang = 0;
             pState.av = 0;
             pState.maxAngleRad = 0;
-            if (showStopwatch) {
-              setStopwatchRunning(false);
-              setStopwatchElapsedMs(0);
+            if (showPendulumStopwatch) {
+              setPendulumStopwatchRunning(false);
+              setPendulumStopwatchElapsedMs(0);
             }
             updateActivePage(
               (p) => ({
@@ -63139,15 +63226,16 @@ export default function App() {
                                   <span>Δυνάμεις</span>
                                 </button>
 
-                                {/* Stopwatch (Χρονόμετρο) */}
+                                {/* Stopwatch (Χρονόμετρο) - Pendulum */}
                                 <button
                                   type="button"
-                                  onClick={toggleStopwatchWithSmartPlacement}
+                                  onClick={togglePendulumStopwatch}
                                   className={`w-full py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition shadow-2xs ${
-                                    showStopwatch
+                                    showPendulumStopwatch
                                       ? 'bg-[#234978] text-white shadow-xs'
                                       : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb]'
                                   }`}
+                                  title="Εμφάνιση / Απόκρυψη ψηφιακού χρονομέτρου για το εκκρεμές"
                                 >
                                   <span>Χρονόμετρο</span>
                                 </button>
@@ -63664,28 +63752,18 @@ export default function App() {
                     onToggleRun={() => {
                       const willRun = !heatSim.activeHeatSim?.isRunning;
                       heatSim.toggleRun();
-                      if (showStopwatch) {
-                        setStopwatchRunning(willRun);
-                      }
+                      setHeatStopwatchRunning(willRun);
                     }}
                     onReset={() => {
                       heatSim.resetSim();
-                      if (showStopwatch) {
-                        setStopwatchRunning(false);
-                        setStopwatchElapsedMs(0);
-                      }
+                      setHeatStopwatchRunning(false);
+                      setHeatStopwatchElapsedMs(0);
                     }}
                     onToggleGraph={heatSim.toggleGraph}
-                    showStopwatch={showStopwatch}
+                    showStopwatch={showHeatStopwatch}
                     ambientTemperature={heatSim.activeHeatSim?.ambientTemperature ?? 20}
                     onSetAmbientTemperature={heatSim.setAmbientTemperature}
-                    onToggleStopwatch={() => {
-                      if (!showStopwatch) {
-                        setStopwatchRunning(heatSim.activeHeatSim?.isRunning ?? false);
-                        setStopwatchElapsedMs(Math.round((heatSim.activeHeatSim?.elapsedSec || 0) * 1000));
-                      }
-                      toggleStopwatchWithSmartPlacement();
-                    }}
+                    onToggleStopwatch={toggleHeatStopwatch}
                     onToggleBurner={heatSim.toggleBurner}
                     onFillContainer={() => {
                       heatSim.handleFillContainer();
@@ -63729,41 +63807,66 @@ export default function App() {
               </div>
             )}
 
-            {/* Draggable & Uniformly Resizable Digital Stopwatch Widget (⏱️) */}
-            {showStopwatch && (
+            {/* Draggable & Uniformly Resizable Digital Stopwatch Widget for Pendulum (Εκκρεμές) */}
+            {showPendulumStopwatch && (
               <StopwatchWidget
-                pos={stopwatchPos}
-                width={stopwatchWidth}
-                running={stopwatchRunning}
-                elapsedMs={stopwatchElapsedMs}
-                onPosChange={setStopwatchPos}
-                onWidthChange={setStopwatchWidth}
-                onClose={() => setShowStopwatch(false)}
+                key="stopwatch-pendulum"
+                pos={pendulumStopwatchPos}
+                width={pendulumStopwatchWidth}
+                running={pendulumStopwatchRunning}
+                elapsedMs={pendulumStopwatchElapsedMs}
+                onPosChange={setPendulumStopwatchPos}
+                onWidthChange={setPendulumStopwatchWidth}
+                onClose={() => setShowPendulumStopwatch(false)}
+                sourceTitle="Εκκρεμές"
+                sourceBadgeColor="blue"
+                storagePrefix="pendulum"
                 onTogglePlayPause={() => {
-                  const nextRunning = !stopwatchRunning;
-                  setStopwatchRunning(nextRunning);
+                  const nextRunning = !pendulumStopwatchRunning;
+                  setPendulumStopwatchRunning(nextRunning);
                   const activeSim = getActiveForceSim(activePage);
                   if (activeSim && activeSim.mode === 'pendulum') {
                     handleForceSimAction(activeSim, nextRunning ? 'resume' : 'pause');
                   }
-                  if (simActiveCategory === 'heat' || (activePage.heatSims && activePage.heatSims.length > 0)) {
-                    if (nextRunning) {
-                      heatSim.startHeatingAndSim();
-                    } else {
-                      heatSim.pauseHeatingAndSim();
-                    }
-                  }
                 }}
                 onReset={() => {
-                  setStopwatchRunning(false);
-                  setStopwatchElapsedMs(0);
+                  setPendulumStopwatchRunning(false);
+                  setPendulumStopwatchElapsedMs(0);
                   const activeSim = getActiveForceSim(activePage);
                   if (activeSim && activeSim.mode === 'pendulum') {
                     handleForceSimAction(activeSim, 'reset-pendulum-initial');
                   }
-                  if (simActiveCategory === 'heat' || (activePage.heatSims && activePage.heatSims.length > 0)) {
-                    heatSim.resetSim();
+                }}
+              />
+            )}
+
+            {/* Draggable & Uniformly Resizable Digital Stopwatch Widget for Heat & Thermodynamics (Θερμότητα) */}
+            {showHeatStopwatch && (
+              <StopwatchWidget
+                key="stopwatch-heat"
+                pos={heatStopwatchPos}
+                width={heatStopwatchWidth}
+                running={heatStopwatchRunning}
+                elapsedMs={heatStopwatchElapsedMs}
+                onPosChange={setHeatStopwatchPos}
+                onWidthChange={setHeatStopwatchWidth}
+                onClose={() => setShowHeatStopwatch(false)}
+                sourceTitle="Θερμότητα"
+                sourceBadgeColor="amber"
+                storagePrefix="heat"
+                onTogglePlayPause={() => {
+                  const nextRunning = !heatStopwatchRunning;
+                  setHeatStopwatchRunning(nextRunning);
+                  if (nextRunning) {
+                    heatSim.startHeatingAndSim();
+                  } else {
+                    heatSim.pauseHeatingAndSim();
                   }
+                }}
+                onReset={() => {
+                  setHeatStopwatchRunning(false);
+                  setHeatStopwatchElapsedMs(0);
+                  heatSim.resetSim();
                 }}
               />
             )}
