@@ -7539,6 +7539,10 @@ export function getCircuitWireRailSnapDelta(
     return { snapDx, snapDy };
   }
 
+  if (movedComps.length >= 2) {
+    return { snapDx: 0, snapDy: 0 };
+  }
+
   const extWires = extractExternalCircuitWireLines(strokes, movingStrokeIds);
   if (extWires.length === 0) return { snapDx: 0, snapDy: 0 };
 
@@ -8365,6 +8369,65 @@ export function adaptCircuitWiresOnComponentMove(
 
   const movedKeySet = new Set(movedComps.map((c) => c.key));
   const unmovedComps = prevComps.filter((c) => !movedKeySet.has(c.key));
+
+  // When an entire connected multi-component circuit is being moved together (all components in its
+  // wire network are in `movedComps`), translate the circuit rigidly as a single cohesive unit
+  // (including any connected parallel-voltmeter or loop wire that might not have been in `movingStrokeIds`)
+  // without warping wires against unrelated lines on the page!
+  if (movedComps.length >= 2) {
+    const compStrokeIds = new Set<string>();
+    for (const c of prevComps) {
+      for (const id of c.strokeIds) compStrokeIds.add(id);
+    }
+    const movingWires = extractCircuitWireSegments(
+      prevStrokes,
+      (s) => movingStrokeIds.has(s.id),
+      compStrokeIds
+    );
+    const stationaryWires = extractCircuitWireSegments(
+      prevStrokes,
+      (s) => !movingStrokeIds.has(s.id),
+      compStrokeIds
+    );
+    const allWires = [...movingWires, ...stationaryWires];
+    const reachableFromMoved = findWiresReachableFromComponents(movedComps, allWires);
+    const reachableWireSegs = allWires.filter((w) =>
+      reachableFromMoved.has(`${w.stroke.id}:${w.p0Idx}`)
+    );
+    const hasConnectedUnmovedComp = unmovedComps.some((uc) =>
+      getCompTerminalList(uc).some((term) =>
+        reachableWireSegs.some(
+          (w) => pointToSegmentDist(term.x, term.y, w.p0.x, w.p0.y, w.p1.x, w.p1.y) <= 30
+        )
+      )
+    );
+    if (!hasConnectedUnmovedComp) {
+      const missedCircuitWireIds = new Set<string>();
+      for (const sw of stationaryWires) {
+        if (reachableFromMoved.has(`${sw.stroke.id}:${sw.p0Idx}`)) {
+          missedCircuitWireIds.add(sw.stroke.id);
+        }
+      }
+      if (missedCircuitWireIds.size === 0) {
+        return nextStrokes;
+      }
+      return nextStrokes.map((s) =>
+        !missedCircuitWireIds.has(s.id)
+          ? s
+          : {
+              ...s,
+              points: s.points.map((p) => ({
+                ...p,
+                x: p.x + dx,
+                y: p.y + dy,
+                cx: p.cx !== undefined ? p.cx + dx : undefined,
+                cy: p.cy !== undefined ? p.cy + dy : undefined,
+              })),
+            }
+      );
+    }
+  }
+
   const extWires = extractExternalCircuitWireLines(prevStrokes, movingStrokeIds);
   if (extWires.length === 0) {
     return adaptCircuitLoopFromSegments(

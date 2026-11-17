@@ -24009,6 +24009,124 @@ export default function App() {
     return out;
   };
 
+  /**
+   * Ensures that when a multi-component circuit (or registered `CircuitSimConfig`) is selected
+   * via Lasso or transformed via Resize / Move / Rotate, 100% of its connected wires (including
+   * parallel Voltmeter horizontal leads `hl`/`hr` and vertical risers `vl`/`vr`, and split switch wires)
+   * are included in the stroke set so no wire ever detaches or stays frozen behind.
+   */
+  const expandWholeCircuitStrokeIds = (page: NotePage, strokeIds: string[]): string[] => {
+    if (strokeIds.length === 0) return strokeIds;
+    const lockedLayerIds = new Set(
+      page.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+    );
+    const outSet = new Set<string>(strokeIds);
+
+    // 1. Check registered CircuitSimConfigs on this page
+    for (const sim of getValidCircuitSims(page)) {
+      const simSet = getSimExpandedStrokeSet(page, sim);
+      const simStrokes = page.strokes.filter(
+        (s) => simSet.has(s.id) && !lockedLayerIds.has(s.layerId)
+      );
+      if (simStrokes.length === 0) continue;
+      const simComps = getCircuitComponentsWithTerminals(simStrokes);
+      const matchedComps = simComps.filter((c) => c.strokeIds.some((id) => outSet.has(id)));
+      const matchedStrokeCount = simStrokes.filter((s) => outSet.has(s.id)).length;
+      if (
+        matchedComps.length >= 2 ||
+        (simComps.length === 1 && matchedComps.length === 1 && matchedStrokeCount >= 2) ||
+        matchedStrokeCount >= Math.max(3, Math.ceil(simStrokes.length * 0.35))
+      ) {
+        for (const s of simStrokes) {
+          outSet.add(s.id);
+        }
+      }
+    }
+
+    // 2. General connected-circuit & parallel-voltmeter wire expansion
+    const unlockedStrokes = page.strokes.filter((s) => !lockedLayerIds.has(s.layerId));
+    const allComps = getCircuitComponentsWithTerminals(unlockedStrokes);
+    const selComps = allComps.filter((c) => c.strokeIds.some((id) => outSet.has(id)));
+    for (const c of selComps) {
+      for (const sid of c.strokeIds) {
+        outSet.add(sid);
+      }
+    }
+
+    if (selComps.length >= 2) {
+      const compStrokeSet = new Set(allComps.flatMap((c) => c.strokeIds));
+      const wireCandidates = unlockedStrokes.filter(
+        (s) =>
+          !compStrokeSet.has(s.id) &&
+          isCircuitEligibleStroke(s) &&
+          (!s.shapeType || s.shapeType === 'line') &&
+          !s.arrowStart &&
+          !s.arrowEnd &&
+          s.points.length >= 2
+      );
+
+      // Explicitly include all 4 parallel branch wires (`hl`, `hr`, `vl`, `vr`) for every selected Voltmeter
+      for (const vm of selComps) {
+        if (vm.kind !== 'voltmeter') continue;
+        const vmTerms = [
+          vm.leftTerm,
+          vm.rightTerm,
+          ...(vm.topTerm ? [vm.topTerm] : []),
+          ...(vm.bottomTerm ? [vm.bottomTerm] : []),
+        ];
+        const outerHorizEndpoints: { x: number; y: number }[] = [];
+        for (const w of wireCandidates) {
+          const p0 = w.points[0];
+          const p1 = w.points[w.points.length - 1];
+          const d0 = Math.min(...vmTerms.map((t) => Math.hypot(p0.x - t.x, p0.y - t.y)));
+          const d1 = Math.min(...vmTerms.map((t) => Math.hypot(p1.x - t.x, p1.y - t.y)));
+          if (d0 <= 28 || d1 <= 28) {
+            outSet.add(w.id);
+            outerHorizEndpoints.push(d0 <= d1 ? p1 : p0);
+          }
+        }
+        for (const ep of outerHorizEndpoints) {
+          for (const w of wireCandidates) {
+            const p0 = w.points[0];
+            const p1 = w.points[w.points.length - 1];
+            if (
+              Math.hypot(p0.x - ep.x, p0.y - ep.y) <= 28 ||
+              Math.hypot(p1.x - ep.x, p1.y - ep.y) <= 28
+            ) {
+              outSet.add(w.id);
+            }
+          }
+        }
+      }
+
+      // Transitively include any circuit wire connected on both ends (or bridging) within the selected circuit
+      let added = true;
+      while (added) {
+        added = false;
+        const curSelStrokes = unlockedStrokes.filter((s) => outSet.has(s.id));
+        for (const w of wireCandidates) {
+          if (outSet.has(w.id)) continue;
+          const p0 = w.points[0];
+          const p1 = w.points[w.points.length - 1];
+          const isExplicitCircuitWire =
+            w.id.startsWith('st-wire-') || w.id.includes('par-vm-');
+          const touchesAtP0 = curSelStrokes.some((m) => isPointNearStroke(p0, m, 26, false));
+          const touchesAtP1 = curSelStrokes.some((m) => isPointNearStroke(p1, m, 26, false));
+          if (
+            (touchesAtP0 && touchesAtP1) ||
+            (isExplicitCircuitWire && (touchesAtP0 || touchesAtP1))
+          ) {
+            outSet.add(w.id);
+            added = true;
+          }
+        }
+      }
+    }
+
+    if (outSet.size === strokeIds.length) return strokeIds;
+    return page.strokes.filter((s) => outSet.has(s.id)).map((s) => s.id);
+  };
+
   const runScopedCircuitOperationOnPage = (
     page: NotePage,
     op: (subStrokes: StrokeObject[]) => StrokeObject[],
@@ -40316,12 +40434,13 @@ export default function App() {
       if (txt.groupId && !txt.groupId.startsWith('math-graph-grp-')) groupIds.add(txt.groupId);
     }
 
-    const finalStrokeIds = strokeList
+    const rawFinalStrokeIds = strokeList
       .filter(
         (s) =>
           directMatchedStrokes.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId))
       )
       .map((s) => s.id);
+    const finalStrokeIds = expandWholeCircuitStrokeIds(activePage, rawFinalStrokeIds);
 
     const finalImgIds = imgList
       .filter(
@@ -43136,40 +43255,58 @@ export default function App() {
                     rotation: Math.round(nextDeg),
                   };
                 }),
-                strokes: page.strokes.map((s) => {
-                  if (!selectedStrokeIds.includes(s.id)) return s;
-                  const nextRot = (s.rotation || 0) + dAngle;
-                  const cleanRot =
-                    Math.abs(nextRot - snappedTotalRad) < 1e-3 ? snappedTotalRad : nextRot;
-                  return {
-                    ...s,
-                    rotation: cleanRot,
-                    points: s.points.map((p) => {
-                      const rx = p.x - tf.centerX;
-                      const ry = p.y - tf.centerY;
-                      const nextPt: BezierPoint = {
-                        ...p,
-                        x: tf.centerX + rx * cosA - ry * sinA,
-                        y: tf.centerY + rx * sinA + ry * cosA,
-                      };
-                      if (p.cx !== undefined && p.cy !== undefined) {
-                        const rcx = p.cx - tf.centerX;
-                        const rcy = p.cy - tf.centerY;
-                        nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
-                        nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
-                      }
-                      if (p.inDx !== undefined && p.inDy !== undefined) {
-                        nextPt.inDx = p.inDx * cosA - p.inDy * sinA;
-                        nextPt.inDy = p.inDx * sinA + p.inDy * cosA;
-                      }
-                      if (p.outDx !== undefined && p.outDy !== undefined) {
-                        nextPt.outDx = p.outDx * cosA - p.outDy * sinA;
-                        nextPt.outDy = p.outDx * sinA + p.outDy * cosA;
-                      }
-                      return nextPt;
-                    }),
-                  };
-                }),
+                strokes: (() => {
+                  const effectiveRotSet = new Set(
+                    expandWholeCircuitStrokeIds(page, selectedStrokeIds)
+                  );
+                  return page.strokes.map((s) => {
+                    if (!effectiveRotSet.has(s.id)) return s;
+                    const nextRot = (s.rotation || 0) + dAngle;
+                    const cleanRot =
+                      Math.abs(nextRot - snappedTotalRad) < 1e-3 ? snappedTotalRad : nextRot;
+                    return {
+                      ...s,
+                      rotation: cleanRot,
+                      circuitBox: s.circuitBox
+                        ? {
+                            ...s.circuitBox,
+                            cx:
+                              tf.centerX +
+                              (s.circuitBox.cx - tf.centerX) * cosA -
+                              (s.circuitBox.termY - tf.centerY) * sinA,
+                            termY:
+                              tf.centerY +
+                              (s.circuitBox.cx - tf.centerX) * sinA +
+                              (s.circuitBox.termY - tf.centerY) * cosA,
+                          }
+                        : undefined,
+                      points: s.points.map((p) => {
+                        const rx = p.x - tf.centerX;
+                        const ry = p.y - tf.centerY;
+                        const nextPt: BezierPoint = {
+                          ...p,
+                          x: tf.centerX + rx * cosA - ry * sinA,
+                          y: tf.centerY + rx * sinA + ry * cosA,
+                        };
+                        if (p.cx !== undefined && p.cy !== undefined) {
+                          const rcx = p.cx - tf.centerX;
+                          const rcy = p.cy - tf.centerY;
+                          nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
+                          nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
+                        }
+                        if (p.inDx !== undefined && p.inDy !== undefined) {
+                          nextPt.inDx = p.inDx * cosA - p.inDy * sinA;
+                          nextPt.inDy = p.inDx * sinA + p.inDy * cosA;
+                        }
+                        if (p.outDx !== undefined && p.outDy !== undefined) {
+                          nextPt.outDx = p.outDx * cosA - p.outDy * sinA;
+                          nextPt.outDy = p.outDx * sinA + p.outDy * cosA;
+                        }
+                        return nextPt;
+                      }),
+                    };
+                  });
+                })(),
                 forceSims: (page.forceSims || []).map((fs) => {
                   const movesPivot =
                     Boolean(fs.primaryStrokeId && selectedStrokeIds.includes(fs.primaryStrokeId)) ||
@@ -43492,23 +43629,38 @@ export default function App() {
                     })),
                   };
                 }),
-                strokes: page.strokes.map((s) => {
-                  if (!selectedStrokeIds.includes(s.id)) return s;
-                  return {
-                    ...s,
-                    points: s.points.map((p) => ({
-                      ...p,
-                      x: tf.anchorX + (p.x - tf.anchorX) * scaleFactor,
-                      y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
-                      cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
-                      cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
-                      inDx: p.inDx !== undefined ? p.inDx * scaleFactor : undefined,
-                      inDy: p.inDy !== undefined ? p.inDy * scaleFactor : undefined,
-                      outDx: p.outDx !== undefined ? p.outDx * scaleFactor : undefined,
-                      outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
-                    })),
-                  };
-                }),
+                strokes: (() => {
+                  const effectiveScaleSet = new Set(
+                    expandWholeCircuitStrokeIds(page, selectedStrokeIds)
+                  );
+                  return page.strokes.map((s) => {
+                    if (!effectiveScaleSet.has(s.id)) return s;
+                    return {
+                      ...s,
+                      circuitBox: s.circuitBox
+                        ? {
+                            cx: tf.anchorX + (s.circuitBox.cx - tf.anchorX) * scaleFactor,
+                            termY: tf.anchorY + (s.circuitBox.termY - tf.anchorY) * scaleFactor,
+                            pictorialW: s.circuitBox.pictorialW * scaleFactor,
+                            pictorialH: s.circuitBox.pictorialH * scaleFactor,
+                            schematicW: s.circuitBox.schematicW * scaleFactor,
+                            schematicH: s.circuitBox.schematicH * scaleFactor,
+                          }
+                        : undefined,
+                      points: s.points.map((p) => ({
+                        ...p,
+                        x: tf.anchorX + (p.x - tf.anchorX) * scaleFactor,
+                        y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
+                        cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
+                        cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
+                        inDx: p.inDx !== undefined ? p.inDx * scaleFactor : undefined,
+                        inDy: p.inDy !== undefined ? p.inDy * scaleFactor : undefined,
+                        outDx: p.outDx !== undefined ? p.outDx * scaleFactor : undefined,
+                        outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
+                      })),
+                    };
+                  });
+                })(),
                 forceSims: (page.forceSims || []).map((fs) => {
                   const movesPivot =
                     Boolean(fs.primaryStrokeId && selectedStrokeIds.includes(fs.primaryStrokeId)) ||
@@ -43867,11 +44019,27 @@ export default function App() {
           }
 
           // Stretch selected Shapes / Strokes / Images / Groups along local X ('scale-x') or local Y ('scale-y') axis!
+          // For multi-component circuits, preserve 1:1 component aspect ratio & wire connections uniformly when dragging any side handle!
+          const expandedSideStretchIds = expandWholeCircuitStrokeIds(activePage, selectedStrokeIds);
+          const expandedSideStretchSet = new Set(expandedSideStretchIds);
+          const isWholeCircuitSideStretch =
+            effectiveImgIds.length === 0 &&
+            getCircuitComponentsWithTerminals(
+              activePage.strokes.filter((s) => expandedSideStretchSet.has(s.id))
+            ).length >= 2;
+          if (isWholeCircuitSideStretch) {
+            tf.curWidth = curW * scaleFactor;
+            tf.curHeight = curH * scaleFactor;
+          }
           const stretchPoint = (px: number, py: number) => {
             const dx = px - tf.anchorX;
             const dy = py - tf.anchorY;
-            const lx = (dx * cosF + dy * sinF) * (tf.mode === 'scale-x' ? scaleFactor : 1);
-            const ly = (-dx * sinF + dy * cosF) * (tf.mode === 'scale-y' ? scaleFactor : 1);
+            const lx =
+              (dx * cosF + dy * sinF) *
+              (isWholeCircuitSideStretch || tf.mode === 'scale-x' ? scaleFactor : 1);
+            const ly =
+              (-dx * sinF + dy * cosF) *
+              (isWholeCircuitSideStretch || tf.mode === 'scale-y' ? scaleFactor : 1);
             return {
               x: tf.anchorX + lx * cosF - ly * sinF,
               y: tf.anchorY + lx * sinF + ly * cosF,
@@ -43883,19 +44051,20 @@ export default function App() {
               const selMathGroupIds = new Set(
                 page.strokes
                   .filter(
-                    (s) => selectedStrokeIds.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                    (s) =>
+                      expandedSideStretchSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')
                   )
                   .map((s) => s.groupId as string)
               );
               const stretchedStrokes = page.strokes.map((s) => {
-                  if (!selectedStrokeIds.includes(s.id)) return s;
+                  if (!expandedSideStretchSet.has(s.id)) return s;
                   // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
                   if (s.shapeType === 'incline-block' && s.groupId) {
                     const companionWedge = page.strokes.find(
                       (ws) =>
                         ws.groupId === s.groupId &&
                         ws.shapeType === 'incline-wedge' &&
-                        selectedStrokeIds.includes(ws.id) &&
+                        expandedSideStretchSet.has(ws.id) &&
                         ws.points.length >= 3
                     );
                     if (companionWedge) {
@@ -43967,9 +44136,27 @@ export default function App() {
                       };
                     }
                   }
+                  const nextCircuitBox = s.circuitBox
+                    ? (() => {
+                        const cPt = stretchPoint(s.circuitBox.cx, s.circuitBox.termY);
+                        const sxF =
+                          isWholeCircuitSideStretch || tf.mode === 'scale-x' ? scaleFactor : 1;
+                        const syF =
+                          isWholeCircuitSideStretch || tf.mode === 'scale-y' ? scaleFactor : 1;
+                        return {
+                          cx: cPt.x,
+                          termY: cPt.y,
+                          pictorialW: s.circuitBox.pictorialW * sxF,
+                          pictorialH: s.circuitBox.pictorialH * syF,
+                          schematicW: s.circuitBox.schematicW * sxF,
+                          schematicH: s.circuitBox.schematicH * syF,
+                        };
+                      })()
+                    : undefined;
                   return {
                     ...s,
                     shapeType: nextShapeType,
+                    circuitBox: nextCircuitBox,
                     points: s.points.map((p) => {
                       const sp = stretchPoint(p.x, p.y);
                       const nextPt: BezierPoint = {
@@ -43997,13 +44184,14 @@ export default function App() {
                   };
                 });
               const adaptedStrokes =
+                !isWholeCircuitSideStretch &&
                 (tf.mode === 'scale-x' || tf.mode === 'scale-y') &&
-                selectedStrokeIds.length > 0 &&
+                expandedSideStretchIds.length > 0 &&
                 effectiveImgIds.length === 0
                   ? adaptCircuitWiresOnScaleTransform(
                       page.strokes,
                       stretchedStrokes,
-                      new Set(selectedStrokeIds),
+                      expandedSideStretchSet,
                       tf.mode
                     )
                   : stretchedStrokes;
@@ -45352,7 +45540,9 @@ export default function App() {
               fixedEnd?: 'start' | 'end';
             } | null = null;
             let unhookedToastMsg: string | null = null;
-            const movingStrokeSet = new Set<string>(targetStrokeIdList);
+            const movingStrokeSet = new Set<string>(
+              expandWholeCircuitStrokeIds(page, targetStrokeIdList)
+            );
             for (const sid of targetStrokeIdList) {
               const st = page.strokes.find((s) => s.id === sid);
               const isAttachedToSpringOrParent =
