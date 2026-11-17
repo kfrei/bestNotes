@@ -302,6 +302,73 @@ export function getContainersCurveMeta(
 }
 
 /**
+ * Offscreen Bitmap Cache for Blurred Submerged Containers, Thermometers & Badges.
+ * Why: Executing `ctx.filter = 'blur(...px)'` directly on the full-page Retina canvas (1600x2200px)
+ * 14 times per frame at 60fps causes severe GPU/CPU frame drops when scrolling.
+ * By rendering each blurred apparatus element onto a tiny tightly-sized offscreen canvas (e.g. 160x220px)
+ * and reusing the cached bitmap whenever its state hasn't changed, Gaussian blur passes drop from 840/sec to ~0/sec!
+ */
+interface OffscreenBlurCacheEntry {
+  canvas: HTMLCanvasElement;
+  key: string;
+}
+
+const offscreenBlurCache = new Map<string, OffscreenBlurCacheEntry>();
+
+function renderWithOffscreenBlurCache(
+  ctx: CanvasRenderingContext2D,
+  cacheId: string,
+  cacheKey: string,
+  w: number,
+  h: number,
+  padX: number,
+  padY: number,
+  drawFn: (offCtx: CanvasRenderingContext2D) => void
+): void {
+  if (typeof document === 'undefined') {
+    drawFn(ctx);
+    return;
+  }
+  const dpr = 2;
+  const logicalW = Math.max(1, Math.ceil(w + padX * 2));
+  const logicalH = Math.max(1, Math.ceil(h + padY * 2));
+  const physW = logicalW * dpr;
+  const physH = logicalH * dpr;
+
+  let entry = offscreenBlurCache.get(cacheId);
+  if (
+    !entry ||
+    entry.key !== cacheKey ||
+    entry.canvas.width !== physW ||
+    entry.canvas.height !== physH
+  ) {
+    const canvas = entry?.canvas || document.createElement('canvas');
+    if (canvas.width !== physW) canvas.width = physW;
+    if (canvas.height !== physH) canvas.height = physH;
+    const offCtx = canvas.getContext('2d');
+    if (!offCtx) {
+      drawFn(ctx);
+      return;
+    }
+    offCtx.save();
+    offCtx.clearRect(0, 0, physW, physH);
+    offCtx.scale(dpr, dpr);
+    offCtx.translate(padX, padY);
+    drawFn(offCtx);
+    offCtx.restore();
+
+    entry = { canvas, key: cacheKey };
+    if (offscreenBlurCache.size > 64 && !offscreenBlurCache.has(cacheId)) {
+      const oldestKey = offscreenBlurCache.keys().next().value;
+      if (oldestKey) offscreenBlurCache.delete(oldestKey);
+    }
+    offscreenBlurCache.set(cacheId, entry);
+  }
+
+  ctx.drawImage(entry.canvas, -padX, -padY, logicalW, logicalH);
+}
+
+/**
  * Renders a letter badge (A, B...) inside the container at the bottom-left of its base.
  * When the container is nested inside an outer container, the badge is softly blurred and
  * slightly translucent so it visually reads as being inside the outer vessel.
@@ -318,54 +385,70 @@ function renderContainerLetterBadge(
   outerLiquidType?: LiquidType,
   isDoubleNested: boolean = false
 ): void {
-  ctx.save();
-  if (isNestedInOuterVessel) {
-    if (isDoubleNested) {
-      if (isSubmergedInOuterLiquid) {
-        if (outerLiquidType === 'milk') {
-          ctx.globalAlpha = 0.22;
-          ctx.filter = 'blur(2.6px)';
-        } else if (outerLiquidType === 'oil') {
-          ctx.globalAlpha = 0.30;
-          ctx.filter = 'blur(2.2px)';
+  const drawBadge = (targetCtx: CanvasRenderingContext2D, cx: number, cy: number) => {
+    targetCtx.save();
+    if (isNestedInOuterVessel) {
+      if (isDoubleNested) {
+        if (isSubmergedInOuterLiquid) {
+          if (outerLiquidType === 'milk') {
+            targetCtx.globalAlpha = 0.22;
+            targetCtx.filter = 'blur(2.6px)';
+          } else if (outerLiquidType === 'oil') {
+            targetCtx.globalAlpha = 0.30;
+            targetCtx.filter = 'blur(2.2px)';
+          } else {
+            targetCtx.globalAlpha = 0.40;
+            targetCtx.filter = 'blur(1.9px)';
+          }
         } else {
-          ctx.globalAlpha = 0.40;
-          ctx.filter = 'blur(1.9px)';
+          targetCtx.globalAlpha = 0.50;
+          targetCtx.filter = 'blur(1.4px)';
+        }
+      } else if (isSubmergedInOuterLiquid) {
+        if (outerLiquidType === 'milk') {
+          targetCtx.globalAlpha = 0.36;
+          targetCtx.filter = 'blur(1.7px)';
+        } else if (outerLiquidType === 'oil') {
+          targetCtx.globalAlpha = 0.50;
+          targetCtx.filter = 'blur(1.35px)';
+        } else {
+          targetCtx.globalAlpha = 0.62;
+          targetCtx.filter = 'blur(1.1px)';
         }
       } else {
-        ctx.globalAlpha = 0.50;
-        ctx.filter = 'blur(1.4px)';
+        targetCtx.globalAlpha = 0.72;
+        targetCtx.filter = 'blur(0.85px)';
       }
-    } else if (isSubmergedInOuterLiquid) {
-      if (outerLiquidType === 'milk') {
-        ctx.globalAlpha = 0.36;
-        ctx.filter = 'blur(1.7px)';
-      } else if (outerLiquidType === 'oil') {
-        ctx.globalAlpha = 0.50;
-        ctx.filter = 'blur(1.35px)';
-      } else {
-        ctx.globalAlpha = 0.62;
-        ctx.filter = 'blur(1.1px)';
-      }
-    } else {
-      ctx.globalAlpha = 0.72;
-      ctx.filter = 'blur(0.85px)';
     }
-  }
-  const r = 7.5;
-  ctx.beginPath();
-  ctx.arc(badgeX, badgeY, r, 0, Math.PI * 2);
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.76)' : 'rgba(255, 255, 255, 0.88)';
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.35;
-  ctx.stroke();
+    const r = 7.5;
+    targetCtx.beginPath();
+    targetCtx.arc(cx, cy, r, 0, Math.PI * 2);
+    targetCtx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.76)' : 'rgba(255, 255, 255, 0.88)';
+    targetCtx.fill();
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = 1.35;
+    targetCtx.stroke();
 
-  ctx.fillStyle = color;
-  ctx.font = 'bold 9.5px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(letter, badgeX, badgeY + 0.5);
+    targetCtx.fillStyle = color;
+    targetCtx.font = 'bold 9.5px system-ui, sans-serif';
+    targetCtx.textAlign = 'center';
+    targetCtx.textBaseline = 'middle';
+    targetCtx.fillText(letter, cx, cy + 0.5);
+    targetCtx.restore();
+  };
+
+  if (!isNestedInOuterVessel) {
+    drawBadge(ctx, badgeX, badgeY);
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(badgeX - 10, badgeY - 10);
+  const badgeCacheId = `badge-${letter}`;
+  const badgeCacheKey = `${letter}|${color}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${isSubmergedInOuterLiquid ? 1 : 0}|${outerLiquidType || ''}`;
+  renderWithOffscreenBlurCache(ctx, badgeCacheId, badgeCacheKey, 20, 20, 8, 8, (offCtx) => {
+    drawBadge(offCtx, 10, 10);
+  });
   ctx.restore();
 }
 
@@ -1181,25 +1264,30 @@ export function getLiquidSurfaceProfile(
   const maxTilt = Math.min(36, Math.max(12, liquidH * 0.55));
 
   // Multi-staged Thermal Convection & Boiling Waves (kept natural and gentle across temperatures):
-  // Stage 1 (T <= 35°C): Calm fluid (~0.35px - 0.55px subtle life)
-  // Stage 2 (35°C - 60°C): Warm convection rolling (~0.55px - 1.45px)
-  // Stage 3 (60°C - 85°C): Active simmering (~1.45px - 3.1px)
+  // Stage 1 (T <= 35°C & not sloshing): Calm resting fluid (0px wave so resting containers don't burn CPU/GPU)
+  // Stage 2 (35°C - 60°C): Warm convection rolling (~0.45px - 1.35px)
+  // Stage 3 (60°C - 85°C): Active simmering (~1.35px - 3.1px)
   // Stage 4 (85°C - 98°C): Pre-boil ripples (~3.1px - 4.8px)
   // Stage 5 (98°C - 100°C+): Full rolling boil (~5.0px - 7.0px)
-  let baseAmp = 0.35;
-  if (temperature > 25 && temperature <= 35) {
-    baseAmp = 0.35 + ((temperature - 25) / 10) * 0.2;
-  } else if (temperature > 35 && temperature <= 60) {
-    baseAmp = 0.55 + ((temperature - 35) / 25) * 0.9;
+  const isActuallyBoiling = isBoiling || temperature >= 98;
+  if (temperature <= 35 && !isActuallyBoiling && Math.abs(sinAngle) < 0.001) {
+    return [
+      { x: leftX, y: liquidTopY },
+      { x: leftX + surfaceW, y: liquidTopY },
+    ];
+  }
+
+  let baseAmp = 0.25;
+  if (temperature > 35 && temperature <= 60) {
+    baseAmp = 0.45 + ((temperature - 35) / 25) * 0.9;
   } else if (temperature > 60 && temperature <= 85) {
-    baseAmp = 1.45 + ((temperature - 60) / 25) * 1.65;
+    baseAmp = 1.35 + ((temperature - 60) / 25) * 1.75;
   } else if (temperature > 85 && temperature <= 98) {
     baseAmp = 3.1 + ((temperature - 85) / 13) * 1.7;
   } else if (temperature > 98) {
     baseAmp = 4.8 + Math.min(2.2, ((temperature - 98) / 4) * 2.2);
   }
 
-  const isActuallyBoiling = isBoiling || temperature >= 98;
   if (isActuallyBoiling) {
     baseAmp = Math.max(baseAmp, 5.0 + Math.max(0.3, boilingIntensity) * 2.0);
   }
@@ -3097,146 +3185,160 @@ function renderBeaker(
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
         objId, objX, objY, layer, false
       );
-    } else if (basinWaterLocalY === null) {
-      // Nested inside an EMPTY outer container:
-      // Above outer container rim -> 100% sharp; Below outer container rim -> softened behind outer glass wall!
-      const bPad = 8;
-      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
-      const splitY = Math.max(y, basinRimLocalY);
-
-      if (splitY > y) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(-30, -30, w + 60, splitY + 30);
-        ctx.clip();
-        drawBeakerPhysical(
-          ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-          objId, objX, objY, layer, false
-        );
-        ctx.restore();
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(-30, splitY, w + 60, h - splitY + 40);
-      ctx.clip();
-      ctx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
-      ctx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
-      drawBeakerPhysical(
-        ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
-        state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-        objId, objX, objY, layer, true
-      );
-      ctx.restore();
     } else {
-      const bPad = 8;
-      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
-      const rimSplitY = Math.max(y, basinRimLocalY);
-      const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
-      const bcs = parentBasin!.containerState!;
-      const bBw = parentBasin!.width - bPad * 2;
-      const bBh = parentBasin!.height - bPad * 2 - 6;
-      const isBasin = parentBasin!.type === 'wide-basin';
-      const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
-      const bFillRatio = Math.max(0, Math.min(1.0, bcs.volumeMl / bcs.capacityMl));
-      const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
-      const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
-      const basinSurface = getLiquidSurfaceProfile(
-        parentBasin!.id,
-        parentBasin!.x,
-        parentBasin!.y,
-        bPad,
-        bBw,
-        bLiquidTopY,
-        bLiquidH,
-        bcs.temperature ?? 20,
-        bcs.isBoiling ?? false,
-        bcs.boilingIntensity ?? 0,
-        performance.now()
-      );
-      const dxBasin = parentBasin!.x - (objX ?? 0);
-      const dyBasin = parentBasin!.y - (objY ?? 0);
+      const bcs = parentBasin?.containerState;
+      const mySlosh = objId ? containerSloshMap.get(objId) : undefined;
+      const pSlosh = parentBasin?.id ? containerSloshMap.get(parentBasin.id) : undefined;
+      const isAnim =
+        (state?.temperature ?? 20) > 35 ||
+        Boolean(state?.isBoiling) ||
+        (bcs?.temperature ?? 20) > 35 ||
+        Boolean(bcs?.isBoiling) ||
+        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.001 || Math.abs(mySlosh.sloshAngularVel) > 0.003)) ||
+        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.001 || Math.abs(pSlosh.sloshAngularVel) > 0.003));
+      const animTick = isAnim ? Math.floor(performance.now() / 75) : 0;
+      const cacheId = `beaker-${objId || 'anon'}-${layer}`;
+      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${animTick}`;
 
-      // PASS 1: Emergent Part above the outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
-      if (rimSplitY > y) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(-30, -30, w + 60, rimSplitY + 30);
-        ctx.clip();
-        drawBeakerPhysical(
-          ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-          objId, objX, objY, layer, false
-        );
-        ctx.restore();
-      }
+      renderWithOffscreenBlurCache(ctx, cacheId, cacheKey, w, h, 30, 35, (offCtx) => {
+        if (basinWaterLocalY === null) {
+          // Nested inside an EMPTY outer container:
+          // Above outer container rim -> 100% sharp; Below outer container rim -> softened behind outer glass wall!
+          const bPad = 8;
+          const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+          const splitY = Math.max(y, basinRimLocalY);
 
-      // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
-      if (surfaceY > rimSplitY - 4) {
-        ctx.save();
-        ctx.beginPath();
-        if (basinSurface.length > 1) {
-          ctx.moveTo(-30, rimSplitY);
-          ctx.lineTo(w + 30, rimSplitY);
-          ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
-          for (let i = basinSurface.length - 1; i >= 0; i--) {
-            ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+          if (splitY > y) {
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(-30, -30, w + 60, splitY + 30);
+            offCtx.clip();
+            drawBeakerPhysical(
+              offCtx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+              objId, objX, objY, layer, false
+            );
+            offCtx.restore();
           }
-          ctx.lineTo(-30, basinSurface[0].y + dyBasin);
-          ctx.closePath();
+
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.rect(-30, splitY, w + 60, h - splitY + 40);
+          offCtx.clip();
+          offCtx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
+          offCtx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
+          drawBeakerPhysical(
+            offCtx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+            state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+            objId, objX, objY, layer, true
+          );
+          offCtx.restore();
         } else {
-          ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
+          const bPad = 8;
+          const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+          const rimSplitY = Math.max(y, basinRimLocalY);
+          const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
+          const bcsNonNull = parentBasin!.containerState!;
+          const bBw = parentBasin!.width - bPad * 2;
+          const bBh = parentBasin!.height - bPad * 2 - 6;
+          const isBasin = parentBasin!.type === 'wide-basin';
+          const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
+          const bFillRatio = Math.max(0, Math.min(1.0, bcsNonNull.volumeMl / bcsNonNull.capacityMl));
+          const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
+          const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
+          const basinSurface = getLiquidSurfaceProfile(
+            parentBasin!.id,
+            parentBasin!.x,
+            parentBasin!.y,
+            bPad,
+            bBw,
+            bLiquidTopY,
+            bLiquidH,
+            bcsNonNull.temperature ?? 20,
+            bcsNonNull.isBoiling ?? false,
+            bcsNonNull.boilingIntensity ?? 0,
+            performance.now()
+          );
+          const dxBasin = parentBasin!.x - (objX ?? 0);
+          const dyBasin = parentBasin!.y - (objY ?? 0);
+
+          // PASS 1: Emergent Part above the outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
+          if (rimSplitY > y) {
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(-30, -30, w + 60, rimSplitY + 30);
+            offCtx.clip();
+            drawBeakerPhysical(
+              offCtx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+              objId, objX, objY, layer, false
+            );
+            offCtx.restore();
+          }
+
+          // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
+          if (surfaceY > rimSplitY - 4) {
+            offCtx.save();
+            offCtx.beginPath();
+            if (basinSurface.length > 1) {
+              offCtx.moveTo(-30, rimSplitY);
+              offCtx.lineTo(w + 30, rimSplitY);
+              offCtx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+              for (let i = basinSurface.length - 1; i >= 0; i--) {
+                offCtx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+              }
+              offCtx.lineTo(-30, basinSurface[0].y + dyBasin);
+              offCtx.closePath();
+            } else {
+              offCtx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
+            }
+            offCtx.clip();
+            offCtx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
+            offCtx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
+            drawBeakerPhysical(
+              offCtx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+              objId, objX, objY, layer, true
+            );
+            offCtx.restore();
+          }
+
+          // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
+          offCtx.save();
+          offCtx.beginPath();
+          if (basinSurface.length > 1) {
+            offCtx.moveTo(-30, basinSurface[0].y + dyBasin);
+            for (let i = 0; i < basinSurface.length; i++) {
+              offCtx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+            }
+            offCtx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+            offCtx.lineTo(w + 30, h + 40);
+            offCtx.lineTo(-30, h + 40);
+            offCtx.closePath();
+          } else {
+            offCtx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+          }
+          offCtx.clip();
+
+          if (bcsNonNull.liquidType === 'milk') {
+            offCtx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
+            offCtx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
+          } else if (bcsNonNull.liquidType === 'oil') {
+            offCtx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
+            offCtx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
+          } else {
+            offCtx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
+            offCtx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
+          }
+
+          drawBeakerPhysical(
+            offCtx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+            state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+            objId, objX, objY, layer, true
+          );
+          offCtx.restore();
         }
-        ctx.clip();
-        ctx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
-        ctx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
-        drawBeakerPhysical(
-          ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-          objId, objX, objY, layer, true
-        );
-        ctx.restore();
-      }
-
-      // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
-      // "οσο ειναι μεσα στο νερο του αλλου να ειναι αρκετα πιο θολο και δυσδιακριτο, οπως κανουμε με το θερμομετρο"
-      ctx.save();
-      ctx.beginPath();
-      if (basinSurface.length > 1) {
-        ctx.moveTo(-30, basinSurface[0].y + dyBasin);
-        for (let i = 0; i < basinSurface.length; i++) {
-          ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
-        }
-        ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
-        ctx.lineTo(w + 30, h + 40);
-        ctx.lineTo(-30, h + 40);
-        ctx.closePath();
-      } else {
-        ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
-      }
-      ctx.clip();
-
-      if (bcs.liquidType === 'milk') {
-        // Milk: softened & diffused shadow ("πολύ θολό και άχνο", partially discernible)
-        ctx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
-        ctx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
-      } else if (bcs.liquidType === 'oil') {
-        // Oil: slightly more transparent, diffused & refracted in amber-olive oil
-        ctx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
-        ctx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
-      } else {
-        // Water: transparent liquid refraction (significantly deeper blur when Γ is nested inside Β inside Α)
-        ctx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
-        ctx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
-      }
-
-      drawBeakerPhysical(
-        ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
-        state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-        objId, objX, objY, layer, true
-      );
-      ctx.restore();
+      });
     }
 
     ctx.restore();
@@ -3841,136 +3943,154 @@ function renderFlask(
         ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
       );
-    } else if (basinWaterLocalY === null) {
-      const bPad = 8;
-      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
-      const splitY = Math.max(y, basinRimLocalY);
-
-      if (splitY > y) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(-30, -30, w + 60, splitY + 30);
-        ctx.clip();
-        drawFlaskPhysical(
-          ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
-        );
-        ctx.restore();
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(-30, splitY, w + 60, h - splitY + 40);
-      ctx.clip();
-      ctx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
-      ctx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
-      drawFlaskPhysical(
-        ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-        state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId,
-        objX, objY, layer, true
-      );
-      ctx.restore();
     } else {
-      const bPad = 8;
-      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
-      const rimSplitY = Math.max(y, basinRimLocalY);
-      const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
-      const bcs = parentBasin!.containerState!;
-      const bBw = parentBasin!.width - bPad * 2;
-      const bBh = parentBasin!.height - bPad * 2 - 6;
-      const isBasin = parentBasin!.type === 'wide-basin';
-      const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
-      const bFillRatio = Math.max(0, Math.min(1.0, bcs.volumeMl / bcs.capacityMl));
-      const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
-      const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
-      const basinSurface = getLiquidSurfaceProfile(
-        parentBasin!.id,
-        parentBasin!.x,
-        parentBasin!.y,
-        bPad,
-        bBw,
-        bLiquidTopY,
-        bLiquidH,
-        bcs.temperature ?? 20,
-        bcs.isBoiling ?? false,
-        bcs.boilingIntensity ?? 0,
-        performance.now()
-      );
-      const dxBasin = parentBasin!.x - (objX ?? 0);
-      const dyBasin = parentBasin!.y - (objY ?? 0);
+      const bcs = parentBasin?.containerState;
+      const mySlosh = objId ? containerSloshMap.get(objId) : undefined;
+      const pSlosh = parentBasin?.id ? containerSloshMap.get(parentBasin.id) : undefined;
+      const isAnim =
+        (state?.temperature ?? 20) > 35 ||
+        Boolean(state?.isBoiling) ||
+        (bcs?.temperature ?? 20) > 35 ||
+        Boolean(bcs?.isBoiling) ||
+        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.001 || Math.abs(mySlosh.sloshAngularVel) > 0.003)) ||
+        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.001 || Math.abs(pSlosh.sloshAngularVel) > 0.003));
+      const animTick = isAnim ? Math.floor(performance.now() / 75) : 0;
+      const cacheId = `flask-${objId || 'anon'}-${layer}`;
+      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${animTick}`;
 
-      // PASS 1: Emergent Part above outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
-      if (rimSplitY > y) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(-30, -30, w + 60, rimSplitY + 30);
-        ctx.clip();
-        drawFlaskPhysical(
-          ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
-        );
-        ctx.restore();
-      }
+      renderWithOffscreenBlurCache(ctx, cacheId, cacheKey, w, h, 30, 35, (offCtx) => {
+        if (basinWaterLocalY === null) {
+          const bPad = 8;
+          const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+          const splitY = Math.max(y, basinRimLocalY);
 
-      // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
-      if (surfaceY > rimSplitY - 4) {
-        ctx.save();
-        ctx.beginPath();
-        if (basinSurface.length > 1) {
-          ctx.moveTo(-30, rimSplitY);
-          ctx.lineTo(w + 30, rimSplitY);
-          ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
-          for (let i = basinSurface.length - 1; i >= 0; i--) {
-            ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+          if (splitY > y) {
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(-30, -30, w + 60, splitY + 30);
+            offCtx.clip();
+            drawFlaskPhysical(
+              offCtx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
+            );
+            offCtx.restore();
           }
-          ctx.lineTo(-30, basinSurface[0].y + dyBasin);
-          ctx.closePath();
+
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.rect(-30, splitY, w + 60, h - splitY + 40);
+          offCtx.clip();
+          offCtx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
+          offCtx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
+          drawFlaskPhysical(
+            offCtx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+            state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId,
+            objX, objY, layer, true
+          );
+          offCtx.restore();
         } else {
-          ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
+          const bPad = 8;
+          const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+          const rimSplitY = Math.max(y, basinRimLocalY);
+          const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
+          const bcsNonNull = parentBasin!.containerState!;
+          const bBw = parentBasin!.width - bPad * 2;
+          const bBh = parentBasin!.height - bPad * 2 - 6;
+          const isBasin = parentBasin!.type === 'wide-basin';
+          const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
+          const bFillRatio = Math.max(0, Math.min(1.0, bcsNonNull.volumeMl / bcsNonNull.capacityMl));
+          const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
+          const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
+          const basinSurface = getLiquidSurfaceProfile(
+            parentBasin!.id,
+            parentBasin!.x,
+            parentBasin!.y,
+            bPad,
+            bBw,
+            bLiquidTopY,
+            bLiquidH,
+            bcsNonNull.temperature ?? 20,
+            bcsNonNull.isBoiling ?? false,
+            bcsNonNull.boilingIntensity ?? 0,
+            performance.now()
+          );
+          const dxBasin = parentBasin!.x - (objX ?? 0);
+          const dyBasin = parentBasin!.y - (objY ?? 0);
+
+          // PASS 1: Emergent Part above outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
+          if (rimSplitY > y) {
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(-30, -30, w + 60, rimSplitY + 30);
+            offCtx.clip();
+            drawFlaskPhysical(
+              offCtx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
+            );
+            offCtx.restore();
+          }
+
+          // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
+          if (surfaceY > rimSplitY - 4) {
+            offCtx.save();
+            offCtx.beginPath();
+            if (basinSurface.length > 1) {
+              offCtx.moveTo(-30, rimSplitY);
+              offCtx.lineTo(w + 30, rimSplitY);
+              offCtx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+              for (let i = basinSurface.length - 1; i >= 0; i--) {
+                offCtx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+              }
+              offCtx.lineTo(-30, basinSurface[0].y + dyBasin);
+              offCtx.closePath();
+            } else {
+              offCtx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
+            }
+            offCtx.clip();
+            offCtx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
+            offCtx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
+            drawFlaskPhysical(
+              offCtx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+              state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
+            );
+            offCtx.restore();
+          }
+
+          // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
+          offCtx.save();
+          offCtx.beginPath();
+          if (basinSurface.length > 1) {
+            offCtx.moveTo(-30, basinSurface[0].y + dyBasin);
+            for (let i = 0; i < basinSurface.length; i++) {
+              offCtx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+            }
+            offCtx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+            offCtx.lineTo(w + 30, h + 40);
+            offCtx.lineTo(-30, h + 40);
+            offCtx.closePath();
+          } else {
+            offCtx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+          }
+          offCtx.clip();
+
+          if (bcsNonNull.liquidType === 'milk') {
+            offCtx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
+            offCtx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
+          } else if (bcsNonNull.liquidType === 'oil') {
+            offCtx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
+            offCtx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
+          } else {
+            offCtx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
+            offCtx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
+          }
+
+          drawFlaskPhysical(
+            offCtx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+            state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
+          );
+          offCtx.restore();
         }
-        ctx.clip();
-        ctx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
-        ctx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
-        drawFlaskPhysical(
-          ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
-        );
-        ctx.restore();
-      }
-
-      // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
-      ctx.save();
-      ctx.beginPath();
-      if (basinSurface.length > 1) {
-        ctx.moveTo(-30, basinSurface[0].y + dyBasin);
-        for (let i = 0; i < basinSurface.length; i++) {
-          ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
-        }
-        ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
-        ctx.lineTo(w + 30, h + 40);
-        ctx.lineTo(-30, h + 40);
-        ctx.closePath();
-      } else {
-        ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
-      }
-      ctx.clip();
-
-      if (bcs.liquidType === 'milk') {
-        ctx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
-        ctx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
-      } else if (bcs.liquidType === 'oil') {
-        ctx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
-        ctx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
-      } else {
-        ctx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
-        ctx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
-      }
-
-      drawFlaskPhysical(
-        ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-        state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
-      );
-      ctx.restore();
+      });
     }
 
     ctx.restore();
@@ -4216,86 +4336,51 @@ function renderThermometer(
     } else {
       const rimY = glassRimLocalY !== null ? Math.max(topY, glassRimLocalY) : topY;
       const surfaceY = isDippedInLiquid ? Math.max(rimY, submergedLocalY!) : h + 10;
+      const thermCacheId = `therm-${dippedContainer?.id || 'anon'}-${Math.round(_thermX ?? 0)}-${layer}`;
+      const thermCacheKey = `${w}|${h}|${Math.round(temp * 5)}|${strokeColor}|${isDark ? 1 : 0}|${Math.round(rimY)}|${Math.round(surfaceY)}|${dippedLiquidType}|${isNestedThermometer ? 1 : 0}|${isDoubleNestedThermometer ? 1 : 0}|${Math.round(outerRimLocalY ?? -1)}|${Math.round(outerSubmergedLocalY ?? -1)}|${outerLiquidType}`;
 
-      // PASS 1: Emergent Part above the container rim (in open air: from 0 down to rimY)
-      // Crystal clear, unblurred, full contrast
-      if (rimY > topY) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, w, rimY);
-        ctx.clip();
-        drawThermometerApparatus(
-          ctx,
-          cx,
-          topY,
-          botY,
-          stemW,
-          stemH,
-          bulbR,
-          temp,
-          tempFrac,
-          liquidTopY,
-          liquidColor,
-          strokeColor,
-          isDark,
-          false
-        );
-        ctx.restore();
-      }
-
-      // PASS 2: Inside the Empty Glass Part of the Container (from rimY down to surfaceY)
-      // Softened and blurred as if viewed through the front borosilicate glass wall ("σαν να βάλαμε μπροστά γυαλί")!
-      if (surfaceY > rimY) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, rimY, w, surfaceY - rimY);
-        ctx.clip();
-        ctx.globalAlpha = isDoubleNestedThermometer ? 0.28 : isNestedThermometer ? 0.36 : 0.50;
-        ctx.filter = isDoubleNestedThermometer
-          ? 'blur(3.8px)'
-          : isNestedThermometer
-          ? 'blur(3.2px)'
-          : 'blur(2.2px)';
-        drawThermometerApparatus(
-          ctx,
-          cx,
-          topY,
-          botY,
-          stemW,
-          stemH,
-          bulbR,
-          temp,
-          tempFrac,
-          liquidTopY,
-          liquidColor,
-          strokeColor,
-          isDark,
-          true
-        );
-        ctx.restore();
-      }
-
-      // PASS 3: Submerged Part inside Liquid (from surfaceY downwards)
-      if (isDippedInLiquid) {
-        if (!isNestedThermometer) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, surfaceY, w, h - surfaceY + 10);
-          ctx.clip();
-
-          if (dippedLiquidType === 'milk') {
-            ctx.globalAlpha = 0.22;
-            ctx.filter = 'blur(4.5px)';
-          } else if (dippedLiquidType === 'oil') {
-            ctx.globalAlpha = 0.32;
-            ctx.filter = 'blur(3.8px)';
-          } else {
-            ctx.globalAlpha = 0.48;
-            ctx.filter = 'blur(3.2px)';
-          }
-
+      renderWithOffscreenBlurCache(ctx, thermCacheId, thermCacheKey, w, h, 16, 16, (offCtx) => {
+        // PASS 1: Emergent Part above the container rim (in open air: from 0 down to rimY)
+        // Crystal clear, unblurred, full contrast
+        if (rimY > topY) {
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.rect(0, 0, w, rimY);
+          offCtx.clip();
           drawThermometerApparatus(
-            ctx,
+            offCtx,
+            cx,
+            topY,
+            botY,
+            stemW,
+            stemH,
+            bulbR,
+            temp,
+            tempFrac,
+            liquidTopY,
+            liquidColor,
+            strokeColor,
+            isDark,
+            false
+          );
+          offCtx.restore();
+        }
+
+        // PASS 2: Inside the Empty Glass Part of the Container (from rimY down to surfaceY)
+        // Softened and blurred as if viewed through the front borosilicate glass wall ("σαν να βάλαμε μπροστά γυαλί")!
+        if (surfaceY > rimY) {
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.rect(0, rimY, w, surfaceY - rimY);
+          offCtx.clip();
+          offCtx.globalAlpha = isDoubleNestedThermometer ? 0.28 : isNestedThermometer ? 0.36 : 0.50;
+          offCtx.filter = isDoubleNestedThermometer
+            ? 'blur(3.8px)'
+            : isNestedThermometer
+            ? 'blur(3.2px)'
+            : 'blur(2.2px)';
+          drawThermometerApparatus(
+            offCtx,
             cx,
             topY,
             botY,
@@ -4310,37 +4395,30 @@ function renderThermometer(
             isDark,
             true
           );
-          ctx.restore();
-        } else {
-          // Nested container (e.g. Thermometer B inside Container B, which sits inside Container A):
-          // Split at the outer container's rim / liquid surface so the upper submerged section is softened,
-          // and the lower section (viewed through BOTH containers & liquids) is significantly more blurred!
-          const outerBoundaryY =
-            outerRimLocalY !== null
-              ? Math.max(surfaceY, outerRimLocalY)
-              : outerSubmergedLocalY !== null
-              ? Math.max(surfaceY, outerSubmergedLocalY)
-              : surfaceY;
+          offCtx.restore();
+        }
 
-          if (outerBoundaryY > surfaceY) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(0, surfaceY, w, outerBoundaryY - surfaceY);
-            ctx.clip();
+        // PASS 3: Submerged Part inside Liquid (from surfaceY downwards)
+        if (isDippedInLiquid) {
+          if (!isNestedThermometer) {
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(0, surfaceY, w, h - surfaceY + 10);
+            offCtx.clip();
 
             if (dippedLiquidType === 'milk') {
-              ctx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.18;
-              ctx.filter = isDoubleNestedThermometer ? 'blur(5.8px)' : 'blur(4.8px)';
+              offCtx.globalAlpha = 0.22;
+              offCtx.filter = 'blur(4.5px)';
             } else if (dippedLiquidType === 'oil') {
-              ctx.globalAlpha = isDoubleNestedThermometer ? 0.18 : 0.26;
-              ctx.filter = isDoubleNestedThermometer ? 'blur(5.0px)' : 'blur(4.1px)';
+              offCtx.globalAlpha = 0.32;
+              offCtx.filter = 'blur(3.8px)';
             } else {
-              ctx.globalAlpha = isDoubleNestedThermometer ? 0.26 : 0.38;
-              ctx.filter = isDoubleNestedThermometer ? 'blur(4.6px)' : 'blur(3.7px)';
+              offCtx.globalAlpha = 0.48;
+              offCtx.filter = 'blur(3.2px)';
             }
 
             drawThermometerApparatus(
-              ctx,
+              offCtx,
               cx,
               topY,
               botY,
@@ -4355,44 +4433,87 @@ function renderThermometer(
               isDark,
               true
             );
-            ctx.restore();
-          }
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, outerBoundaryY, w, h - outerBoundaryY + 10);
-          ctx.clip();
-
-          if (dippedLiquidType === 'milk' || outerLiquidType === 'milk') {
-            ctx.globalAlpha = isDoubleNestedThermometer ? 0.08 : 0.12;
-            ctx.filter = isDoubleNestedThermometer ? 'blur(7.8px)' : 'blur(6.2px)';
-          } else if (dippedLiquidType === 'oil' || outerLiquidType === 'oil') {
-            ctx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.19;
-            ctx.filter = isDoubleNestedThermometer ? 'blur(7.0px)' : 'blur(5.4px)';
+            offCtx.restore();
           } else {
-            ctx.globalAlpha = isDoubleNestedThermometer ? 0.16 : 0.27;
-            ctx.filter = isDoubleNestedThermometer ? 'blur(6.4px)' : 'blur(4.8px)';
-          }
+            const outerBoundaryY =
+              outerRimLocalY !== null
+                ? Math.max(surfaceY, outerRimLocalY)
+                : outerSubmergedLocalY !== null
+                ? Math.max(surfaceY, outerSubmergedLocalY)
+                : surfaceY;
 
-          drawThermometerApparatus(
-            ctx,
-            cx,
-            topY,
-            botY,
-            stemW,
-            stemH,
-            bulbR,
-            temp,
-            tempFrac,
-            liquidTopY,
-            liquidColor,
-            strokeColor,
-            isDark,
-            true
-          );
-          ctx.restore();
+            if (outerBoundaryY > surfaceY) {
+              offCtx.save();
+              offCtx.beginPath();
+              offCtx.rect(0, surfaceY, w, outerBoundaryY - surfaceY);
+              offCtx.clip();
+
+              if (dippedLiquidType === 'milk') {
+                offCtx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.18;
+                offCtx.filter = isDoubleNestedThermometer ? 'blur(5.8px)' : 'blur(4.8px)';
+              } else if (dippedLiquidType === 'oil') {
+                offCtx.globalAlpha = isDoubleNestedThermometer ? 0.18 : 0.26;
+                offCtx.filter = isDoubleNestedThermometer ? 'blur(5.0px)' : 'blur(4.1px)';
+              } else {
+                offCtx.globalAlpha = isDoubleNestedThermometer ? 0.26 : 0.38;
+                offCtx.filter = isDoubleNestedThermometer ? 'blur(4.6px)' : 'blur(3.7px)';
+              }
+
+              drawThermometerApparatus(
+                offCtx,
+                cx,
+                topY,
+                botY,
+                stemW,
+                stemH,
+                bulbR,
+                temp,
+                tempFrac,
+                liquidTopY,
+                liquidColor,
+                strokeColor,
+                isDark,
+                true
+              );
+              offCtx.restore();
+            }
+
+            offCtx.save();
+            offCtx.beginPath();
+            offCtx.rect(0, outerBoundaryY, w, h - outerBoundaryY + 10);
+            offCtx.clip();
+
+            if (dippedLiquidType === 'milk' || outerLiquidType === 'milk') {
+              offCtx.globalAlpha = isDoubleNestedThermometer ? 0.08 : 0.12;
+              offCtx.filter = isDoubleNestedThermometer ? 'blur(7.8px)' : 'blur(6.2px)';
+            } else if (dippedLiquidType === 'oil' || outerLiquidType === 'oil') {
+              offCtx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.19;
+              offCtx.filter = isDoubleNestedThermometer ? 'blur(7.0px)' : 'blur(5.4px)';
+            } else {
+              offCtx.globalAlpha = isDoubleNestedThermometer ? 0.16 : 0.27;
+              offCtx.filter = isDoubleNestedThermometer ? 'blur(6.4px)' : 'blur(4.8px)';
+            }
+
+            drawThermometerApparatus(
+              offCtx,
+              cx,
+              topY,
+              botY,
+              stemW,
+              stemH,
+              bulbR,
+              temp,
+              tempFrac,
+              liquidTopY,
+              liquidColor,
+              strokeColor,
+              isDark,
+              true
+            );
+            offCtx.restore();
+          }
         }
-      }
+      });
     }
 
     ctx.restore();
@@ -4955,14 +5076,18 @@ function renderThermalGraph(
         liquidType === 'oil' ? 'Λάδι' : liquidType === 'milk' ? 'Γάλα' : 'Νερό';
       const currentTemp = container?.containerState?.temperature ?? 20;
 
-      // Draw Curve Line
+      // Draw Curve Line (decimated to <= 150 points for O(1) rendering speed on long 15+ min runs)
       ctx.save();
       ctx.beginPath();
       let started = false;
       let lastX: number | undefined;
       let lastY: number | undefined;
       let lastTempVal: number | undefined;
-      for (const pt of sim.history) {
+      const histLen = sim.history.length;
+      const stepStride = histLen > 150 ? Math.ceil(histLen / 150) : 1;
+      for (let hIdx = 0; hIdx < histLen; hIdx++) {
+        if (hIdx !== 0 && hIdx !== histLen - 1 && hIdx % stepStride !== 0) continue;
+        const pt = sim.history[hIdx];
         const tempVal =
           pt.tempsByContainerId?.[cId] ??
           (idx === 0 ? pt.temp1 : idx === 1 ? pt.temp2 : undefined);
@@ -5168,4 +5293,77 @@ function renderThermalGraph(
   ctx.stroke();
 
   ctx.restore();
+}
+
+/**
+ * Returns true ONLY when the Heat Simulation requires continuous 60fps animation frames:
+ * - Simulation is actively running (`isRunning === true`), OR
+ * - Any burner is ON (`isOn === true`), OR
+ * - Any container liquid is > 35°C or boiling (convection/waves/bubbles/steam), OR
+ * - Any container is actively sloshing from a drag/shake, OR
+ * - An ephemeral fill feedback badge (1.5s) is fading out.
+ * When false (e.g. paused at <= 35°C or resting), the simulation needs 0 continuous RAF frames!
+ */
+export function isHeatSimulationVisuallyActive(sim: HeatSimConfig | null | undefined): boolean {
+  if (!sim) return false;
+  if (sim.isRunning) return true;
+  const now = performance.now();
+  for (const obj of sim.objects) {
+    if (obj.type === 'burner' && obj.burnerState?.isOn) return true;
+    if (obj.containerState && (obj.containerState.volumeMl ?? 0) > 0) {
+      if ((obj.containerState.temperature ?? 20) > 50 || obj.containerState.isBoiling) {
+        return true;
+      }
+      const slosh = containerSloshMap.get(obj.id);
+      if (
+        slosh &&
+        (Math.abs(slosh.sloshAngle) > 0.001 ||
+          Math.abs(slosh.sloshAngularVel) > 0.003 ||
+          Math.abs(slosh.externalVx) > 0.8)
+      ) {
+        return true;
+      }
+      const fb = containerFillFeedbackMap.get(obj.id);
+      if (fb && now - fb.startTime < 1550) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Computes the logical bounding box of a Heat Simulation (all apparatus objects + visible graphs)
+ * on the page so offscreen simulations can skip canvas rendering when scrolled out of view.
+ */
+export function getHeatSimulationWorldBounds(
+  sim: HeatSimConfig
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const obj of sim.objects) {
+    minX = Math.min(minX, obj.x - 40);
+    minY = Math.min(minY, obj.y - 60);
+    maxX = Math.max(maxX, obj.x + obj.width + 45);
+    maxY = Math.max(maxY, obj.y + obj.height + 40);
+  }
+
+  const graphs =
+    sim.graphs && sim.graphs.length > 0
+      ? sim.graphs.filter((g) => g.visible)
+      : sim.graph?.visible
+      ? [sim.graph]
+      : [];
+  for (const g of graphs) {
+    minX = Math.min(minX, g.x - 20);
+    minY = Math.min(minY, g.y - 20);
+    maxX = Math.max(maxX, g.x + g.width + 20);
+    maxY = Math.max(maxY, g.y + g.height + 20);
+  }
+
+  if (!Number.isFinite(minX)) return null;
+  return { minX, minY, maxX, maxY };
 }

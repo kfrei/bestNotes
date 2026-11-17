@@ -282,6 +282,8 @@ import {
   HeatLiquidConfigModal,
   HeatGraphChoiceModal,
   renderHeatSimulation,
+  isHeatSimulationVisuallyActive,
+  getHeatSimulationWorldBounds,
   stepHeatSimulation,
   createHeatObjectFromRecognition,
   HeatSimConfig,
@@ -27375,8 +27377,137 @@ export default function App() {
     autoSwitchHitRef.current = activeHit;
 
     let rafId = 0;
+    let lastHeatIdleSig = '';
 
     const renderSimFrame = (now: number) => {
+      const hasHeatSims = Boolean(activePage.heatSims && activePage.heatSims.length > 0);
+      const isOtherSimAnimating =
+        isLivePdfMode ||
+        isSimulating ||
+        (isSpringSimulating && !isSpringPaused) ||
+        hasProposal ||
+        springSettleAnim !== null ||
+        springPhaseShiftAnim !== null ||
+        hookeLineAnim !== null ||
+        forceSimAnim !== null ||
+        forceSimAnimRef.current !== null ||
+        hasAtomOverlay ||
+        atomReactionAnim !== null ||
+        atomReactionAnimRef.current !== null ||
+        Boolean(activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
+        Boolean(activeForceSim) ||
+        (activePage.springSims && activePage.springSims.length > 0) ||
+        (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560);
+
+      // Fast-path for pages that ONLY contain a Heat Simulation:
+      // 1. Always advance physics & stopwatch in real time when running (even if scrolled off-screen).
+      // 2. If the Heat Simulation is scrolled outside the visible viewport, skip canvas redrawing completely!
+      // 3. If paused/idle (no flame, temp <= 50°C, not sloshing, not dragging) and nothing changed since the last frame,
+      //    skip clearing & redrawing the 2x Retina canvas so scrolling is 100% zero-overhead (120fps)!
+      if (hasHeatSims && !isOtherSimAnimating) {
+        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatSim.activeHeatSim?.isRunning) {
+          heatSim.pauseHeatingAndSim();
+        }
+        if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
+          const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
+          heatSim.stepPhysicsFrame(rawHDt);
+        }
+        const syncedLiveSim = (heatSim as any).getLiveSim
+          ? (heatSim as any).getLiveSim()
+          : heatSim.activeHeatSim;
+        if (syncedLiveSim && typeof syncedLiveSim.elapsedSec === 'number') {
+          const simMs = Math.round(syncedLiveSim.elapsedSec * 1000);
+          setHeatStopwatchElapsedMs((prev) => (Math.abs(prev - simMs) >= 50 ? simMs : prev));
+        }
+        heatSimLastFrameRef.current = now;
+
+        const wCheck = canvas.width / CANVAS_DPR;
+        const hCheck = canvas.height / CANVAS_DPR;
+
+        // Viewport visibility check: skip GPU/Canvas work when the Heat Simulation is scrolled out of view
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0 && typeof window !== 'undefined') {
+          const scaleX = rect.width / Math.max(1, wCheck);
+          const scaleY = rect.height / Math.max(1, hCheck);
+          let anyVisible = false;
+          for (const hSim of activePage.heatSims!) {
+            const liveSim = ((heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim) || hSim;
+            const bounds = getHeatSimulationWorldBounds(liveSim);
+            if (!bounds) continue;
+            const screenTop = rect.top + bounds.minY * scaleY;
+            const screenBottom = rect.top + bounds.maxY * scaleY;
+            const screenLeft = rect.left + bounds.minX * scaleX;
+            const screenRight = rect.left + bounds.maxX * scaleX;
+            if (
+              screenBottom >= -60 &&
+              screenTop <= window.innerHeight + 60 &&
+              screenRight >= -60 &&
+              screenLeft <= window.innerWidth + 60
+            ) {
+              anyVisible = true;
+              break;
+            }
+          }
+          if (!anyVisible) {
+            rafId = window.requestAnimationFrame(renderSimFrame);
+            return;
+          }
+        }
+
+        // Idle & low-frequency frame deduplication when no 60fps fluid/flame animation is active
+        const primaryLive =
+          ((heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : activePage.heatSims![0]) ||
+          activePage.heatSims![0];
+        const has60FpsFluidOrFlame =
+          heatSim.isDragging() ||
+          isHeatSimulationVisuallyActive(
+            primaryLive ? { ...primaryLive, isRunning: false } : null
+          );
+
+        if (!has60FpsFluidOrFlame) {
+          const hoverPt = heatSim.getHoverPoint();
+          const selectActive =
+            activeTool === 'lasso' ||
+            activeTool === 'shape' ||
+            activeTool === 'magnetic-lasso' ||
+            (showSimulationPanel && simActiveCategory === 'heat');
+          const timeQuant = primaryLive?.isRunning
+            ? Math.floor((primaryLive.elapsedSec || 0) * 12)
+            : Math.round((primaryLive?.elapsedSec || 0) * 100);
+          const sig = `${primaryLive?.id || ''}|${timeQuant}|${primaryLive?.ambientTemperature ?? 20}|${
+            primaryLive?.selectedObjectId || ''
+          }|${(primaryLive?.selectedObjectIds || []).join(',')}|${selectActive ? 1 : 0}|${
+            hoverPt ? `${Math.round(hoverPt.x)},${Math.round(hoverPt.y)}` : ''
+          }|${(primaryLive?.objects || [])
+            .map(
+              (o: any) =>
+                `${o.id}:${Math.round(o.x)},${Math.round(o.y)},${o.width},${o.height},${
+                  o.strokeColor || ''
+                },${Math.round(o.containerState?.volumeMl ?? 0)},${
+                  o.containerState?.liquidType || ''
+                },${(o.containerState?.temperature ?? 0).toFixed(1)},${(
+                  o.thermometerState?.temperature ?? 0
+                ).toFixed(1)},${o.burnerState?.isOn ? 1 : 0}`
+            )
+            .join(';')}|${(primaryLive?.graphs || (primaryLive?.graph ? [primaryLive.graph] : []))
+            .map(
+              (g: any) =>
+                `${g.visible ? 1 : 0},${Math.round(g.x)},${Math.round(g.y)},${g.width},${
+                  g.height
+                },${(g.boundContainerIds || []).join('+')}`
+            )
+            .join(';')}`;
+
+          if (sig === lastHeatIdleSig) {
+            rafId = window.requestAnimationFrame(renderSimFrame);
+            return;
+          }
+          lastHeatIdleSig = sig;
+        } else {
+          lastHeatIdleSig = '';
+        }
+      }
+
       const elapsedSec = (now - simAnimOriginMsRef.current) / 1000;
       const w = canvas.width / CANVAS_DPR;
       const h = canvas.height / CANVAS_DPR;
@@ -33659,7 +33790,7 @@ export default function App() {
         if ((!showHeatStopwatch || !heatStopwatchRunning) && heatSim.activeHeatSim?.isRunning) {
           heatSim.pauseHeatingAndSim();
         }
-        if (heatSimLastFrameRef.current !== null) {
+        if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
           const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
           heatSim.stepPhysicsFrame(rawHDt);
         }
