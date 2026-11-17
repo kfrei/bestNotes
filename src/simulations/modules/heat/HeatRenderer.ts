@@ -169,6 +169,7 @@ export interface ContainerCurveMeta {
   id: string;
   letter: string;
   color: string;
+  outlineColor: string;
   liquidType: string;
   type: string;
   temperature: number;
@@ -182,37 +183,100 @@ export function getContainersCurveMeta(
     (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
   );
 
-  // Containers that currently contain liquid (volumeMl > 0)
-  const filledContainers = containers.filter(
-    (c) => (c.containerState?.volumeMl || 0) > 0
-  );
+  // Compute nesting depth for each container (0 = outer/root, 1 = inside outer, 2 = inside inner...)
+  const getNestingDepth = (c: HeatObject): number => {
+    let depth = 0;
+    let curr: HeatObject | undefined = c;
+    const visited = new Set<string>();
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      const parent = findParentVessel(curr, sim.objects);
+      if (parent) {
+        depth++;
+        curr = parent;
+      } else {
+        break;
+      }
+    }
+    return depth;
+  };
+
+  // Nested containers sorted by nesting depth ascending (1st nested = Β, 2nd nested = Γ, 3rd = Δ)
+  const nestedContainers = containers
+    .filter((c) => getNestingDepth(c) > 0)
+    .sort((a, b) => {
+      const da = getNestingDepth(a);
+      const db = getNestingDepth(b);
+      if (da !== db) return da - db;
+      return b.width - a.width;
+    });
+
+  // Containers that currently contain liquid (volumeMl > 0), sorted so outer (Α) is first, then nested (Β, Γ...)
+  const filledContainers = containers
+    .filter((c) => (c.containerState?.volumeMl || 0) > 0)
+    .sort((a, b) => {
+      const da = getNestingDepth(a);
+      const db = getNestingDepth(b);
+      if (da !== db) return da - db;
+      return b.width - a.width;
+    });
+
+  // Distinct high-contrast outline & curve colors for nested containers:
+  // 1st nested (Β): Purple (#7c3aed), 2nd nested (Γ): Green (#16a34a), 3rd nested (Δ): Red (#dc2626)
+  const nestedPalette = isDark
+    ? ['#a78bfa', '#4ade80', '#f87171', '#fbbf24']
+    : ['#7c3aed', '#16a34a', '#dc2626', '#d97706'];
+
+  const defaultOuterOutline = isDark ? '#f8fafc' : '#111827';
+  const defaultOuterCurve = isDark ? '#e2e8f0' : '#1e293b';
 
   // Greek capital letters: Α, Β, Γ, Δ, Ε
   const letters = ['Α', 'Β', 'Γ', 'Δ', 'Ε'];
-  const liquidCounts: Record<string, number> = {};
   const metaMap = new Map<string, ContainerCurveMeta>();
 
   // Only assign letters and badges if there are 2 or more containers with liquid!
   const hasMultipleFilled = filledContainers.length >= 2;
+  const hasAnyNested = nestedContainers.length > 0;
+
+  let nonNestedFilledIdx = 0;
 
   containers.forEach((c) => {
     const isFilled = (c.containerState?.volumeMl || 0) > 0;
     const liquidType = c.containerState?.liquidType || 'water';
-    const count = liquidCounts[liquidType] || 0;
-    if (isFilled) {
-      liquidCounts[liquidType] = count + 1;
-    }
+    const nestedIdx = nestedContainers.findIndex((nc) => nc.id === c.id);
 
-    let color = '#0284c7';
-    if (liquidType === 'oil') {
-      color = count === 0 ? '#65a30d' : '#4d7c0f';
-    } else if (liquidType === 'milk') {
-      color = count === 0
-        ? (isDark ? '#cbd5e1' : '#64748b')
-        : (isDark ? '#94a3b8' : '#475569');
+    let outlineColor = c.strokeColor || defaultOuterOutline;
+    let color = c.strokeColor || defaultOuterCurve;
+
+    if (nestedIdx >= 0) {
+      // Immediately assign distinct outline & curve color when a container is placed inside another!
+      const nestedCol = c.strokeColor || nestedPalette[nestedIdx % nestedPalette.length];
+      outlineColor = nestedCol;
+      color = nestedCol;
+    } else if (hasAnyNested || hasMultipleFilled) {
+      // Outer / root container (Α): keeps its black/dark outline and uses matching dark charcoal on the graph
+      if (!hasAnyNested && isFilled && nonNestedFilledIdx > 0) {
+        const distinctCol =
+          c.strokeColor || nestedPalette[(nonNestedFilledIdx - 1) % nestedPalette.length];
+        outlineColor = distinctCol;
+        color = distinctCol;
+      } else {
+        outlineColor = c.strokeColor || defaultOuterOutline;
+        color = c.strokeColor || defaultOuterCurve;
+      }
+      if (isFilled) nonNestedFilledIdx++;
     } else {
-      // Water
-      color = count === 0 ? '#0284c7' : '#1d4ed8';
+      // Single standalone container with no nesting
+      outlineColor = c.strokeColor || defaultOuterOutline;
+      if (c.strokeColor) {
+        color = c.strokeColor;
+      } else if (liquidType === 'oil') {
+        color = '#65a30d';
+      } else if (liquidType === 'milk') {
+        color = isDark ? '#cbd5e1' : '#64748b';
+      } else {
+        color = '#0284c7';
+      }
     }
 
     let letter = '';
@@ -227,6 +291,7 @@ export function getContainersCurveMeta(
       id: c.id,
       letter,
       color,
+      outlineColor,
       liquidType,
       type: c.type,
       temperature: c.containerState?.temperature ?? 20,
@@ -313,10 +378,11 @@ function renderContainerFrontRim(
   obj: HeatObject,
   isDark: boolean,
   crossingThermometers: HeatObject[],
-  hasCrossingNestedVessel: boolean = false
+  hasCrossingNestedVessel: boolean = false,
+  customOutlineColor?: string
 ): void {
   if (crossingThermometers.length === 0 && !hasCrossingNestedVessel) return;
-  const strokeColor = obj.strokeColor || (isDark ? '#f8fafc' : '#111827');
+  const strokeColor = customOutlineColor || obj.strokeColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = obj.width - pad * 2;
   const x = pad;
@@ -391,12 +457,15 @@ function renderContainerFrontRim(
     ctx.stroke();
 
     // Rolled glass lip bead line right beneath top rim
+    ctx.save();
     ctx.beginPath();
     ctx.moveTo(x, y + beadH);
     ctx.lineTo(x + bw, y + beadH);
-    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.45)' : 'rgba(17, 24, 39, 0.40)';
+    ctx.strokeStyle = strokeColor;
+    ctx.globalAlpha *= 0.42;
     ctx.lineWidth = 1.3;
     ctx.stroke();
+    ctx.restore();
   } else if (obj.type === 'flask') {
     const cx = x + bw / 2;
     const neckW = bw * 0.30;
@@ -553,7 +622,7 @@ export function renderHeatSimulation(
           isDark,
           isSelected,
           layer,
-          obj.strokeColor,
+          curveMeta?.outlineColor || obj.strokeColor,
           obj.id,
           obj.x,
           obj.y,
@@ -578,7 +647,7 @@ export function renderHeatSimulation(
           isDark,
           isSelected,
           layer,
-          obj.strokeColor,
+          curveMeta?.outlineColor || obj.strokeColor,
           obj.id,
           obj.x,
           obj.y,
@@ -602,7 +671,7 @@ export function renderHeatSimulation(
           isDark,
           isSelected,
           layer,
-          obj.strokeColor,
+          curveMeta?.outlineColor || obj.strokeColor,
           obj.id,
           obj.x,
           obj.y,
@@ -618,6 +687,7 @@ export function renderHeatSimulation(
         const dipped = findDippedVesselForThermometer(obj, sim.objects, false);
         const outerDipped = dipped ? findParentVessel(dipped, sim.objects) : undefined;
         const outerMostDipped = outerDipped ? findParentVessel(outerDipped, sim.objects) : undefined;
+        const dippedMeta = dipped ? metaMap.get(dipped.id) : undefined;
         renderThermometer(
           ctx,
           obj.width,
@@ -626,7 +696,7 @@ export function renderHeatSimulation(
           isDark,
           isSelected,
           layer,
-          obj.strokeColor,
+          obj.strokeColor || dippedMeta?.outlineColor,
           dipped,
           obj.x,
           obj.y,
@@ -722,7 +792,14 @@ export function renderHeatSimulation(
       });
 
       if (crossingThermometers.length > 0 || hasCrossingNestedVessel) {
-        renderContainerFrontRim(ctx, c, isDark, crossingThermometers, hasCrossingNestedVessel);
+        renderContainerFrontRim(
+          ctx,
+          c,
+          isDark,
+          crossingThermometers,
+          hasCrossingNestedVessel,
+          metaMap.get(c.id)?.outlineColor
+        );
       }
     }
   }
@@ -2409,7 +2486,8 @@ function drawDropletIcon(
   cy: number,
   isDark: boolean,
   isIntense: boolean,
-  liquidType: LiquidType = 'water'
+  liquidType: LiquidType = 'water',
+  customOutlineColor?: string
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
@@ -2460,6 +2538,10 @@ function drawDropletIcon(
       fillCol = isDark ? 'rgba(56, 189, 248, 0.12)' : 'rgba(186, 230, 253, 0.22)';
       strokeCol = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
     }
+  }
+
+  if (customOutlineColor) {
+    strokeCol = customOutlineColor;
   }
 
   ctx.fillStyle = fillCol;
@@ -2556,7 +2638,8 @@ function drawPencilIcon(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  isDark: boolean
+  isDark: boolean,
+  customOutlineColor?: string
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
@@ -2572,7 +2655,7 @@ function drawPencilIcon(
   ctx.moveTo(-2.2, -2.1);
   ctx.lineTo(2.2, -2.1);
 
-  ctx.strokeStyle = isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569';
+  ctx.strokeStyle = customOutlineColor || (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
   ctx.lineWidth = 1.3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -2589,7 +2672,8 @@ function drawGraphIcon(
   cx: number,
   cy: number,
   isDark: boolean,
-  isActive: boolean
+  isActive: boolean,
+  customOutlineColor?: string
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
@@ -2597,7 +2681,7 @@ function drawGraphIcon(
   if (isActive) {
     ctx.beginPath();
     ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
-    ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.32)' : 'rgba(99, 102, 241, 0.20)';
+    ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.28)' : 'rgba(99, 102, 241, 0.16)';
     ctx.fill();
   }
 
@@ -2608,10 +2692,18 @@ function drawGraphIcon(
   ctx.lineTo(0.5, 2.2);
   ctx.lineTo(5.5, -4.5);
 
-  ctx.strokeStyle = isActive
-    ? (isDark ? '#818cf8' : '#4f46e5')
-    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
-  ctx.lineWidth = 1.35;
+  const iconStroke =
+    customOutlineColor ||
+    (isActive
+      ? isDark
+        ? '#818cf8'
+        : '#4f46e5'
+      : isDark
+      ? 'rgba(241, 245, 249, 0.85)'
+      : '#475569');
+
+  ctx.strokeStyle = iconStroke;
+  ctx.lineWidth = isActive ? 1.5 : 1.35;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.stroke();
@@ -2619,9 +2711,7 @@ function drawGraphIcon(
   // Small dot on apex
   ctx.beginPath();
   ctx.arc(5.5, -4.5, 1.1, 0, Math.PI * 2);
-  ctx.fillStyle = isActive
-    ? (isDark ? '#818cf8' : '#4f46e5')
-    : (isDark ? 'rgba(241, 245, 249, 0.85)' : '#475569');
+  ctx.fillStyle = iconStroke;
   ctx.fill();
 
   ctx.restore();
@@ -2642,7 +2732,8 @@ function renderContainerActionButtons(
   isGraphActive?: boolean,
   isSubmerged?: boolean,
   containerType?: string,
-  outerRimLocalY?: number | null
+  outerRimLocalY?: number | null,
+  customOutlineColor?: string
 ): void {
   const { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnHalf, glassRightX } =
     getContainerActionButtonsLocalPos(w, h, isSubmerged, containerType, outerRimLocalY);
@@ -2654,14 +2745,14 @@ function renderContainerActionButtons(
 
   const frameGrey = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(156, 163, 175, 0.68)';
 
-  // 1. Standalone Droplet Icon (matches liquid contents, soft and faint)
-  drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense, liquidType);
+  // 1. Standalone Droplet Icon (interior fill matches liquid contents; outline matches container outline)
+  drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense, liquidType, customOutlineColor);
 
-  // 2. Standalone Pencil Icon (darker grey line art)
-  drawPencilIcon(ctx, pencilX, pencilY, isDark);
+  // 2. Standalone Pencil Icon (outline matches container outline)
+  drawPencilIcon(ctx, pencilX, pencilY, isDark, customOutlineColor);
 
-  // 3. Standalone Graph Icon (diagonal line with zig-zag curve above pencil)
-  drawGraphIcon(ctx, graphX, graphY, isDark, Boolean(isGraphActive));
+  // 3. Standalone Graph Icon (diagonal line with zig-zag curve above pencil; outline matches container outline)
+  drawGraphIcon(ctx, graphX, graphY, isDark, Boolean(isGraphActive), customOutlineColor);
 
   // 3. Ephemeral 1.5s Fade-out Volume Feedback Badge
   if (objId && feedback) {
@@ -2909,7 +3000,8 @@ function drawBeakerPhysical(
     ctx.beginPath();
     ctx.moveTo(x, y + beadH);
     ctx.lineTo(x + bw, y + beadH);
-    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.45)' : 'rgba(17, 24, 39, 0.40)';
+    ctx.strokeStyle = strokeColor;
+    ctx.globalAlpha *= 0.42;
     ctx.lineWidth = 1.3;
     ctx.stroke();
     ctx.restore();
@@ -3171,7 +3263,8 @@ function renderBeaker(
       isGraphActive,
       isSubmerged,
       'beaker',
-      outerRimLocalY
+      outerRimLocalY,
+      customColor
     );
     if (letter && color) {
       renderContainerLetterBadge(
@@ -3384,7 +3477,8 @@ function renderWideBasin(
     ctx.beginPath();
     ctx.moveTo(x, y + beadH);
     ctx.lineTo(x + bw, y + beadH);
-    ctx.strokeStyle = isDark ? 'rgba(248, 250, 252, 0.45)' : 'rgba(17, 24, 39, 0.40)';
+    ctx.strokeStyle = strokeColor;
+    ctx.globalAlpha *= 0.42;
     ctx.lineWidth = 1.3;
     ctx.stroke();
     ctx.restore();
@@ -3402,7 +3496,19 @@ function renderWideBasin(
 
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(ctx, objId, w, h, isDark, state, isGraphActive);
+    renderContainerActionButtons(
+      ctx,
+      objId,
+      w,
+      h,
+      isDark,
+      state,
+      isGraphActive,
+      false,
+      'wide-basin',
+      null,
+      customColor
+    );
     if (letter && color) {
       renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
     }
@@ -3891,7 +3997,8 @@ function renderFlask(
       isGraphActive,
       isSubmerged,
       'flask',
-      outerRimLocalY
+      outerRimLocalY,
+      customColor
     );
     if (letter && color) {
       renderContainerLetterBadge(
@@ -3983,9 +4090,7 @@ function drawThermometerApparatus(
     ctx.beginPath();
     ctx.moveTo(cx + stemW / 2, ty);
     ctx.lineTo(cx + stemW / 2 + tickLen, ty);
-    ctx.strokeStyle = isSubmergedPass
-      ? (isDark ? 'rgba(248, 250, 252, 0.35)' : 'rgba(17, 24, 39, 0.35)')
-      : strokeColor;
+    ctx.strokeStyle = strokeColor;
     ctx.lineWidth = isMajor ? 1.0 : 0.8;
     ctx.stroke();
 
@@ -4833,11 +4938,18 @@ function renderThermalGraph(
       lastTempVal?: number;
     }[] = [];
 
-    boundIds.forEach((cId: string, idx: number) => {
+    const orderedBoundIds = [...boundIds].sort((a, b) => {
+      const la = effectiveMeta.get(a)?.letter || 'Ω';
+      const lb = effectiveMeta.get(b)?.letter || 'Ω';
+      return la.localeCompare(lb, 'el');
+    });
+
+    orderedBoundIds.forEach((cId: string) => {
+      const idx = boundIds.indexOf(cId);
       const meta = effectiveMeta.get(cId);
       const container = sim.objects.find((o) => o.id === cId);
       const letter = meta?.letter ?? '';
-      const color = meta?.color ?? (idx === 0 ? '#0284c7' : '#65a30d');
+      const color = meta?.color ?? (idx === 0 ? '#1e293b' : '#7c3aed');
       const liquidType = container?.containerState?.liquidType ?? meta?.liquidType ?? 'water';
       const liquidLabel =
         liquidType === 'oil' ? 'Λάδι' : liquidType === 'milk' ? 'Γάλα' : 'Νερό';
