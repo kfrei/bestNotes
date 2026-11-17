@@ -90,6 +90,8 @@ import {
   Brain,
   HeartPulse,
   ShieldCheck,
+  Settings,
+  FolderInput,
 } from 'lucide-react';
 import {
   auth,
@@ -201,6 +203,8 @@ import {
   getCachedPdfPageDataUrl,
   getBestAvailablePdfPageDataUrl,
   ensurePdfPageDataUrl,
+  loadRawPdfFromIndexedDB,
+  saveRawPdfToIndexedDB,
   type PdfQualityMode,
 } from './utils/pdfAndImageImporter';
 import {
@@ -7304,6 +7308,8 @@ export default function App() {
     x: number;
     y: number;
     openUpward: boolean;
+    mode?: 'download' | 'library-gear';
+    showMoveTree?: boolean;
   } | null>(null);
 
   const toggleDownloadMenuForButton = useCallback(
@@ -7311,7 +7317,7 @@ export default function App() {
       e.stopPropagation();
       const rect = e.currentTarget.getBoundingClientRect();
       setShareMenuTarget((prev) => {
-        if (prev?.notebookId === notebookId) return null;
+        if (prev?.notebookId === notebookId && prev?.mode !== 'library-gear') return null;
         const menuW = 224;
         const clampedX = Math.max(12, Math.min(window.innerWidth - menuW - 12, rect.right - menuW));
         const openUpward = rect.bottom + 140 > window.innerHeight && rect.top > 140;
@@ -7321,6 +7327,30 @@ export default function App() {
           x: Math.round(clampedX),
           y: Math.round(anchorY),
           openUpward,
+          mode: 'download',
+        };
+      });
+    },
+    []
+  );
+
+  const toggleLibraryGearMenuForButton = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, notebookId: string) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      setShareMenuTarget((prev) => {
+        if (prev?.notebookId === notebookId && prev?.mode === 'library-gear') return null;
+        const menuW = 248;
+        const clampedX = Math.max(12, Math.min(window.innerWidth - menuW - 12, rect.right - menuW));
+        const openUpward = rect.bottom + 290 > window.innerHeight && rect.top > 260;
+        const anchorY = openUpward ? rect.top - 8 : rect.bottom + 8;
+        return {
+          notebookId,
+          x: Math.round(clampedX),
+          y: Math.round(anchorY),
+          openUpward,
+          mode: 'library-gear',
+          showMoveTree: false,
         };
       });
     },
@@ -54635,6 +54665,44 @@ export default function App() {
                 );
               };
 
+              const duplicateNotebookInLibrary = (nb: Notebook) => {
+                const newId = `nb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                const origTime = nb.updatedAt ? new Date(nb.updatedAt).getTime() : Date.now();
+                const adjacentIso = new Date(
+                  Number.isFinite(origTime) && origTime > 1000 ? origTime - 1 : Date.now()
+                ).toISOString();
+                const clonedPages = structuredClone(nb.pages).map((p, idx) => ({
+                  ...p,
+                  id: `page-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+                }));
+                const newNb: Notebook = {
+                  ...structuredClone(nb),
+                  id: newId,
+                  title: `${nb.title}-Copy`,
+                  updatedAt: adjacentIso,
+                  pages: clonedPages,
+                };
+                void loadRawPdfFromIndexedDB(nb.id).then((buf) => {
+                  if (buf) {
+                    void saveRawPdfToIndexedDB(newId, buf.slice(0));
+                  }
+                });
+                userEditedInSessionRef.current.add(newId);
+                setNotebooks((prev) => {
+                  const idx = prev.findIndex((item) => item.id === nb.id);
+                  if (idx === -1) return [newNb, ...prev];
+                  const next = [...prev];
+                  next.splice(idx + 1, 0, newNb);
+                  return next;
+                });
+                if (currentUser) {
+                  pushNotebookToCloudTracked(currentUser.uid, newNb);
+                }
+                setIsDirty(true);
+                setSyncStatus('dirty');
+                showToast(`📋 Δημιουργήθηκε αντίγραφο «${newNb.title}»!`);
+              };
+
               const openFolderEditorModal = (folder: {
                 path: string;
                 name: string;
@@ -56324,46 +56392,17 @@ export default function App() {
                                     <div className="flex items-center gap-1">
                                       <button
                                         type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleNotebookFavorite(nb);
-                                        }}
-                                        className={`p-1.5 rounded-lg border shadow-2xs transition cursor-pointer focus:outline-none ${
-                                          nb.favorite
-                                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-500 border-amber-300'
-                                            : 'bg-white/95 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200/80'
-                                        }`}
-                                        title={
-                                          nb.favorite
-                                            ? 'Αφαίρεση από τα Αγαπημένα'
-                                            : 'Προσθήκη στα Αγαπημένα'
-                                        }
-                                      >
-                                        <Star
-                                          className={`w-3.5 h-3.5 ${
-                                            nb.favorite ? 'fill-amber-400 text-amber-500' : ''
-                                          }`}
-                                        />
-                                      </button>
-                                      <button
-                                        type="button"
                                         data-popover-trigger="share-menu"
-                                        onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
-                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
-                                        title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
+                                        onClick={(e) => toggleLibraryGearMenuForButton(e, nb.id)}
+                                        className={`p-1.5 rounded-lg border shadow-2xs transition cursor-pointer focus:outline-none ${
+                                          shareMenuTarget?.notebookId === nb.id &&
+                                          shareMenuTarget?.mode === 'library-gear'
+                                            ? 'bg-[#234978] text-white border-[#234978]'
+                                            : 'bg-white/95 hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] border-slate-200/80'
+                                        }`}
+                                        title={`Επιλογές αρχείου «${nb.title}» (Διαμοιρασμός, Λήψη PDF, Αγαπημένο, Αντίγραφο, Μετακίνηση)`}
                                       >
-                                        <Download className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void handleShareNotebookPdf(nb);
-                                        }}
-                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
-                                        title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
-                                      >
-                                        <Share2 className="w-3.5 h-3.5" />
+                                        <Settings className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={(e) => {
@@ -57019,45 +57058,16 @@ export default function App() {
                               <button
                                 type="button"
                                 data-popover-trigger="share-menu"
-                                onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
-                                className="p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
-                                title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleShareNotebookPdf(nb);
-                                }}
-                                className="p-2 rounded-lg text-slate-500 hover:text-[#234978] hover:bg-slate-100 transition cursor-pointer"
-                                title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
-                              >
-                                <Share2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleNotebookFavorite(nb);
-                                }}
+                                onClick={(e) => toggleLibraryGearMenuForButton(e, nb.id)}
                                 className={`p-2 rounded-lg transition cursor-pointer focus:outline-none ${
-                                  nb.favorite
-                                    ? 'bg-amber-50/90 text-amber-500 hover:bg-amber-100'
-                                    : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                  shareMenuTarget?.notebookId === nb.id &&
+                                  shareMenuTarget?.mode === 'library-gear'
+                                    ? 'bg-[#234978] text-white shadow-2xs'
+                                    : 'text-slate-500 hover:text-[#234978] hover:bg-slate-100'
                                 }`}
-                                title={
-                                  nb.favorite
-                                    ? 'Αφαίρεση από τα Αγαπημένα'
-                                    : 'Προσθήκη στα Αγαπημένα'
-                                }
+                                title={`Επιλογές αρχείου «${nb.title}» (Διαμοιρασμός, Λήψη PDF, Αγαπημένο, Αντίγραφο, Μετακίνηση)`}
                               >
-                                <Star
-                                  className={`w-4 h-4 ${
-                                    nb.favorite ? 'fill-amber-400 text-amber-500' : ''
-                                  }`}
-                                />
+                                <Settings className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={(e) => {
@@ -57170,6 +57180,229 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Library File Gear Liquid Glass Dropdown (Διαμοιρασμός, Λήψη PDF, Αγαπημένο, Αντίγραφο, Μετακίνηση με Δέντρο Φακέλων) */}
+                  {shareMenuTarget &&
+                    shareMenuTarget.mode === 'library-gear' &&
+                    (() => {
+                      const targetNb = notebooks.find((n) => n.id === shareMenuTarget.notebookId);
+                      if (!targetNb) return null;
+
+                      type MoveTreeItem = {
+                        path: string;
+                        name: string;
+                        parentPath: string;
+                        depth: number;
+                        isLastSibling: boolean;
+                      };
+                      const allFolders = Array.from(folderMap.values());
+                      const childrenByParent = new Map<string, typeof allFolders>();
+                      for (const f of allFolders) {
+                        const pKey = f.parentPath || '';
+                        const arr = childrenByParent.get(pKey) || [];
+                        arr.push(f);
+                        childrenByParent.set(pKey, arr);
+                      }
+                      for (const arr of childrenByParent.values()) {
+                        arr.sort((a, b) => a.name.localeCompare(b.name, 'el'));
+                      }
+                      const moveTreeRows: MoveTreeItem[] = [];
+                      const buildMoveTreeDfs = (parentKey: string, depth: number) => {
+                        const kids = childrenByParent.get(parentKey) || [];
+                        kids.forEach((kid, idx) => {
+                          moveTreeRows.push({
+                            path: kid.path,
+                            name: kid.name,
+                            parentPath: kid.parentPath,
+                            depth,
+                            isLastSibling: idx === kids.length - 1,
+                          });
+                          buildMoveTreeDfs(kid.path, depth + 1);
+                        });
+                      };
+                      buildMoveTreeDfs('', 0);
+                      const curNbFolder = normalizeFolderPath(targetNb.folder || '');
+
+                      return (
+                        <div
+                          data-popover-panel="share-menu"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            position: 'fixed',
+                            left: shareMenuTarget.x,
+                            top: shareMenuTarget.openUpward ? undefined : shareMenuTarget.y,
+                            bottom: shareMenuTarget.openUpward
+                              ? window.innerHeight - shareMenuTarget.y
+                              : undefined,
+                            width: 248,
+                          }}
+                          className="ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[9999] space-y-0.5 text-left"
+                        >
+                          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b] truncate">
+                            {targetNb.title}
+                          </div>
+
+                          {/* 1. Διαμοιρασμός */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareMenuTarget(null);
+                              void handleShareNotebookPdf(targetNb);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                          >
+                            <Share2 className="w-4 h-4 text-[#2c3e50] shrink-0" />
+                            <span>Διαμοιρασμός</span>
+                          </button>
+
+                          {/* 2. Λήψη PDF */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareMenuTarget(null);
+                              void handleDownloadActiveNotebookPdf(targetNb);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                          >
+                            <Download className="w-4 h-4 text-[#2c3e50] shrink-0" />
+                            <span>Λήψη PDF</span>
+                          </button>
+
+                          {/* 3. Αγαπημένο */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareMenuTarget(null);
+                              toggleNotebookFavorite(targetNb);
+                            }}
+                            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <Star
+                                className={`w-4 h-4 text-[#2c3e50] shrink-0 ${
+                                  targetNb.favorite ? 'fill-[#2c3e50]' : ''
+                                }`}
+                              />
+                              <span>Αγαπημένο</span>
+                            </span>
+                            {targetNb.favorite && (
+                              <Check className="w-3.5 h-3.5 text-[#234978] shrink-0" />
+                            )}
+                          </button>
+
+                          {/* 4. Αντίγραφο */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareMenuTarget(null);
+                              duplicateNotebookInLibrary(targetNb);
+                            }}
+                            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <Copy className="w-4 h-4 text-[#2c3e50] shrink-0" />
+                              <span>Αντίγραφο</span>
+                            </span>
+                            <span className="text-[10px] font-medium text-[#64748b]">-Copy</span>
+                          </button>
+
+                          <div className="my-1 border-t border-[#dfd8cb]/80" />
+
+                          {/* 5. Μετακίνηση (opens Folder Tree) */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShareMenuTarget((prev) =>
+                                prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
+                              )
+                            }
+                            className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer text-left ${
+                              shareMenuTarget.showMoveTree
+                                ? 'bg-[#efebe3] text-[#234978]'
+                                : 'hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978]'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <FolderInput className="w-4 h-4 text-[#2c3e50] shrink-0" />
+                              <span>Μετακίνηση</span>
+                            </span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-[#64748b] transition-transform ${
+                                shareMenuTarget.showMoveTree ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
+
+                          {shareMenuTarget.showMoveTree && (
+                            <div className="mt-1 max-h-48 overflow-y-auto p-1.5 bg-[#efebe3]/45 rounded-xl border border-[#dfd8cb] space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  changeNotebookFolder(targetNb.id, '');
+                                  setShareMenuTarget(null);
+                                }}
+                                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer text-left ${
+                                  curNbFolder === ''
+                                    ? 'bg-[#234978] text-white shadow-2xs'
+                                    : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <Home
+                                    className={`w-3.5 h-3.5 shrink-0 ${
+                                      curNbFolder === '' ? 'text-white' : 'text-[#2c3e50]'
+                                    }`}
+                                  />
+                                  <span className="truncate">Βιβλιοθήκη (Αρχικός)</span>
+                                </span>
+                                {curNbFolder === '' && (
+                                  <Check className="w-3 h-3 text-white shrink-0 ml-1" />
+                                )}
+                              </button>
+
+                              {moveTreeRows.map((node) => {
+                                const isCurrentFolder = curNbFolder === node.path;
+                                return (
+                                  <button
+                                    key={node.path}
+                                    type="button"
+                                    onClick={() => {
+                                      changeNotebookFolder(targetNb.id, node.path);
+                                      setShareMenuTarget(null);
+                                    }}
+                                    style={{ paddingLeft: `${(node.depth + 1) * 14 + 6}px` }}
+                                    className={`w-full flex items-center justify-between pr-2 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer text-left ${
+                                      isCurrentFolder
+                                        ? 'bg-[#234978] text-white shadow-2xs'
+                                        : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-1.5 min-w-0 truncate">
+                                      <span
+                                        className={`font-mono text-[10px] select-none ${
+                                          isCurrentFolder ? 'text-white/70' : 'text-[#a8a29e]'
+                                        }`}
+                                      >
+                                        {node.isLastSibling ? '└─' : '├─'}
+                                      </span>
+                                      <Folder
+                                        className={`w-3.5 h-3.5 shrink-0 ${
+                                          isCurrentFolder ? 'text-white' : 'text-[#2c3e50]'
+                                        }`}
+                                      />
+                                      <span className="truncate">{node.name}</span>
+                                    </span>
+                                    {isCurrentFolder && (
+                                      <Check className="w-3 h-3 text-white shrink-0 ml-1" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                   {/* Edit Folder Modal (Name + 12 Preset Names + 10 Colors + 20 Icons + Parent Folder Move + Favorite Star) */}
                   <FolderEditModal
@@ -70220,8 +70453,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Global Fixed Download Menu (PDF & .bestnotes) — never clipped by overflow-hidden cards */}
+      {/* Global Fixed Download Menu (PDF & .bestnotes) for Editor Toolbar */}
       {shareMenuTarget &&
+        shareMenuTarget.mode !== 'library-gear' &&
         (() => {
           const targetNb =
             notebooks.find((n) => n.id === shareMenuTarget.notebookId) || activeNotebook;
