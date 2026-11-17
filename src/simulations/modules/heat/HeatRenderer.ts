@@ -4703,17 +4703,17 @@ function renderThermalGraph(
     const ambient = sim.ambientTemperature ?? 20.0;
     const eqY = mapY(ambient);
     ctx.save();
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.34)' : 'rgba(100, 116, 139, 0.34)';
+    ctx.lineWidth = 1.0;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(plotX, eqY);
     ctx.lineTo(plotX + plotW, eqY);
     ctx.stroke();
-    ctx.fillStyle = '#059669';
-    ctx.font = 'bold 8.5px system-ui, sans-serif';
+    ctx.fillStyle = isDark ? 'rgba(148, 163, 184, 0.48)' : 'rgba(100, 116, 139, 0.48)';
+    ctx.font = '500 8px system-ui, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`θπεριβάλλοντος = ${ambient.toFixed(1)}°C`, plotX + plotW - 4, eqY - 4);
+    ctx.fillText(`θπεριβάλλοντος = ${ambient.toFixed(1)}°C`, plotX + plotW - 4, eqY + 10);
     ctx.restore();
 
     let legendX = plotX + 32;
