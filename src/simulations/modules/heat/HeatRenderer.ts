@@ -273,9 +273,10 @@ function renderContainerFrontRim(
   ctx: CanvasRenderingContext2D,
   obj: HeatObject,
   isDark: boolean,
-  crossingThermometers: HeatObject[]
+  crossingThermometers: HeatObject[],
+  hasCrossingNestedVessel: boolean = false
 ): void {
-  if (crossingThermometers.length === 0) return;
+  if (crossingThermometers.length === 0 && !hasCrossingNestedVessel) return;
   const strokeColor = obj.strokeColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = obj.width - pad * 2;
@@ -286,31 +287,59 @@ function renderContainerFrontRim(
   ctx.save();
   ctx.translate(obj.x, obj.y);
 
-  // Clip horizontally around the thermometer stems crossing this container's rim
-  // so outer vessels never draw a rim stripe across nested inner containers!
-  ctx.beginPath();
-  for (const t of crossingThermometers) {
-    const localTx = t.x - obj.x;
-    ctx.rect(localTx - 4, y - 4, t.width + 8, beadH + 10);
+  // 1. Over any thermometer stems crossing this container's rim, fill the 3.5px glass bead
+  //    so the thermometer stem & colored column are masked behind the rim
+  if (crossingThermometers.length > 0) {
+    ctx.save();
+    ctx.beginPath();
+    for (const t of crossingThermometers) {
+      const localTx = t.x - obj.x;
+      ctx.rect(localTx - 4, y - 4, t.width + 8, beadH + 10);
+    }
+    ctx.clip();
+
+    if (obj.type === 'beaker' || obj.type === 'wide-basin') {
+      const spoutW = obj.type === 'beaker' ? 12 : 10;
+      ctx.beginPath();
+      ctx.moveTo(x - spoutW, y + 1.5);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + bw, y);
+      ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x, y + beadH);
+      ctx.lineTo(x - spoutW, y + 1.5);
+      ctx.closePath();
+      ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+      ctx.fill();
+    } else if (obj.type === 'flask') {
+      const cx = x + bw / 2;
+      const neckW = bw * 0.30;
+      const collarH = 4.5;
+      const collarExt = 3.5;
+      const collarLeft = cx - neckW / 2 - collarExt;
+      const collarRight = cx + neckW / 2 + collarExt;
+      ctx.beginPath();
+      ctx.roundRect(collarLeft, y, collarRight - collarLeft, collarH, collarH / 2);
+      ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+      ctx.fill();
+    }
+    ctx.restore();
   }
-  ctx.clip();
+
+  // 2. Draw the crisp front rim contour & lip bead line across the container mouth
+  //    so the outer container's rim is ALWAYS in front of both dipped thermometers and nested inner containers!
+  if (!hasCrossingNestedVessel && crossingThermometers.length > 0) {
+    ctx.beginPath();
+    for (const t of crossingThermometers) {
+      const localTx = t.x - obj.x;
+      ctx.rect(localTx - 4, y - 4, t.width + 8, beadH + 10);
+    }
+    ctx.clip();
+  }
 
   if (obj.type === 'beaker' || obj.type === 'wide-basin') {
     const spoutW = obj.type === 'beaker' ? 12 : 10;
 
-    // 1. Translucent solid glass fill across the rim bead (covers thermometer stem passing behind)
-    ctx.beginPath();
-    ctx.moveTo(x - spoutW, y + 1.5);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + bw, y);
-    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(x, y + beadH);
-    ctx.lineTo(x - spoutW, y + 1.5);
-    ctx.closePath();
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)';
-    ctx.fill();
-
-    // 2. Top horizontal rim stroke (in front of thermometer)
+    // Top horizontal rim stroke (in front of inner containers and thermometers)
     ctx.beginPath();
     ctx.moveTo(x - spoutW, y + 1.5);
     ctx.lineTo(x, y);
@@ -322,7 +351,7 @@ function renderContainerFrontRim(
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // 3. Rolled glass lip bead line right beneath top rim
+    // Rolled glass lip bead line right beneath top rim
     ctx.beginPath();
     ctx.moveTo(x, y + beadH);
     ctx.lineTo(x + bw, y + beadH);
@@ -337,13 +366,8 @@ function renderContainerFrontRim(
     const collarLeft = cx - neckW / 2 - collarExt;
     const collarRight = cx + neckW / 2 + collarExt;
 
-    // 1. Translucent solid glass fill of mouth collar
     ctx.beginPath();
     ctx.roundRect(collarLeft, y, collarRight - collarLeft, collarH, collarH / 2);
-    ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)';
-    ctx.fill();
-
-    // 2. Mouth collar stroke
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2.0;
     ctx.lineCap = 'round';
@@ -630,27 +654,34 @@ export function renderHeatSimulation(
     if (obj.type === 'thermometer') renderSingleObject(obj);
   }
 
-  // 7. Glassware Front Rim (renders cleanly in front of dipped thermometers so vessel rim is always in front)
+  // 7. Glassware Front Rim (renders cleanly in front of dipped thermometers AND nested inner containers!)
   if (layer === 'all' || layer === 'apparatus') {
     const containers = sim.objects.filter(
       (obj) => obj.type === 'beaker' || obj.type === 'flask' || obj.type === 'wide-basin'
     );
     const thermometers = sim.objects.filter((obj) => obj.type === 'thermometer');
     for (const c of containers) {
+      const cRimY = c.y + 12;
       const crossingThermometers = thermometers.filter((t) => {
         const dippedVessel = findDippedVesselForThermometer(t, sim.objects, false);
         if (dippedVessel && dippedVessel.id !== c.id) return false;
         const tx = t.x + t.width / 2;
         const cLeft = c.x + 8;
         const cRight = c.x + c.width - 8;
-        const cRimY = c.y + 12;
         const isHorizInside = tx >= cLeft && tx <= cRight;
         const isVertCrossing = t.y < cRimY && t.y + t.height > cRimY;
         return isHorizInside && isVertCrossing;
       });
 
-      if (crossingThermometers.length > 0) {
-        renderContainerFrontRim(ctx, c, isDark, crossingThermometers);
+      const hasCrossingNestedVessel = containers.some((inner) => {
+        if (inner.id === c.id) return false;
+        const parent = findParentVessel(inner, sim.objects);
+        if (!parent || parent.id !== c.id) return false;
+        return inner.y < cRimY && inner.y + inner.height > cRimY;
+      });
+
+      if (crossingThermometers.length > 0 || hasCrossingNestedVessel) {
+        renderContainerFrontRim(ctx, c, isDark, crossingThermometers, hasCrossingNestedVessel);
       }
     }
   }
@@ -2841,13 +2872,46 @@ function renderBeaker(
     } else {
       const surfaceY = Math.max(y, basinWaterLocalY);
       const bcs = parentBasin!.containerState!;
-      const span = bw - 2 * cornerR;
+      const bPad = 8;
+      const bBw = parentBasin!.width - bPad * 2;
+      const bBh = parentBasin!.height - bPad * 2 - 6;
+      const isBasin = parentBasin!.type === 'wide-basin';
+      const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
+      const bFillRatio = Math.max(0, Math.min(1.0, bcs.volumeMl / bcs.capacityMl));
+      const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
+      const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
+      const basinSurface = getLiquidSurfaceProfile(
+        parentBasin!.id,
+        parentBasin!.x,
+        parentBasin!.y,
+        bPad,
+        bBw,
+        bLiquidTopY,
+        bLiquidH,
+        bcs.temperature ?? 20,
+        bcs.isBoiling ?? false,
+        bcs.boilingIntensity ?? 0,
+        performance.now()
+      );
+      const dxBasin = parentBasin!.x - (objX ?? 0);
+      const dyBasin = parentBasin!.y - (objY ?? 0);
 
-      // PASS 1: Emergent Part (in the air: from top down to surfaceY) - 100% sharp and crisp
+      // PASS 1: Emergent Part (in the air: from top down to the outer vessel's actual wavy surface) - 100% sharp and crisp
       if (surfaceY > y) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(-15, -15, w + 30, surfaceY + 15);
+        if (basinSurface.length > 1) {
+          ctx.moveTo(-30, -30);
+          ctx.lineTo(w + 30, -30);
+          ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+          for (let i = basinSurface.length - 1; i >= 0; i--) {
+            ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+          }
+          ctx.lineTo(-30, basinSurface[0].y + dyBasin);
+          ctx.closePath();
+        } else {
+          ctx.rect(-15, -15, w + 30, surfaceY + 15);
+        }
         ctx.clip();
         drawBeakerPhysical(
           ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
@@ -2857,11 +2921,22 @@ function renderBeaker(
         ctx.restore();
       }
 
-      // PASS 2: Submerged Part (inside liquid: from surfaceY downwards) - diffused blur & softened contrast
+      // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
       // "οσο ειναι μεσα στο νερο του αλλου να ειναι αρκετα πιο θολο και δυσδιακριτο, οπως κανουμε με το θερμομετρο"
       ctx.save();
       ctx.beginPath();
-      ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+      if (basinSurface.length > 1) {
+        ctx.moveTo(-30, basinSurface[0].y + dyBasin);
+        for (let i = 0; i < basinSurface.length; i++) {
+          ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+        }
+        ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+        ctx.lineTo(w + 30, h + 40);
+        ctx.lineTo(-30, h + 40);
+        ctx.closePath();
+      } else {
+        ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+      }
       ctx.clip();
 
       if (bcs.liquidType === 'milk') {
@@ -3392,13 +3467,46 @@ function renderFlask(
     } else {
       const surfaceY = Math.max(y, basinWaterLocalY);
       const bcs = parentBasin!.containerState!;
-      const span = baseHalfW * 2 - 2 * cornerR;
+      const bPad = 8;
+      const bBw = parentBasin!.width - bPad * 2;
+      const bBh = parentBasin!.height - bPad * 2 - 6;
+      const isBasin = parentBasin!.type === 'wide-basin';
+      const bHeadspace = isBasin ? (0.15 * bBh + 8.5) * 0.40 : (0.14 * bBh + 8.6) * 0.40;
+      const bFillRatio = Math.max(0, Math.min(1.0, bcs.volumeMl / bcs.capacityMl));
+      const bLiquidH = Math.max(0, (bBh - bHeadspace) * bFillRatio);
+      const bLiquidTopY = bPad + 4 + bBh - bLiquidH;
+      const basinSurface = getLiquidSurfaceProfile(
+        parentBasin!.id,
+        parentBasin!.x,
+        parentBasin!.y,
+        bPad,
+        bBw,
+        bLiquidTopY,
+        bLiquidH,
+        bcs.temperature ?? 20,
+        bcs.isBoiling ?? false,
+        bcs.boilingIntensity ?? 0,
+        performance.now()
+      );
+      const dxBasin = parentBasin!.x - (objX ?? 0);
+      const dyBasin = parentBasin!.y - (objY ?? 0);
 
-      // PASS 1: Emergent Part (in the air: from top down to surfaceY) - 100% sharp and crisp
+      // PASS 1: Emergent Part (in the air: from top down to outer vessel's actual wavy surface) - 100% sharp and crisp
       if (surfaceY > y) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(-15, -15, w + 30, surfaceY + 15);
+        if (basinSurface.length > 1) {
+          ctx.moveTo(-30, -30);
+          ctx.lineTo(w + 30, -30);
+          ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+          for (let i = basinSurface.length - 1; i >= 0; i--) {
+            ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+          }
+          ctx.lineTo(-30, basinSurface[0].y + dyBasin);
+          ctx.closePath();
+        } else {
+          ctx.rect(-15, -15, w + 30, surfaceY + 15);
+        }
         ctx.clip();
         drawFlaskPhysical(
           ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
@@ -3407,10 +3515,21 @@ function renderFlask(
         ctx.restore();
       }
 
-      // PASS 2: Submerged Part (inside liquid: from surfaceY downwards) - diffused blur & softened contrast
+      // PASS 2: Submerged Part (inside liquid: from outer wavy surface downwards) - diffused blur & softened contrast
       ctx.save();
       ctx.beginPath();
-      ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+      if (basinSurface.length > 1) {
+        ctx.moveTo(-30, basinSurface[0].y + dyBasin);
+        for (let i = 0; i < basinSurface.length; i++) {
+          ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
+        }
+        ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
+        ctx.lineTo(w + 30, h + 40);
+        ctx.lineTo(-30, h + 40);
+        ctx.closePath();
+      } else {
+        ctx.rect(-15, surfaceY, w + 30, h - surfaceY + 30);
+      }
       ctx.clip();
 
       if (bcs.liquidType === 'milk') {
