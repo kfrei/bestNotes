@@ -4171,6 +4171,9 @@ function renderThermalGraph(
       label: string;
       liquidLabel: string;
       currentTemp: number;
+      lastX?: number;
+      lastY?: number;
+      lastTempVal?: number;
     }[] = [];
 
     boundIds.forEach((cId: string, idx: number) => {
@@ -4183,19 +4186,13 @@ function renderThermalGraph(
         liquidType === 'oil' ? 'Λάδι' : liquidType === 'milk' ? 'Γάλα' : 'Νερό';
       const currentTemp = container?.containerState?.temperature ?? 20;
 
-      curvesToPlot.push({
-        cId,
-        letter,
-        color,
-        label: letter ? `θ${letter}` : 'θ',
-        liquidLabel,
-        currentTemp,
-      });
-
       // Draw Curve Line
       ctx.save();
       ctx.beginPath();
       let started = false;
+      let lastX: number | undefined;
+      let lastY: number | undefined;
+      let lastTempVal: number | undefined;
       for (const pt of sim.history) {
         const tempVal =
           pt.tempsByContainerId?.[cId] ??
@@ -4209,6 +4206,9 @@ function renderThermalGraph(
         } else {
           ctx.lineTo(x, y);
         }
+        lastX = x;
+        lastY = y;
+        lastTempVal = tempVal;
       }
       ctx.strokeStyle = color;
       ctx.lineWidth = 2.2;
@@ -4216,6 +4216,18 @@ function renderThermalGraph(
       ctx.lineJoin = 'round';
       ctx.stroke();
       ctx.restore();
+
+      curvesToPlot.push({
+        cId,
+        letter,
+        color,
+        label: letter ? `θ${letter}` : 'θ',
+        liquidLabel,
+        currentTemp,
+        lastX,
+        lastY,
+        lastTempVal,
+      });
 
       // Legend Item: "— θΑ (Νερό): 24°C" or "— θ (Νερό): 24°C" when single filled container
       ctx.font = 'bold 9.5px system-ui, sans-serif';
@@ -4227,29 +4239,70 @@ function renderThermalGraph(
       legendX += ctx.measureText(itemText).width + 14;
     });
 
-    // -------------------------------------------------------------------------
-    // Clean Hover Inspection (Frameless Temperature Readout & Faint Dashed Projections)
-    // -------------------------------------------------------------------------
-    if (
+    // Determine if mouse is currently hovering inside the plot area
+    const isHoveringPlot = Boolean(
       hoverPoint &&
-      hoverPoint.x >= plotX &&
-      hoverPoint.x <= plotX + plotW &&
-      hoverPoint.y >= plotY - 12 &&
-      hoverPoint.y <= plotY + plotH + 12
-    ) {
-      const hoverT = Math.max(0, Math.min(tMax, ((hoverPoint.x - plotX) / plotW) * tMax));
+        hoverPoint.x >= plotX &&
+        hoverPoint.x <= plotX + plotW &&
+        hoverPoint.y >= plotY - 12 &&
+        hoverPoint.y <= plotY + plotH + 12
+    );
 
-      // Find closest history point
-      let closestPt = sim.history[0];
-      let minDiff = Math.abs(closestPt.timeSec - hoverT);
+    let hoverClosestPt: (typeof sim.history)[0] | null = null;
+    if (isHoveringPlot && hoverPoint) {
+      const hoverT = Math.max(0, Math.min(tMax, ((hoverPoint.x - plotX) / plotW) * tMax));
+      hoverClosestPt = sim.history[0];
+      let minDiff = Math.abs(hoverClosestPt.timeSec - hoverT);
       for (let i = 1; i < sim.history.length; i++) {
         const diff = Math.abs(sim.history[i].timeSec - hoverT);
         if (diff < minDiff) {
           minDiff = diff;
-          closestPt = sim.history[i];
+          hoverClosestPt = sim.history[i];
         }
       }
+    }
 
+    // -------------------------------------------------------------------------
+    // Live Tip Readout at the End of Each Curve (same look as mouse hover on curve)
+    // -------------------------------------------------------------------------
+    const hoverCx = hoverClosestPt ? mapX(hoverClosestPt.timeSec) : null;
+    curvesToPlot.forEach((curve, idx) => {
+      if (curve.lastX === undefined || curve.lastY === undefined) return;
+      // Avoid overlapping with the active hover readout when the cursor is right on the curve tip
+      if (hoverCx !== null && Math.abs(hoverCx - curve.lastX) < 28) return;
+
+      const tipTemp = curve.lastTempVal ?? curve.currentTemp;
+      const cx = curve.lastX;
+      const cy = curve.lastY;
+
+      ctx.save();
+      // Small circular dot at the tip of the curve
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = curve.color;
+      ctx.fill();
+      ctx.strokeStyle = isDark ? '#0f172a' : '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // Frameless small temperature text at the tip of the curve
+      ctx.fillStyle = curve.color;
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      const tipText = `${tipTemp.toFixed(1)}°`;
+      const tipTextW = ctx.measureText(tipText).width;
+      const textOffsetY = idx % 2 === 0 ? -6 : 12;
+      const rawTextX = cx + 6;
+      const clampedTextX = Math.min(rawTextX, gx + gw - 6 - tipTextW);
+      ctx.fillText(tipText, clampedTextX, cy + textOffsetY);
+      ctx.restore();
+    });
+
+    // -------------------------------------------------------------------------
+    // Clean Hover Inspection (Frameless Temperature Readout & Faint Dashed Projections)
+    // -------------------------------------------------------------------------
+    if (isHoveringPlot && hoverClosestPt) {
+      const closestPt = hoverClosestPt;
       if (closestPt) {
         curvesToPlot.forEach((curve, idx) => {
           const tempVal =
