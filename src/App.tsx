@@ -2184,20 +2184,6 @@ export default function App() {
   const [heatStopwatchRunning, setHeatStopwatchRunning] = useState<boolean>(false);
   const [heatStopwatchElapsedMs, setHeatStopwatchElapsedMs] = useState<number>(0);
 
-  useEffect(() => {
-    if (!heatStopwatchRunning) return;
-    let animId: number;
-    let lastTime = performance.now();
-    const loop = (now: number) => {
-      const delta = now - lastTime;
-      lastTime = now;
-      setHeatStopwatchElapsedMs((prev) => prev + delta);
-      animId = requestAnimationFrame(loop);
-    };
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, [heatStopwatchRunning]);
-
   const formatStopwatch = (ms: number): string => {
     const totalSec = Math.floor(ms / 1000);
     const mins = Math.floor(totalSec / 60);
@@ -33396,8 +33382,15 @@ export default function App() {
           heatSim.pauseHeatingAndSim();
         }
         if (heatSimLastFrameRef.current !== null) {
-          const hDt = Math.max(0.001, Math.min(0.05, (now - heatSimLastFrameRef.current) / 1000));
-          heatSim.stepPhysicsFrame(hDt);
+          const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
+          heatSim.stepPhysicsFrame(rawHDt);
+        }
+        const syncedLiveSim = (heatSim as any).getLiveSim
+          ? (heatSim as any).getLiveSim()
+          : heatSim.activeHeatSim;
+        if (syncedLiveSim && typeof syncedLiveSim.elapsedSec === 'number') {
+          const simMs = Math.round(syncedLiveSim.elapsedSec * 1000);
+          setHeatStopwatchElapsedMs((prev) => (Math.abs(prev - simMs) >= 50 ? simMs : prev));
         }
         heatSimLastFrameRef.current = now;
       } else {

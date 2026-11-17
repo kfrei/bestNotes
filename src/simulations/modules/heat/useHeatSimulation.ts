@@ -1861,12 +1861,24 @@ export function useHeatSimulation(
     [updatePage]
   );
 
-  // Advances physics frame at 60fps in memory, throttling page state sync & localStorage backup
+  // Advances physics frame at 60fps in memory, throttling page state sync & localStorage backup.
+  // When running, sub-steps larger real-time deltas (e.g. slow frames or tab switches) in 0.08s increments
+  // so simulation elapsed time (`elapsedSec`) and graph history stay 100% locked to real wall-clock stopwatch time!
   const stepPhysicsFrame = useCallback(
     (dt: number) => {
       const cur = liveSimRef.current || activeHeatSim;
       if (!cur) return;
-      const next = stepHeatSimulation(cur, dt);
+      let next = cur;
+      if (cur.isRunning && dt > 0.08) {
+        let remaining = Math.min(dt, 600);
+        while (remaining > 0.0005) {
+          const step = Math.min(0.08, remaining);
+          next = stepHeatSimulation(next, step);
+          remaining -= step;
+        }
+      } else {
+        next = stepHeatSimulation(cur, Math.min(0.08, dt));
+      }
       liveSimRef.current = next;
 
       // Throttle persistent sync to activePage & localStorage backup (every 800ms)
