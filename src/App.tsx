@@ -11567,6 +11567,67 @@ export default function App() {
       const isStrokeInAnySim = (s: StrokeObject) =>
         allSimBaseSet.has(s.id) || Boolean(s.groupId && allSimGroupIds.has(s.groupId));
 
+      const faintVoltmeterStrokeIds = new Set<string>();
+      if (pageValidSims.length > 0) {
+        const simStrokesAll = strokeList.filter((s) => isStrokeInAnySim(s));
+        for (const s of simStrokesAll) {
+          if (
+            s.shapeType === 'voltmeter' ||
+            s.shapeType === 'voltmeter-needle' ||
+            s.shapeType === 'voltmeter-label' ||
+            Boolean(s.groupId && s.groupId.startsWith('voltmeter-')) ||
+            s.id.includes('par-vm-')
+          ) {
+            faintVoltmeterStrokeIds.add(s.id);
+          }
+        }
+        const simCompsAll = getCircuitComponentsWithTerminals(simStrokesAll);
+        const vmCompsAll = simCompsAll.filter((c) => c.kind === 'voltmeter');
+        if (vmCompsAll.length > 0) {
+          const compStrokeIdsAll = new Set(simCompsAll.flatMap((c) => c.strokeIds));
+          for (const vm of vmCompsAll) {
+            for (const sid of vm.strokeIds) faintVoltmeterStrokeIds.add(sid);
+          }
+          const wireStrokesAll = simStrokesAll.filter(
+            (s) =>
+              !compStrokeIdsAll.has(s.id) &&
+              s.points.length >= 2 &&
+              (!s.shapeType || s.shapeType === 'line')
+          );
+          const outerHorizEndpoints: { x: number; y: number }[] = [];
+          for (const vm of vmCompsAll) {
+            const terms = [vm.leftTerm, vm.rightTerm];
+            if (vm.topTerm) terms.push(vm.topTerm);
+            if (vm.bottomTerm) terms.push(vm.bottomTerm);
+            for (const w of wireStrokesAll) {
+              const p0 = w.points[0];
+              const p1 = w.points[w.points.length - 1];
+              const d0 = Math.min(...terms.map((t) => Math.hypot(p0.x - t.x, p0.y - t.y)));
+              const d1 = Math.min(...terms.map((t) => Math.hypot(p1.x - t.x, p1.y - t.y)));
+              if (d0 <= 22 || d1 <= 22) {
+                faintVoltmeterStrokeIds.add(w.id);
+                outerHorizEndpoints.push(d0 <= d1 ? p1 : p0);
+              }
+            }
+          }
+          for (const ep of outerHorizEndpoints) {
+            for (const w of wireStrokesAll) {
+              if (faintVoltmeterStrokeIds.has(w.id)) continue;
+              const p0 = w.points[0];
+              const p1 = w.points[w.points.length - 1];
+              const isVertWire = Math.abs(p1.y - p0.y) > Math.abs(p1.x - p0.x) * 1.5;
+              if (!isVertWire) continue;
+              if (
+                Math.hypot(p0.x - ep.x, p0.y - ep.y) <= 22 ||
+                Math.hypot(p1.x - ep.x, p1.y - ep.y) <= 22
+              ) {
+                faintVoltmeterStrokeIds.add(w.id);
+              }
+            }
+          }
+        }
+      }
+
       const pageValidSpringSims = (pageObj.springSims || []).filter(
         (sm) =>
           strokeList.some((s) => s.id === sm.eqSpringStrokeId) &&
@@ -11879,7 +11940,13 @@ export default function App() {
               targetCtx.rect(0, 0, pWidth, swHit.yTop);
               targetCtx.rect(0, swHit.yBottom, pWidth, pHeight - swHit.yBottom);
               targetCtx.clip();
-              drawStrokeOnContext(targetCtx, s, false);
+              drawStrokeOnContext(
+                targetCtx,
+                faintVoltmeterStrokeIds.has(s.id)
+                  ? { ...s, opacity: Math.min(s.opacity ?? 1, 0.38) }
+                  : s,
+                false
+              );
               targetCtx.restore();
               continue;
             }
@@ -11897,7 +11964,13 @@ export default function App() {
               continue;
             }
           }
-          drawStrokeOnContext(targetCtx, s, false);
+          drawStrokeOnContext(
+            targetCtx,
+            faintVoltmeterStrokeIds.has(s.id)
+              ? { ...s, opacity: Math.min(s.opacity ?? 1, 0.38) }
+              : s,
+            false
+          );
         }
       }
 
@@ -25793,6 +25866,7 @@ export default function App() {
               });
             }
           } else {
+            const isParVmMatched = sp.id.startsWith('par-vm-');
             const wireId = `st-wire-ex-${Date.now()}-${sp.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Math.random().toString(36).slice(2, 5)}`;
             sp.existingStrokeId = wireId;
             matchedWireStrokes.push({
@@ -25801,8 +25875,10 @@ export default function App() {
               penType: match.stroke.penType,
               lineStyle: match.stroke.lineStyle || 'solid',
               color: match.stroke.color || '#111827',
-              width: match.stroke.width || 2.0,
-              opacity: match.stroke.opacity ?? 1,
+              width: isParVmMatched
+                ? Math.max(1.5, (match.stroke.width || 2.0) * 0.85)
+                : match.stroke.width || 2.0,
+              opacity: isParVmMatched ? 0.38 : match.stroke.opacity ?? 1,
               layerId: match.stroke.layerId || defaultLayerId,
               isShape: true,
               shapeType: 'line',
@@ -26078,7 +26154,7 @@ export default function App() {
         width: isParVmWire
           ? Math.max(1.5, (prop.wireWidth || 2.0) * 0.85)
           : prop.wireWidth || 2.0,
-        opacity: isParVmWire ? 0.42 : prop.wireOpacity ?? 1,
+        opacity: isParVmWire ? 0.38 : prop.wireOpacity ?? 1,
         layerId: prop.layerId,
         isShape: true,
         shapeType: 'line',
@@ -26098,6 +26174,11 @@ export default function App() {
     const existingWireIds = prop.spans
       .map((sp) => sp.existingStrokeId)
       .filter((id): id is string => Boolean(id));
+    const parVmExistingWireSet = new Set(
+      prop.spans
+        .filter((sp) => sp.id.startsWith('par-vm-') && sp.existingStrokeId)
+        .map((sp) => sp.existingStrokeId!)
+    );
     const allCircuitStrokeIds = [
       ...prop.componentStrokeIds,
       ...existingWireIds,
@@ -26117,9 +26198,11 @@ export default function App() {
           s.shapeType === 'voltmeter' ||
           s.shapeType === 'voltmeter-needle' ||
           s.shapeType === 'voltmeter-label' ||
-          Boolean(s.groupId && s.groupId.startsWith('voltmeter-'));
+          Boolean(s.groupId && s.groupId.startsWith('voltmeter-')) ||
+          parVmExistingWireSet.has(s.id) ||
+          s.id.includes('par-vm-');
         if (isVmComp) {
-          return { ...s, opacity: 0.44 };
+          return { ...s, opacity: 0.38 };
         }
         return s;
       });
@@ -27553,7 +27636,7 @@ export default function App() {
           ctx.globalAlpha =
             ringStroke?.opacity !== undefined && ringStroke.opacity < 0.9
               ? ringStroke.opacity
-              : 0.44;
+              : 0.38;
         } else if (ringStroke?.opacity !== undefined) {
           ctx.globalAlpha = ringStroke.opacity;
         }
