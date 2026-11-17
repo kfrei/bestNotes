@@ -1669,12 +1669,14 @@ export function useHeatSimulation(
             let nextX = (drag.origObjX ?? 0) + dx;
             let nextY = (drag.origObjY ?? 0) + dy;
 
-            // Magnetic snap / pull to base (tripod / wire gauze or water bath):
+            // Magnetic snap / pull to base (tripod / wire gauze or water bath) ONLY when very close (<= 14px X, <= 12px Y):
+            const SNAP_X = 14;
+            const SNAP_Y = 12;
             if (obj.type === 'beaker' || obj.type === 'flask' || obj.type === 'wide-basin') {
               const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
               for (const tripod of tripods) {
                 const { dockX, dockY } = getTripodContainerDockPos(tripod, obj);
-                if (Math.abs(nextX - dockX) <= 52 && Math.abs(nextY - dockY) <= 44) {
+                if (Math.abs(nextX - dockX) <= SNAP_X && Math.abs(nextY - dockY) <= SNAP_Y) {
                   nextX = dockX;
                   nextY = dockY;
                   break;
@@ -1685,7 +1687,7 @@ export function useHeatSimulation(
                 const basins = liveSimRef.current.objects.filter((o) => o.type === 'wide-basin' && o.id !== obj.id);
                 for (const basin of basins) {
                   const { dockX, dockY } = getWaterBathNestedDockPos(basin, obj);
-                  if (Math.abs(nextX - dockX) <= 46 && Math.abs(nextY - dockY) <= 38) {
+                  if (Math.abs(nextX - dockX) <= SNAP_X && Math.abs(nextY - dockY) <= SNAP_Y) {
                     nextX = dockX;
                     nextY = dockY;
                     break;
@@ -1693,7 +1695,7 @@ export function useHeatSimulation(
                 }
               }
             } else if (obj.type === 'tripod') {
-              // 1. Dragging tripod near a sitting container snaps tripod under the container
+              // 1. Dragging tripod very close to a sitting container snaps tripod under the container
               const containers = liveSimRef.current.objects.filter(
                 (o) => (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') && o.id !== obj.id
               );
@@ -1703,14 +1705,14 @@ export function useHeatSimulation(
                 const diffY = c.y - cDockY;
                 const targetTripodX = obj.x + diffX;
                 const targetTripodY = obj.y + diffY;
-                if (Math.abs(nextX - targetTripodX) <= 52 && Math.abs(nextY - targetTripodY) <= 44) {
+                if (Math.abs(nextX - targetTripodX) <= SNAP_X && Math.abs(nextY - targetTripodY) <= SNAP_Y) {
                   nextX = targetTripodX;
                   nextY = targetTripodY;
                   break;
                 }
               }
 
-              // 2. Dragging tripod near a sitting burner snaps tripod centered over the burner
+              // 2. Dragging tripod very close to a sitting burner snaps tripod centered over the burner
               const burners = liveSimRef.current.objects.filter((o) => o.type === 'burner' && o.id !== obj.id);
               for (const b of burners) {
                 const { dockX: bDockX, dockY: bDockY } = getTripodBurnerDockPos(obj, b);
@@ -1718,18 +1720,18 @@ export function useHeatSimulation(
                 const diffY = b.y - bDockY;
                 const targetTripodX = obj.x + diffX;
                 const targetTripodY = obj.y + diffY;
-                if (Math.abs(nextX - targetTripodX) <= 52 && Math.abs(nextY - targetTripodY) <= 44) {
+                if (Math.abs(nextX - targetTripodX) <= SNAP_X && Math.abs(nextY - targetTripodY) <= SNAP_Y) {
                   nextX = targetTripodX;
                   nextY = targetTripodY;
                   break;
                 }
               }
             } else if (obj.type === 'burner') {
-              // Dragging burner near tripod snaps burner centered underneath tripod
+              // Dragging burner very close to tripod snaps burner centered underneath tripod
               const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
               for (const tripod of tripods) {
                 const { dockX, dockY } = getTripodBurnerDockPos(tripod, obj);
-                if (Math.abs(nextX - dockX) <= 52 && Math.abs(nextY - dockY) <= 44) {
+                if (Math.abs(nextX - dockX) <= SNAP_X && Math.abs(nextY - dockY) <= SNAP_Y) {
                   nextX = dockX;
                   nextY = dockY;
                   break;
@@ -1767,11 +1769,13 @@ export function useHeatSimulation(
     if (liveSimRef.current && drag.mode === 'move' && drag.objectId) {
       const obj = liveSimRef.current.objects.find((o) => o.id === drag.objectId);
       if (obj) {
+        const SNAP_X = 14;
+        const SNAP_Y = 12;
         if (obj.type === 'beaker' || obj.type === 'flask' || obj.type === 'wide-basin') {
           const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
           for (const tripod of tripods) {
             const { dockX, dockY } = getTripodContainerDockPos(tripod, obj);
-            if (Math.abs(obj.x - dockX) <= 56 && Math.abs(obj.y - dockY) <= 48) {
+            if (Math.abs(obj.x - dockX) <= SNAP_X && Math.abs(obj.y - dockY) <= SNAP_Y) {
               obj.x = dockX;
               obj.y = dockY;
               break;
@@ -1781,7 +1785,7 @@ export function useHeatSimulation(
             const basins = liveSimRef.current.objects.filter((o) => o.type === 'wide-basin' && o.id !== obj.id);
             for (const basin of basins) {
               const { dockX, dockY } = getWaterBathNestedDockPos(basin, obj);
-              if (Math.abs(obj.x - dockX) <= 50 && Math.abs(obj.y - dockY) <= 42) {
+              if (Math.abs(obj.x - dockX) <= SNAP_X && Math.abs(obj.y - dockY) <= SNAP_Y) {
                 obj.x = dockX;
                 obj.y = dockY;
                 break;
@@ -1799,7 +1803,7 @@ export function useHeatSimulation(
             const diffY = c.y - cDockY;
             const targetTripodX = obj.x + diffX;
             const targetTripodY = obj.y + diffY;
-            if (Math.abs(obj.x - targetTripodX) <= 56 && Math.abs(obj.y - targetTripodY) <= 48) {
+            if (Math.abs(obj.x - targetTripodX) <= SNAP_X && Math.abs(obj.y - targetTripodY) <= SNAP_Y) {
               obj.x = targetTripodX;
               obj.y = targetTripodY;
               break;
@@ -1813,7 +1817,7 @@ export function useHeatSimulation(
             const diffY = b.y - bDockY;
             const targetTripodX = obj.x + diffX;
             const targetTripodY = obj.y + diffY;
-            if (Math.abs(obj.x - targetTripodX) <= 56 && Math.abs(obj.y - targetTripodY) <= 48) {
+            if (Math.abs(obj.x - targetTripodX) <= SNAP_X && Math.abs(obj.y - targetTripodY) <= SNAP_Y) {
               obj.x = targetTripodX;
               obj.y = targetTripodY;
               break;
@@ -1823,7 +1827,7 @@ export function useHeatSimulation(
           const tripods = liveSimRef.current.objects.filter((o) => o.type === 'tripod' && o.id !== obj.id);
           for (const tripod of tripods) {
             const { dockX, dockY } = getTripodBurnerDockPos(tripod, obj);
-            if (Math.abs(obj.x - dockX) <= 56 && Math.abs(obj.y - dockY) <= 48) {
+            if (Math.abs(obj.x - dockX) <= SNAP_X && Math.abs(obj.y - dockY) <= SNAP_Y) {
               obj.x = dockX;
               obj.y = dockY;
               break;

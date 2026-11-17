@@ -184,14 +184,13 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     if (!tripod.tripodState) continue;
     let targetGauzeTemp = ambientTemp;
 
-    // Check if any active burner is positioned directly under or within the tripod base
+    // Check if any active burner is positioned directly under the tripod base
     const burnerUnderneath = burners.find((b) => {
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
-      const isHoriz = dx < Math.max(70, tripod.width * 0.65);
-      // Burner top is within/under tripod wire gauze
-      const isUnderGauze =
-        b.y <= tripod.y + tripod.height + 70 && b.y + b.height >= tripod.y + 10;
+      const isHoriz = dx <= 35;
+      // Burner top is under tripod wire gauze
+      const isUnderGauze = b.y >= tripod.y - 10 && b.y <= tripod.y + 65;
       return isHoriz && isUnderGauze;
     });
 
@@ -243,9 +242,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const tripodBelow = tripods.find((t) => {
       const dx = Math.abs(container.x + container.width / 2 - (t.x + t.width / 2));
       const cBot = container.y + container.height;
-      const isHorizAligned = dx < Math.max(75, (t.width + container.width) * 0.48);
-      // Container base rests near or on wire gauze
-      const isVertOnGauze = cBot >= t.y - 25 && cBot <= t.y + Math.max(75, t.height * 0.65);
+      const isHorizAligned = dx <= 35;
+      // Container base rests directly on or very close to the wire gauze ring
+      const isVertOnGauze = cBot >= t.y && cBot <= t.y + 42;
       return isHorizAligned && isVertOnGauze;
     });
 
@@ -254,9 +253,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       burnerUnderTripod = burners.find((b) => {
         if (!b.burnerState?.isOn) return false;
         const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
-        const isHoriz = dx < Math.max(70, tripodBelow.width * 0.65);
-        const isUnderGauze =
-          b.y <= tripodBelow.y + tripodBelow.height + 70 && b.y + b.height >= tripodBelow.y + 10;
+        const isHoriz = dx <= 35;
+        const isUnderGauze = b.y >= tripodBelow.y - 10 && b.y <= tripodBelow.y + 65;
         return isHoriz && isUnderGauze;
       });
     }
@@ -272,14 +270,14 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       }
     }
 
-    // B. Direct flame check (burner positioned directly below container, with or without tripod)
+    // B. Direct flame check (burner positioned directly below container, touching flame)
     const directBurner = burners.find((b) => {
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
       const cBot = container.y + container.height;
-      const isHoriz = dx < Math.max(75, (container.width + b.width) * 0.48);
-      // Burner nozzle / flame reaches container base
-      const isVert = b.y >= cBot - 70 && b.y <= cBot + 170;
+      const isHoriz = dx <= 32;
+      // Burner nozzle / flame physically reaches container base
+      const isVert = b.y >= cBot - 25 && b.y <= cBot + 40;
       return isHoriz && isVert;
     });
 
