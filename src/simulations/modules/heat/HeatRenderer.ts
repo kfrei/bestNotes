@@ -433,9 +433,8 @@ export function renderHeatSimulation(
       case 'tripod': {
         const hasContainerOnTop = sim.objects.some((c) => {
           if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
-          const dx = Math.abs(c.x + c.width / 2 - (obj.x + obj.width / 2));
-          const cBot = c.y + c.height;
-          return dx <= 45 && cBot >= obj.y - 5 && cBot <= obj.y + 45;
+          const { dockX, dockY } = getTripodContainerDockPos(obj, c);
+          return Math.abs(c.x - dockX) <= 14 && Math.abs(c.y - dockY) <= 6;
         });
         renderTripod(
           ctx,
@@ -473,9 +472,8 @@ export function renderHeatSimulation(
               // If a container sits on this tripod, clamp flame at the underside of the gauze/container
               const hasVesselOnTripod = sim.objects.some((c) => {
                 if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
-                const cdx = Math.abs(c.x + c.width / 2 - (o.x + o.width / 2));
-                const cBot = c.y + c.height;
-                return cdx <= 45 && cBot >= o.y - 5 && cBot <= o.y + 45;
+                const { dockX, dockY } = getTripodContainerDockPos(o, c);
+                return Math.abs(c.x - dockX) <= 14 && Math.abs(c.y - dockY) <= 6;
               });
               if (hasVesselOnTripod) {
                 if (ceilingWorldY === undefined || gauzeUndersideY < ceilingWorldY) {
