@@ -2207,6 +2207,7 @@ export default function App() {
   });
   const [heatStopwatchRunning, setHeatStopwatchRunning] = useState<boolean>(false);
   const [heatStopwatchElapsedMs, setHeatStopwatchElapsedMs] = useState<number>(0);
+  const [heatSimSpeed, setHeatSimSpeed] = useState<1 | 2 | 5>(1);
 
   const formatStopwatch = (ms: number): string => {
     const totalSec = Math.floor(ms / 1000);
@@ -27434,7 +27435,7 @@ export default function App() {
         }
         if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
           const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
-          heatSim.stepPhysicsFrame(rawHDt);
+          heatSim.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
         }
         const syncedLiveSim = (heatSim as any).getLiveSim
           ? (heatSim as any).getLiveSim()
@@ -33817,7 +33818,7 @@ export default function App() {
         }
         if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
           const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
-          heatSim.stepPhysicsFrame(rawHDt);
+          heatSim.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
         }
         const syncedLiveSim = (heatSim as any).getLiveSim
           ? (heatSim as any).getLiveSim()
@@ -65644,6 +65645,10 @@ export default function App() {
                   heatSim.pauseHeatingAndSim();
                 }}
                 storagePrefix="heat"
+                speedMultiplier={heatSimSpeed}
+                onCycleSpeed={() =>
+                  setHeatSimSpeed((prev) => (prev === 1 ? 2 : prev === 2 ? 5 : 1))
+                }
                 onTogglePlayPause={() => {
                   const nextRunning = !heatStopwatchRunning;
                   setHeatStopwatchRunning(nextRunning);

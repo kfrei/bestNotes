@@ -904,9 +904,199 @@ export function renderHeatSimulation(
     for (const g of graphsToRender) {
       renderThermalGraph(ctx, sim, isDark, g, options?.hoverPoint, metaMap);
     }
+
+    if (options?.hoverPoint) {
+      renderHoveredContainerLiquidBadge(ctx, sim, isDark, options.hoverPoint, selectedIds, metaMap);
+    }
   }
 
   ctx.restore();
+}
+
+/**
+ * Returns the world coordinates of a container's top-left pouring spout ("μύτη του δοχείου")
+ * for hover hit-testing and left-side badge anchoring.
+ */
+export function getContainerSpoutWorldPos(obj: HeatObject): {
+  hitX: number;
+  hitY: number;
+  tipX: number;
+  tipY: number;
+} {
+  const pad = 8;
+  const x = obj.x + pad;
+  const y = obj.y + pad + 4;
+  if (obj.type === 'flask') {
+    const bw = obj.width - pad * 2;
+    const cx = x + bw / 2;
+    const neckW = bw * 0.30;
+    const collarH = 4.5;
+    const collarExt = 3.5;
+    return {
+      hitX: cx - neckW / 2,
+      hitY: y + collarH / 2 + 2,
+      tipX: cx - neckW / 2 - collarExt,
+      tipY: y + collarH / 2 + 1,
+    };
+  }
+  const spoutW = obj.type === 'wide-basin' ? 10 : 12;
+  return {
+    hitX: x - spoutW * 0.35,
+    hitY: y + 5.5,
+    tipX: x - spoutW,
+    tipY: y + 3.5,
+  };
+}
+
+function getLiquidShortGreekName(liquidType: LiquidType): string {
+  if (liquidType === 'oil') return 'Ελαιόλαδο';
+  if (liquidType === 'milk') return 'Γάλα';
+  return 'Νερό';
+}
+
+function drawContainerLiquidPillBadge(
+  ctx: CanvasRenderingContext2D,
+  vol: number,
+  liquidType: LiquidType,
+  side: 'left' | 'right',
+  anchorX: number,
+  anchorY: number,
+  isDark: boolean,
+  outlineColor?: string
+): void {
+  const liquidLabel = getLiquidShortGreekName(liquidType);
+  const badgeText = vol > 0 ? `${Math.round(vol)}ml ${liquidLabel}` : '0ml (Άδειο)';
+
+  ctx.save();
+  ctx.font = 'bold 10.5px system-ui, -apple-system, sans-serif';
+  const textMetrics = ctx.measureText(badgeText);
+  const dotSpace = vol > 0 ? 11 : 0;
+  const padX = 9.5;
+  const badgeW = Math.round(textMetrics.width + padX * 2 + dotSpace);
+  const badgeH = 21;
+
+  const boxX = side === 'right' ? anchorX : Math.max(4, anchorX - badgeW);
+  const boxY = anchorY - badgeH / 2;
+
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.14)';
+  ctx.shadowBlur = 5;
+  ctx.shadowOffsetY = 1.5;
+
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, badgeW, badgeH, badgeH / 2);
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.97)';
+  ctx.fill();
+
+  const borderCol =
+    outlineColor ||
+    (vol > 0
+      ? liquidType === 'oil'
+        ? '#65a30d'
+        : liquidType === 'milk'
+        ? '#64748b'
+        : '#0284c7'
+      : isDark
+      ? 'rgba(255,255,255,0.28)'
+      : '#64748b');
+  ctx.strokeStyle = borderCol;
+  ctx.lineWidth = 1.35;
+  ctx.stroke();
+
+  ctx.shadowColor = 'transparent';
+
+  if (vol > 0) {
+    const dotX = boxX + padX + 2.5;
+    const dotY = anchorY;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 3.3, 0, Math.PI * 2);
+    if (liquidType === 'oil') {
+      ctx.fillStyle = '#84cc16';
+      ctx.fill();
+    } else if (liquidType === 'milk') {
+      ctx.fillStyle = '#f8fafc';
+      ctx.fill();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#0ea5e9';
+      ctx.fill();
+    }
+  }
+
+  ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badgeText, boxX + padX + dotSpace, anchorY + 0.5);
+  ctx.restore();
+}
+
+/**
+ * Renders the container liquid badge (e.g., "500ml Νερό") when hovering over:
+ * 1. The container's right-side droplet icon (💧) -> badge appears to the RIGHT of the droplet.
+ * 2. The container's top-left pouring spout ("μύτη του δοχείου") -> badge appears to the LEFT of the spout.
+ */
+function renderHoveredContainerLiquidBadge(
+  ctx: CanvasRenderingContext2D,
+  sim: HeatSimConfig,
+  isDark: boolean,
+  hoverPoint: { x: number; y: number },
+  selectedIds: string[],
+  metaMap: Map<string, ContainerCurveMeta>
+): void {
+  let bestMatch: {
+    obj: HeatObject;
+    side: 'left' | 'right';
+    anchorX: number;
+    anchorY: number;
+    dist: number;
+  } | null = null;
+
+  for (const obj of sim.objects) {
+    if (obj.type !== 'beaker' && obj.type !== 'wide-basin' && obj.type !== 'flask') {
+      continue;
+    }
+
+    // 1. Right-side droplet icon (💧) hover (when container is not selected)
+    if (!selectedIds.includes(obj.id)) {
+      const { dropletX, dropletY } = getContainerActionButtonsWorldPos(obj, sim.objects);
+      const dDrop = Math.hypot(hoverPoint.x - dropletX, hoverPoint.y - dropletY);
+      if (dDrop <= 14 && (!bestMatch || dDrop < bestMatch.dist)) {
+        bestMatch = {
+          obj,
+          side: 'right',
+          anchorX: dropletX + 9,
+          anchorY: dropletY,
+          dist: dDrop,
+        };
+      }
+    }
+
+    // 2. Top-left pouring spout ("μύτη του δοχείου") hover
+    const spout = getContainerSpoutWorldPos(obj);
+    const dSpout = Math.hypot(hoverPoint.x - spout.hitX, hoverPoint.y - spout.hitY);
+    if (dSpout <= 16 && (!bestMatch || dSpout < bestMatch.dist)) {
+      bestMatch = {
+        obj,
+        side: 'left',
+        anchorX: spout.tipX - 7,
+        anchorY: spout.tipY,
+        dist: dSpout,
+      };
+    }
+  }
+
+  if (!bestMatch) return;
+
+  const { obj, side, anchorX, anchorY } = bestMatch;
+  // Clear any ephemeral click feedback on this container so we don't double-render the badge while hovering
+  containerFillFeedbackMap.delete(obj.id);
+
+  const vol = obj.containerState?.volumeMl ?? 0;
+  const liquidType = obj.containerState?.liquidType ?? 'water';
+  const outlineCol = metaMap.get(obj.id)?.outlineColor || obj.strokeColor;
+
+  drawContainerLiquidPillBadge(ctx, vol, liquidType, side, anchorX, anchorY, isDark, outlineCol);
 }
 
 /**
@@ -2823,15 +3013,13 @@ function renderContainerActionButtons(
   outerRimLocalY?: number | null,
   customOutlineColor?: string
 ): void {
-  const { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnHalf, glassRightX } =
+  const { dropletX, dropletY, pencilX, pencilY, graphX, graphY } =
     getContainerActionButtonsLocalPos(w, h, isSubmerged, containerType, outerRimLocalY);
 
   const feedback = objId ? containerFillFeedbackMap.get(objId) : undefined;
   const isFilled = Boolean(state && state.volumeMl > 0);
   const isDropletIntense = isFilled || Boolean(feedback);
   const liquidType: LiquidType = state?.liquidType || 'water';
-
-  const frameGrey = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(156, 163, 175, 0.68)';
 
   // 1. Standalone Droplet Icon (interior fill matches liquid contents; outline matches container outline)
   drawDropletIcon(ctx, dropletX, dropletY, isDark, isDropletIntense, liquidType, customOutlineColor);
@@ -2842,7 +3030,7 @@ function renderContainerActionButtons(
   // 3. Standalone Graph Icon (diagonal line with zig-zag curve above pencil; outline matches container outline)
   drawGraphIcon(ctx, graphX, graphY, isDark, Boolean(isGraphActive), customOutlineColor);
 
-  // 3. Ephemeral 1.5s Fade-out Volume Feedback Badge
+  // 4. Ephemeral 1.5s Fade-out Volume Feedback Badge (for touch / tap when not hovering)
   if (objId && feedback) {
     const now = performance.now();
     const elapsed = now - feedback.startTime;
@@ -2856,45 +3044,18 @@ function renderContainerActionButtons(
       if (elapsed > totalDuration - fadeDuration) {
         alpha = Math.max(0, (totalDuration - elapsed) / fadeDuration);
       }
-      const floatUp = Math.min(5, (elapsed / totalDuration) * 5);
-
       ctx.save();
       ctx.globalAlpha = alpha;
-
-      const badgeText = feedback.volumeMl > 0 ? `💧 ${feedback.volumeMl} ml` : '💧 Άδειο (0 ml)';
-
-      ctx.font = 'bold 9.5px system-ui, sans-serif';
-      const textMetrics = ctx.measureText(badgeText);
-      const badgeW = textMetrics.width + 16;
-      const badgeH = 19;
-      let badgeCenterX = dropletX;
-      const minCenterX = glassRightX + 4 + badgeW / 2;
-      if (badgeCenterX < minCenterX) {
-        badgeCenterX = minCenterX;
-      }
-      const badgeCenterY = isSubmerged
-        ? graphY - btnHalf - badgeH / 2 - 4 - floatUp
-        : pencilY - btnHalf - 12 - floatUp;
-
-      // Shadow & pill container
-      ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 1.2;
-
-      ctx.beginPath();
-      ctx.roundRect(badgeCenterX - badgeW / 2, badgeCenterY - badgeH / 2, badgeW, badgeH, badgeH / 2);
-      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.94)' : 'rgba(255, 255, 255, 0.96)';
-      ctx.fill();
-      ctx.strokeStyle = feedback.volumeMl > 0 ? 'rgba(59, 130, 246, 0.65)' : frameGrey;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      ctx.shadowColor = 'transparent';
-      ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(badgeText, badgeCenterX, badgeCenterY + 0.5);
-
+      drawContainerLiquidPillBadge(
+        ctx,
+        feedback.volumeMl,
+        liquidType,
+        'right',
+        dropletX + 9,
+        dropletY,
+        isDark,
+        customOutlineColor
+      );
       ctx.restore();
     }
   }

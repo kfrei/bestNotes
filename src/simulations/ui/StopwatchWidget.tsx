@@ -13,6 +13,8 @@ export interface StopwatchWidgetProps {
   sourceTitle?: string;
   sourceBadgeColor?: 'blue' | 'amber' | 'emerald';
   storagePrefix?: string;
+  speedMultiplier?: 1 | 2 | 5;
+  onCycleSpeed?: () => void;
   className?: string;
 }
 
@@ -40,6 +42,8 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
   sourceTitle,
   sourceBadgeColor = 'blue',
   storagePrefix,
+  speedMultiplier,
+  onCycleSpeed,
 }) => {
   const widthKey = storagePrefix ? `bestnotes_stopwatch_${storagePrefix}_width_v1` : 'bestnotes_stopwatch_width_v1';
   const posKey = storagePrefix ? `bestnotes_stopwatch_${storagePrefix}_pos_v1` : 'bestnotes_stopwatch_pos_v1';
@@ -201,19 +205,40 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            width: `${Math.round(20 * swScale)}px`,
-            height: `${Math.round(20 * swScale)}px`,
-            fontSize: `${Math.max(9, Math.round(11 * swScale))}px`,
-          }}
-          className="flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] font-bold transition cursor-pointer"
-          title="Κλείσιμο χρονομέτρου"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1">
+          {typeof speedMultiplier === 'number' && onCycleSpeed && (
+            <button
+              type="button"
+              onClick={onCycleSpeed}
+              style={{
+                padding: `${Math.max(1.5, Math.round(2 * swScale))}px ${Math.max(5.5, Math.round(6.5 * swScale))}px`,
+                borderRadius: `${Math.round(7 * swScale)}px`,
+                fontSize: `${Math.max(8.5, Math.round(10 * swScale))}px`,
+              }}
+              className={`font-extrabold tracking-tight border transition cursor-pointer tabular-nums ${
+                speedMultiplier > 1
+                  ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
+                  : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border-[#dfd8cb]'
+              }`}
+              title={`Ταχύτητα προσομοίωσης: ${speedMultiplier}x (Κάνε κλικ για εναλλαγή 1x → 2x → 5x)`}
+            >
+              {speedMultiplier}x
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: `${Math.round(20 * swScale)}px`,
+              height: `${Math.round(20 * swScale)}px`,
+              fontSize: `${Math.max(9, Math.round(11 * swScale))}px`,
+            }}
+            className="flex items-center justify-center rounded-full hover:bg-[#efebe3] text-[#64748b] hover:text-[#0f172a] font-bold transition cursor-pointer"
+            title="Κλείσιμο χρονομέτρου"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* LCD Screen: Signature Dark Navy Blue (#132644) Background */}
