@@ -54005,13 +54005,12 @@ export default function App() {
                 setViewMode('library');
               }
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
+            className={`flex items-center justify-center p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
               viewMode === 'library' ? 'bg-white/15 text-white' : 'text-white/90'
             }`}
             title="Βιβλιοθήκη — Επιστροφή στην Αρχική Βιβλιοθήκη"
           >
             <Home className="w-4 h-4 text-sky-300" />
-            <span className="text-xs font-semibold hidden sm:inline">Βιβλιοθήκη</span>
           </button>
 
           {/* 1-Tap Safe Refresh Button for iPad Home-Screen Web App (PWA) & Desktop */}
@@ -54047,11 +54046,10 @@ export default function App() {
               await fetch(window.location.href, { cache: 'reload' }).catch(() => {});
               window.location.reload();
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+            className="flex items-center justify-center p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
             title="Ανανέωση εφαρμογής & λήψη τελευταίων αλλαγών από το Cloud (ιδανικό για iPad Web App)"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-sky-300" />
-            <span className="text-xs font-semibold hidden sm:inline">Ανανέωση</span>
+            <RefreshCw className="w-4 h-4 text-sky-300" />
           </button>
 
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
@@ -54059,11 +54057,10 @@ export default function App() {
             <button
               data-popover-trigger="thumbnails"
               onClick={() => setShowThumbnailsModal((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-xs font-semibold text-indigo-100 transition cursor-pointer"
-              title="Προβολή όλων των σελίδων σε Μικρογραφίες (3 ή 4 στήλες με scroll)"
+              className="flex items-center justify-center p-1.5 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-indigo-100 transition cursor-pointer"
+              title={`Σελίδες (${activeNotebook.pages.length}) — Προβολή όλων των σελίδων σε Μικρογραφίες`}
             >
               <LayoutGrid className="w-4 h-4 text-sky-300" />
-              <span className="hidden md:inline">Σελίδες ({activeNotebook.pages.length})</span>
             </button>
           )}
         </div>
