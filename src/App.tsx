@@ -16054,6 +16054,32 @@ export default function App() {
           WebkitTextStroke: '0px transparent',
           paintOrder: 'stroke fill',
         };
+      case 'fun':
+        return {
+          fontFamily: boldActive
+            ? "'ExplainBoardsFunBold', 'ExplainBoardsFun', 'ExplainBoardsHand', cursive"
+            : "'ExplainBoardsFun', 'ExplainBoardsHand', cursive",
+          fontStyle: 'normal',
+          fontWeight: boldActive ? 700 : 400,
+          fontSynthesis: 'none',
+          lineHeight: 1.38,
+          letterSpacing: '0em',
+          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
+        };
+      case 'diary':
+        return {
+          fontFamily: boldActive
+            ? "'ExplainBoardsDiaryBold', 'ExplainBoardsDiary', 'ExplainBoardsHand', cursive"
+            : "'ExplainBoardsDiary', 'ExplainBoardsHand', cursive",
+          fontStyle: 'normal',
+          fontWeight: boldActive ? 700 : 400,
+          fontSynthesis: 'none',
+          lineHeight: 1.38,
+          letterSpacing: '0.01em',
+          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
+        };
       case 'mansalva':
         return {
           fontFamily: "'Mansalva', 'ExplainBoardsPenLegacy', cursive",
@@ -59619,12 +59645,42 @@ export default function App() {
                         Σκιά
                       </button>
 
-                      {/* Greek Font Style Selector: Custom ExplainBoardsHand / Custom ExplainBoardsPen / Mansalva / Playpen / GFS / Printed */}
-                      <div className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb]">
+                      {/* Greek Font Style Selector: Shows 4 fonts at a time (Καλλιγραφική, Πένα, Fun, Diary) with horizontal swipe/scroll for the rest */}
+                      <div
+                        onWheel={(e) => {
+                          if (e.deltaY !== 0 && !e.deltaX) {
+                            e.currentTarget.scrollLeft += e.deltaY;
+                          }
+                        }}
+                        onPointerDown={(e) => {
+                          if (e.pointerType === 'mouse') {
+                            const el = e.currentTarget;
+                            el.dataset.dragStartX = String(e.clientX);
+                            el.dataset.dragScrollLeft = String(el.scrollLeft);
+                            el.dataset.wasDragged = '0';
+                          }
+                        }}
+                        onPointerMove={(e) => {
+                          if (e.pointerType === 'mouse' && e.buttons === 1) {
+                            const el = e.currentTarget;
+                            const startX = Number(el.dataset.dragStartX || 0);
+                            const origScroll = Number(el.dataset.dragScrollLeft || 0);
+                            const dx = e.clientX - startX;
+                            if (Math.abs(dx) > 5) {
+                              el.dataset.wasDragged = '1';
+                              el.scrollLeft = origScroll - dx;
+                            }
+                          }
+                        }}
+                        className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-[238px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain touch-pan-x select-none shrink-0"
+                        title="Σύρετε αριστερά/δεξιά (swipe) για περισσότερες γραμματοσειρές"
+                      >
                         {(
                           [
                             { id: 'calligraphic', label: 'Καλλιγραφική' },
                             { id: 'marker', label: 'Πένα' },
+                            { id: 'fun', label: 'Fun' },
+                            { id: 'diary', label: 'Diary' },
                             { id: 'mansalva', label: 'Μαρκαδόρος' },
                             { id: 'handwritten', label: 'Χειρόγραφο' },
                             { id: 'neohellenic', label: 'Ρέουσα' },
@@ -59633,14 +59689,38 @@ export default function App() {
                         ).map((fOpt) => (
                           <button
                             key={fOpt.id}
-                            onClick={() => applyFontFamily(fOpt.id)}
+                            ref={(btnEl) => {
+                              if (btnEl && currentFontFamily === fOpt.id) {
+                                const parent = btnEl.parentElement;
+                                if (parent) {
+                                  const btnLeft = btnEl.offsetLeft;
+                                  const btnRight = btnLeft + btnEl.offsetWidth;
+                                  if (btnLeft < parent.scrollLeft) {
+                                    parent.scrollTo({ left: Math.max(0, btnLeft - 4), behavior: 'smooth' });
+                                  } else if (btnRight > parent.scrollLeft + parent.clientWidth) {
+                                    parent.scrollTo({
+                                      left: btnRight - parent.clientWidth + 4,
+                                      behavior: 'smooth',
+                                    });
+                                  }
+                                }
+                              }
+                            }}
+                            onClick={(e) => {
+                              const parent = e.currentTarget.parentElement;
+                              if (parent && parent.dataset.wasDragged === '1') {
+                                parent.dataset.wasDragged = '0';
+                                return;
+                              }
+                              applyFontFamily(fOpt.id);
+                            }}
                             style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 whitespace-nowrap ${
                               currentFontFamily === fOpt.id
                                 ? 'bg-[#234978] text-white shadow-xs'
                                 : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
                             }`}
-                            title={`Γραμματοσειρά: ${fOpt.label}`}
+                            title={`Γραμματοσειρά: ${fOpt.label} (σύρετε για τις υπόλοιπες)`}
                           >
                             {fOpt.label}
                           </button>
@@ -67862,6 +67942,8 @@ export default function App() {
                                         const order: TextFontStyle[] = [
                                           'calligraphic',
                                           'marker',
+                                          'fun',
+                                          'diary',
                                           'mansalva',
                                           'handwritten',
                                           'neohellenic',
@@ -67927,13 +68009,17 @@ export default function App() {
                                         }));
                                       }}
                                       className="w-[62px] min-w-[62px] max-w-[62px] py-1 px-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer text-center flex items-center justify-center shrink-0 truncate select-none text-[11px]"
-                                      title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
+                                      title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Fun / Diary / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
                                       displayedFontFamily === 'calligraphic-bold'
                                         ? 'Καλλιγρ.'
                                         : displayedFontFamily === 'marker'
                                         ? 'Πένα'
+                                        : displayedFontFamily === 'fun'
+                                        ? 'Fun'
+                                        : displayedFontFamily === 'diary'
+                                        ? 'Diary'
                                         : displayedFontFamily === 'mansalva'
                                         ? 'Μαρκ.'
                                         : displayedFontFamily === 'handwritten'

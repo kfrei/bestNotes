@@ -2524,6 +2524,14 @@ async function drawTextObjectForPdf(
       ? tx.bold
         ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
         : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
+      : tx.fontFamily === 'fun'
+      ? tx.bold
+        ? '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
+        : '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
+      : tx.fontFamily === 'diary'
+      ? tx.bold
+        ? '"ExplainBoardsDiaryBold", "ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
+        : '"ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
       : tx.isMath
       ? '"GFS Neohellenic", Georgia, "Times New Roman", serif'
       : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -2704,6 +2712,14 @@ async function drawTextObjectForPdf(
         ? isBold
           ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
           : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
+        : fam === 'fun'
+        ? isBold
+          ? '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
+          : '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
+        : fam === 'diary'
+        ? isBold
+          ? '"ExplainBoardsDiaryBold", "ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
+          : '"ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
         : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
     const getStyleAt = (charIdx: number) => {

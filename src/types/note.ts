@@ -127,6 +127,8 @@ export type TextFontStyle =
   | 'sans'
   | 'calligraphic'
   | 'calligraphic-bold'
+  | 'fun'
+  | 'diary'
   | 'neohellenic'
   | 'handwritten'
   | 'marker'
