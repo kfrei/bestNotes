@@ -16,14 +16,155 @@ export function distance(a: { x: number; y: number }, b: { x: number; y: number 
 }
 
 /**
+ * Removes 1-to-4 sample digitizer / coalesced-event teleport spikes (such as a delayed
+ * compatibility pointer event replaying the initial pointerdown origin P_0 mid-stroke,
+ * which pulls the EMA filter 72%-92% of the way back toward P_0 and creates an internal
+ * V-chord inside letters like θ, μ, λ, υ, ο, ε, π, α).
+ */
+export function filterFreehandTeleportSpikes(rawPoints: BezierPoint[]): BezierPoint[] {
+  if (rawPoints.length < 4) return rawPoints;
+
+  const p0 = rawPoints[0];
+  const out: BezierPoint[] = [rawPoints[0]];
+  let i = 1;
+
+  while (i < rawPoints.length) {
+    const prev = out[out.length - 1];
+    const cur = rawPoints[i];
+    const dOut = distance(prev, cur);
+    const prevDistP0 = distance(prev, p0);
+    const curDistP0 = distance(cur, p0);
+
+    // Check if `cur` is the start of a 1-to-4 sample spike that jumps back toward P_0 (or a sharp needle spike)
+    // and then returns to the stroke trajectory at `rawPoints[i + m]`.
+    if (i < rawPoints.length - 1 && dOut >= 5.0) {
+      const jumpsTowardP0 =
+        prevDistP0 >= 6.5 &&
+        curDistP0 <= Math.max(4.5, prevDistP0 * 0.58) &&
+        prevDistP0 - curDistP0 >= 4.5;
+
+      let matchedSkipCount = 0;
+      const maxWindow = Math.min(4, rawPoints.length - 1 - i);
+      for (let m = maxWindow; m >= 1; m--) {
+        const resumePt = rawPoints[i + m];
+        const dBridge = distance(prev, resumePt);
+        const resumeDistP0 = distance(resumePt, p0);
+        const lastSpikePt = rawPoints[i + m - 1];
+        const dBack = distance(lastSpikePt, resumePt);
+
+        // Case A: Stale-P_0 origin replay spike + EMA recovery tail (1 to 4 samples)
+        if (
+          jumpsTowardP0 &&
+          resumeDistP0 >= Math.max(curDistP0 + 3.5, prevDistP0 * 0.64) &&
+          dBridge <= Math.max(10.5, dOut * 0.65)
+        ) {
+          matchedSkipCount = m;
+          break;
+        }
+
+        // Case B: General 1-to-2 sample needle spike away from the trajectory and immediately back
+        if (
+          m <= 2 &&
+          dOut >= 7.5 &&
+          dBack >= 6.5 &&
+          dBridge <= Math.min(dOut, dBack) * 0.44
+        ) {
+          matchedSkipCount = m;
+          break;
+        }
+      }
+
+      if (matchedSkipCount > 0) {
+        i += matchedSkipCount;
+        continue;
+      }
+    }
+
+    // Also guard against a single trailing stale-P_0 jump on the very last sample of the stroke
+    if (
+      i === rawPoints.length - 1 &&
+      out.length >= 4 &&
+      dOut >= 7.5 &&
+      prevDistP0 >= 9.0 &&
+      curDistP0 <= Math.max(4.5, prevDistP0 * 0.45)
+    ) {
+      const prev2 = out[out.length - 2];
+      const prevStep = distance(prev2, prev);
+      if (dOut >= Math.max(7.5, prevStep * 2.8)) {
+        i++;
+        continue;
+      }
+    }
+
+    out.push(cur);
+    i++;
+  }
+
+  return out;
+}
+
+/**
+ * Inspects an already-committed freehand Bezier stroke (`!s.isShape`), recovers its
+ * pre-spline control points, strips any stale-P_0 teleport spikes, and rebuilds the
+ * C1-continuous Quadratic Bezier spline if a spike was found.
+ */
+export function repairFreehandStrokeTeleportSpikes(points: BezierPoint[]): {
+  points: BezierPoint[];
+  repaired: boolean;
+} {
+  if (!points || points.length < 6 || points[0]?.twist === 999) {
+    return { points, repaired: false };
+  }
+  const hasMidpointSplineControls = points
+    .slice(2, -1)
+    .every((p) => p.cx !== undefined && p.cy !== undefined);
+  if (!hasMidpointSplineControls) {
+    const cleanedDirect = filterFreehandTeleportSpikes(points);
+    if (cleanedDirect.length !== points.length) {
+      return { points: smoothStrokeToBezier(cleanedDirect), repaired: true };
+    }
+    return { points, repaired: false };
+  }
+
+  const rawPts: BezierPoint[] = [{ ...points[0], cx: undefined, cy: undefined }];
+  for (let k = 2; k < points.length - 1; k++) {
+    const pt = points[k];
+    rawPts.push({
+      x: pt.cx ?? pt.x,
+      y: pt.cy ?? pt.y,
+      pressure: pt.pressure,
+      tiltX: pt.tiltX,
+      tiltY: pt.tiltY,
+      twist: pt.twist,
+    });
+  }
+  const last = points[points.length - 1];
+  rawPts.push({
+    x: last.x,
+    y: last.y,
+    pressure: last.pressure,
+    tiltX: last.tiltX,
+    tiltY: last.tiltY,
+    twist: last.twist,
+  });
+
+  const cleaned = filterFreehandTeleportSpikes(rawPts);
+  if (cleaned.length !== rawPts.length) {
+    return { points: smoothStrokeToBezier(cleaned), repaired: true };
+  }
+  return { points, repaired: false };
+}
+
+/**
  * Converts raw Apple Pencil points into smooth Quadratic Bezier curves with StreamLine filtering.
  */
 export function smoothStrokeToBezier(rawPoints: BezierPoint[], _streamline = 0.54): BezierPoint[] {
-  if (rawPoints.length === 0) return [];
-  if (rawPoints.length === 1) return [{ ...rawPoints[0] }];
-  if (rawPoints.length === 2) {
-    const p0 = rawPoints[0];
-    const p1 = rawPoints[1];
+  const cleanedPoints = filterFreehandTeleportSpikes(rawPoints);
+  if (cleanedPoints.length === 0) return [];
+  if (cleanedPoints.length === 1) return [{ ...cleanedPoints[0] }];
+  if (cleanedPoints.length === 2) {
+    const p0 = cleanedPoints[0];
+    const p1 = cleanedPoints[1];
     return [
       { ...p0 },
       {
@@ -40,7 +181,7 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], _streamline = 0.5
    * is disabled per user request ("οτι γραφω ας μενει ιδιο ... θα το δουμε πολυ πολυ μετα") so the committed
    * stroke matches 100% what was drawn live on the canvas without shifting or morphing on pointerUp.
    */
-  const pts = rawPoints;
+  const pts = cleanedPoints;
 
   // Exact 1:1 C1-continuous Quadratic Bezier Midpoint Spline matching drawIncrementalSegment live ink!
   const result: BezierPoint[] = [{ ...pts[0] }];

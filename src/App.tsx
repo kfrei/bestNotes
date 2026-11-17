@@ -210,6 +210,7 @@ import {
 import {
   distance,
   smoothStrokeToBezier,
+  repairFreehandStrokeTeleportSpikes,
   recognizeAndSnapShape,
   isScribbleEraseGesture,
   tryMatchShadowCornerOnBox,
@@ -1204,22 +1205,35 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
         repaired = true;
         return { ...s, points: ensureWaveBezierPoints(s) };
       }
-      if (
-        !s.isShape &&
-        s.points &&
-        s.points.length >= 5 &&
-        s.points[0]?.twist !== 999 &&
-        Math.abs(s.points[s.points.length - 1].x - s.points[0].x) < 1e-3 &&
-        Math.abs(s.points[s.points.length - 1].y - s.points[0].y) < 1e-3
-      ) {
-        pageModified = true;
-        repaired = true;
-        return {
-          ...s,
-          points: s.points.slice(0, -1),
-          fillStyle: 'none' as const,
-          fillColor: undefined,
-        };
+      if (!s.isShape && s.points && s.points.length >= 5 && s.points[0]?.twist !== 999) {
+        let nextPts = s.points;
+        let nextFillStyle = s.fillStyle;
+        let nextFillColor = s.fillColor;
+        let strokeChanged = false;
+        if (
+          Math.abs(nextPts[nextPts.length - 1].x - nextPts[0].x) < 1e-3 &&
+          Math.abs(nextPts[nextPts.length - 1].y - nextPts[0].y) < 1e-3
+        ) {
+          nextPts = nextPts.slice(0, -1);
+          nextFillStyle = 'none';
+          nextFillColor = undefined;
+          strokeChanged = true;
+        }
+        const spikeRepair = repairFreehandStrokeTeleportSpikes(nextPts);
+        if (spikeRepair.repaired) {
+          nextPts = spikeRepair.points;
+          strokeChanged = true;
+        }
+        if (strokeChanged) {
+          pageModified = true;
+          repaired = true;
+          return {
+            ...s,
+            points: nextPts,
+            fillStyle: nextFillStyle,
+            fillColor: nextFillColor,
+          };
+        }
       }
       return s;
     });
@@ -36949,6 +36963,15 @@ export default function App() {
     }
 
     if (isPen) {
+      // If a pen stroke is already actively drawing with another pointerId, ignore duplicate pointerdown
+      if (
+        isDrawingRef.current &&
+        activePointerTypeRef.current === 'pen' &&
+        activePointerIdRef.current !== null &&
+        activePointerIdRef.current !== e.pointerId
+      ) {
+        return;
+      }
       // APPLE PENCIL HARDWARE PRIORITY:
       // Always register Apple Pencil contact immediately! Cancel any palm-induced pinch/pan state.
       lastPenActivityTimeRef.current = performance.now();
@@ -36969,7 +36992,12 @@ export default function App() {
       const nev = e.nativeEvent as PointerEvent;
       if ((nev.width && nev.width > 72) || (nev.height && nev.height > 72)) return;
 
-      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
+      if (
+        (isDrawingRef.current && activePointerTypeRef.current === 'pen') ||
+        performance.now() - lastPenActivityTimeRef.current < 240
+      ) {
+        return;
+      }
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
       if (pinchStateRef.current?.active) return;
@@ -36999,6 +37027,21 @@ export default function App() {
         // When Finger Drawing is enabled (!pencilOnlyMode) or Laser is active, let the finger act like the pencil for the active tool
         outsidePanDragRef.current = null;
         cancelScrollMomentum();
+      }
+    } else {
+      // Block delayed compatibility mouse events synthesized by the browser ~35-60ms after Apple Pencil / touch contact
+      if (
+        (isDrawingRef.current && activePointerTypeRef.current && activePointerTypeRef.current !== 'mouse') ||
+        performance.now() - lastPenActivityTimeRef.current < 260
+      ) {
+        return;
+      }
+      if (
+        isDrawingRef.current &&
+        activePointerIdRef.current !== null &&
+        activePointerIdRef.current !== e.pointerId
+      ) {
+        return;
       }
     }
 
@@ -37037,7 +37080,15 @@ export default function App() {
 
     canvasRectRef.current = e.currentTarget.getBoundingClientRect();
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
-    lastRawCanvasPtRef.current = pt;
+    const isIgnoredPencilOnlyTouch =
+      e.pointerType === 'touch' &&
+      pencilOnlyMode &&
+      effectiveTool !== 'lasso' &&
+      effectiveTool !== 'direct-node' &&
+      effectiveTool !== 'laser';
+    if (!isIgnoredPencilOnlyTouch) {
+      lastRawCanvasPtRef.current = pt;
+    }
     if (isPen) {
       penTapTrackRef.current = {
         startTime: performance.now(),
@@ -38463,6 +38514,16 @@ export default function App() {
       return;
     }
 
+    if (
+      e.pointerType === 'touch' &&
+      pencilOnlyMode &&
+      effectiveTool !== 'lasso' &&
+      effectiveTool !== 'direct-node' &&
+      effectiveTool !== 'laser'
+    ) {
+      return;
+    }
+
     activePointerIdRef.current = e.pointerId;
     activePointerTypeRef.current = e.pointerType;
     try {
@@ -39807,6 +39868,7 @@ export default function App() {
 
       // Start Lasso trajectory so the Lasso ALWAYS follows the Apple Pencil 1:1 at 0ms (even over an unselected image or shape!).
       // If the user simply taps (< 16px path length), finalizeLassoSelection will select the tapped shape or image on pointerUp!
+      e.preventDefault();
       lassoAdditiveRef.current = isAdditiveSelect;
       selectionTransformRef.current = null;
       isDraggingSelectionRef.current = null;
@@ -39831,6 +39893,7 @@ export default function App() {
 
     // 5. Eraser
     if (effectiveTool === 'eraser') {
+      e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
@@ -39843,6 +39906,7 @@ export default function App() {
     }
 
     // 6. Pen / Pencil / Highlighter / Shape / Laser -> Deselect any previous shape/image & Start 0ms Direct Ink!
+    e.preventDefault();
     if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
     if (activeNodeStrokeId) setActiveNodeStrokeId(null);
     if (selectedImageId) setSelectedImageId(null);
@@ -40914,6 +40978,8 @@ export default function App() {
     const effectiveTool: ToolType = activeTool;
     if (draggingTextRef.current || effectiveTool === 'text') return;
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+    if (activePointerTypeRef.current !== null && e.pointerType !== activePointerTypeRef.current) return;
+    if (e.pointerType === 'pen' && e.pressure === 0 && e.buttons === 0) return;
 
     if (e.pointerType === 'pen') {
       lastPenActivityTimeRef.current = performance.now();
@@ -40927,7 +40993,17 @@ export default function App() {
     const coalesced = nativeEv.getCoalescedEvents ? nativeEv.getCoalescedEvents() : [nativeEv];
     const prevRawPt = lastRawCanvasPtRef.current;
     const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
-    lastRawCanvasPtRef.current = latestPt;
+    const activeStrokePts = currentStrokePtsRef.current;
+    const isLatestStaleOriginJump =
+      activeTool !== 'shape' &&
+      activeStrokePts.length >= 2 &&
+      distance(activeStrokePts[activeStrokePts.length - 1], activeStrokePts[0]) >= 7.0 &&
+      distance(latestPt, activeStrokePts[0]) <= 4.5 &&
+      distance(activeStrokePts[activeStrokePts.length - 1], latestPt) >=
+        Math.max(6.0, distance(activeStrokePts[activeStrokePts.length - 1], activeStrokePts[0]) * 0.68);
+    if (!isLatestStaleOriginJump) {
+      lastRawCanvasPtRef.current = latestPt;
+    }
     if (e.pointerType === 'pen' && penTapTrackRef.current) {
       const distFromStart = Math.hypot(
         latestPt.x - penTapTrackRef.current.startX,
@@ -46132,15 +46208,74 @@ export default function App() {
     }
 
     // 6. ZERO-LATENCY, SILKY-SMOOTH PEN / PENCIL / HIGHLIGHTER / SHAPE INKING AT 2x RETINA!
+    let needsFullOverlayRedraw = false;
     for (const ce of coalesced) {
+      if (ce.clientX === 0 && ce.clientY === 0) continue;
+      if (e.pointerType === 'pen' && ce.pressure === 0 && e.buttons === 0) continue;
       const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
       const pts = currentStrokePtsRef.current;
 
       if (pts.length > 0) {
-        const prev = pts[pts.length - 1];
-        const d = distance(prev, rawPt);
+        let prev = pts[pts.length - 1];
+        let d = distance(prev, rawPt);
         // Filter sub-pixel digitizer stair-steps (< 1.5px) so live wet ink is completely smooth ("εντελώς λείο")!
         if (d < 1.5) continue;
+
+        if (activeTool !== 'shape' && pts.length >= 2) {
+          const startPt = pts[0];
+          const prevDistP0 = distance(prev, startPt);
+          const rawDistP0 = distance(rawPt, startPt);
+          // 1. Stale-P_0 Origin Replay Filter:
+          // Reject a single-frame jump back to the pointerdown origin P_0 when the pen is already >= 7px away
+          if (
+            prevDistP0 >= 7.0 &&
+            d >= Math.max(6.0, prevDistP0 * 0.65) &&
+            rawDistP0 <= Math.min(6.0, prevDistP0 * 0.42)
+          ) {
+            continue;
+          }
+          if (
+            coalesced.length > 1 &&
+            prevDistP0 >= 7.0 &&
+            rawDistP0 <= 7.5 &&
+            distance(latestPt, startPt) >= rawDistP0 + 5.0
+          ) {
+            continue;
+          }
+          // 2. Intra-Coalesced Spike Filter:
+          // Reject an intermediate coalesced sample that jumps >= 7.5px away from both `prev` and `latestPt`
+          if (coalesced.length > 1 && ce !== coalesced[coalesced.length - 1]) {
+            const dToLatest = distance(rawPt, latestPt);
+            const dPrevToLatest = distance(prev, latestPt);
+            if (d >= 7.5 && dToLatest >= 7.5 && dPrevToLatest <= Math.min(d, dToLatest) * 0.45) {
+              continue;
+            }
+          }
+          // 3. 1-Frame Spike Rollback (Live Self-Healing):
+          // If the previous sample `prev` was a 1-frame teleport spike away from `pts[pts.length - 2]` and `rawPt` is back on track, pop `prev`!
+          if (pts.length >= 3) {
+            const prev2 = pts[pts.length - 2];
+            const dOut = distance(prev2, prev);
+            const dBack = d;
+            const dBridge = distance(prev2, rawPt);
+            const prev2DistP0 = distance(prev2, startPt);
+            const wasP0Spike =
+              prev2DistP0 >= 6.5 &&
+              prevDistP0 <= Math.max(4.5, prev2DistP0 * 0.58) &&
+              rawDistP0 >= prevDistP0 + 3.5 &&
+              dBridge <= Math.max(10.0, dOut * 0.65);
+            const wasNeedleSpike =
+              dOut >= 7.5 && dBack >= 6.5 && dBridge <= Math.min(dOut, dBack) * 0.44;
+            if (wasP0Spike || wasNeedleSpike) {
+              pts.pop();
+              prev = pts[pts.length - 1];
+              d = distance(prev, rawPt);
+              needsFullOverlayRedraw = true;
+              if (d < 1.5) continue;
+            }
+          }
+        }
+
         const alpha = Math.max(0.36, Math.min(0.72, 1 - 0.5 * Math.exp(-d / 15)));
         const smoothedPt: BezierPoint = {
           x: prev.x + alpha * (rawPt.x - prev.x),
@@ -46155,6 +46290,7 @@ export default function App() {
       // If not yet snapped and using solid opaque pen/pencil, draw only the new incremental Bezier segment in 0.02ms!
       // (Highlighter uses single-path renderLiveOverlayStroke below so semi-transparent segments never overlap into dark circles/bands while drawing!)
       if (
+        !needsFullOverlayRedraw &&
         !snappedCurrentStrokeRef.current &&
         lineStyle === 'solid' &&
         !arrowEnd &&
@@ -46171,6 +46307,7 @@ export default function App() {
     }
 
     if (
+      needsFullOverlayRedraw ||
       snappedCurrentStrokeRef.current ||
       lineStyle !== 'solid' ||
       arrowEnd ||
@@ -47228,13 +47365,22 @@ export default function App() {
       return;
     }
     // Preserve short micro-strokes (like Greek accents / τόνοι) that moved < 1.5px,
-    // and ensure the final unsmoothed endpoint is included on fast straight lines!
-    if (
-      lastRawCanvasPtRef.current &&
-      distance(rawPts[rawPts.length - 1], lastRawCanvasPtRef.current) >
-        (rawPts.length === 1 ? 0.35 : 1.5)
-    ) {
-      rawPts.push(lastRawCanvasPtRef.current);
+    // and ensure the final endpoint is included without ever appending a stale-P_0 or palm jump!
+    if (lastRawCanvasPtRef.current) {
+      const endDist = distance(rawPts[rawPts.length - 1], lastRawCanvasPtRef.current);
+      const isValidFinalTail =
+        activeTool === 'shape'
+          ? endDist > 1.5
+          : rawPts.length === 1
+            ? endDist > 0.35 && endDist <= 12
+            : endDist > 1.5 &&
+              endDist <= 8.0 &&
+              (rawPts.length < 3 ||
+                distance(lastRawCanvasPtRef.current, rawPts[0]) >=
+                  Math.min(6.0, distance(rawPts[rawPts.length - 1], rawPts[0]) * 0.55));
+      if (isValidFinalTail) {
+        rawPts.push(lastRawCanvasPtRef.current);
+      }
     }
 
     // 3. Check Scribble-to-Erase Gesture
