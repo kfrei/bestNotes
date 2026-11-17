@@ -316,7 +316,15 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
           const baseEnvWattsPerDeg = 1.78 * Math.pow(Math.max(50, cs.volumeMl) / 500, 0.45);
           // When nested in a water bath, the inner vessel is shielded by the outer liquid,
           // and the ambient environment plays a subtle secondary role over the ~12-minute equilibration.
-          const envShieldFactor = cs.parentBasinId ? 0.03 : cs.nestedVesselId ? 0.05 : 1.0;
+          const isPartOfMultiNestedChain =
+            nestedPairs.length >= 2 && Boolean(cs.parentBasinId || cs.nestedVesselId);
+          const envShieldFactor = isPartOfMultiNestedChain
+            ? 0.025
+            : cs.parentBasinId
+            ? 0.03
+            : cs.nestedVesselId
+            ? 0.05
+            : 1.0;
           const dQEnv = envShieldFactor * baseEnvWattsPerDeg * coolDelta * timeStep;
           cs.temperature -= dQEnv / heatCapJoulesPerC;
         }
@@ -368,8 +376,12 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       const capInner = Math.max(1, mInner * cInner);
 
       // Contact area scales gently with the wetted liquid level of the submerged vessel
-      const wettedScale = Math.pow(Math.max(80, Math.min(bs.volumeMl, is.volumeMl)) / 500, 0.55);
-      const chainBoost = nestedPairs.length >= 2 ? 1.35 : 1.0;
+      const wettedScale = Math.pow(
+        Math.max(120, Math.sqrt(bs.volumeMl * is.volumeMl)) / 500,
+        0.5
+      );
+      const isOuterBathPair = nestedPairs.length >= 2 && !bs.parentBasinId;
+      const chainBoost = nestedPairs.length >= 2 ? (isOuterBathPair ? 2.15 : 1.75) : 1.0;
       const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale * chainBoost;
 
       const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
@@ -385,6 +397,34 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       // Clamp to boiling if reached
       if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
       if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
+    }
+
+    // 3b. In 3-vessel nested chains (Γ inside Β inside Α), if the innermost vessel Γ also sits below
+    // the water surface of the outermost bath Α, apply secondary radial bath coupling across the bath
+    // so Α, Β, and Γ reach full thermal equilibrium together within ~10–12 minutes without Α lagging behind!
+    if (nestedPairs.length >= 2) {
+      for (const { outer: midVessel, inner: deepVessel } of nestedPairs) {
+        const rootBathPair = nestedPairs.find((np) => np.inner.id === midVessel.id);
+        if (!rootBathPair) continue;
+        const rootBath = rootBathPair.outer;
+        const rs = rootBath.containerState;
+        const ds = deepVessel.containerState;
+        if (!rs || !ds || rs.volumeMl <= 0 || ds.volumeMl <= 0) continue;
+
+        const pRoot = LIQUID_REGISTRY[rs.liquidType];
+        const pDeep = LIQUID_REGISTRY[ds.liquidType];
+        const capRoot = Math.max(1, rs.volumeMl * pRoot.density * pRoot.specificHeat);
+        const capDeep = Math.max(1, ds.volumeMl * pDeep.density * pDeep.specificHeat);
+
+        const crossK = WATER_BATH_HEAT_TRANSFER_COEFF * 0.65;
+        const instEqRD = (capRoot * rs.temperature + capDeep * ds.temperature) / (capRoot + capDeep);
+        const rawDQ = crossK * (rs.temperature - ds.temperature) * timeStep;
+        const maxDQ = Math.abs(rs.temperature - instEqRD) * capRoot;
+        const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
+
+        rs.temperature -= dQ / capRoot;
+        ds.temperature += dQ / capDeep;
+      }
     }
   }
 

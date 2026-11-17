@@ -250,11 +250,28 @@ function renderContainerLetterBadge(
   isDark: boolean,
   isNestedInOuterVessel: boolean = false,
   isSubmergedInOuterLiquid: boolean = false,
-  outerLiquidType?: LiquidType
+  outerLiquidType?: LiquidType,
+  isDoubleNested: boolean = false
 ): void {
   ctx.save();
   if (isNestedInOuterVessel) {
-    if (isSubmergedInOuterLiquid) {
+    if (isDoubleNested) {
+      if (isSubmergedInOuterLiquid) {
+        if (outerLiquidType === 'milk') {
+          ctx.globalAlpha = 0.22;
+          ctx.filter = 'blur(2.6px)';
+        } else if (outerLiquidType === 'oil') {
+          ctx.globalAlpha = 0.30;
+          ctx.filter = 'blur(2.2px)';
+        } else {
+          ctx.globalAlpha = 0.40;
+          ctx.filter = 'blur(1.9px)';
+        }
+      } else {
+        ctx.globalAlpha = 0.50;
+        ctx.filter = 'blur(1.4px)';
+      }
+    } else if (isSubmergedInOuterLiquid) {
       if (outerLiquidType === 'milk') {
         ctx.globalAlpha = 0.36;
         ctx.filter = 'blur(1.7px)';
@@ -600,6 +617,7 @@ export function renderHeatSimulation(
       case 'thermometer': {
         const dipped = findDippedVesselForThermometer(obj, sim.objects, false);
         const outerDipped = dipped ? findParentVessel(dipped, sim.objects) : undefined;
+        const outerMostDipped = outerDipped ? findParentVessel(outerDipped, sim.objects) : undefined;
         renderThermometer(
           ctx,
           obj.width,
@@ -612,7 +630,8 @@ export function renderHeatSimulation(
           dipped,
           obj.x,
           obj.y,
-          outerDipped
+          outerDipped,
+          outerMostDipped
         );
         break;
       }
@@ -2949,6 +2968,9 @@ function renderBeaker(
   const liquidTopY = y + bh - liquidH;
 
   // Submerged calculation if placed inside another vessel / water bath
+  const grandParentBasin =
+    parentBasin && _allObjects ? findParentVessel(parentBasin, _allObjects) : undefined;
+  const isDoubleNested = Boolean(grandParentBasin);
   let basinWaterLocalY: number | null = null;
   let isSubmerged = false;
   if (parentBasin && parentBasin.containerState && parentBasin.containerState.volumeMl > 0) {
@@ -3007,8 +3029,8 @@ function renderBeaker(
       ctx.beginPath();
       ctx.rect(-30, splitY, w + 60, h - splitY + 40);
       ctx.clip();
-      ctx.globalAlpha = 0.58;
-      ctx.filter = 'blur(2.0px)';
+      ctx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
+      ctx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
       drawBeakerPhysical(
         ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
@@ -3075,8 +3097,8 @@ function renderBeaker(
           ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
         }
         ctx.clip();
-        ctx.globalAlpha = 0.62;
-        ctx.filter = 'blur(1.8px)';
+        ctx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
+        ctx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
         drawBeakerPhysical(
           ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
           state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
@@ -3105,16 +3127,16 @@ function renderBeaker(
 
       if (bcs.liquidType === 'milk') {
         // Milk: softened & diffused shadow ("πολύ θολό και άχνο", partially discernible)
-        ctx.globalAlpha = 0.20;
-        ctx.filter = 'blur(4.5px)';
+        ctx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
+        ctx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
       } else if (bcs.liquidType === 'oil') {
         // Oil: slightly more transparent, diffused & refracted in amber-olive oil
-        ctx.globalAlpha = 0.28;
-        ctx.filter = 'blur(3.8px)';
+        ctx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
+        ctx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
       } else {
-        // Water: transparent liquid refraction
-        ctx.globalAlpha = 0.48;
-        ctx.filter = 'blur(3.0px)';
+        // Water: transparent liquid refraction (significantly deeper blur when Γ is nested inside Β inside Α)
+        ctx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
+        ctx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
       }
 
       drawBeakerPhysical(
@@ -3161,7 +3183,8 @@ function renderBeaker(
         isDark,
         Boolean(parentBasin),
         isSubmerged,
-        parentBasin?.containerState?.liquidType
+        parentBasin?.containerState?.liquidType,
+        isDoubleNested
       );
     }
   }
@@ -3677,6 +3700,9 @@ function renderFlask(
   const liquidTopY = y + bh - liquidH;
 
   // Submerged calculation if placed inside another vessel / water bath
+  const grandParentBasin =
+    parentBasin && _allObjects ? findParentVessel(parentBasin, _allObjects) : undefined;
+  const isDoubleNested = Boolean(grandParentBasin);
   let basinWaterLocalY: number | null = null;
   let isSubmerged = false;
   if (parentBasin && parentBasin.containerState && parentBasin.containerState.volumeMl > 0) {
@@ -3730,8 +3756,8 @@ function renderFlask(
       ctx.beginPath();
       ctx.rect(-30, splitY, w + 60, h - splitY + 40);
       ctx.clip();
-      ctx.globalAlpha = 0.58;
-      ctx.filter = 'blur(2.0px)';
+      ctx.globalAlpha = isDoubleNested ? 0.38 : 0.58;
+      ctx.filter = isDoubleNested ? 'blur(3.2px)' : 'blur(2.0px)';
       drawFlaskPhysical(
         ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId,
@@ -3797,8 +3823,8 @@ function renderFlask(
           ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
         }
         ctx.clip();
-        ctx.globalAlpha = 0.62;
-        ctx.filter = 'blur(1.8px)';
+        ctx.globalAlpha = isDoubleNested ? 0.42 : 0.62;
+        ctx.filter = isDoubleNested ? 'blur(2.8px)' : 'blur(1.8px)';
         drawFlaskPhysical(
           ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
           state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
@@ -3824,14 +3850,14 @@ function renderFlask(
       ctx.clip();
 
       if (bcs.liquidType === 'milk') {
-        ctx.globalAlpha = 0.20;
-        ctx.filter = 'blur(4.5px)';
+        ctx.globalAlpha = isDoubleNested ? 0.12 : 0.20;
+        ctx.filter = isDoubleNested ? 'blur(6.5px)' : 'blur(4.5px)';
       } else if (bcs.liquidType === 'oil') {
-        ctx.globalAlpha = 0.28;
-        ctx.filter = 'blur(3.8px)';
+        ctx.globalAlpha = isDoubleNested ? 0.18 : 0.28;
+        ctx.filter = isDoubleNested ? 'blur(5.6px)' : 'blur(3.8px)';
       } else {
-        ctx.globalAlpha = 0.48;
-        ctx.filter = 'blur(3.0px)';
+        ctx.globalAlpha = isDoubleNested ? 0.28 : 0.48;
+        ctx.filter = isDoubleNested ? 'blur(4.8px)' : 'blur(3.0px)';
       }
 
       drawFlaskPhysical(
@@ -3877,7 +3903,8 @@ function renderFlask(
         isDark,
         Boolean(parentBasin),
         isSubmerged,
-        parentBasin?.containerState?.liquidType
+        parentBasin?.containerState?.liquidType,
+        isDoubleNested
       );
     }
   }
@@ -3994,7 +4021,8 @@ function renderThermometer(
   dippedContainer?: HeatObject,
   _thermX?: number,
   thermY?: number,
-  outerDippedContainer?: HeatObject
+  outerDippedContainer?: HeatObject,
+  outerMostDippedContainer?: HeatObject
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -4053,6 +4081,7 @@ function renderThermometer(
     }
   }
   const isNestedThermometer = Boolean(outerDippedContainer);
+  const isDoubleNestedThermometer = Boolean(outerMostDippedContainer);
 
   // 1. Physical Thermometer Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
@@ -4116,8 +4145,12 @@ function renderThermometer(
         ctx.beginPath();
         ctx.rect(0, rimY, w, surfaceY - rimY);
         ctx.clip();
-        ctx.globalAlpha = isNestedThermometer ? 0.36 : 0.50;
-        ctx.filter = isNestedThermometer ? 'blur(3.2px)' : 'blur(2.2px)';
+        ctx.globalAlpha = isDoubleNestedThermometer ? 0.28 : isNestedThermometer ? 0.36 : 0.50;
+        ctx.filter = isDoubleNestedThermometer
+          ? 'blur(3.8px)'
+          : isNestedThermometer
+          ? 'blur(3.2px)'
+          : 'blur(2.2px)';
         drawThermometerApparatus(
           ctx,
           cx,
@@ -4191,14 +4224,14 @@ function renderThermometer(
             ctx.clip();
 
             if (dippedLiquidType === 'milk') {
-              ctx.globalAlpha = 0.18;
-              ctx.filter = 'blur(4.8px)';
+              ctx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.18;
+              ctx.filter = isDoubleNestedThermometer ? 'blur(5.8px)' : 'blur(4.8px)';
             } else if (dippedLiquidType === 'oil') {
-              ctx.globalAlpha = 0.26;
-              ctx.filter = 'blur(4.1px)';
+              ctx.globalAlpha = isDoubleNestedThermometer ? 0.18 : 0.26;
+              ctx.filter = isDoubleNestedThermometer ? 'blur(5.0px)' : 'blur(4.1px)';
             } else {
-              ctx.globalAlpha = 0.38;
-              ctx.filter = 'blur(3.7px)';
+              ctx.globalAlpha = isDoubleNestedThermometer ? 0.26 : 0.38;
+              ctx.filter = isDoubleNestedThermometer ? 'blur(4.6px)' : 'blur(3.7px)';
             }
 
             drawThermometerApparatus(
@@ -4226,14 +4259,14 @@ function renderThermometer(
           ctx.clip();
 
           if (dippedLiquidType === 'milk' || outerLiquidType === 'milk') {
-            ctx.globalAlpha = 0.12;
-            ctx.filter = 'blur(6.2px)';
+            ctx.globalAlpha = isDoubleNestedThermometer ? 0.08 : 0.12;
+            ctx.filter = isDoubleNestedThermometer ? 'blur(7.8px)' : 'blur(6.2px)';
           } else if (dippedLiquidType === 'oil' || outerLiquidType === 'oil') {
-            ctx.globalAlpha = 0.19;
-            ctx.filter = 'blur(5.4px)';
+            ctx.globalAlpha = isDoubleNestedThermometer ? 0.12 : 0.19;
+            ctx.filter = isDoubleNestedThermometer ? 'blur(7.0px)' : 'blur(5.4px)';
           } else {
-            ctx.globalAlpha = 0.27;
-            ctx.filter = 'blur(4.8px)';
+            ctx.globalAlpha = isDoubleNestedThermometer ? 0.16 : 0.27;
+            ctx.filter = isDoubleNestedThermometer ? 'blur(6.4px)' : 'blur(4.8px)';
           }
 
           drawThermometerApparatus(
