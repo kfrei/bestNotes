@@ -2619,6 +2619,10 @@ export default function App() {
     }[];
     layerId: string;
     rawStrokesBackup?: StrokeObject[];
+    preProposalPageSnapshot?: NotePage;
+    preProposalSelectedStrokeIds?: string[];
+    preProposalIsSimulating?: boolean;
+    preProposalSimCircuitSwitchClosed?: boolean;
   } | null>(null);
   const draggingProposalCornerRef = useRef<'tl' | 'tr' | 'br' | 'bl' | null>(null);
   const proposalOverlayHitRef = useRef<{
@@ -8468,6 +8472,31 @@ export default function App() {
   }, [activeNotebook.id]);
 
   const handleUndo = useCallback(() => {
+    if (circuitProposal && circuitProposal.pageId === activePage.id && circuitProposal.preProposalPageSnapshot) {
+      const prop = circuitProposal;
+      setCircuitProposal(null);
+      proposalOverlayHitRef.current = null;
+      draggingProposalCornerRef.current = null;
+      const snap = clonePageFast(prop.preProposalPageSnapshot!);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: snap.strokes,
+          texts: snap.texts,
+          circuitSims: snap.circuitSims,
+          activeCircuitSimId: snap.activeCircuitSimId,
+        }),
+        false
+      );
+      setSelectedStrokeIds(prop.preProposalSelectedStrokeIds || []);
+      setIsSimulating(prop.preProposalIsSimulating ?? false);
+      if (typeof prop.preProposalSimCircuitSwitchClosed === 'boolean') {
+        setSimCircuitSwitchClosed(prop.preProposalSimCircuitSwitchClosed);
+      }
+      showToast('✕ Η πρόταση ολοκλήρωσης ακυρώθηκε.');
+      return;
+    }
+
     const stack = [...undoStackRef.current];
     if (stack.length === 0) {
       showToast('ℹ️ Δεν υπάρχει προηγούμενη ενέργεια για Αναίρεση (Undo)!');
@@ -8554,9 +8583,11 @@ export default function App() {
     activeNotebook,
     activePageIndex,
     activePage,
+    circuitProposal,
     clonePageFast,
     isSamePageStateForUndo,
     showToast,
+    updateActivePage,
   ]);
 
   const handleRedo = useCallback(() => {
@@ -24117,22 +24148,13 @@ export default function App() {
         nextStrokesSnapshot.push(...alignedSubset);
       }
 
-      if (removeTextSet.size > 0) {
-        updateActivePage(
-          (page) => ({
-            ...page,
-            texts: (page.texts || []).filter((t) => !removeTextSet.has(t.id)),
-          }),
-          false
-        );
-      }
-
       setShowSimulationPanel(true);
       setSimActiveCategory('circuits');
       handleStartCircuitCompletion(
         nextStrokesSnapshot,
         alignedSubset.map((s) => s.id),
-        replaceOnPageSet
+        replaceOnPageSet,
+        removeTextSet
       );
       return true;
     }
@@ -24286,8 +24308,26 @@ export default function App() {
   const handleStartCircuitCompletion = (
     overridePageStrokes?: StrokeObject[],
     overrideSelectedIds?: string[],
-    extraReplaceIds?: Set<string>
+    extraReplaceIds?: Set<string>,
+    extraRemoveTextIds?: Set<string>
   ) => {
+    const preProposalContext =
+      circuitProposal &&
+      circuitProposal.pageId === activePage.id &&
+      circuitProposal.preProposalPageSnapshot
+        ? {
+            pageSnapshot: circuitProposal.preProposalPageSnapshot,
+            selectedStrokeIds: circuitProposal.preProposalSelectedStrokeIds || [],
+            isSimulating: circuitProposal.preProposalIsSimulating ?? false,
+            simCircuitSwitchClosed: circuitProposal.preProposalSimCircuitSwitchClosed ?? false,
+          }
+        : {
+            pageSnapshot: clonePageFast(activePage),
+            selectedStrokeIds: [...selectedStrokeIds],
+            isSimulating,
+            simCircuitSwitchClosed,
+          };
+
     const sourcePageStrokes = overridePageStrokes || activePage.strokes;
     const sourceSelectedIds =
       overrideSelectedIds !== undefined ? overrideSelectedIds : selectedStrokeIds;
@@ -24332,7 +24372,7 @@ export default function App() {
         const members = eligible.filter((s) => expandedIdSet.has(s.id));
         for (const cand of eligible) {
           if (expandedIdSet.has(cand.id)) continue;
-          if (members.some((m) => areStrokesWithinCircuitTol(cand, m, 40))) {
+          if (members.some((m) => areStrokesWithinCircuitTol(cand, m, 18))) {
             expandedIdSet.add(cand.id);
             added = true;
             if (cand.groupId) {
@@ -24379,9 +24419,10 @@ export default function App() {
         convertFreehandWires: true,
       }
     );
-    const completionRemoveTextSet = new Set<string>(
-      completionHandRec.changed ? completionHandRec.removedTextIds : []
-    );
+    const completionRemoveTextSet = new Set<string>([
+      ...(completionHandRec.changed ? completionHandRec.removedTextIds : []),
+      ...(extraRemoveTextIds ? Array.from(extraRemoveTextIds) : []),
+    ]);
 
     const preAligned = autoAlignAndConnectCircuit(
       completionHandRec.changed ? completionHandRec.strokes : rawSubset
@@ -24495,6 +24536,9 @@ export default function App() {
       if ((c.kind === 'battery' || c.kind === 'voltage-source') && baseLoopComps.length > 1) {
         return false;
       }
+      if (c.orientation !== 'v' && c.kind !== 'ammeter' && c.kind !== 'voltmeter') {
+        return false;
+      }
       if (c.orientation === 'v' && c.cx >= midX - 24) {
         return true;
       }
@@ -24540,6 +24584,9 @@ export default function App() {
 
     const isLeftComp = (c: (typeof baseLoopComps)[number]): boolean => {
       if ((c.kind === 'battery' || c.kind === 'voltage-source') && baseLoopComps.length > 1) {
+        return false;
+      }
+      if (c.orientation !== 'v' && c.kind !== 'ammeter' && c.kind !== 'voltmeter') {
         return false;
       }
       if (c.orientation === 'v' && c.cx < midX - 24) {
@@ -25838,7 +25885,7 @@ export default function App() {
         circuitSims: nextSims,
         activeCircuitSimId: targetSimId,
       };
-    });
+    }, false);
 
     setSelectedStrokeIds([]);
     setSelectedImageId(null);
@@ -25879,6 +25926,10 @@ export default function App() {
       spans,
       rawStrokesBackup: matchingExisting?.rawStrokesBackup || rawStrokesBackup,
       layerId: defaultLayerId,
+      preProposalPageSnapshot: preProposalContext.pageSnapshot,
+      preProposalSelectedStrokeIds: preProposalContext.selectedStrokeIds,
+      preProposalIsSimulating: preProposalContext.isSimulating,
+      preProposalSimCircuitSwitchClosed: preProposalContext.simCircuitSwitchClosed,
     });
 
     showToast(
@@ -26051,6 +26102,10 @@ export default function App() {
     ];
     const circuitIdSet = new Set(allCircuitStrokeIds);
 
+    if (prop.preProposalPageSnapshot) {
+      pushUndoSnapshot(prop.preProposalPageSnapshot);
+    }
+
     updateActivePage((page) => {
       const combined = [...page.strokes, ...createdWires];
       const subStrokes = combined.filter((s) => circuitIdSet.has(s.id));
@@ -26122,7 +26177,7 @@ export default function App() {
         circuitSims: nextSims,
         activeCircuitSimId: prop.simId,
       };
-    });
+    }, !prop.preProposalPageSnapshot);
 
     setCircuitProposal(null);
     proposalOverlayHitRef.current = null;
@@ -26134,9 +26189,28 @@ export default function App() {
   };
 
   const cancelCircuitCompletionProposal = () => {
+    const prop = circuitProposal;
     setCircuitProposal(null);
     proposalOverlayHitRef.current = null;
     draggingProposalCornerRef.current = null;
+    if (prop && prop.pageId === activePage.id && prop.preProposalPageSnapshot) {
+      const snap = clonePageFast(prop.preProposalPageSnapshot);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: snap.strokes,
+          texts: snap.texts,
+          circuitSims: snap.circuitSims,
+          activeCircuitSimId: snap.activeCircuitSimId,
+        }),
+        false
+      );
+      setSelectedStrokeIds(prop.preProposalSelectedStrokeIds || []);
+      setIsSimulating(prop.preProposalIsSimulating ?? false);
+      if (typeof prop.preProposalSimCircuitSwitchClosed === 'boolean') {
+        setSimCircuitSwitchClosed(prop.preProposalSimCircuitSwitchClosed);
+      }
+    }
     showToast('✕ Η πρόταση ολοκλήρωσης ακυρώθηκε.');
   };
 
@@ -26589,7 +26663,7 @@ export default function App() {
               strokes: nextStrokes,
               circuitSims: nextSims,
             };
-          });
+          }, false);
 
           setCircuitProposal(nextProp);
           setSelectedStrokeIds([]);
@@ -62470,19 +62544,11 @@ export default function App() {
                             nextStrokesSnapshot.push(s);
                           }
                           if (!insertedOpen) nextStrokesSnapshot.push(...alignedSubset);
-                          if (removeJoinTextSet.size > 0) {
-                            updateActivePage(
-                              (page) => ({
-                                ...page,
-                                texts: (page.texts || []).filter((t) => !removeJoinTextSet.has(t.id)),
-                              }),
-                              false
-                            );
-                          }
                           handleStartCircuitCompletion(
                             nextStrokesSnapshot,
                             alignedIds,
-                            replaceJoinSet
+                            replaceJoinSet,
+                            removeJoinTextSet
                           );
                           return;
                         }
