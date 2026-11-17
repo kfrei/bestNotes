@@ -65644,8 +65644,6 @@ export default function App() {
                   heatSim.pauseHeatingAndSim();
                 }}
                 storagePrefix="heat"
-                ambientTemperature={heatSim.activeHeatSim?.ambientTemperature ?? 20}
-                onSetAmbientTemperature={heatSim.setAmbientTemperature}
                 onTogglePlayPause={() => {
                   const nextRunning = !heatStopwatchRunning;
                   setHeatStopwatchRunning(nextRunning);
