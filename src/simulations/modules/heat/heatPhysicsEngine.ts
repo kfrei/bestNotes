@@ -369,7 +369,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
 
       // Contact area scales gently with the wetted liquid level of the submerged vessel
       const wettedScale = Math.pow(Math.max(80, Math.min(bs.volumeMl, is.volumeMl)) / 500, 0.55);
-      const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale;
+      const chainBoost = nestedPairs.length >= 2 ? 1.35 : 1.0;
+      const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale * chainBoost;
 
       const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
       const tempDiff = bs.temperature - is.temperature; // Outer - Inner

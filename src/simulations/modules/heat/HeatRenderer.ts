@@ -2001,15 +2001,56 @@ export function getContainerActionButtonsLocalPos(
   return { dropletX, dropletY, pencilX, pencilY, graphX, graphY, btnSize, btnHalf, glassRightX, glassBottomY };
 }
 
+export function computeEffectiveOuterRimLocalY(
+  objX: number,
+  objY: number,
+  w: number,
+  type: string | undefined,
+  parentBasin: HeatObject | undefined,
+  allObjects?: HeatObject[]
+): number | null {
+  if (!parentBasin) return null;
+  const bPad = 8;
+  let effectiveRimWorldY = parentBasin.y + bPad + 4;
+
+  // If the parent container (e.g. B) is itself submerged in a grandparent container (e.g. A),
+  // check if B's upward-stacked action buttons (💧, ✏️, 📈 above A's rim) reach above B's rim
+  // and are horizontally close to this inner container's (Γ's) action buttons!
+  if (allObjects) {
+    const grandParent = findParentVessel(parentBasin, allObjects);
+    if (grandParent && isContainerSubmerged(parentBasin, allObjects)) {
+      const parentBtnX =
+        parentBasin.x +
+        (parentBasin.type === 'flask'
+          ? 8 + (parentBasin.width - 16) * 0.65 + 17
+          : parentBasin.width - 8 + 13.5);
+      const innerBtnX =
+        objX + (type === 'flask' ? 8 + (w - 16) * 0.65 + 17 : w - 8 + 13.5);
+      if (Math.abs(innerBtnX - parentBtnX) < 26) {
+        const grandParentRimWorldY = grandParent.y + bPad + 4;
+        // Top of parent B's 3-button stack above A's rim:
+        const parentButtonsTopWorldY = grandParentRimWorldY - 7 - 18 * 3 - 4 * 2;
+        effectiveRimWorldY = Math.min(effectiveRimWorldY, parentButtonsTopWorldY);
+      }
+    }
+  }
+  return effectiveRimWorldY - objY;
+}
+
 export function getContainerActionButtonsWorldPos(obj: HeatObject, allObjects?: HeatObject[]) {
   const isSubmerged = allObjects ? isContainerSubmerged(obj, allObjects) : false;
   let outerRimLocalY: number | null = null;
   if (isSubmerged && allObjects) {
     const parentBasin = findParentVessel(obj, allObjects);
     if (parentBasin) {
-      const bPad = 8;
-      const basinRimWorldY = parentBasin.y + bPad + 4;
-      outerRimLocalY = basinRimWorldY - obj.y;
+      outerRimLocalY = computeEffectiveOuterRimLocalY(
+        obj.x,
+        obj.y,
+        obj.width,
+        obj.type,
+        parentBasin,
+        allObjects
+      );
     }
   }
   const local = getContainerActionButtonsLocalPos(obj.width, obj.height, isSubmerged, obj.type, outerRimLocalY);
@@ -3090,12 +3131,14 @@ function renderBeaker(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
   // When submerged, slides smoothly up to the top-right empty area!
   if (layer === 'all' || layer === 'ui') {
-    let outerRimLocalY: number | null = null;
-    if (parentBasin) {
-      const bPad = 8;
-      const basinRimGlobalY = parentBasin.y + bPad + 4;
-      outerRimLocalY = basinRimGlobalY - (objY ?? 0);
-    }
+    const outerRimLocalY = computeEffectiveOuterRimLocalY(
+      objX ?? 0,
+      objY ?? 0,
+      w,
+      'beaker',
+      parentBasin,
+      _allObjects
+    );
     renderContainerActionButtons(
       ctx,
       objId,
@@ -3804,12 +3847,14 @@ function renderFlask(
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
   // When submerged, slides smoothly up to the top-right empty area!
   if (layer === 'all' || layer === 'ui') {
-    let outerRimLocalY: number | null = null;
-    if (parentBasin) {
-      const bPad = 8;
-      const basinRimGlobalY = parentBasin.y + bPad + 4;
-      outerRimLocalY = basinRimGlobalY - (objY ?? 0);
-    }
+    const outerRimLocalY = computeEffectiveOuterRimLocalY(
+      objX ?? 0,
+      objY ?? 0,
+      w,
+      'flask',
+      parentBasin,
+      _allObjects
+    );
     renderContainerActionButtons(
       ctx,
       objId,
@@ -4580,12 +4625,36 @@ function renderThermalGraph(
   const plotH = gh - 76;
 
   const effectiveMeta = metaMap || getContainersCurveMeta(sim, isDark);
-  let boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? g.boundContainerIds : [];
+  const allContainers = sim.objects.filter(
+    (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
+  );
+  let boundIds = g.boundContainerIds && g.boundContainerIds.length > 0 ? [...g.boundContainerIds] : [];
   if (boundIds.length === 0) {
-    const allContainers = sim.objects.filter(
-      (o) => o.type === 'beaker' || o.type === 'wide-basin' || o.type === 'flask'
-    );
     boundIds = allContainers.map((c) => c.id);
+  } else if (boundIds.length === 1) {
+    // If 1 container is bound and it is part of a nested multi-container system (e.g., A, B, Γ nested together),
+    // automatically include all filled containers in that nested chain so all 2 or 3 interacting curves plot together!
+    const getRootVesselId = (c: HeatObject): string => {
+      let cur: HeatObject | undefined = c;
+      let safety = 0;
+      while (cur && safety < 6) {
+        const p = findParentVessel(cur, allContainers);
+        if (!p) return cur.id;
+        cur = p;
+        safety++;
+      }
+      return c.id;
+    };
+    const seedObj = allContainers.find((c) => c.id === boundIds[0]);
+    if (seedObj) {
+      const rootId = getRootVesselId(seedObj);
+      const chainContainers = allContainers.filter(
+        (c) => (c.containerState?.volumeMl ?? 0) > 0 && getRootVesselId(c) === rootId
+      );
+      if (chainContainers.length > 1) {
+        boundIds = chainContainers.map((c) => c.id);
+      }
+    }
   }
 
   // Calculate highest recorded temperature among plotted containers to configure dynamic vertical axis
@@ -4785,13 +4854,18 @@ function renderThermalGraph(
       });
 
       // Legend Item: "— θΑ (Νερό): 24°C" or "— θ (Νερό): 24°C" when single filled container
-      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      const isCompactLegend = boundIds.length >= 3;
+      ctx.font = isCompactLegend
+        ? 'bold 8.5px system-ui, sans-serif'
+        : 'bold 9.5px system-ui, sans-serif';
       ctx.fillStyle = color;
       ctx.textAlign = 'left';
       const labelPrefix = letter ? `θ${letter}` : 'θ';
-      const itemText = `— ${labelPrefix} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
+      const itemText = isCompactLegend
+        ? `— ${labelPrefix}: ${Math.round(currentTemp)}°C`
+        : `— ${labelPrefix} (${liquidLabel}): ${Math.round(currentTemp)}°C`;
       ctx.fillText(itemText, legendX, legendY);
-      legendX += ctx.measureText(itemText).width + 14;
+      legendX += ctx.measureText(itemText).width + (isCompactLegend ? 10 : 14);
     });
 
     // Determine if mouse is currently hovering inside the plot area
@@ -4821,6 +4895,9 @@ function renderThermalGraph(
     // Live Tip Readout at the End of Each Curve (same look as mouse hover on curve)
     // -------------------------------------------------------------------------
     const hoverCx = hoverClosestPt ? mapX(hoverClosestPt.timeSec) : null;
+    const sortedByLastY = [...curvesToPlot]
+      .filter((c) => c.lastY !== undefined)
+      .sort((a, b) => (a.lastY ?? 0) - (b.lastY ?? 0));
     curvesToPlot.forEach((curve, idx) => {
       if (curve.lastX === undefined || curve.lastY === undefined) return;
       // Avoid overlapping with the active hover readout when the cursor is right on the curve tip
@@ -4846,7 +4923,18 @@ function renderThermalGraph(
       ctx.textAlign = 'left';
       const tipText = `${tipTemp.toFixed(1)}°`;
       const tipTextW = ctx.measureText(tipText).width;
-      const textOffsetY = idx % 2 === 0 ? -6 : 12;
+      const rankIdx = sortedByLastY.findIndex((c) => c.cId === curve.cId);
+      const effectiveRank = rankIdx >= 0 ? rankIdx : idx;
+      const textOffsetY =
+        sortedByLastY.length >= 3
+          ? effectiveRank === 0
+            ? -8
+            : effectiveRank === 1
+            ? 3
+            : 14
+          : effectiveRank % 2 === 0
+          ? -6
+          : 12;
       const rawTextX = cx + 6;
       const clampedTextX = Math.min(rawTextX, gx + gw - 6 - tipTextW);
       ctx.fillText(tipText, clampedTextX, cy + textOffsetY);
