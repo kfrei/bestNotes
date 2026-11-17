@@ -12826,14 +12826,18 @@ export function analyzeCircuitForSimulation(
     for (const wn of wireNodes) {
       if (wn.u === wn.v) continue;
       if (!circuitSwitchClosed && autoSwitch && wn.idx === autoSwitch.wireIdx) continue;
-      passAdj[wn.u].push({ to: wn.v, g: 4.0 });
-      passAdj[wn.v].push({ to: wn.u, g: 4.0 });
+      passAdj[wn.u].push({ to: wn.v, g: 40.0 });
+      passAdj[wn.v].push({ to: wn.u, g: 40.0 });
+    }
+    if (autoSwitchGap && circuitSwitchClosed) {
+      passAdj[autoSwitchGap.uTop].push({ to: autoSwitchGap.vBot, g: 100.0 });
+      passAdj[autoSwitchGap.vBot].push({ to: autoSwitchGap.uTop, g: 100.0 });
     }
     for (const cn of compNodes) {
       const k = cn.comp.kind;
       if (k === 'voltmeter' || k === 'battery' || k === 'voltage-source') continue;
-      if (k === 'switch' && cn.comp.switchClosed === false) continue;
-      const g = k === 'switch' || k === 'ammeter' ? 50.0 : 1.0;
+      if (k === 'switch' && (!circuitSwitchClosed || cn.comp.switchClosed === false)) continue;
+      const g = k === 'switch' || k === 'ammeter' ? 100.0 : 1.0;
       passAdj[cn.u].push({ to: cn.v, g });
       passAdj[cn.v].push({ to: cn.u, g });
     }
