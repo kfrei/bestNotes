@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { Notebook, NotePage, StrokeObject, BezierPoint, TextObject } from '../types/note';
+import { compactStrokeForStorage } from '../services/storage/storageCleaners';
 
 /**
  * Decompresses an Apple 'bv41' raw LZ4 block into a Uint8Array.
@@ -294,17 +295,19 @@ function parseGoodnotesPageBuffer(buf: Uint8Array, pageId: string, pageNum: numb
     const avgW = widths.length > 0 ? widths.reduce((s, v) => s + v, 0) / widths.length : 280;
     const strokeWidth = isHighlighter ? 18 : Math.max(2.2, Math.min(6.5, avgW / 115));
 
-    strokes.push({
-      id: uuid,
-      tool: isHighlighter ? 'highlighter' : 'pen',
-      penType: 'fountain',
-      color: hexColor,
-      width: Math.round(strokeWidth * 10) / 10,
-      opacity: isHighlighter ? Math.round(a * 100) / 100 : 1,
-      points: pts,
-      layerId: 'layer-1',
-      isShape: f3?.value === 4,
-    });
+    strokes.push(
+      compactStrokeForStorage({
+        id: uuid,
+        tool: isHighlighter ? 'highlighter' : 'pen',
+        penType: 'fountain',
+        color: hexColor,
+        width: Math.round(strokeWidth * 10) / 10,
+        opacity: isHighlighter ? Math.round(a * 100) / 100 : 1,
+        points: pts,
+        layerId: 'layer-1',
+        isShape: f3?.value === 4,
+      })
+    );
   }
 
   const texts: TextObject[] = [];

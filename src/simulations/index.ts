@@ -18,6 +18,7 @@ export * from './registry/SimulationRegistry';
 export * from './modules/mechanics/pendulum/pendulumPhysics';
 export * from './modules/mechanics/pendulum/PendulumModule';
 export * from './modules/heat';
+export * from './modules/circuits';
 
 // UI Components
 export * from './ui/StopwatchWidget';
@@ -28,6 +29,8 @@ export * from './ui/SimulationObjectRibbon';
 import { SimulationRegistry } from './registry/SimulationRegistry';
 import { PendulumModule } from './modules/mechanics/pendulum/PendulumModule';
 import { HeatSimulationModule } from './modules/heat';
+import { CircuitSimulationModule } from './modules/circuits';
 
 SimulationRegistry.register(PendulumModule);
 SimulationRegistry.register(HeatSimulationModule);
+SimulationRegistry.register(CircuitSimulationModule);

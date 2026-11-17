@@ -216,18 +216,6 @@ import {
   tryMatchShadowCornerOnBox,
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
-  getCircuitComponentsWithTerminals,
-  repairCircuitMeterStrokes,
-  classifyCircuitStrokeKind,
-  splitWiresUnderCircuitComponent,
-  getCircuitWireRailSnapDelta,
-  adaptCircuitWiresOnComponentMove,
-  adaptCircuitWiresOnScaleTransform,
-  toggleSwitchStrokeGroup,
-  recognizeHandDrawnCircuitSymbols,
-  autoAlignAndConnectCircuit,
-  convertCircuitComponents,
-  analyzeCircuitForSimulation,
   beautifyHandwritingStrokes,
   removeImageBackground,
   computeImageSobelEdgeMap,
@@ -288,6 +276,29 @@ import {
   createHeatObjectFromRecognition,
   HeatSimConfig,
   isPointOnHeatObject,
+  getCircuitComponentsWithTerminals,
+  repairCircuitMeterStrokes,
+  classifyCircuitStrokeKind,
+  splitWiresUnderCircuitComponent,
+  getCircuitWireRailSnapDelta,
+  adaptCircuitWiresOnComponentMove,
+  adaptCircuitWiresOnScaleTransform,
+  toggleSwitchStrokeGroup,
+  recognizeHandDrawnCircuitSymbols,
+  autoAlignAndConnectCircuit,
+  convertCircuitComponents,
+  analyzeCircuitForSimulation,
+  CircuitControlPanel,
+  getValidCircuitSims,
+  getAllNotebookCircuitSims as getAllNotebookCircuitSimsHelper,
+  getActiveCircuitSim,
+  getNextDefaultCircuitSimName,
+  isCircuitEligibleStroke,
+  areStrokesWithinCircuitTol,
+  getSimExpandedStrokeSet,
+  expandWholeCircuitStrokeIds,
+  runScopedCircuitOperationOnPage,
+  splitWiresAndSyncPageSims,
 } from './simulations';
 import { LassoOcrButtons } from './stem-engines';
 import {
@@ -325,6 +336,7 @@ import {
   saveUserEditedSessionIds,
   getNotebookContentScore,
   cleanNotebookForStorage,
+  compactStrokeForStorage,
   serializeNotebookForFirestore,
   cleanNotebookForLibraryCache,
   openBestNotesIdb,
@@ -5126,7 +5138,8 @@ export default function App() {
         }
         const strokes = p.strokes || [];
         for (let j = 0; j < strokes.length; j++) {
-          pBytes += 140 + (strokes[j].points?.length || 0) * 44;
+          const cs = compactStrokeForStorage(strokes[j]);
+          pBytes += 96 + (cs.points?.length || 0) * 22;
         }
         const texts = p.texts || [];
         for (let j = 0; j < texts.length; j++) {
@@ -18583,31 +18596,10 @@ export default function App() {
   // ============================================================================
   // NAMED LASSO CIRCUIT SIMULATION HELPERS (sim01, sim02, ... — 1 Active at a Time)
   // ============================================================================
-  const getValidCircuitSims = (page: NotePage): CircuitSimConfig[] => {
-    const strokeIdSet = new Set(page.strokes.map((s) => s.id));
-    return (page.circuitSims || []).filter((sim) =>
-      sim.strokeIds.some((id) => strokeIdSet.has(id))
-    );
-  };
-
   const getAllNotebookCircuitSims = (
     nb: Notebook = activeNotebook
-  ): { pageId: string; pageIdx: number; sim: CircuitSimConfig }[] => {
-    const list: { pageId: string; pageIdx: number; sim: CircuitSimConfig }[] = [];
-    nb.pages.forEach((p, pageIdx) => {
-      const valid = getValidCircuitSims(p);
-      for (const sim of valid) {
-        list.push({ pageId: p.id, pageIdx, sim });
-      }
-    });
-    return list;
-  };
-
-  const getActiveCircuitSim = (page: NotePage): CircuitSimConfig | null => {
-    const valid = getValidCircuitSims(page);
-    if (valid.length === 0) return null;
-    return valid.find((sim) => sim.id === page.activeCircuitSimId) || valid[0];
-  };
+  ): { pageId: string; pageIdx: number; sim: CircuitSimConfig }[] =>
+    getAllNotebookCircuitSimsHelper(nb);
 
   // Sync circuit simulation controls (switch state, flow direction, electrons, speed, track) when active sim, page or file changes
   const lastActiveCircuitSimKeyRef = useRef<string | null>(null);
@@ -18643,20 +18635,8 @@ export default function App() {
     }
   }, [activeNotebook.id, activePage.id, activePage.activeCircuitSimId, activePage.circuitSims]);
 
-  const getNextDefaultSimName = (page?: NotePage): string => {
-    const allEntries = getAllNotebookCircuitSims(activeNotebook);
-    const usedNames = new Set(allEntries.map((e) => e.sim.name.trim().toLowerCase()));
-    if (page) {
-      for (const s of getValidCircuitSims(page)) {
-        usedNames.add(s.name.trim().toLowerCase());
-      }
-    }
-    for (let i = 1; i <= 99; i++) {
-      const candidate = `sim${String(i).padStart(2, '0')}`;
-      if (!usedNames.has(candidate)) return candidate;
-    }
-    return `sim${usedNames.size + 1}`;
-  };
+  const getNextDefaultSimName = (page?: NotePage): string =>
+    getNextDefaultCircuitSimName(activeNotebook, page);
 
   // Auto-deduplicate any identical default sim names (e.g. two pages both having 'sim01') across the active notebook
   useEffect(() => {
@@ -24089,301 +24069,6 @@ export default function App() {
       attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId);
     }, 0);
     return true;
-  };
-
-  const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
-    if (s.tool === 'highlighter') return false;
-    if (s.arrowStart || s.arrowEnd) return false;
-    if (s.points[0]?.twist === 999) return false;
-    if (s.fillStyle && s.fillStyle !== 'none') return false;
-    if (!s.isShape) {
-      // Freehand wire strokes drawn with Apple Pencil / Stylus
-      return s.points.length >= 2;
-    }
-    if (s.shapeType === 'line') {
-      return s.points.length >= 2;
-    }
-    return (
-      s.shapeType === 'battery' ||
-      s.shapeType === 'voltage-source' ||
-      s.shapeType === 'bulb' ||
-      s.shapeType === 'bulb-symbol' ||
-      s.shapeType === 'resistor' ||
-      s.shapeType === 'switch' ||
-      s.shapeType === 'switch-blade' ||
-      s.shapeType === 'switch-knob' ||
-      s.shapeType === 'fan' ||
-      s.shapeType === 'fan-blade' ||
-      s.shapeType === 'fan-hub' ||
-      s.shapeType === 'ammeter' ||
-      s.shapeType === 'ammeter-needle' ||
-      s.shapeType === 'ammeter-label' ||
-      s.shapeType === 'voltmeter' ||
-      s.shapeType === 'voltmeter-needle' ||
-      s.shapeType === 'voltmeter-label'
-    );
-  };
-
-  const areStrokesWithinCircuitTol = (a: StrokeObject, b: StrokeObject, tol = 40): boolean => {
-    for (const pt of a.points) {
-      if (b.points.length === 1) {
-        if (Math.hypot(pt.x - b.points[0].x, pt.y - b.points[0].y) <= tol) return true;
-      } else {
-        for (let i = 0; i < b.points.length - 1; i++) {
-          if (isPointNearSegment(pt, b.points[i], b.points[i + 1], tol)) return true;
-        }
-      }
-    }
-    for (const pt of b.points) {
-      if (a.points.length === 1) {
-        if (Math.hypot(pt.x - a.points[0].x, pt.y - a.points[0].y) <= tol) return true;
-      } else {
-        for (let i = 0; i < a.points.length - 1; i++) {
-          if (isPointNearSegment(pt, a.points[i], a.points[i + 1], tol)) return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  const getSimExpandedStrokeSet = (page: NotePage, sim: CircuitSimConfig | null): Set<string> => {
-    if (!sim) return new Set();
-    const baseSet = new Set(sim.strokeIds);
-    const groupIds = new Set(
-      page.strokes
-        .filter((s) => baseSet.has(s.id) && isCircuitEligibleStroke(s) && s.groupId)
-        .map((s) => s.groupId!)
-    );
-    const out = new Set<string>();
-    for (const s of page.strokes) {
-      if (baseSet.has(s.id)) {
-        out.add(s.id);
-      } else if (
-        isCircuitEligibleStroke(s) &&
-        s.groupId &&
-        groupIds.has(s.groupId)
-      ) {
-        out.add(s.id);
-      }
-    }
-
-    // Exclude strokes explicitly registered to other named simulations (e.g. sim02)
-    const otherSimIds = new Set<string>();
-    for (const other of page.circuitSims || []) {
-      if (other.id === sim.id) continue;
-      for (const id of other.strokeIds) otherSimIds.add(id);
-    }
-
-    // Transitively include any newly drawn wire branch or circuit component physically connected (<= 40px) to this circuit
-    const eligible = page.strokes.filter(
-      (s) => !otherSimIds.has(s.id) && (out.has(s.id) || isCircuitEligibleStroke(s))
-    );
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const currentMembers = eligible.filter((s) => out.has(s.id));
-      for (const cand of eligible) {
-        if (out.has(cand.id)) continue;
-        if (currentMembers.some((m) => areStrokesWithinCircuitTol(cand, m, 40))) {
-          out.add(cand.id);
-          changed = true;
-          if (cand.groupId) {
-            for (const g of page.strokes) {
-              if (g.groupId === cand.groupId && !out.has(g.id)) {
-                out.add(g.id);
-              }
-            }
-          }
-        }
-      }
-    }
-    return out;
-  };
-
-  /**
-   * Ensures that when a multi-component circuit (or registered `CircuitSimConfig`) is selected
-   * via Lasso or transformed via Resize / Move / Rotate, 100% of its connected wires (including
-   * parallel Voltmeter horizontal leads `hl`/`hr` and vertical risers `vl`/`vr`, and split switch wires)
-   * are included in the stroke set so no wire ever detaches or stays frozen behind.
-   */
-  const expandWholeCircuitStrokeIds = (page: NotePage, strokeIds: string[]): string[] => {
-    if (strokeIds.length === 0) return strokeIds;
-    const lockedLayerIds = new Set(
-      page.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
-    );
-    const outSet = new Set<string>(strokeIds);
-
-    // 1. Check registered CircuitSimConfigs on this page
-    for (const sim of getValidCircuitSims(page)) {
-      const simSet = getSimExpandedStrokeSet(page, sim);
-      const simStrokes = page.strokes.filter(
-        (s) => simSet.has(s.id) && !lockedLayerIds.has(s.layerId)
-      );
-      if (simStrokes.length === 0) continue;
-      const simComps = getCircuitComponentsWithTerminals(simStrokes);
-      const matchedComps = simComps.filter((c) => c.strokeIds.some((id) => outSet.has(id)));
-      const matchedStrokeCount = simStrokes.filter((s) => outSet.has(s.id)).length;
-      if (
-        matchedComps.length >= 2 ||
-        (simComps.length === 1 && matchedComps.length === 1 && matchedStrokeCount >= 2) ||
-        matchedStrokeCount >= Math.max(3, Math.ceil(simStrokes.length * 0.35))
-      ) {
-        for (const s of simStrokes) {
-          outSet.add(s.id);
-        }
-      }
-    }
-
-    // 2. General connected-circuit & parallel-voltmeter wire expansion
-    const unlockedStrokes = page.strokes.filter((s) => !lockedLayerIds.has(s.layerId));
-    const allComps = getCircuitComponentsWithTerminals(unlockedStrokes);
-    const selComps = allComps.filter((c) => c.strokeIds.some((id) => outSet.has(id)));
-    for (const c of selComps) {
-      for (const sid of c.strokeIds) {
-        outSet.add(sid);
-      }
-    }
-
-    if (selComps.length >= 2) {
-      const compStrokeSet = new Set(allComps.flatMap((c) => c.strokeIds));
-      const wireCandidates = unlockedStrokes.filter(
-        (s) =>
-          !compStrokeSet.has(s.id) &&
-          isCircuitEligibleStroke(s) &&
-          (!s.shapeType || s.shapeType === 'line') &&
-          !s.arrowStart &&
-          !s.arrowEnd &&
-          s.points.length >= 2
-      );
-
-      // Explicitly include all 4 parallel branch wires (`hl`, `hr`, `vl`, `vr`) for every selected Voltmeter
-      for (const vm of selComps) {
-        if (vm.kind !== 'voltmeter') continue;
-        const vmTerms = [
-          vm.leftTerm,
-          vm.rightTerm,
-          ...(vm.topTerm ? [vm.topTerm] : []),
-          ...(vm.bottomTerm ? [vm.bottomTerm] : []),
-        ];
-        const outerHorizEndpoints: { x: number; y: number }[] = [];
-        for (const w of wireCandidates) {
-          const p0 = w.points[0];
-          const p1 = w.points[w.points.length - 1];
-          const d0 = Math.min(...vmTerms.map((t) => Math.hypot(p0.x - t.x, p0.y - t.y)));
-          const d1 = Math.min(...vmTerms.map((t) => Math.hypot(p1.x - t.x, p1.y - t.y)));
-          if (d0 <= 28 || d1 <= 28) {
-            outSet.add(w.id);
-            outerHorizEndpoints.push(d0 <= d1 ? p1 : p0);
-          }
-        }
-        for (const ep of outerHorizEndpoints) {
-          for (const w of wireCandidates) {
-            const p0 = w.points[0];
-            const p1 = w.points[w.points.length - 1];
-            if (
-              Math.hypot(p0.x - ep.x, p0.y - ep.y) <= 28 ||
-              Math.hypot(p1.x - ep.x, p1.y - ep.y) <= 28
-            ) {
-              outSet.add(w.id);
-            }
-          }
-        }
-      }
-
-      // Transitively include any circuit wire connected on both ends (or bridging) within the selected circuit
-      let added = true;
-      while (added) {
-        added = false;
-        const curSelStrokes = unlockedStrokes.filter((s) => outSet.has(s.id));
-        for (const w of wireCandidates) {
-          if (outSet.has(w.id)) continue;
-          const p0 = w.points[0];
-          const p1 = w.points[w.points.length - 1];
-          const isExplicitCircuitWire =
-            w.id.startsWith('st-wire-') || w.id.includes('par-vm-');
-          const touchesAtP0 = curSelStrokes.some((m) => isPointNearStroke(p0, m, 26, false));
-          const touchesAtP1 = curSelStrokes.some((m) => isPointNearStroke(p1, m, 26, false));
-          if (
-            (touchesAtP0 && touchesAtP1) ||
-            (isExplicitCircuitWire && (touchesAtP0 || touchesAtP1))
-          ) {
-            outSet.add(w.id);
-            added = true;
-          }
-        }
-      }
-    }
-
-    if (outSet.size === strokeIds.length) return strokeIds;
-    return page.strokes.filter((s) => outSet.has(s.id)).map((s) => s.id);
-  };
-
-  const runScopedCircuitOperationOnPage = (
-    page: NotePage,
-    op: (subStrokes: StrokeObject[]) => StrokeObject[],
-    targetSimId?: string
-  ): NotePage => {
-    const validSims = getValidCircuitSims(page);
-    const targetSim =
-      (targetSimId ? validSims.find((s) => s.id === targetSimId) : null) ||
-      getActiveCircuitSim(page);
-    if (!targetSim) return page;
-
-    const simSet = getSimExpandedStrokeSet(page, targetSim);
-    const subStrokes = page.strokes.filter((s) => simSet.has(s.id));
-    if (subStrokes.length === 0) return page;
-
-    const nextSubStrokes = op(subStrokes);
-    const nextSubIds = nextSubStrokes.map((s) => s.id);
-    const nextStrokes: StrokeObject[] = [];
-    let inserted = false;
-    for (const s of page.strokes) {
-      if (simSet.has(s.id)) {
-        if (!inserted) {
-          nextStrokes.push(...nextSubStrokes);
-          inserted = true;
-        }
-        continue;
-      }
-      nextStrokes.push(s);
-    }
-    if (!inserted) {
-      nextStrokes.push(...nextSubStrokes);
-    }
-
-    const nextSims = validSims.map((sim) =>
-      sim.id === targetSim.id ? { ...sim, strokeIds: nextSubIds } : sim
-    );
-    return {
-      ...page,
-      strokes: nextStrokes,
-      circuitSims: nextSims,
-      activeCircuitSimId: targetSim.id,
-    };
-  };
-
-  const splitWiresAndSyncPageSims = (
-    page: NotePage,
-    strokesWithNewComp: StrokeObject[],
-    compStrokeIds: string[]
-  ): NotePage => {
-    const splitStrokes = splitWiresUnderCircuitComponent(strokesWithNewComp, compStrokeIds);
-    const beforeIds = new Set(strokesWithNewComp.map((s) => s.id));
-    const afterIds = new Set(splitStrokes.map((s) => s.id));
-    const removedWireIds = [...beforeIds].filter((id) => !afterIds.has(id));
-    const addedWireIds = [...afterIds].filter((id) => !beforeIds.has(id));
-
-    if (removedWireIds.length === 0 || !page.circuitSims || page.circuitSims.length === 0) {
-      return { ...page, strokes: splitStrokes };
-    }
-    const removedSet = new Set(removedWireIds);
-    const nextSims = page.circuitSims.map((sim) => {
-      if (!sim.strokeIds.some((id) => removedSet.has(id))) return sim;
-      const kept = sim.strokeIds.filter((id) => !removedSet.has(id));
-      const mergedIds = Array.from(new Set([...kept, ...addedWireIds, ...compStrokeIds]));
-      return { ...sim, strokeIds: mergedIds };
-    });
-    return { ...page, strokes: splitStrokes, circuitSims: nextSims };
   };
 
   const registerOrActivateSimFromLasso = (
@@ -63068,269 +62753,134 @@ export default function App() {
                 </div>
 
                 {simActiveCategory === 'circuits' ? (
-                  <>
-                {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time across the Notebook) */}
-                {(() => {
-                  const allNotebookSims = getAllNotebookCircuitSims(activeNotebook);
-                  const validPageSims = getValidCircuitSims(activePage);
-                  const activeSim = getActiveCircuitSim(activePage);
-                  const nextSimLabel = getNextDefaultSimName(activePage);
-                  const isSelectionAlreadyRegisteredSim =
-                    selectedStrokeIds.length > 0 &&
-                    validPageSims.some((sim) => {
-                      const simSet = getSimExpandedStrokeSet(activePage, sim);
-                      const overlap = selectedStrokeIds.filter((id) => simSet.has(id)).length;
-                      return overlap >= Math.max(1, selectedStrokeIds.length * 0.45);
-                    });
-
-                  return (
-                    <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
-                      {selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            registerOrActivateSimFromLasso();
-                          }}
-                          className="w-full py-1.5 px-2.5 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                          title="Προσθέτει το επιλεγμένο με Λάσο κύκλωμα ως προσομοίωση και κλείνει αυτόματα το πλαίσιο επιλογής"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Προσθήκη από Λάσο ({nextSimLabel})</span>
-                        </button>
-                      )}
-
-                      {allNotebookSims.length > 0 ? (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-                              Ενεργό Κύκλωμα:
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {allNotebookSims.map((entry) => {
-                              const { sim, pageId: simPageId, pageIdx: simPageIdx } = entry;
-                              const isCurrent =
-                                simPageId === activePage.id && activeSim?.id === sim.id;
-                              const isEditingThis = editingSimId === sim.id;
-                              const commitSimName = () => {
-                                const trimmed = editingSimName.trim() || sim.name;
-                                userEditedInSessionRef.current.add(activeNotebook.id);
-                                saveUserEditedSessionIds(userEditedInSessionRef.current);
-                                setNotebooks((prev) => {
-                                  const nextNbs = prev.map((nb) =>
-                                    nb.id !== activeNotebook.id
-                                      ? nb
-                                      : {
-                                          ...nb,
-                                          pages: nb.pages.map((p) =>
-                                            p.id !== simPageId
-                                              ? p
-                                              : {
-                                                  ...p,
-                                                  circuitSims: (p.circuitSims || []).map((s) =>
-                                                    s.id === sim.id ? { ...s, name: trimmed } : s
-                                                  ),
-                                                }
-                                          ),
-                                        }
-                                  );
-                                  notebooksRef.current = nextNbs;
-                                  const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
-                                  if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                                  return nextNbs;
-                                });
-                                setEditingSimId(null);
-                              };
-                              return (
-                                <div
-                                  key={sim.id}
-                                  className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
-                                    isCurrent
-                                      ? 'bg-[#efebe3] text-[#234978] border-[#234978]/50 shadow-2xs'
-                                      : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
-                                  }`}
-                                >
-                                  {isEditingThis ? (
-                                    <input
-                                      type="text"
-                                      value={editingSimName}
-                                      autoFocus
-                                      onChange={(e) => setEditingSimName(e.target.value)}
-                                      onBlur={commitSimName}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          commitSimName();
-                                        } else if (e.key === 'Escape') {
-                                          e.preventDefault();
-                                          setEditingSimId(null);
-                                        }
-                                      }}
-                                      className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-[#234978] text-[11px] font-bold text-[#234978] focus:outline-none"
-                                    />
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        lastDetectedSimIdRef.current = sim.id;
-                                        setNotebooks((prev) => {
-                                          const nextNbs = prev.map((nb) =>
-                                            nb.id !== activeNotebook.id
-                                              ? nb
-                                              : {
-                                                  ...nb,
-                                                  pages: nb.pages.map((p) =>
-                                                    p.id !== simPageId
-                                                      ? p
-                                                      : {
-                                                          ...p,
-                                                          circuitSims: (p.circuitSims || []).map((cs) =>
-                                                            cs.id === p.activeCircuitSimId
-                                                              ? { ...cs, switchClosed: simCircuitSwitchClosed }
-                                                              : cs
-                                                          ),
-                                                          activeCircuitSimId: sim.id,
-                                                        }
-                                                  ),
-                                                }
-                                          );
-                                          notebooksRef.current = nextNbs;
-                                          const updatedNb = nextNbs.find(
-                                            (n) => n.id === activeNotebook.id
-                                          );
-                                          if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                                          return nextNbs;
-                                        });
-                                        setSelectedStrokeIds([]);
-                                        setIsSimulating(true);
-                                        setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
-                                        if (sim.flowDirection) setSimFlowDirection(sim.flowDirection);
-                                        if (typeof sim.showElectrons === 'boolean') setSimShowElectrons(sim.showElectrons);
-                                        if (typeof sim.speedMultiplier === 'number') setSimSpeedMultiplier(sim.speedMultiplier);
-                                        if (typeof sim.showDarkWireTrack === 'boolean') setSimShowDarkWireTrack(sim.showDarkWireTrack);
-                                        if (!isCircuitSimVisibleInViewport(simPageIdx, sim)) {
-                                          scrollToCircuitSim(simPageIdx, sim);
-                                        }
-                                      }}
-                                      className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1.5"
-                                      title={`Μετάβαση & Ενεργοποίηση κυκλώματος "${sim.name}" (${
-                                        sim.switchClosed ? 'Κλειστό 🟢' : 'Ανοιχτό 🔴'
-                                      }, ${
-                                        sim.flowDirection === 'conventional'
-                                          ? 'Συμβατική φορά'
-                                          : 'Πραγματική φορά'
-                                      })`}
-                                    >
-                                      <span
-                                        className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
-                                          sim.switchClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
-                                        }`}
-                                        title={
-                                          sim.switchClosed
-                                            ? 'Διακόπτης: Κλειστός (ON)'
-                                            : 'Διακόπτης: Ανοιχτός (OFF)'
-                                        }
-                                      />
-                                      <span>{sim.name}</span>
-                                    </button>
-                                  )}
-                                  {!isEditingThis && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingSimId(sim.id);
-                                        setEditingSimName(sim.name);
-                                      }}
-                                      className={`px-1 py-1 text-[10px] cursor-pointer transition ${
-                                        isCurrent
-                                          ? 'text-[#475569] hover:text-[#234978]'
-                                          : 'text-[#94a3b8] hover:text-[#234978]'
-                                      }`}
-                                      title={`Μετονομασία "${sim.name}"`}
-                                    >
-                                      ✎
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      userEditedInSessionRef.current.add(activeNotebook.id);
-                                      saveUserEditedSessionIds(userEditedInSessionRef.current);
-                                      setNotebooks((prev) => {
-                                        const nextNbs = prev.map((nb) => {
-                                          if (nb.id !== activeNotebook.id) return nb;
-                                          const nextPages = nb.pages.map((p) => {
-                                            if (p.id !== simPageId) return p;
-                                            const remaining = (p.circuitSims || []).filter(
-                                              (s) => s.id !== sim.id
-                                            );
-                                            const nextActiveId =
-                                              p.activeCircuitSimId === sim.id
-                                                ? remaining[0]?.id
-                                                : p.activeCircuitSimId;
-                                            let nextStrokes = p.strokes;
-                                            if (sim.rawStrokesBackup && sim.rawStrokesBackup.length > 0) {
-                                              const simIdSet = new Set(sim.strokeIds);
-                                              const kept = p.strokes.filter((s) => !simIdSet.has(s.id));
-                                              nextStrokes = [...kept, ...sim.rawStrokesBackup];
-                                            }
-                                            return {
-                                              ...p,
-                                              strokes: nextStrokes,
-                                              circuitSims: remaining,
-                                              activeCircuitSimId: nextActiveId,
-                                            };
-                                          });
-                                          const anyLeft = nextPages.some(
-                                            (p) => getValidCircuitSims(p).length > 0
-                                          );
-                                          if (!anyLeft) {
-                                            setIsSimulating(false);
-                                          }
-                                          return {
-                                            ...nb,
-                                            updatedAt: getMonotonicIsoTimestamp(),
-                                            pages: nextPages,
-                                          };
-                                        });
-                                        notebooksRef.current = nextNbs;
-                                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
-                                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                                        return nextNbs;
-                                      });
-                                      showToast(
-                                        `🗑️ Το κύκλωμα "${sim.name}" αφαιρέθηκε. Το σχέδιο παραμένει ως απλό σκίτσο!`
-                                      );
-                                    }}
-                                    className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
-                                      isCurrent
-                                        ? 'text-[#475569] hover:text-[#b91c1c]'
-                                        : 'text-[#94a3b8] hover:text-[#b91c1c]'
-                                    }`}
-                                    title={`Αφαίρεση "${sim.name}" από τη λίστα προσομοιώσεων`}
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-[10.5px] font-medium text-[#64748b] bg-[#f7f5f0] border border-[#e8e2d6] rounded-lg p-2 leading-snug text-center">
-                          Επιλέξτε με το <b>Λάσο</b> ένα κλειστό κύκλωμα (με Μπαταρία/Πηγή) και πατήστε <b>Sim</b> για να δημιουργηθεί το <b>{nextSimLabel}</b>.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Single-Row Controls: Small Square Play/Pause Button + Simple Warm "Ένωση" & "Ολοκλήρωση" */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
+                  <CircuitControlPanel
+                    activeNotebook={activeNotebook}
+                    activePage={activePage}
+                    selectedStrokeIds={selectedStrokeIds}
+                    isSimulating={isSimulating}
+                    simCircuitSwitchClosed={simCircuitSwitchClosed}
+                    simShowElectrons={simShowElectrons}
+                    simFlowDirection={simFlowDirection}
+                    simShowDarkWireTrack={simShowDarkWireTrack}
+                    simSpeedMultiplier={simSpeedMultiplier}
+                    editingSimId={editingSimId}
+                    editingSimName={editingSimName}
+                    setEditingSimId={setEditingSimId}
+                    setEditingSimName={setEditingSimName}
+                    onCommitSimName={(simPageId, simId, trimmed) => {
+                      userEditedInSessionRef.current.add(activeNotebook.id);
+                      saveUserEditedSessionIds(userEditedInSessionRef.current);
+                      setNotebooks((prev) => {
+                        const nextNbs = prev.map((nb) =>
+                          nb.id !== activeNotebook.id
+                            ? nb
+                            : {
+                                ...nb,
+                                pages: nb.pages.map((p) =>
+                                  p.id !== simPageId
+                                    ? p
+                                    : {
+                                        ...p,
+                                        circuitSims: (p.circuitSims || []).map((s) =>
+                                          s.id === simId ? { ...s, name: trimmed } : s
+                                        ),
+                                      }
+                                ),
+                              }
+                        );
+                        notebooksRef.current = nextNbs;
+                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                        return nextNbs;
+                      });
+                      setEditingSimId(null);
+                    }}
+                    onSelectSim={({ sim, pageId: simPageId, pageIdx: simPageIdx }) => {
+                      lastDetectedSimIdRef.current = sim.id;
+                      setNotebooks((prev) => {
+                        const nextNbs = prev.map((nb) =>
+                          nb.id !== activeNotebook.id
+                            ? nb
+                            : {
+                                ...nb,
+                                pages: nb.pages.map((p) =>
+                                  p.id !== simPageId
+                                    ? p
+                                    : {
+                                        ...p,
+                                        circuitSims: (p.circuitSims || []).map((cs) =>
+                                          cs.id === p.activeCircuitSimId
+                                            ? { ...cs, switchClosed: simCircuitSwitchClosed }
+                                            : cs
+                                        ),
+                                        activeCircuitSimId: sim.id,
+                                      }
+                                ),
+                              }
+                        );
+                        notebooksRef.current = nextNbs;
+                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                        return nextNbs;
+                      });
+                      setSelectedStrokeIds([]);
+                      setIsSimulating(true);
+                      setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
+                      if (sim.flowDirection) setSimFlowDirection(sim.flowDirection);
+                      if (typeof sim.showElectrons === "boolean") setSimShowElectrons(sim.showElectrons);
+                      if (typeof sim.speedMultiplier === "number") setSimSpeedMultiplier(sim.speedMultiplier);
+                      if (typeof sim.showDarkWireTrack === "boolean") setSimShowDarkWireTrack(sim.showDarkWireTrack);
+                      if (!isCircuitSimVisibleInViewport(simPageIdx, sim)) {
+                        scrollToCircuitSim(simPageIdx, sim);
+                      }
+                    }}
+                    onRemoveSim={({ sim, pageId: simPageId }) => {
+                      userEditedInSessionRef.current.add(activeNotebook.id);
+                      saveUserEditedSessionIds(userEditedInSessionRef.current);
+                      setNotebooks((prev) => {
+                        const nextNbs = prev.map((nb) => {
+                          if (nb.id !== activeNotebook.id) return nb;
+                          const nextPages = nb.pages.map((p) => {
+                            if (p.id !== simPageId) return p;
+                            const remaining = (p.circuitSims || []).filter((s) => s.id !== sim.id);
+                            const nextActiveId =
+                              p.activeCircuitSimId === sim.id ? remaining[0]?.id : p.activeCircuitSimId;
+                            let nextStrokes = p.strokes;
+                            if (sim.rawStrokesBackup && sim.rawStrokesBackup.length > 0) {
+                              const simIdSet = new Set(sim.strokeIds);
+                              const kept = p.strokes.filter((s) => !simIdSet.has(s.id));
+                              nextStrokes = [...kept, ...sim.rawStrokesBackup];
+                            }
+                            return {
+                              ...p,
+                              strokes: nextStrokes,
+                              circuitSims: remaining,
+                              activeCircuitSimId: nextActiveId,
+                            };
+                          });
+                          const anyLeft = nextPages.some((p) => getValidCircuitSims(p).length > 0);
+                          if (!anyLeft) {
+                            setIsSimulating(false);
+                          }
+                          return {
+                            ...nb,
+                            updatedAt: getMonotonicIsoTimestamp(),
+                            pages: nextPages,
+                          };
+                        });
+                        notebooksRef.current = nextNbs;
+                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                        return nextNbs;
+                      });
+                      showToast(
+                        `🗑️ Το κύκλωμα "${sim.name}" αφαιρέθηκε. Το σχέδιο παραμένει ως απλό σκίτσο!`
+                      );
+                    }}
+                    onRegisterFromLasso={() => {
+                      registerOrActivateSimFromLasso();
+                    }}
+                    onTogglePlayPause={() => {
                       if (!isSimulating) {
                         if (selectedStrokeIds.length > 0) {
                           registerOrActivateSimFromLasso();
@@ -63338,7 +62888,7 @@ export default function App() {
                         }
                         const activeSim = getActiveCircuitSim(activePage);
                         if (!activeSim) {
-                          showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
+                          showToast("🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!");
                           return;
                         }
                         setSimCircuitSwitchClosed(Boolean(activeSim.switchClosed));
@@ -63347,33 +62897,8 @@ export default function App() {
                         setIsSimulating(false);
                       }
                     }}
-                    className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center shadow-2xs transition cursor-pointer ${
-                      isSimulating && getActiveCircuitSim(activePage)
-                        ? 'bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c]'
-                        : 'bg-[#234978] hover:bg-[#1c3c63] text-white'
-                    }`}
-                    title={
-                      isSimulating && getActiveCircuitSim(activePage)
-                        ? 'Διακοπή Προσομοίωσης'
-                        : 'Έναρξη Προσομοίωσης'
-                    }
-                  >
-                    {isSimulating && getActiveCircuitSim(activePage) ? (
-                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
-                        <rect x="6" y="5" width="4" height="14" rx="1" />
-                        <rect x="14" y="5" width="4" height="14" rx="1" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current ml-0.5" aria-hidden="true">
-                        <path d="M6 4.75L19.25 12 6 19.25V4.75z" />
-                      </svg>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      let activeSim = getActiveCircuitSim(activePage);
+                    onJoinAndAlign={() => {
+                      const activeSim = getActiveCircuitSim(activePage);
                       if (selectedStrokeIds.length > 0) {
                         const rawSelSet = new Set(selectedStrokeIds);
                         const selGroupIds = new Set(
@@ -63415,11 +62940,10 @@ export default function App() {
                           (s) =>
                             !compIdsInJoin.has(s.id) &&
                             s.isShape &&
-                            (!s.shapeType || s.shapeType === 'line')
+                            (!s.shapeType || s.shapeType === "line")
                         ).length;
 
                         if (compsInJoin.length > 0 && extWireCount === 0) {
-                          // Components drawn/selected without wires: convert & propose completion wires!
                           const nextStrokesSnapshot: StrokeObject[] = [];
                           let insertedOpen = false;
                           for (const s of activePage.strokes) {
@@ -63478,14 +63002,23 @@ export default function App() {
                                       ...sim,
                                       strokeIds: alignedIds,
                                       switchClosed:
-                                        typeof sim.switchClosed === 'boolean'
+                                        typeof sim.switchClosed === "boolean"
                                           ? sim.switchClosed
                                           : false,
-                                      flowDirection: sim.flowDirection || 'electrons',
-                                      showElectrons: typeof sim.showElectrons === 'boolean' ? sim.showElectrons : true,
-                                      speedMultiplier: typeof sim.speedMultiplier === 'number' ? sim.speedMultiplier : 1.0,
-                                      showDarkWireTrack: typeof sim.showDarkWireTrack === 'boolean' ? sim.showDarkWireTrack : false,
-                                      componentMode: sim.componentMode || 'pictorial',
+                                      flowDirection: sim.flowDirection || "electrons",
+                                      showElectrons:
+                                        typeof sim.showElectrons === "boolean"
+                                          ? sim.showElectrons
+                                          : true,
+                                      speedMultiplier:
+                                        typeof sim.speedMultiplier === "number"
+                                          ? sim.speedMultiplier
+                                          : 1.0,
+                                      showDarkWireTrack:
+                                        typeof sim.showDarkWireTrack === "boolean"
+                                          ? sim.showDarkWireTrack
+                                          : false,
+                                      componentMode: sim.componentMode || "pictorial",
                                     }
                                   : sim
                               )
@@ -63496,11 +63029,11 @@ export default function App() {
                                   name: targetSimName,
                                   strokeIds: alignedIds,
                                   switchClosed: false,
-                                  flowDirection: 'electrons',
+                                  flowDirection: "electrons",
                                   showElectrons: true,
                                   speedMultiplier: 1.0,
                                   showDarkWireTrack: false,
-                                  componentMode: 'pictorial',
+                                  componentMode: "pictorial",
                                 },
                               ];
                           return {
@@ -63521,7 +63054,7 @@ export default function App() {
                         return;
                       }
                       if (!activeSim) {
-                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
+                        showToast("🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!");
                         return;
                       }
                       updateActivePage((page) =>
@@ -63536,311 +63069,81 @@ export default function App() {
                       setIsSimulating(true);
                       showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
-                    className="flex-1 h-8 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center transition cursor-pointer"
-                    title="Ευθυγραμμίζει αυτόματα τους οριζόντιους/κάθετους αγωγούς του ενεργού κυκλώματος"
-                  >
-                    <span>Ένωση</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStartCircuitCompletion()}
-                    className="flex-1 h-8 px-2 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50] font-semibold text-[11px] flex items-center justify-center transition cursor-pointer"
-                    title="Προτείνει αυτόματη ολοκλήρωση του κυκλώματος με διακεκομμένη γραμμή, διακόπτη και 4 κόμβους ρύθμισης καλωδίων"
-                  >
-                    <span>Ολοκλήρωση</span>
-                  </button>
-                </div>
-
-                {/* Automatic Left-Wire Switch Toggle */}
-                <div className="grid grid-cols-1 gap-1.5">
-                  {isSimulating &&
-                    (() => {
+                    onStartCompletion={() => handleStartCircuitCompletion()}
+                    hasActiveProposal={Boolean(circuitProposal && circuitProposal.pageId === activePage.id)}
+                    onAcceptProposal={() => acceptCircuitCompletionProposal()}
+                    onCancelProposal={() => cancelCircuitCompletionProposal()}
+                    onToggleSwitch={(next) => {
                       const activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim) return null;
-                      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
-                      const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
-                      const simPreviewEval = analyzeCircuitForSimulation(
-                        simStrokes,
-                        true
-                      );
-                      const hasCompleteLoop = simPreviewEval.isCircuitClosed;
-                      if (!hasCompleteLoop) {
-                        const hasOpenSourceVoltmeter = simPreviewEval.components.some(
-                          (cs) => cs.comp.kind === 'voltmeter' && cs.active
-                        );
-                        if (hasOpenSourceVoltmeter) {
-                          return (
-                            <div className="w-full py-1.5 px-2.5 rounded-xl bg-[#f1f6f3] border border-[#c8dfd0] text-[#15803d] font-semibold text-[10.5px] leading-snug text-center">
-                              Ανοιχτό κύκλωμα (I = 0) — Το βολτόμετρο μετράει ενεργά την τάση της πηγής!
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-[#f7f5f0] border border-[#dfd8cb] text-[#64748b] font-medium text-[10.5px] leading-snug text-center">
-                            Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης.
-                          </div>
+                      setSimCircuitSwitchClosed(next);
+                      if (activeSim) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          circuitSims: (page.circuitSims || []).map((s) =>
+                            s.id === activeSim.id ? { ...s, switchClosed: next } : s
+                          ),
+                        }));
+                      }
+                      setIsSimulating(true);
+                      if (activeSim) {
+                        showToast(
+                          next
+                            ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
+                            : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
                         );
                       }
-                      const curClosed = typeof activeSim.switchClosed === 'boolean'
-                        ? activeSim.switchClosed
-                        : simCircuitSwitchClosed;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = !curClosed;
-                            setSimCircuitSwitchClosed(next);
-                            if (activeSim) {
-                              updateActivePage((page) => ({
-                                ...page,
-                                circuitSims: (page.circuitSims || []).map((s) =>
-                                  s.id === activeSim.id ? { ...s, switchClosed: next } : s
-                                ),
-                              }));
-                            }
-                            setIsSimulating(true);
-                            showToast(
-                              next
-                                ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
-                                : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
-                            );
-                          }}
-                          className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-2 border shadow-2xs transition cursor-pointer ${
-                            curClosed
-                              ? 'bg-[#f1f6f3] border-[#c8dfd0] text-[#15803d] hover:bg-[#e7f0eb]'
-                              : 'bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#fae8e8]'
-                          }`}
-                          title="Κάνε κλικ στον διακόπτη ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
-                        >
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              curClosed ? 'bg-[#16a34a]' : 'bg-[#dc2626]'
-                            }`}
-                          />
-                          <span>
-                            {curClosed
-                              ? 'Διακόπτης: Κλειστός'
-                              : 'Διακόπτης: Ανοιχτός'}
-                          </span>
-                        </button>
-                      );
-                    })()}
-                  {circuitProposal && circuitProposal.pageId === activePage.id && (
-                    <div className="grid grid-cols-2 gap-1.5 pt-0.5 animate-pulse">
-                      <button
-                        type="button"
-                        onClick={() => acceptCircuitCompletionProposal()}
-                        className="py-1.5 px-2 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-bold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                        title="Αποδοχή του προτεινόμενου κυκλώματος"
-                      >
-                        <span>✓ Αποδοχή</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => cancelCircuitCompletionProposal()}
-                        className="py-1.5 px-2 rounded-lg bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-[#b91c1c] font-bold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                        title="Ακύρωση πρότασης ολοκλήρωσης"
-                      >
-                        <span>✕ Ακύρωση</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* 1-Click Scoped Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
-                {(() => {
-                  const activeSim = getActiveCircuitSim(activePage);
-                  const activeSimStrokes = activeSim
-                    ? activePage.strokes.filter((s) => activeSim.strokeIds.includes(s.id))
-                    : [];
-                  const detectedMode =
-                    activeSim?.componentMode ||
-                    (activeSimStrokes.some((s) => s.shapeType === 'resistor' || s.shapeType === 'voltage-source')
-                      ? 'schematic'
-                      : 'pictorial');
-
-                  return (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleConvertActiveCircuitMode('pictorial')}
-                        className={`px-2 py-2 rounded-lg text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
-                          detectedMode === 'pictorial'
-                            ? 'bg-[#234978] text-white border border-[#234978]'
-                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
-                        }`}
-                        title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
-                      >
-                        <svg
-                          viewBox="0 0 28 18"
-                          className={`w-7 h-4.5 shrink-0 ${detectedMode === 'pictorial' ? 'text-white' : 'text-[#234978]'}`}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.9"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M 2 6.2 H 6.5 V 2.4 H 26 V 15.6 H 6.5 V 11.8 H 2 Z" />
-                        </svg>
-                        <span>Σχήματα</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleConvertActiveCircuitMode('schematic')}
-                        className={`px-2 py-2 rounded-lg text-[11px] font-bold shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
-                          detectedMode === 'schematic'
-                            ? 'bg-[#234978] text-white border border-[#234978]'
-                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#2c3e50]'
-                        }`}
-                        title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
-                      >
-                        <svg
-                          viewBox="0 0 28 18"
-                          className={`w-7 h-4.5 shrink-0 ${detectedMode === 'schematic' ? 'text-white' : 'text-[#234978]'}`}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.9"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M 1 9 H 4.2 L 6.2 2.2 L 9.4 15.8 L 12.6 2.2 L 15.8 15.8 L 19 2.2 L 22.2 15.8 L 24.2 9 H 27" />
-                        </svg>
-                        <span>Σύμβολα</span>
-                      </button>
-                    </div>
-                  );
-                })()}
-
-                {/* Simulation Visual Options */}
-                {(() => {
-                  const activeSim = getActiveCircuitSim(activePage);
-                  const curShowElectrons = typeof activeSim?.showElectrons === 'boolean' ? activeSim.showElectrons : simShowElectrons;
-                  const curFlowDirection = activeSim?.flowDirection || simFlowDirection;
-                  const curDarkWireTrack = typeof activeSim?.showDarkWireTrack === 'boolean' ? activeSim.showDarkWireTrack : simShowDarkWireTrack;
-                  const curSpeedMultiplier = typeof activeSim?.speedMultiplier === 'number' ? activeSim.speedMultiplier : simSpeedMultiplier;
-
-                  return (
-                    <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2 divide-y divide-[#e8e2d6]/70">
-                      <div className="space-y-1.5">
-                        <WarmStudioToggle
-                          checked={curShowElectrons}
-                          onChange={(checked) => {
-                            setSimShowElectrons(checked);
-                            if (activeSim) {
-                              updateActivePage((page) => ({
-                                ...page,
-                                circuitSims: (page.circuitSims || []).map((s) =>
-                                  s.id === activeSim.id ? { ...s, showElectrons: checked } : s
-                                ),
-                              }));
-                            }
-                          }}
-                          icon={<Zap className="w-3.5 h-3.5" />}
-                          label="Ηλεκτρόνια / Φορτία"
-                          className="w-full"
-                        />
-
-                        {curShowElectrons && (
-                          <div className="grid grid-cols-2 gap-1 pt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSimFlowDirection('electrons');
-                                setSimParticleStyle('green-energy');
-                                if (activeSim) {
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    circuitSims: (page.circuitSims || []).map((s) =>
-                                      s.id === activeSim.id ? { ...s, flowDirection: 'electrons' } : s
-                                    ),
-                                  }));
-                                }
-                              }}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                curFlowDirection === 'electrons'
-                                  ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
-                                  : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
-                              }`}
-                            >
-                              Πραγματική φορά
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSimFlowDirection('conventional');
-                                setSimParticleStyle('blue-electrons');
-                                if (activeSim) {
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    circuitSims: (page.circuitSims || []).map((s) =>
-                                      s.id === activeSim.id ? { ...s, flowDirection: 'conventional' } : s
-                                    ),
-                                  }));
-                                }
-                              }}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                curFlowDirection === 'conventional'
-                                  ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
-                                  : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
-                              }`}
-                            >
-                              Συμβατική Φορά
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="pt-1.5">
-                        <WarmStudioToggle
-                          checked={curDarkWireTrack}
-                          onChange={(checked) => {
-                            setSimShowDarkWireTrack(checked);
-                            if (activeSim) {
-                              updateActivePage((page) => ({
-                                ...page,
-                                circuitSims: (page.circuitSims || []).map((s) =>
-                                  s.id === activeSim.id ? { ...s, showDarkWireTrack: checked } : s
-                                ),
-                              }));
-                            }
-                          }}
-                          label="Σκούρος Σωλήνας Καλωδίων"
-                          className="w-full"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-2">
-                        <span className="text-[10.5px] font-semibold text-[#475569]">
-                          Ταχύτητα (<span className="text-[#234978] font-bold">{curSpeedMultiplier.toFixed(1)}x</span>):
-                        </span>
-                        <input
-                          type="range"
-                          min="0.4"
-                          max="2.4"
-                          step="0.2"
-                          value={curSpeedMultiplier}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setSimSpeedMultiplier(val);
-                            if (activeSim) {
-                              updateActivePage((page) => ({
-                                ...page,
-                                circuitSims: (page.circuitSims || []).map((s) =>
-                                  s.id === activeSim.id ? { ...s, speedMultiplier: val } : s
-                                ),
-                              }));
-                            }
-                          }}
-                          className="w-28 accent-[#234978] cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-                  </>
+                    }}
+                    onConvertMode={(mode) => handleConvertActiveCircuitMode(mode)}
+                    onChangeShowElectrons={(checked) => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      setSimShowElectrons(checked);
+                      if (activeSim) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          circuitSims: (page.circuitSims || []).map((s) =>
+                            s.id === activeSim.id ? { ...s, showElectrons: checked } : s
+                          ),
+                        }));
+                      }
+                    }}
+                    onChangeFlowDirection={(dir) => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      setSimFlowDirection(dir);
+                      setSimParticleStyle(dir === "conventional" ? "blue-electrons" : "green-energy");
+                      if (activeSim) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          circuitSims: (page.circuitSims || []).map((s) =>
+                            s.id === activeSim.id ? { ...s, flowDirection: dir } : s
+                          ),
+                        }));
+                      }
+                    }}
+                    onChangeDarkWireTrack={(checked) => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      setSimShowDarkWireTrack(checked);
+                      if (activeSim) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          circuitSims: (page.circuitSims || []).map((s) =>
+                            s.id === activeSim.id ? { ...s, showDarkWireTrack: checked } : s
+                          ),
+                        }));
+                      }
+                    }}
+                    onChangeSpeedMultiplier={(val) => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      setSimSpeedMultiplier(val);
+                      if (activeSim) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          circuitSims: (page.circuitSims || []).map((s) =>
+                            s.id === activeSim.id ? { ...s, speedMultiplier: val } : s
+                          ),
+                        }));
+                      }
+                    }}
+                  />
                 ) : simActiveCategory === 'springs' ? (
                   /* ==========================================================
                      TAB 2: "🌀 ΕΛΑΤΗΡΙΑ" (Harmonic Oscillation & Live Graphs)

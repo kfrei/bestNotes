@@ -1,6 +1,6 @@
 # Πλήρης Οδηγός & Τεκμηρίωση Προσομοιώσεων BestNotes (Simulations Reference Manual)
 
-> **Έκδοση:** v0.99 (`pendulumSimFullyFunctional`)  
+> **Έκδοση:** v1.02 (`heatSimFixed`)  
 > **Πλατφόρμα:** BestNotes / ExplainBoards ([https://explainboards.web.app](https://explainboards.web.app))  
 > **Φιλοσοφία Σχεδίασης:** *"Pencil & Shapes First"* — Ο χρήστης σχεδιάζει ελεύθερα με το μολύβι και η φυσική ζωντανεύει πάνω στα σχήματά του.
 
@@ -292,22 +292,40 @@ src/simulations/
 ├── registry/
 │   └── SimulationRegistry.ts        // Plug-and-Play Registry για δυναμική εγγραφή νέων θεμάτων
 ├── modules/
+│   ├── circuits/
+│   │   ├── index.ts                 // Barrel export Μηχανής Κυκλωμάτων
+│   │   ├── types.ts                 // Τύποι εξαρτημάτων, ακροδεκτών & αποτελεσμάτων Kirchhoff
+│   │   ├── circuitEngine.ts         // Επίλυση κόμβων Kirchhoff (με O(1) LRU cache), ευθυγράμμιση, αναγνώριση σκίτσου
+│   │   ├── circuitHelpers.ts        // Helpers επιλογής, επέκτασης καλωδίων και πολλαπλών κυκλωμάτων
+│   │   ├── CircuitControlPanel.tsx  // Αυτόνομο Dashboard UI Ηλεκτρικών Κυκλωμάτων
+│   │   └── CircuitSimulationModule.ts // Module εγγραφής στο SimulationRegistry
+│   ├── heat/
+│   │   ├── index.ts                 // Barrel export Μηχανής Θερμότητας
+│   │   ├── types.ts                 // Τύποι δοχείων, υγρών (Νερό, Γάλα, Ελαιόλαδο), καμινέτου & διαγραμμάτων
+│   │   ├── heatPhysicsEngine.ts     // Ενεργειακά συνεπής θερμική ισορροπία, Νόμος Ψύξης Νεύτωνα & βρασμός
+│   │   ├── HeatRenderer.ts          // 2.5D Canvas renderer, offscreen blur cache, χρωματική κωδικοποίηση Α/Β/Γ & hover badges
+│   │   ├── useHeatSimulation.ts     // React hook διαχείρισης αντικειμένων, μαγνητικού snap & physics loop
+│   │   ├── HeatControlPanel.tsx     // Αυτόνομο Dashboard UI Θερμότητας
+│   │   ├── HeatLiquidConfigModal.tsx // Modal επιλογής υγρού, όγκου (ml) & αρχικής θερμοκρασίας
+│   │   ├── HeatGraphChoiceModal.tsx // Modal επιλογής διαγράμματος θ - t
+│   │   ├── HeatSketchRecognizer.ts  // Αναγνώριση χειρόγραφων εργαστηριακών σκευών
+│   │   └── HeatSimulationModule.ts  // Module εγγραφής στο SimulationRegistry
 │   └── mechanics/
 │       └── pendulum/
 │           ├── pendulumPhysics.ts   // Φυσική εκκρεμούς: T=2π√(L/g), τάση νήματος, συντεταγμένες
 │           └── PendulumModule.ts    // Module εγγραφής & παραμέτρων (με objects catalog)
 └── ui/
-    ├── StopwatchWidget.tsx          // Αυτόνομο widget ψηφιακού χρονομέτρου (dual-corner resize)
+    ├── StopwatchWidget.tsx          // Αυτόνομο widget ψηφιακού χρονομέτρου (dual-corner resize & 1x/2x/5x ταχύτητα)
     ├── FullscreenLaserCanvas.tsx    // Αυτόνομος καμβάς κόκκινου laser z-[100000]
     └── SimulationObjectRibbon.tsx   // Επαναχρησιμοποιήσιμη swipeable μπάρα αντικειμένων προσομοίωσης
 ```
 
 ### Βασικά Χαρακτηριστικά Αρχιτεκτονικής:
-1. **Διεπαφή `ISimulationModule`:** Κάθε νέα προσομοίωση υλοποιεί σαφές συμβόλαιο (`detect`, `initState`, `stepPhysics`, `render`, `onStopwatchEvent`).
-2. **Κατάλογος Εγγραφής `SimulationRegistry`:** Επιτρέπει δυναμική εγγραφή (`register`), αναζήτηση ανά ID και ομαδοποίηση ανά κατηγορία (`mechanics`, `electricity`, `fluids`, `waves`, `chemistry`, `math`).
-3. **Καθολική Γέφυρα Χρονομέτρου (`UniversalStopwatchBridge`):** Όλες οι προσομοιώσεις συνδέονται αμφίδρομα με το Χρονόμετρο μέσω καθαρού pub/sub χωρίς κυκλικές εξαρτήσεις.
-4. **Απομόνωση UI:** Το `StopwatchWidget` και το `FullscreenLaserCanvas` λειτουργούν ως ανεξάρτητα, επαναχρησιμοποιήσιμα components, μειώνοντας δραστικά το μέγεθος του `App.tsx`.
+1. **Διεπαφή `ISimulationModule`:** Κάθε νέα προσομοίωση υλοποιεί σαφές συμβόλαιο (`canAssemble`, `initState`, `stepPhysics`, `render`, `onStopwatchEvent`).
+2. **Κατάλογος Εγγραφής `SimulationRegistry`:** Επιτρέπει δυναμική εγγραφή (`register`), αναζήτηση ανά ID και ομαδοποίηση ανά κατηγορία (`mechanics`, `electricity`, `heat`, `fluids`, `waves`, `chemistry`, `math`).
+3. **Καθολική Γέφυρα Χρονομέτρου (`UniversalStopwatchBridge`) & Επιλογέας Ταχύτητας (`1x → 2x → 5x`):** Όλες οι προσομοιώσεις συνδέονται αμφίδρομα με το Χρονόμετρο, με δυνατότητα επιτάχυνσης της εξέλιξης στην τάξη.
+4. **Πλήρης Απομόνωση & Code Splitting (`feature-simulations`):** Οι μηχανές Κυκλωμάτων (`modules/circuits/`), Θερμότητας (`modules/heat/`) και Εκκρεμούς (`modules/mechanics/pendulum/`), μαζί με τα UI Dashboards τους, φορτώνονται ως ανεξάρτητο, cached bundle.
 
 ---
 
-*Τελευταία ενημέρωση τεκμηρίωσης: 14 Νοεμβρίου 2026 — v0.99 (pendulumSimFullyFunctional + Modular Simulations Core)*
+*Τελευταία ενημέρωση τεκμηρίωσης: 18 Νοεμβρίου 2026 — v1.02 (heatSimFixed + Modular Circuits & Heat Architecture)*

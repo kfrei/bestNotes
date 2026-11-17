@@ -15,8 +15,24 @@ export default defineConfig({
           ) {
             return 'feature-admin';
           }
-          if (id.includes('node_modules/firebase/')) {
+          if (id.includes('/src/simulations/')) {
+            return 'feature-simulations';
+          }
+          if (id.includes('/src/data/seeds/')) {
+            return 'data-seeds';
+          }
+          if (id.includes('node_modules/firebase/') || id.includes('node_modules/@firebase/')) {
             return 'vendor-firebase';
+          }
+          if (
+            id.includes('node_modules/pdfjs-dist/') ||
+            id.includes('node_modules/jspdf/') ||
+            id.includes('node_modules/jszip/')
+          ) {
+            return 'vendor-pdf-zip';
+          }
+          if (id.includes('node_modules/katex/')) {
+            return 'vendor-math';
           }
           if (id.includes('node_modules/lucide-react/')) {
             return 'vendor-icons';

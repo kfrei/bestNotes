@@ -286,10 +286,10 @@ sequenceDiagram
 
 ---
 
-## 9. Κατάσταση Έργου — Έκδοση `v0.99 (pendulumSimFullyFunctional)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
+## 9. Κατάσταση Έργου — Έκδοση `v1.02 (heatSimFixed)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
 
 > [!NOTE]
-> **Τρέχουσα Έκδοση:** **`v0.99 — pendulumSimFullyFunctional`** (14 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`v1.02 — heatSimFixed`** (18 Νοεμβρίου 2026)
 > **Live Web App (Primary):** [https://explainboards.web.app](https://explainboards.web.app) & [https://mybestnotes.web.app](https://mybestnotes.web.app) (και [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app))
 > **GitHub Repository:** [https://github.com/kfrei/bestNotes](https://github.com/kfrei/bestNotes)
 
@@ -300,7 +300,23 @@ sequenceDiagram
 > * **Τυπογραφία Γκρι 80% (`#333333`):** Τα γράμματα και τα σύμβολα των κουμπιών χρησιμοποιούν **σκούρο γκρι 80% (`#333333`)** (και `#1f1f1f` με `bg-stone-200/95` όταν ένα κουμπί είναι ενεργό).
 > * **Μονόχρωμα, Απλά & Καθαρά Εικονίδια (`Monochrome Vector Icons`):** Κάθε φορά που προστίθεται ή ενημερώνεται εικονίδιο στο UI, πρέπει να είναι **μονόχρωμο μαύρο/σκούρο γκρι (`stroke="currentColor"`), απλό, καθαρό διανυσματικό SVG** που θυμίζει σύγχρονο premium UI (χωρίς πολύχρωμα emojis).
 
-### 9.1 ✅ Τι Έχουμε Ολοκληρώσει Πλήρως έως την `v0.99 (pendulumSimFullyFunctional)`
+### 9.1 ✅ Τι Έχουμε Ολοκληρώσει Πλήρως έως την `v1.02 (heatSimFixed)`
+
+#### Α000000000. Απομόνωση Μηχανής Κυκλωμάτων (`src/simulations/modules/circuits/`), Ολοκληρωμένη Μηχανή Θερμότητας, Νέες Γραμματοσειρές `Fun`/`Diary` & Βελτιστοποίηση Απόδοσης (`v1.02 — heatSimFixed`)
+* **⚡ Πλήρης Απομόνωση Μηχανής Ηλεκτρικών Κυκλωμάτων (`src/simulations/modules/circuits/`):**
+  * Μεταφορά **7.138 γραμμών** κώδικα από το `src/utils/geometryAndAlgorithms.ts` και **1.110 γραμμών** από το `src/App.tsx` στα αυτόνομα αρχεία `types.ts`, `circuitEngine.ts`, `circuitHelpers.ts`, `CircuitControlPanel.tsx` και `CircuitSimulationModule.ts`.
+  * Προσθήκη **`O(1)` LRU Memoization Cache** στον επιλυτή κόμβων Kirchhoff (`analyzeCircuitForSimulation`), μηδενίζοντας τις περιττές επαναλήψεις Gauss-Seidel όταν το κύκλωμα δεν έχει αλλάξει.
+* **🔥 Ολοκληρωμένη Μηχανή Θερμότητας & Θερμικής Ισορροπίας (`src/simulations/modules/heat/`):**
+  * **Χρωματική Κωδικοποίηση Ένθετων Δοχείων:** Αυτόματη αλλαγή χρώματος περιγράμματος δοχείου, εμβαπτισμένου θερμομέτρου, δεξιών εικονιδίων και καμπύλης διαγράμματος $\theta - t$ (`Α` Μαύρο, `Β` Μωβ `#7c3aed`, `Γ` Πράσινο `#16a34a`, `Δ` Κόκκινο `#dc2626`).
+  * **Ενεργειακά Συνεπής Θερμιδική Σύγκλιση:** Μονοτονική εκθετική προσέγγιση της θερμοκρασίας ισορροπίας $\theta_{\text{eq}} = \frac{\sum C_i \theta_i}{\sum C_i}$ χωρίς διασταύρωση καμπυλών.
+  * **Hover Ενδείξεις Υγρού (`500ml Νερό`):** Με hover πάνω στη σταγόνα (`💧`) εμφανίζεται η ένδειξη δεξιά της σταγόνας, και με hover πάνω στη μύτη του δοχείου εμφανίζεται αριστερά της μύτης.
+  * **Απόκρυψη Κουμπιών κατά την Επιλογή:** Όταν το πλαίσιο επιλογής δοχείου είναι ενεργό, τα 3 δεξιά εικονίδια κρύβονται και απενεργοποιούνται ώστε να μη συμπίπτουν με την πορτοκαλί λαβή αλλαγής μεγέθους.
+  * **Επιλογέας Ταχύτητας (`1x → 2x → 5x`) στο Χρονόμετρο (`StopwatchWidget.tsx`):** Επιταχύνει συγχρονισμένα το χρονόμετρο και τη φυσική εξέλιξη της προσομοίωσης.
+  * **120fps Scrolling & Μικρογραφίες:** Προσθήκη offscreen bitmap caching (`renderWithOffscreenBlurCache`), viewport culling (`getHeatSimulationWorldBounds`), idle frame deduplication και `PageHeatSimsThumbCanvas.tsx` για ζωντανές μικρογραφίες στη Βιβλιοθήκη.
+* **✍️ Νέες Ελληνικές Γραμματοσειρές `Fun` & `Diary` με Bold & Swipe 4 Γραμματοσειρών:**
+  * Κατασκευή και ενσωμάτωση των γραμματοσειρών `ExplainBoardsFun.otf`, `ExplainBoardsFunBold.otf`, `ExplainBoardsDiary.otf`, `ExplainBoardsDiaryBold.otf` με πλήρη ελληνικά/λατινικά/αριθμούς/σύμβολα και οριζόντιο swipe 4 ορατών γραμματοσειρών στην πάνω μπάρα (`Καλλιγραφική`, `Πένα`, `Fun`, `Diary`).
+* **🚀 Lossless Συμπίεση Σημείων 240Hz (`compactStrokeForStorage`) & Vite Code-Splitting:**
+  * Μείωση μεγέθους χειρόγραφων/GoodNotes σημειωματάριων κατά **55%–70%** και μείωση του gzip μεγέθους του κύριου bundle `index.js` κατά **65%** (`1.796 kB` → `622 kB`).
 
 #### Α00000000. Πλήρης Προσομοίωση Απλού Εκκρεμούς, Χρονόμετρο Διπλής Γωνίας & Αρθρωτοί Πυρήνες Προσομοιώσεων & STEM/OCR (`v0.99 — pendulumSimFullyFunctional + Modular Architecture`)
 * **🧩 Αρθρωτός Πυρήνας Προσομοιώσεων (`src/simulations/` — Βήμα 1):**
