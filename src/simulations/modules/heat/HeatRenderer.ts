@@ -25,6 +25,11 @@ import {
   LiquidType,
   FlameIntensity,
 } from './types';
+import {
+  calculateEquilibriumTemperature,
+  findDippedVesselForThermometer,
+  findParentVessel,
+} from './heatPhysicsEngine';
 
 // Helper: interpolate between two hex colors
 function lerpColor(c1: string, c2: string, t: number): string {
@@ -268,8 +273,10 @@ function renderContainerLetterBadge(
 function renderContainerFrontRim(
   ctx: CanvasRenderingContext2D,
   obj: HeatObject,
-  isDark: boolean
+  isDark: boolean,
+  crossingThermometers: HeatObject[]
 ): void {
+  if (crossingThermometers.length === 0) return;
   const strokeColor = obj.strokeColor || (isDark ? '#f8fafc' : '#111827');
   const pad = 8;
   const bw = obj.width - pad * 2;
@@ -279,6 +286,15 @@ function renderContainerFrontRim(
 
   ctx.save();
   ctx.translate(obj.x, obj.y);
+
+  // Clip horizontally around the thermometer stems crossing this container's rim
+  // so outer vessels never draw a rim stripe across nested inner containers!
+  ctx.beginPath();
+  for (const t of crossingThermometers) {
+    const localTx = t.x - obj.x;
+    ctx.rect(localTx - 4, y - 4, t.width + 8, beadH + 10);
+  }
+  ctx.clip();
 
   if (obj.type === 'beaker' || obj.type === 'wide-basin') {
     const spoutW = obj.type === 'beaker' ? 12 : 10;
@@ -420,15 +436,7 @@ export function renderHeatSimulation(
         );
         break;
       case 'beaker': {
-        const parentBasin = sim.objects.find(
-          (b) =>
-            b.id !== obj.id &&
-            (b.type === 'wide-basin' || b.type === 'beaker') &&
-            obj.x >= b.x - 25 &&
-            obj.x + obj.width <= b.x + b.width + 25 &&
-            obj.y + obj.height >= b.y + 15 &&
-            obj.width <= b.width
-        );
+        const parentBasin = findParentVessel(obj, sim.objects);
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
@@ -477,15 +485,7 @@ export function renderHeatSimulation(
         break;
       }
       case 'flask': {
-        const parentBasin = sim.objects.find(
-          (b) =>
-            b.id !== obj.id &&
-            (b.type === 'wide-basin' || b.type === 'beaker') &&
-            obj.x >= b.x - 25 &&
-            obj.x + obj.width <= b.x + b.width + 25 &&
-            obj.y + obj.height >= b.y + 15 &&
-            obj.width <= b.width
-        );
+        const parentBasin = findParentVessel(obj, sim.objects);
         const isGraphActive = (sim.graphs || [sim.graph]).some(
           (g) => g.visible && g.boundContainerIds?.includes(obj.id)
         );
@@ -511,18 +511,7 @@ export function renderHeatSimulation(
         break;
       }
       case 'thermometer': {
-        const thermCx = obj.x + obj.width / 2;
-        const thermBotY = obj.y + obj.height - 4;
-        const dipped = sim.objects.find((c) => {
-          if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
-          if (!c.containerState || c.containerState.volumeMl <= 0) return false;
-          return (
-            thermCx >= c.x - 4 &&
-            thermCx <= c.x + c.width + 4 &&
-            thermBotY >= c.y + 10 &&
-            obj.y <= c.y + c.height
-          );
-        });
+        const dipped = findDippedVesselForThermometer(obj, sim.objects, false);
         renderThermometer(
           ctx,
           obj.width,
@@ -605,8 +594,9 @@ export function renderHeatSimulation(
     );
     const thermometers = sim.objects.filter((obj) => obj.type === 'thermometer');
     for (const c of containers) {
-      // Check if any thermometer is dipped or crosses this container's rim
-      const hasThermometerCrossingRim = thermometers.some((t) => {
+      const crossingThermometers = thermometers.filter((t) => {
+        const dippedVessel = findDippedVesselForThermometer(t, sim.objects, false);
+        if (dippedVessel && dippedVessel.id !== c.id) return false;
         const tx = t.x + t.width / 2;
         const cLeft = c.x + 8;
         const cRight = c.x + c.width - 8;
@@ -616,8 +606,8 @@ export function renderHeatSimulation(
         return isHorizInside && isVertCrossing;
       });
 
-      if (hasThermometerCrossingRim) {
-        renderContainerFrontRim(ctx, c, isDark);
+      if (crossingThermometers.length > 0) {
+        renderContainerFrontRim(ctx, c, isDark, crossingThermometers);
       }
     }
   }
@@ -1799,15 +1789,7 @@ export function triggerContainerFillFeedback(containerId: string, volumeMl: numb
  * Tests if a container is nested / submerged inside another container (water bath / outer vessel).
  */
 export function isContainerSubmerged(obj: HeatObject, allObjects?: HeatObject[]): boolean {
-  if (!allObjects) return false;
-  return allObjects.some((b) => {
-    if (b.id === obj.id) return false;
-    if (b.type !== 'wide-basin' && b.type !== 'beaker') return false;
-    if (obj.width > b.width) return false;
-    const isInsideX = obj.x >= b.x - 25 && obj.x + obj.width <= b.x + b.width + 25;
-    const isInsideY = obj.y + obj.height >= b.y + 15 && obj.y <= b.y + b.height;
-    return isInsideX && isInsideY;
-  });
+  return Boolean(findParentVessel(obj, allObjects));
 }
 
 /**
@@ -1884,15 +1866,7 @@ export function getContainerActionButtonsWorldPos(obj: HeatObject, allObjects?: 
   const isSubmerged = allObjects ? isContainerSubmerged(obj, allObjects) : false;
   let outerRimLocalY: number | null = null;
   if (isSubmerged && allObjects) {
-    const parentBasin = allObjects.find(
-      (b) =>
-        b.id !== obj.id &&
-        (b.type === 'wide-basin' || b.type === 'beaker') &&
-        obj.x >= b.x - 25 &&
-        obj.x + obj.width <= b.x + b.width + 25 &&
-        obj.y + obj.height >= b.y + 15 &&
-        obj.width <= b.width
-    );
+    const parentBasin = findParentVessel(obj, allObjects);
     if (parentBasin) {
       const bPad = 8;
       const basinRimWorldY = parentBasin.y + bPad + 4;
@@ -4137,8 +4111,34 @@ function renderThermalGraph(
 
   // Plot Curves from history
   if (sim.history.length > 1) {
-    // Asymptote line if thermal equilibrium exists
-    const lastEq = sim.history[sim.history.length - 1].tempEquilibrium;
+    // Determine if any plotted container is part of a nested water-bath pair (e.g., Γ inside Β)
+    let nestedEqTemp: number | undefined;
+    for (const cId of boundIds) {
+      const cObj = sim.objects.find((o) => o.id === cId);
+      if (!cObj?.containerState) continue;
+      const partner =
+        (cObj.containerState.parentBasinId &&
+          sim.objects.find((o) => o.id === cObj.containerState?.parentBasinId)) ||
+        (cObj.containerState.nestedVesselId &&
+          sim.objects.find((o) => o.id === cObj.containerState?.nestedVesselId)) ||
+        findParentVessel(cObj, sim.objects) ||
+        sim.objects.find(
+          (o) =>
+            (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') &&
+            findParentVessel(o, sim.objects)?.id === cObj.id
+        );
+      if (partner?.containerState && cObj.containerState.volumeMl > 0 && partner.containerState.volumeMl > 0) {
+        nestedEqTemp = calculateEquilibriumTemperature(cObj.containerState, partner.containerState);
+        break;
+      }
+    }
+
+    const ambient = sim.ambientTemperature ?? 20.0;
+    const isNestedEquilibrium = nestedEqTemp !== undefined;
+    const lastEq = isNestedEquilibrium
+      ? nestedEqTemp
+      : sim.history[sim.history.length - 1].tempEquilibrium ?? ambient;
+
     if (lastEq !== undefined) {
       const eqY = mapY(lastEq);
       ctx.save();
@@ -4152,11 +4152,9 @@ function renderThermalGraph(
       ctx.fillStyle = '#059669';
       ctx.font = 'bold 8.5px system-ui, sans-serif';
       ctx.textAlign = 'right';
-      const ambient = sim.ambientTemperature ?? 20.0;
-      const isAmbient = Math.abs(lastEq - ambient) < 0.05;
-      const eqLabel = isAmbient
-        ? `θπεριβάλλοντος = ${lastEq.toFixed(1)}°C`
-        : `θισορ = ${lastEq.toFixed(1)}°C`;
+      const eqLabel = isNestedEquilibrium
+        ? `θισορ = ${lastEq.toFixed(1)}°C`
+        : `θπεριβάλλοντος = ${lastEq.toFixed(1)}°C`;
       ctx.fillText(eqLabel, plotX + plotW - 4, eqY - 4);
       ctx.restore();
     }

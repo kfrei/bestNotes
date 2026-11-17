@@ -13,8 +13,106 @@ import {
 } from './types';
 
 export const ROOM_TEMPERATURE_C = 20.0;
-const AMBIENT_COOLING_COEFF = 0.004; // Gentle cooling to room temp
-const WATER_BATH_HEAT_TRANSFER_COEFF = 18.0; // W / °C effective contact transfer
+const WATER_BATH_HEAT_TRANSFER_COEFF = 42.0; // W / °C effective contact conduction between nested vessels
+
+/**
+ * Finds the outer vessel (water bath / larger beaker / basin) in which `inner` is physically nested.
+ * Works for any combination of containers (e.g., beaker inside wide-basin, beaker inside wider beaker,
+ * flask inside beaker or wide-basin).
+ */
+export function findParentVessel(
+  inner: HeatObject,
+  allObjects?: HeatObject[]
+): HeatObject | undefined {
+  if (!allObjects) return undefined;
+  if (inner.type !== 'beaker' && inner.type !== 'flask' && inner.type !== 'wide-basin') {
+    return undefined;
+  }
+
+  const candidates = allObjects.filter((outer) => {
+    if (outer.id === inner.id) return false;
+    if (outer.type !== 'wide-basin' && outer.type !== 'beaker' && outer.type !== 'flask') {
+      return false;
+    }
+    // Outer container must be wider than inner container (or wide-basin with equal width)
+    const isWider =
+      outer.width > inner.width + 2 ||
+      (outer.type === 'wide-basin' && inner.type !== 'wide-basin' && outer.width >= inner.width);
+    if (!isWider) return false;
+
+    const isInsideX = inner.x >= outer.x - 25 && inner.x + inner.width <= outer.x + outer.width + 25;
+    const cx = inner.x + inner.width / 2;
+    const isCenterInsideX = cx >= outer.x + 4 && cx <= outer.x + outer.width - 4;
+    const isInsideY =
+      inner.y + inner.height >= outer.y + 12 &&
+      inner.y + inner.height <= outer.y + outer.height + 30 &&
+      inner.y <= outer.y + outer.height;
+
+    return isInsideX && isCenterInsideX && isInsideY;
+  });
+
+  if (candidates.length === 0) return undefined;
+  // Pick the closest enclosing vessel (narrowest outer width)
+  candidates.sort((a, b) => a.width - b.width);
+  return candidates[0];
+}
+
+/**
+ * Computes the world-space Y coordinate of the liquid surface inside a container.
+ */
+export function getContainerLiquidTopWorldY(c: HeatObject): number {
+  const cs = c.containerState;
+  if (!cs || cs.volumeMl <= 0) return c.y + c.height;
+  const fillRatio = Math.max(0, Math.min(1.0, cs.volumeMl / cs.capacityMl));
+  const cPad = 8;
+  const cBh = c.height - cPad * 2 - 6;
+  const isBasin = c.type === 'wide-basin';
+  const cHeadspace = isBasin ? (0.15 * cBh + 8.5) * 0.40 : (0.14 * cBh + 8.6) * 0.40;
+  const cLiquidH = Math.max(0, (cBh - cHeadspace) * fillRatio);
+  return c.y + cPad + 4 + cBh - cLiquidH;
+}
+
+/**
+ * Finds which container a thermometer is dipped into.
+ * Crucially prioritizes INNER nested vessels (narrower width / nested inside a bath) over outer vessels,
+ * so lowering a thermometer deeper inside an inner container Γ never falsely switches to measuring the outer container Β!
+ */
+export function findDippedVesselForThermometer(
+  therm: HeatObject,
+  allObjects: HeatObject[],
+  requireBulbInLiquid: boolean = true
+): HeatObject | undefined {
+  const bulbX = therm.x + therm.width / 2;
+  const bulbY = therm.y + therm.height - 4; // Bottom tip of bulb
+
+  const matching = allObjects.filter((c) => {
+    if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
+    if (!c.containerState || c.containerState.volumeMl <= 0) return false;
+
+    const isHorizInside = bulbX >= c.x + 4 && bulbX <= c.x + c.width - 4;
+    if (!isHorizInside) return false;
+
+    if (requireBulbInLiquid) {
+      const liquidTopY = getContainerLiquidTopWorldY(c);
+      const liquidBottomY = c.y + c.height;
+      return bulbY >= liquidTopY - 4 && bulbY <= liquidBottomY + 10 && therm.y <= liquidBottomY;
+    } else {
+      return bulbY >= c.y + 10 && bulbY <= c.y + c.height + 12 && therm.y <= c.y + c.height;
+    }
+  });
+
+  if (matching.length === 0) return undefined;
+
+  // Prioritize inner nested vessels first, then smallest width
+  matching.sort((a, b) => {
+    const aIsInner = Boolean(a.containerState?.parentBasinId || findParentVessel(a, allObjects));
+    const bIsInner = Boolean(b.containerState?.parentBasinId || findParentVessel(b, allObjects));
+    if (aIsInner !== bIsInner) return aIsInner ? -1 : 1;
+    return a.width - b.width;
+  });
+
+  return matching[0];
+}
 
 /**
  * Returns power output in Watts for a burner state.
@@ -110,6 +208,29 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     };
   }
 
+  // Pre-detect nested container pairs (e.g., vessel Γ placed inside wider vessel Β)
+  // so both thermal conduction and ambient shielding know which vessels are nested!
+  for (const c of containers) {
+    if (c.containerState) {
+      c.containerState = {
+        ...c.containerState,
+        parentBasinId: undefined,
+        nestedVesselId: undefined,
+      };
+    }
+  }
+
+  const nestedPairs: { outer: HeatObject; inner: HeatObject }[] = [];
+  for (const inner of containers) {
+    if (!inner.containerState) continue;
+    const outer = findParentVessel(inner, containers);
+    if (outer && outer.containerState) {
+      inner.containerState.parentBasinId = outer.id;
+      outer.containerState.nestedVesselId = inner.id;
+      nestedPairs.push({ outer, inner });
+    }
+  }
+
   // 2. Identify heat sources for each container
   for (const container of containers) {
     if (!container.containerState) continue;
@@ -186,11 +307,17 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       if (cs.temperature < liquidProps.boilingPoint) {
         cs.temperature = Math.min(liquidProps.boilingPoint, cs.temperature + netDT);
       }
-    } else {
-      // No active heating: Natural cooling towards room ambient temperature (Newton's Law of Cooling)
+    } else if (cs.volumeMl > 0) {
+      // No active heating: Natural cooling towards room ambient temperature (Newton's Law of Cooling),
+      // properly scaled by thermal capacity (m · c) so quantity and material affect cooling rate!
       const coolDelta = cs.temperature - ambientTemp;
       if (Math.abs(coolDelta) > 0.005) {
-        cs.temperature -= coolDelta * 0.0012 * timeStep;
+        const baseEnvWattsPerDeg = 1.78 * Math.pow(Math.max(50, cs.volumeMl) / 500, 0.45);
+        // When nested in a water bath, the inner vessel is largely shielded by the outer liquid,
+        // and the ambient environment plays a subtle secondary role compared to inter-vessel heat exchange.
+        const envShieldFactor = cs.parentBasinId ? 0.12 : cs.nestedVesselId ? 0.22 : 1.0;
+        const dQEnv = envShieldFactor * baseEnvWattsPerDeg * coolDelta * timeStep;
+        cs.temperature -= dQEnv / heatCapJoulesPerC;
       }
     }
 
@@ -218,83 +345,48 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     container.containerState = cs;
   }
 
-  // 3. Thermal Equilibrium between nested vessels (Water Bath / Υδατόλουτρο)
-  const basins = containers.filter((c) => c.type === 'wide-basin');
-  for (const basin of basins) {
-    if (!basin.containerState) continue;
-    const bs = basin.containerState;
+  // 3. Thermal Interaction & Calorimetric Equilibrium between ANY nested vessels (e.g., Γ inside Β)
+  for (const { outer, inner } of nestedPairs) {
+    if (!outer.containerState || !inner.containerState) continue;
+    const bs = outer.containerState;
+    const is = inner.containerState;
 
-    // Find any beaker or flask physically resting inside this basin
-    const innerVessels = containers.filter((c) => {
-      if (c.id === basin.id) return false;
-      const cx = c.x + c.width / 2;
-      const cy = c.y + c.height;
-      return (
-        cx >= basin.x + 8 &&
-        cx <= basin.x + basin.width - 8 &&
-        cy >= basin.y + 10 &&
-        cy <= basin.y + basin.height + 20
-      );
-    });
+    if (bs.volumeMl <= 0 || is.volumeMl <= 0) continue;
 
-    for (const inner of innerVessels) {
-      if (!inner.containerState) continue;
-      const is = inner.containerState;
+    // Conduction between outer vessel liquid and inner vessel liquid: Q = m · c · ΔT
+    const pOuter = LIQUID_REGISTRY[bs.liquidType];
+    const pInner = LIQUID_REGISTRY[is.liquidType];
 
-      // Link IDs
-      bs.nestedVesselId = inner.id;
-      is.parentBasinId = basin.id;
+    const mOuter = bs.volumeMl * pOuter.density;
+    const mInner = is.volumeMl * pInner.density;
 
-      // Conduction between outer basin liquid and inner vessel liquid
-      const pOuter = LIQUID_REGISTRY[bs.liquidType];
-      const pInner = LIQUID_REGISTRY[is.liquidType];
+    const cOuter = pOuter.specificHeat;
+    const cInner = pInner.specificHeat;
 
-      const mOuter = bs.volumeMl * pOuter.density;
-      const mInner = is.volumeMl * pInner.density;
+    const capOuter = Math.max(1, mOuter * cOuter);
+    const capInner = Math.max(1, mInner * cInner);
 
-      const cOuter = pOuter.specificHeat;
-      const cInner = pInner.specificHeat;
+    const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
+    const tempDiff = bs.temperature - is.temperature; // Outer - Inner
+    const rawDQ = WATER_BATH_HEAT_TRANSFER_COEFF * tempDiff * timeStep; // Joules
+    // Clamp so vessels converge smoothly to instEq without overshooting in a single step
+    const maxDQ = Math.abs(bs.temperature - instEq) * capOuter;
+    const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
 
-      const capOuter = Math.max(1, mOuter * cOuter);
-      const capInner = Math.max(1, mInner * cInner);
+    bs.temperature -= dQ / capOuter;
+    is.temperature += dQ / capInner;
 
-      const tempDiff = bs.temperature - is.temperature; // Outer - Inner
-      const dQ = WATER_BATH_HEAT_TRANSFER_COEFF * tempDiff * timeStep; // Joules
-
-      bs.temperature -= dQ / capOuter;
-      is.temperature += dQ / capInner;
-
-      // Clamp to boiling if reached
-      if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
-      if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
-    }
+    // Clamp to boiling if reached
+    if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
+    if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
   }
 
-  // 4. Update Thermometer readings (smooth probe response)
+  // 4. Update Thermometer readings (smooth probe response, prioritizing inner nested vessels)
   for (const therm of thermometers) {
     if (!therm.thermometerState) continue;
     const ts = { ...therm.thermometerState };
 
-    // Check if thermometer bulb is dipping into any container with liquid
-    const bulbX = therm.x + therm.width / 2;
-    const bulbY = therm.y + therm.height - 4; // Bottom tip
-
-    const vesselDipped = containers.find((c) => {
-      if (!c.containerState || c.containerState.volumeMl <= 0) return false;
-      const liquidLevelFraction = Math.min(
-        0.96,
-        Math.max(0.08, c.containerState.volumeMl / c.containerState.capacityMl)
-      );
-      const liquidTopY = c.y + c.height * (1.0 - liquidLevelFraction * 0.94);
-      const liquidBottomY = c.y + c.height;
-
-      return (
-        bulbX >= c.x + 4 &&
-        bulbX <= c.x + c.width - 4 &&
-        bulbY >= liquidTopY &&
-        bulbY <= liquidBottomY + 8
-      );
-    });
+    const vesselDipped = findDippedVesselForThermometer(therm, containers, true);
 
     let targetTemp = ambientTemp;
     if (vesselDipped?.containerState) {
@@ -334,7 +426,18 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
         }
       }
 
+      // Prefer a container that is part of an active nested water-bath pair so tempEquilibrium is recorded accurately
+      const nestedVesselInGraph =
+        (sim.graph.boundContainerIds &&
+          containers.find(
+            (c) =>
+              sim.graph.boundContainerIds!.includes(c.id) &&
+              (c.containerState?.parentBasinId || c.containerState?.nestedVesselId)
+          )) ||
+        containers.find((c) => c.containerState?.parentBasinId || c.containerState?.nestedVesselId);
+
       const primaryVessel =
+        nestedVesselInGraph ||
         (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
         containers.find((c) => c.id === sim.selectedObjectId) ||
         containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
