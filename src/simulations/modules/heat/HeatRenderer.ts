@@ -237,7 +237,9 @@ export function getContainersCurveMeta(
 }
 
 /**
- * Renders a crisp letter badge (A, B...) inside the container at the bottom-left of its base.
+ * Renders a letter badge (A, B...) inside the container at the bottom-left of its base.
+ * When the container is nested inside an outer container, the badge is softly blurred and
+ * slightly translucent so it visually reads as being inside the outer vessel.
  */
 function renderContainerLetterBadge(
   ctx: CanvasRenderingContext2D,
@@ -245,9 +247,29 @@ function renderContainerLetterBadge(
   color: string,
   badgeX: number,
   badgeY: number,
-  isDark: boolean
+  isDark: boolean,
+  isNestedInOuterVessel: boolean = false,
+  isSubmergedInOuterLiquid: boolean = false,
+  outerLiquidType?: LiquidType
 ): void {
   ctx.save();
+  if (isNestedInOuterVessel) {
+    if (isSubmergedInOuterLiquid) {
+      if (outerLiquidType === 'milk') {
+        ctx.globalAlpha = 0.36;
+        ctx.filter = 'blur(1.7px)';
+      } else if (outerLiquidType === 'oil') {
+        ctx.globalAlpha = 0.50;
+        ctx.filter = 'blur(1.35px)';
+      } else {
+        ctx.globalAlpha = 0.62;
+        ctx.filter = 'blur(1.1px)';
+      }
+    } else {
+      ctx.globalAlpha = 0.72;
+      ctx.filter = 'blur(0.85px)';
+    }
+  }
   const r = 7.5;
   ctx.beginPath();
   ctx.arc(badgeX, badgeY, r, 0, Math.PI * 2);
@@ -577,6 +599,7 @@ export function renderHeatSimulation(
       }
       case 'thermometer': {
         const dipped = findDippedVesselForThermometer(obj, sim.objects, false);
+        const outerDipped = dipped ? findParentVessel(dipped, sim.objects) : undefined;
         renderThermometer(
           ctx,
           obj.width,
@@ -588,7 +611,8 @@ export function renderHeatSimulation(
           obj.strokeColor,
           dipped,
           obj.x,
-          obj.y
+          obj.y,
+          outerDipped
         );
         break;
       }
@@ -3083,7 +3107,17 @@ function renderBeaker(
       outerRimLocalY
     );
     if (letter && color) {
-      renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
+      renderContainerLetterBadge(
+        ctx,
+        letter,
+        color,
+        x + 16,
+        y + bh - 10,
+        isDark,
+        Boolean(parentBasin),
+        isSubmerged,
+        parentBasin?.containerState?.liquidType
+      );
     }
   }
 }
@@ -3787,7 +3821,17 @@ function renderFlask(
       outerRimLocalY
     );
     if (letter && color) {
-      renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
+      renderContainerLetterBadge(
+        ctx,
+        letter,
+        color,
+        x + 16,
+        y + bh - 10,
+        isDark,
+        Boolean(parentBasin),
+        isSubmerged,
+        parentBasin?.containerState?.liquidType
+      );
     }
   }
 }
@@ -3902,7 +3946,8 @@ function renderThermometer(
   customColor?: string,
   dippedContainer?: HeatObject,
   _thermX?: number,
-  thermY?: number
+  thermY?: number,
+  outerDippedContainer?: HeatObject
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -3939,6 +3984,28 @@ function renderThermometer(
       submergedLocalY = containerLiquidTopGlobalY - (thermY ?? 0);
     }
   }
+
+  // If the dipped container is itself nested inside an outer container (e.g. B inside A),
+  // compute the outer container's rim and liquid level so the nested thermometer gets double-layer optical blur!
+  let outerRimLocalY: number | null = null;
+  let outerSubmergedLocalY: number | null = null;
+  let outerLiquidType: LiquidType = 'water';
+  if (outerDippedContainer) {
+    const oPad = 8;
+    outerRimLocalY = outerDippedContainer.y + oPad + 4 - (thermY ?? 0);
+    if (outerDippedContainer.containerState && outerDippedContainer.containerState.volumeMl > 0) {
+      const ocs = outerDippedContainer.containerState;
+      outerLiquidType = ocs.liquidType || 'water';
+      const oFillRatio = Math.max(0, Math.min(1.0, ocs.volumeMl / ocs.capacityMl));
+      const oBh = outerDippedContainer.height - oPad * 2 - 6;
+      const oIsBasin = outerDippedContainer.type === 'wide-basin';
+      const oHeadspace = oIsBasin ? (0.15 * oBh + 8.5) * 0.40 : (0.14 * oBh + 8.6) * 0.40;
+      const oLiquidH = Math.max(0, (oBh - oHeadspace) * oFillRatio);
+      const oLiquidTopY = oPad + 4 + oBh - oLiquidH;
+      outerSubmergedLocalY = outerDippedContainer.y + oLiquidTopY - (thermY ?? 0);
+    }
+  }
+  const isNestedThermometer = Boolean(outerDippedContainer);
 
   // 1. Physical Thermometer Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
@@ -4002,8 +4069,8 @@ function renderThermometer(
         ctx.beginPath();
         ctx.rect(0, rimY, w, surfaceY - rimY);
         ctx.clip();
-        ctx.globalAlpha = 0.50;
-        ctx.filter = 'blur(2.2px)';
+        ctx.globalAlpha = isNestedThermometer ? 0.36 : 0.50;
+        ctx.filter = isNestedThermometer ? 'blur(3.2px)' : 'blur(2.2px)';
         drawThermometerApparatus(
           ctx,
           cx,
@@ -4025,39 +4092,121 @@ function renderThermometer(
 
       // PASS 3: Submerged Part inside Liquid (from surfaceY downwards)
       if (isDippedInLiquid) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, surfaceY, w, h - surfaceY + 10);
-        ctx.clip();
+        if (!isNestedThermometer) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, surfaceY, w, h - surfaceY + 10);
+          ctx.clip();
 
-        if (dippedLiquidType === 'milk') {
-          ctx.globalAlpha = 0.22;
-          ctx.filter = 'blur(4.5px)';
-        } else if (dippedLiquidType === 'oil') {
-          ctx.globalAlpha = 0.32;
-          ctx.filter = 'blur(3.8px)';
+          if (dippedLiquidType === 'milk') {
+            ctx.globalAlpha = 0.22;
+            ctx.filter = 'blur(4.5px)';
+          } else if (dippedLiquidType === 'oil') {
+            ctx.globalAlpha = 0.32;
+            ctx.filter = 'blur(3.8px)';
+          } else {
+            ctx.globalAlpha = 0.48;
+            ctx.filter = 'blur(3.2px)';
+          }
+
+          drawThermometerApparatus(
+            ctx,
+            cx,
+            topY,
+            botY,
+            stemW,
+            stemH,
+            bulbR,
+            temp,
+            tempFrac,
+            liquidTopY,
+            liquidColor,
+            strokeColor,
+            isDark,
+            true
+          );
+          ctx.restore();
         } else {
-          ctx.globalAlpha = 0.48;
-          ctx.filter = 'blur(3.2px)';
-        }
+          // Nested container (e.g. Thermometer B inside Container B, which sits inside Container A):
+          // Split at the outer container's rim / liquid surface so the upper submerged section is softened,
+          // and the lower section (viewed through BOTH containers & liquids) is significantly more blurred!
+          const outerBoundaryY =
+            outerRimLocalY !== null
+              ? Math.max(surfaceY, outerRimLocalY)
+              : outerSubmergedLocalY !== null
+              ? Math.max(surfaceY, outerSubmergedLocalY)
+              : surfaceY;
 
-        drawThermometerApparatus(
-          ctx,
-          cx,
-          topY,
-          botY,
-          stemW,
-          stemH,
-          bulbR,
-          temp,
-          tempFrac,
-          liquidTopY,
-          liquidColor,
-          strokeColor,
-          isDark,
-          true
-        );
-        ctx.restore();
+          if (outerBoundaryY > surfaceY) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, surfaceY, w, outerBoundaryY - surfaceY);
+            ctx.clip();
+
+            if (dippedLiquidType === 'milk') {
+              ctx.globalAlpha = 0.18;
+              ctx.filter = 'blur(4.8px)';
+            } else if (dippedLiquidType === 'oil') {
+              ctx.globalAlpha = 0.26;
+              ctx.filter = 'blur(4.1px)';
+            } else {
+              ctx.globalAlpha = 0.38;
+              ctx.filter = 'blur(3.7px)';
+            }
+
+            drawThermometerApparatus(
+              ctx,
+              cx,
+              topY,
+              botY,
+              stemW,
+              stemH,
+              bulbR,
+              temp,
+              tempFrac,
+              liquidTopY,
+              liquidColor,
+              strokeColor,
+              isDark,
+              true
+            );
+            ctx.restore();
+          }
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, outerBoundaryY, w, h - outerBoundaryY + 10);
+          ctx.clip();
+
+          if (dippedLiquidType === 'milk' || outerLiquidType === 'milk') {
+            ctx.globalAlpha = 0.12;
+            ctx.filter = 'blur(6.2px)';
+          } else if (dippedLiquidType === 'oil' || outerLiquidType === 'oil') {
+            ctx.globalAlpha = 0.19;
+            ctx.filter = 'blur(5.4px)';
+          } else {
+            ctx.globalAlpha = 0.27;
+            ctx.filter = 'blur(4.8px)';
+          }
+
+          drawThermometerApparatus(
+            ctx,
+            cx,
+            topY,
+            botY,
+            stemW,
+            stemH,
+            bulbR,
+            temp,
+            tempFrac,
+            liquidTopY,
+            liquidColor,
+            strokeColor,
+            isDark,
+            true
+          );
+          ctx.restore();
+        }
       }
     }
 
