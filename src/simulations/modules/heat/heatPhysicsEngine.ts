@@ -189,8 +189,8 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       if (!b.burnerState?.isOn) return false;
       const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
       const isHoriz = dx <= 35;
-      // Burner top is under tripod wire gauze
-      const isUnderGauze = b.y >= tripod.y - 10 && b.y <= tripod.y + 65;
+      // Burner top is under tripod wire gauze (including the lower locked position)
+      const isUnderGauze = b.y >= tripod.y - 10 && b.y <= tripod.y + 85;
       return isHoriz && isUnderGauze;
     });
 
@@ -254,7 +254,7 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
         if (!b.burnerState?.isOn) return false;
         const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
         const isHoriz = dx <= 35;
-        const isUnderGauze = b.y >= tripodBelow.y - 10 && b.y <= tripodBelow.y + 65;
+        const isUnderGauze = b.y >= tripodBelow.y - 10 && b.y <= tripodBelow.y + 85;
         return isHoriz && isUnderGauze;
       });
     }

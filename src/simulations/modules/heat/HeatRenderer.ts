@@ -407,7 +407,13 @@ export function renderHeatSimulation(
     }
 
     switch (obj.type) {
-      case 'tripod':
+      case 'tripod': {
+        const hasContainerOnTop = sim.objects.some((c) => {
+          if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
+          const dx = Math.abs(c.x + c.width / 2 - (obj.x + obj.width / 2));
+          const cBot = c.y + c.height;
+          return dx <= 45 && cBot >= obj.y - 5 && cBot <= obj.y + 45;
+        });
         renderTripod(
           ctx,
           obj.width,
@@ -417,10 +423,46 @@ export function renderHeatSimulation(
           isSelected,
           layer,
           obj.strokeColor,
-          tripodPart || 'all'
+          tripodPart || 'all',
+          hasContainerOnTop
         );
         break;
-      case 'burner':
+      }
+      case 'burner': {
+        // Compute ceiling Y if a container or tripod gauze is above this burner so the flame never enters inside the vessel
+        let ceilingWorldY: number | undefined;
+        const bCx = obj.x + obj.width / 2;
+        for (const o of sim.objects) {
+          if (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') {
+            const dx = Math.abs(o.x + o.width / 2 - bCx);
+            const cBot = o.y + o.height - 2;
+            if (dx <= 45 && cBot < obj.y + obj.height && cBot > obj.y - 80) {
+              if (ceilingWorldY === undefined || cBot < ceilingWorldY) {
+                ceilingWorldY = cBot;
+              }
+            }
+          } else if (o.type === 'tripod') {
+            const dx = Math.abs(o.x + o.width / 2 - bCx);
+            if (dx <= 45 && o.y < obj.y + obj.height) {
+              const collarW = o.width * 0.72;
+              const collarH = Math.round(collarW * 0.15);
+              const gauzeUndersideY = o.y + 4 + collarH;
+              // If a container sits on this tripod, clamp flame at the underside of the gauze/container
+              const hasVesselOnTripod = sim.objects.some((c) => {
+                if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
+                const cdx = Math.abs(c.x + c.width / 2 - (o.x + o.width / 2));
+                const cBot = c.y + c.height;
+                return cdx <= 45 && cBot >= o.y - 5 && cBot <= o.y + 45;
+              });
+              if (hasVesselOnTripod) {
+                if (ceilingWorldY === undefined || gauzeUndersideY < ceilingWorldY) {
+                  ceilingWorldY = gauzeUndersideY;
+                }
+              }
+            }
+          }
+        }
+        const ceilingLocalY = ceilingWorldY !== undefined ? ceilingWorldY - obj.y : undefined;
         renderBurner(
           ctx,
           obj.width,
@@ -432,9 +474,11 @@ export function renderHeatSimulation(
           obj.strokeColor,
           obj.x,
           obj.y,
-          options?.hoverPoint
+          options?.hoverPoint,
+          ceilingLocalY
         );
         break;
+      }
       case 'beaker': {
         const parentBasin = findParentVessel(obj, sim.objects);
         const isGraphActive = (sim.graphs || [sim.graph]).some(
@@ -1099,23 +1143,23 @@ function renderLiquidBody(
   // 1. Beautiful, tall, smooth linear depth gradient (degrade) - enhanced transition towards the fill level
   const grad = ctx.createLinearGradient(x + bw / 2, liquidTopY, x + bw / 2, bottomY);
   if (liquidType === 'oil') {
-    grad.addColorStop(0, 'rgba(101, 163, 13, 0.90)'); // Rich golden-olive at surface
-    grad.addColorStop(0.20, 'rgba(132, 204, 22, 0.88)'); // Fresh lime olive oil
-    grad.addColorStop(0.55, 'rgba(163, 230, 53, 0.84)'); // Golden-lime green body
-    grad.addColorStop(0.85, 'rgba(190, 242, 100, 0.80)'); // Lighter golden olive
-    grad.addColorStop(1, 'rgba(217, 249, 157, 0.82)'); // Pale luminous base
+    grad.addColorStop(0, 'rgba(101, 163, 13, 0.92)'); // Rich golden-olive at surface
+    grad.addColorStop(0.20, 'rgba(132, 204, 22, 0.90)'); // Fresh lime olive oil
+    grad.addColorStop(0.55, 'rgba(163, 230, 53, 0.89)'); // Golden-lime green body
+    grad.addColorStop(0.85, 'rgba(190, 242, 100, 0.91)'); // Less transparent base so tripod underneath is softer
+    grad.addColorStop(1, 'rgba(217, 249, 157, 0.93)'); // Pale luminous base
   } else if (liquidType === 'milk') {
-    grad.addColorStop(0, 'rgba(203, 213, 225, 0.94)'); // Soft slate-grey top matching surface line!
-    grad.addColorStop(0.25, 'rgba(226, 232, 240, 0.95)'); // Transition to cool light grey
-    grad.addColorStop(0.60, 'rgba(241, 245, 249, 0.97)'); // Milky off-white
-    grad.addColorStop(1, 'rgba(248, 250, 252, 0.98)'); // Crisp milky white base
+    grad.addColorStop(0, 'rgba(203, 213, 225, 0.95)'); // Soft slate-grey top matching surface line!
+    grad.addColorStop(0.25, 'rgba(226, 232, 240, 0.96)'); // Transition to cool light grey
+    grad.addColorStop(0.60, 'rgba(241, 245, 249, 0.98)'); // Milky off-white
+    grad.addColorStop(1, 'rgba(248, 250, 252, 0.99)'); // Crisp milky white base
   } else {
     // Water
     grad.addColorStop(0, 'rgba(2, 132, 199, 0.92)'); // Rich medium-dark blue right under surface! Matches surface stroke!
-    grad.addColorStop(0.22, 'rgba(14, 165, 233, 0.88)'); // Vibrant sky blue
-    grad.addColorStop(0.55, 'rgba(56, 189, 248, 0.82)'); // Clear light cyan/blue (γαλάζιο)
-    grad.addColorStop(0.85, 'rgba(125, 211, 252, 0.78)'); // Light aquamarine sheen
-    grad.addColorStop(1, 'rgba(186, 230, 253, 0.80)'); // Soft clear crystal base
+    grad.addColorStop(0.22, 'rgba(14, 165, 233, 0.90)'); // Vibrant sky blue
+    grad.addColorStop(0.55, 'rgba(56, 189, 248, 0.88)'); // Clear light cyan/blue (γαλάζιο)
+    grad.addColorStop(0.85, 'rgba(125, 211, 252, 0.90)'); // Less transparent base so tripod underneath is softer
+    grad.addColorStop(1, 'rgba(186, 230, 253, 0.92)'); // Soft clear crystal base
   }
 
   ctx.fillStyle = grad;
@@ -1199,7 +1243,8 @@ function renderBurner(
   customColor?: string,
   worldX?: number,
   worldY?: number,
-  hoverPoint?: { x: number; y: number } | null
+  hoverPoint?: { x: number; y: number } | null,
+  ceilingLocalY?: number
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -1221,7 +1266,7 @@ function renderBurner(
 
   const stemW = coneTopW * 0.82;
   const nozzleH = 12;
-  const nozzleTopY = Math.max(8, h * 0.11); // taller stem & chimney tube
+  const nozzleTopY = Math.max(16, h * 0.24); // compact stem height so flame sits cleanly beneath tripod gauze
   const nozzleBotY = nozzleTopY + nozzleH;
   const nozzleW = stemW * 1.34;
 
@@ -1238,22 +1283,34 @@ function renderBurner(
     if (state?.isOn && layer !== 'apparatus') {
       const time = performance.now() / 1000;
       // 1. Organic gentle sway (sway like candle in air)
-      const sway = Math.sin(time * 3.2) * 2.8 + Math.sin(time * 6.5) * 1.2;
+      const sway = Math.sin(time * 3.6) * 3.1 + Math.sin(time * 7.2) * 1.4;
       // 2. Flame height breathing
-      const breathe = 1.0 + Math.sin(time * 4.0) * 0.08 + Math.cos(time * 7.0) * 0.03;
+      const breathe = 1.0 + Math.sin(time * 4.4) * 0.09 + Math.cos(time * 7.8) * 0.04;
 
       const isLow = state.intensity === 'low' || state.intensity === 'safety';
       const isHigh = state.intensity === 'high' || state.intensity === 'roaring';
 
-      // "η εικονα της φλογας που εχουμε τωρα ας ειναι η μεσαι και αρα στο μικρο θα εχεις τη φλογα φανερα μικροτερη και στο πιο μεγαλο θα ειναι πιο μεγαλη λιογ..."
-      const baseFlameH = isHigh ? h * 0.68 : isLow ? h * 0.32 : h * 0.50;
-      const flameH = baseFlameH * breathe;
-      const flameTipY = nozzleTopY - 4 - flameH;
+      const baseFlameH = isHigh ? h * 0.54 : isLow ? h * 0.28 : h * 0.41;
+      let flameH = baseFlameH * breathe;
+      let spreadBoost = 1.0;
+
+      // Never allow flame to penetrate inside a container sitting above the burner;
+      // instead convert blocked height into lively horizontal flame licking & flickering along the underside!
+      if (ceilingLocalY !== undefined) {
+        const maxAllowedH = Math.max(14, nozzleTopY - 2 - ceilingLocalY);
+        if (flameH > maxAllowedH) {
+          const compression = (flameH - maxAllowedH) / Math.max(10, baseFlameH);
+          spreadBoost = 1.0 + Math.min(0.60, compression * 0.90) * (1.0 + Math.sin(time * 8.5) * 0.14);
+          flameH = maxAllowedH + Math.sin(time * 6.2) * 1.3;
+        }
+      }
+
+      const flameTipY = nozzleTopY - 3 - flameH;
 
       // 3. Soft circular ambient breathing glow (NO rectangular box!)
       ctx.save();
       const glowR = isHigh ? flameH * 1.20 : isLow ? flameH * 0.75 : flameH * 0.95;
-      const glowCenterY = nozzleTopY - 4 - flameH * 0.45;
+      const glowCenterY = nozzleTopY - 3 - flameH * 0.45;
       const glow = ctx.createRadialGradient(cx, glowCenterY, 3, cx, glowCenterY, glowR);
       const glowAlpha = 0.22 + Math.sin(time * 5.0) * 0.05;
 
@@ -1278,7 +1335,7 @@ function renderBurner(
 
       // 4. Fluid teardrop flame silhouette emerging from nozzle mouth
       ctx.save();
-      const widthScale = isHigh ? 1.30 : isLow ? 0.70 : 1.0;
+      const widthScale = (isHigh ? 1.30 : isLow ? 0.70 : 1.0) * spreadBoost;
       const flameBaseW = nozzleW * 0.72 * (isLow ? 0.80 : isHigh ? 1.15 : 1.0);
       const flameMidW = nozzleW * 1.35 * widthScale * (1.0 - (breathe - 1.0) * 0.5);
 
@@ -1578,7 +1635,8 @@ function renderTripod(
   _isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
   customColor?: string,
-  part: 'all' | 'back' | 'front' = 'all'
+  part: 'all' | 'back' | 'front' = 'all',
+  hasContainerOnTop: boolean = false
 ): void {
   const strokeColor = customColor || (isDark ? '#f8fafc' : '#111827');
   const cx = w / 2;
@@ -1616,13 +1674,21 @@ function renderTripod(
       const backEndY = legBotY - 6;
 
       ctx.save();
-      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.42)' : 'rgba(100, 116, 139, 0.38)';
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(100, 116, 139, 0.28)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(backStartX, backStartY);
       ctx.lineTo(backEndX, backEndY);
       ctx.stroke();
       ctx.restore();
+
+      // When a container sits on top of the tripod, its glass base & liquid cover the wire gauze,
+      // inner ring, and back collar arc: soften with subtle blur & reduced opacity so it's less prominent!
+      ctx.save();
+      if (hasContainerOnTop) {
+        ctx.globalAlpha = 0.28;
+        ctx.filter = 'blur(1.8px)';
+      }
 
       // 2. Wire Gauze mesh crosshatch (Top/Back half: y <= collarCy + 0.5)
       // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
@@ -1638,7 +1704,7 @@ function renderTripod(
       ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
       ctx.clip('evenodd');
 
-      ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
+      ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
       ctx.lineWidth = 0.8;
       const step = 4;
       for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
@@ -1664,14 +1730,14 @@ function renderTripod(
         ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
       }
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
       ctx.restore();
 
       // 4. Back Arc of Circular Top Collar Ring
       ctx.save();
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = 2.2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -1682,6 +1748,8 @@ function renderTripod(
       }
       ctx.stroke();
       ctx.restore();
+
+      ctx.restore(); // restore from hasContainerOnTop blur/alpha
     }
 
     // -------------------------------------------------------------------------
@@ -1689,6 +1757,12 @@ function renderTripod(
     // -------------------------------------------------------------------------
     if (part === 'all' || part === 'front') {
       if (part === 'front') {
+        ctx.save();
+        if (hasContainerOnTop) {
+          ctx.globalAlpha = 0.28;
+          ctx.filter = 'blur(1.8px)';
+        }
+
         // Wire Gauze mesh crosshatch (Bottom/Front half: y >= collarCy - 0.5)
         // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
         ctx.save();
@@ -1701,7 +1775,7 @@ function renderTripod(
         ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
         ctx.clip('evenodd');
 
-        ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.55)' : 'rgba(71, 85, 105, 0.55)';
+        ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
         ctx.lineWidth = 0.8;
         const step = 4;
         for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
@@ -1723,11 +1797,13 @@ function renderTripod(
         ctx.beginPath();
         ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI);
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 1.3;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.restore();
 
-        // Front Arc of Circular Top Collar Ring (from 0 to PI)
+        ctx.restore(); // restore from hasContainerOnTop blur/alpha
+
+        // Front Arc of Circular Top Collar Ring (from 0 to PI) - remains 100% sharp as the foreground lip!
         ctx.save();
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 2.4;
@@ -1922,10 +1998,9 @@ export function getTripodBurnerDockPos(
 ): { dockX: number; dockY: number } {
   const tripodCenterX = tripod.x + tripod.width / 2;
   const dockX = Math.round(tripodCenterX - burner.width / 2);
-  // Tripod front legs end at legBotY = tripod.height - 6.
-  // Burner base rests on desk at groundY = burner.height - 12.
-  // Aligning both to rest level on the exact same horizontal table baseline:
-  const dockY = Math.round(tripod.y + tripod.height - burner.height + 6);
+  // Lock the burner at a lower position under the tripod so the entire animated flame
+  // sits clearly beneath the wire gauze without piercing into the vessel above!
+  const dockY = Math.round(tripod.y + tripod.height - burner.height + 24);
   return { dockX, dockY };
 }
 

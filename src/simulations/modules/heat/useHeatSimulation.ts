@@ -402,11 +402,11 @@ export function useHeatSimulation(
         if (type === 'tripod' && burner && !tripod) {
           // Tripod centers over burner!
           targetX = burner.x + burner.width / 2;
-          targetY = burner.y + burner.height - def.h / 2;
+          targetY = burner.y + burner.height - 24 - def.h / 2;
         } else if (type === 'burner' && tripod && !burner) {
-          // Burner centers under tripod!
+          // Burner centers under tripod at the lower locked position!
           targetX = tripod.x + tripod.width / 2;
-          targetY = tripod.y + tripod.height - def.h / 2;
+          targetY = tripod.y + tripod.height + 24 - def.h / 2;
         } else if ((type === 'beaker' || type === 'flask') && tripod && containers.length === 0) {
           // Container sits on tripod wire gauze!
           targetX = tripod.x + tripod.width / 2;
