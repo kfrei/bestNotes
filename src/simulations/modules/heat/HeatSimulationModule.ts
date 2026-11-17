@@ -57,42 +57,19 @@ export const HEAT_SIMULATION_OBJECTS: readonly SimulationObjectItem[] = [
 ];
 
 /**
- * Creates default heat simulation configuration with initial objects.
+ * Creates default heat simulation configuration (empty container until user explicitly places apparatus).
  */
 export function createDefaultHeatSim(originX: number = 240, originY: number = 320): HeatSimConfig {
-  const burner = createHeatObjectFromRecognition(
-    'burner',
-    { minX: originX + 20, minY: originY + 120, maxX: originX + 100, maxY: originY + 230 },
-    '-default'
-  );
-
-  const tripod = createHeatObjectFromRecognition(
-    'tripod',
-    { minX: originX, minY: originY, maxX: originX + 140, maxY: originY + 140 },
-    '-default'
-  );
-
-  const beaker = createHeatObjectFromRecognition(
-    'beaker',
-    { minX: originX + 15, minY: originY - 120, maxX: originX + 125, maxY: originY + 5 },
-    '-default'
-  );
-
-  const thermometer = createHeatObjectFromRecognition(
-    'thermometer',
-    { minX: originX + 45, minY: originY - 160, maxX: originX + 75, maxY: originY - 10 },
-    '-default'
-  );
-
   return {
     id: `heat-sim-${Date.now()}`,
     name: 'θερμ01',
-    objects: [burner, tripod, beaker, thermometer],
-    selectedObjectId: beaker.id,
+    objects: [],
+    selectedObjectId: null,
+    selectedObjectIds: [],
     isRunning: false,
     elapsedSec: 0,
     graph: {
-      visible: true,
+      visible: false,
       x: originX + 180,
       y: originY - 120,
       width: 290,

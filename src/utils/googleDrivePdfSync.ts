@@ -3414,12 +3414,23 @@ export async function exportNotebookToPdfBlob(
     const jpegBytes = dataUrlToUint8Array(jpegDataUrl);
     const isLandscape = logicalW > logicalH;
     const ptLong = 841.89;
+    const ptShortA4 = 595.28;
+    const isStandardA4Ratio =
+      Math.abs(Math.max(logicalW, logicalH) / Math.max(1, Math.min(logicalW, logicalH)) - 1334 / 943) < 0.015;
     pageImages.push({
       jpegBytes,
       pixelW: canvas.width,
       pixelH: canvas.height,
-      ptW: isLandscape ? ptLong : Math.round(ptLong * (logicalW / Math.max(1, logicalH)) * 100) / 100,
-      ptH: isLandscape ? Math.round(ptLong * (logicalH / Math.max(1, logicalW)) * 100) / 100 : ptLong,
+      ptW: isLandscape
+        ? ptLong
+        : isStandardA4Ratio
+        ? ptShortA4
+        : Math.round(ptLong * (logicalW / Math.max(1, logicalH)) * 100) / 100,
+      ptH: isLandscape
+        ? isStandardA4Ratio
+          ? ptShortA4
+          : Math.round(ptLong * (logicalH / Math.max(1, logicalW)) * 100) / 100
+        : ptLong,
     });
   }
 

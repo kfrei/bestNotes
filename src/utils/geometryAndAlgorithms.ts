@@ -3592,26 +3592,26 @@ export function isFreehandLoopClosed(pts: BezierPoint[], lenientForManualToggle 
   const h = maxY - minY;
   const diag = Math.hypot(w, h);
 
-  // Must have a meaningful 2D area (not a tiny dot or flat straight line)
-  if (diag < 18 || Math.min(w, h) < 8 || totalLen < Math.max(45, diag * 1.4)) {
+  // Must have a meaningful 2D area (never treat small handwritten letters/digits as closed shapes!)
+  if (diag < 42 || Math.min(w, h) < 16 || totalLen < Math.max(95, diag * 1.85)) {
     return false;
   }
 
   const directDist = distance(pts[0], pts[n - 1]);
   const closeThreshold = lenientForManualToggle
-    ? Math.max(68, diag * 0.48, totalLen * 0.22)
-    : Math.max(44, diag * 0.32, totalLen * 0.16);
+    ? Math.min(48, Math.max(12, diag * 0.28), totalLen * 0.14)
+    : Math.min(28, Math.max(10, diag * 0.18), totalLen * 0.10);
 
   if (directDist <= closeThreshold) {
     return true;
   }
 
-  // Also check if the ending tail crossed or touched near the starting tail (first 20% vs last 20% of points)
-  const headCount = Math.max(2, Math.floor(n * 0.2));
-  const tailStart = Math.min(n - 2, Math.ceil(n * 0.8));
+  // Also check if the ending tail crossed or touched near the starting tail (first 15% vs last 15% of points)
+  const headCount = Math.max(2, Math.floor(n * 0.15));
+  const tailStart = Math.min(n - 2, Math.ceil(n * 0.85));
   const crossThreshold = lenientForManualToggle
-    ? Math.max(48, diag * 0.35)
-    : Math.max(32, diag * 0.24);
+    ? Math.min(32, Math.max(10, diag * 0.22))
+    : Math.min(20, Math.max(8, diag * 0.14));
 
   for (let i = 0; i < headCount; i++) {
     for (let j = tailStart; j < n; j++) {
@@ -23725,11 +23725,6 @@ function extractCanonicalRectBox(s: StrokeObject): CanonicalRectBox | null {
     distance(s.points[0], s.points[s.points.length - 1]) <= 6
   ) {
     rawCorners = s.points.slice(0, 4);
-  } else if (!s.isShape && s.points.length >= 8 && isFreehandLoopClosed(s.points, true)) {
-    const snapped = recognizeAndSnapShape(s.points, 'auto');
-    if (snapped?.shapeType === 'rectangle' && snapped.points.length >= 4) {
-      rawCorners = snapped.points.slice(0, 4);
-    }
   }
   if (!rawCorners || rawCorners.length < 4) return null;
 

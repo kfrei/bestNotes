@@ -92,30 +92,15 @@ export function persistHeatSimLive(sim: HeatSimConfig): void {
 
 export function restoreHeatSimFromStorage(simFromPage: HeatSimConfig): HeatSimConfig {
   try {
-    const rawBackup =
-      localStorage.getItem(`${HEAT_SIM_BY_ID_PREFIX}${simFromPage.id}`) ||
-      localStorage.getItem(HEAT_SIM_BACKUP_KEY);
+    const rawBackup = localStorage.getItem(`${HEAT_SIM_BY_ID_PREFIX}${simFromPage.id}`);
     if (rawBackup) {
       const parsed: HeatSimConfig = JSON.parse(rawBackup);
-      if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
-        // If the backup has progress (elapsedSec > 0 or history or modified liquid/temp), restore it!
-        const hasPageProgress =
-          (simFromPage.elapsedSec || 0) > 0 || (simFromPage.history && simFromPage.history.length > 1);
-        const hasBackupProgress =
-          (parsed.elapsedSec || 0) > 0 || (parsed.history && parsed.history.length > 1);
-        const hasCustomObjects = parsed.objects.some(
-          (o) =>
-            (o.containerState?.temperature && o.containerState.temperature !== 20) ||
-            (o.containerState?.liquidType && o.containerState.liquidType !== 'water') ||
-            o.type === 'flask'
-        );
-        if (parsed.id === simFromPage.id || (!hasPageProgress && (hasBackupProgress || hasCustomObjects))) {
-          return {
-            ...parsed,
-            id: simFromPage.id,
-            isRunning: false,
-          };
-        }
+      if (parsed && parsed.id === simFromPage.id && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+        return {
+          ...parsed,
+          id: simFromPage.id,
+          isRunning: false,
+        };
       }
     }
   } catch {
@@ -264,17 +249,9 @@ export function useHeatSimulation(
       updatePage((page: NotePage) => {
         const curSims = page.heatSims || [];
         const activeId = page.activeHeatSimId || curSims[0]?.id;
+        // Never auto-spawn a Heat Simulation on a page that does not already have one!
         if (!activeId || curSims.length === 0) {
-          const freshSim = createDefaultHeatSim(320, 380);
-          const candidate = restoreHeatSimFromStorage(freshSim);
-          const updated = updater(candidate);
-          liveSimRef.current = JSON.parse(JSON.stringify(updated));
-          persistHeatSimLive(updated);
-          return {
-            ...page,
-            heatSims: [updated],
-            activeHeatSimId: updated.id,
-          };
+          return page;
         }
 
         const nextSims = curSims.map((s: HeatSimConfig) => (s.id === activeId ? updater(s) : s));
@@ -300,30 +277,10 @@ export function useHeatSimulation(
         liveSimRef.current = JSON.parse(JSON.stringify(restored));
         return restored;
       }
-      let candidateSim: HeatSimConfig | null = null;
-      try {
-        const raw = localStorage.getItem(HEAT_SIM_BACKUP_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.objects) && parsed.objects.length > 0) {
-            candidateSim = { ...parsed, isRunning: false };
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      const newSim = candidateSim || createDefaultHeatSim(280, 360);
-      liveSimRef.current = JSON.parse(JSON.stringify(newSim));
-      persistHeatSimLive(newSim);
-      updatePage((p: NotePage) => ({
-        ...p,
-        heatSims: [newSim],
-        activeHeatSimId: newSim.id,
-      }));
+      const newSim = createDefaultHeatSim(280, 360);
       return newSim;
     },
-    [updatePage]
+    []
   );
 
   const handleAddObjectWithBounds = useCallback(
@@ -793,6 +750,15 @@ export function useHeatSimulation(
 
   const setSelectedObjectIds = useCallback(
     (ids: string[]) => {
+      const curLive = liveSimRef.current || activeHeatSim;
+      if (!curLive) return;
+      if (
+        ids.length === 0 &&
+        !curLive.selectedObjectId &&
+        (!curLive.selectedObjectIds || curLive.selectedObjectIds.length === 0)
+      ) {
+        return;
+      }
       updateActiveHeatSim((prev: HeatSimConfig) => {
         const cur = liveSimRef.current || prev;
         const next = {
@@ -804,7 +770,7 @@ export function useHeatSimulation(
         return next;
       });
     },
-    [updateActiveHeatSim]
+    [activeHeatSim, updateActiveHeatSim]
   );
 
   const handleDeleteSelectedObject = useCallback(

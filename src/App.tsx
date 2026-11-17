@@ -1204,8 +1204,37 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
         repaired = true;
         return { ...s, points: ensureWaveBezierPoints(s) };
       }
+      if (
+        !s.isShape &&
+        s.points &&
+        s.points.length >= 5 &&
+        s.points[0]?.twist !== 999 &&
+        Math.abs(s.points[s.points.length - 1].x - s.points[0].x) < 1e-3 &&
+        Math.abs(s.points[s.points.length - 1].y - s.points[0].y) < 1e-3
+      ) {
+        pageModified = true;
+        repaired = true;
+        return {
+          ...s,
+          points: s.points.slice(0, -1),
+          fillStyle: 'none' as const,
+          fillColor: undefined,
+        };
+      }
       return s;
     });
+    const origHeatSims = p.heatSims || [];
+    const nextHeatSims = origHeatSims.filter((hs) => {
+      if (!hs || !Array.isArray(hs.objects) || hs.objects.length === 0) return false;
+      const isAllAutoDefault =
+        (hs.elapsedSec || 0) === 0 &&
+        hs.objects.every((o) => typeof o.id === 'string' && o.id.endsWith('-default'));
+      return !isAllAutoDefault;
+    });
+    if (nextHeatSims.length !== origHeatSims.length) {
+      pageModified = true;
+      repaired = true;
+    }
     const origTexts = p.texts || [];
     const nextTexts = origTexts.filter((t) => {
       if (!t) return false;
@@ -1220,7 +1249,16 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       pageModified = true;
       repaired = true;
     }
-    return pageModified ? { ...p, id: pid, strokes: nextStrokes, texts: nextTexts } : p;
+    return pageModified
+      ? {
+          ...p,
+          id: pid,
+          strokes: nextStrokes,
+          texts: nextTexts,
+          heatSims: nextHeatSims,
+          activeHeatSimId: nextHeatSims[0]?.id,
+        }
+      : p;
   });
 
   // Self-healing guard for "Κύκλος Νερού" (nb-1792959661594):
@@ -4033,13 +4071,13 @@ export default function App() {
                 const liveHeat = JSON.parse(rawLiveHeat);
                 const pIdx = Math.min(activePageIndexLiveRef.current, curActive.pages.length - 1);
                 const curPage = curActive.pages[pIdx];
-                if (curPage && liveHeat) {
+                if (curPage && liveHeat && Array.isArray(curPage.heatSims) && curPage.heatSims.length > 0) {
                   const safeLive = { ...liveHeat, isRunning: false };
-                  const curSims = curPage.heatSims || [];
-                  curPage.heatSims = curSims.some((s) => s.id === safeLive.id)
-                    ? curSims.map((s) => (s.id === safeLive.id ? safeLive : s))
-                    : [safeLive];
-                  curPage.activeHeatSimId = safeLive.id;
+                  const curSims = curPage.heatSims;
+                  if (curSims.some((s) => s.id === safeLive.id)) {
+                    curPage.heatSims = curSims.map((s) => (s.id === safeLive.id ? safeLive : s));
+                    curPage.activeHeatSimId = safeLive.id;
+                  }
                 }
               } catch {
                 // ignore
@@ -8397,11 +8435,17 @@ export default function App() {
   const heatSim = useHeatSimulation(activePage, updateActivePage);
   const heatSimLastFrameRef = useRef<number | null>(null);
 
-  // When switching tool to drawing tools (pen, pencil, highlighter, eraser), deselect any simulation object bounding box!
+  // When switching tool to drawing tools (pen, pencil, highlighter, eraser), deselect any simulation object bounding box
+  // and ensure fillStyle is reset to 'none' so normal handwriting is never filled!
   const prevActiveToolForSimRef = useRef<ToolType>(activeTool);
   useEffect(() => {
     if (prevActiveToolForSimRef.current !== activeTool) {
       prevActiveToolForSimRef.current = activeTool;
+      if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter') {
+        if (fillStyle !== 'none') {
+          setFillStyle('none');
+        }
+      }
       if (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser') {
         if (heatSim.activeHeatSim?.selectedObjectId || (heatSim.activeHeatSim?.selectedObjectIds && heatSim.activeHeatSim.selectedObjectIds.length > 0)) {
           heatSim.updateActiveHeatSim((prev) => ({
@@ -8412,7 +8456,7 @@ export default function App() {
         }
       }
     }
-  }, [activeTool, heatSim.activeHeatSim?.selectedObjectId, heatSim.activeHeatSim?.selectedObjectIds, heatSim.updateActiveHeatSim]);
+  }, [activeTool, fillStyle, heatSim.activeHeatSim?.selectedObjectId, heatSim.activeHeatSim?.selectedObjectIds, heatSim.updateActiveHeatSim]);
 
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
   useEffect(() => {
@@ -45922,7 +45966,7 @@ export default function App() {
     candidateStrokes: StrokeObject[],
     targetLayerId: string
   ): StrokeObject | null => {
-    if (rawPts.length < 3) return null;
+    if (rawPts.length < 3 || candidateStrokes.length === 0) return null;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -45937,176 +45981,193 @@ export default function App() {
       if (p.y > maxY) maxY = p.y;
     }
     const diag = Math.hypot(maxX - minX, maxY - minY);
-    if (diag < 5 || diag > 95 || totalLen < 8 || totalLen > 250) return null;
+    if (diag < 10 || diag > 78 || totalLen < 14 || totalLen > 140) return null;
     const directDist = distance(rawPts[0], rawPts[rawPts.length - 1]);
-    if (directDist / Math.max(1, totalLen) > 0.85) return null;
+    // Reject closed loops (like ρ, ο, 0, α) and straight lines
+    if (directDist <= Math.max(8, diag * 0.34) || directDist / Math.max(1, totalLen) > 0.82) {
+      return null;
+    }
 
+    // Only inspect the most recent stroke on the target layer so handwriting near older lines is never converted!
+    let targetCandidate: StrokeObject | null = null;
     for (let idx = candidateStrokes.length - 1; idx >= 0; idx--) {
-      const s = candidateStrokes[idx];
-      if ((s.layerId || 'layer-1') !== targetLayerId) continue;
-      if (s.groupId || s.points.length < 2 || s.points[0]?.twist === 999) continue;
-
-      const isAutoLineOrArrow =
-        s.isShape && (s.shapeType === 'line' || s.shapeType === 'arrow') && s.points.length === 2;
-      let isStraightFreehand = false;
-      if (!isAutoLineOrArrow && !s.isShape && s.points.length >= 2) {
-        let sPathLen = 0;
-        for (let k = 1; k < s.points.length; k++) {
-          sPathLen += distance(s.points[k - 1], s.points[k]);
-        }
-        const sChord = distance(s.points[0], s.points[s.points.length - 1]);
-        if (sChord >= 24 && sChord / Math.max(1, sPathLen) >= 0.91) {
-          isStraightFreehand = true;
-        }
+      const cand = candidateStrokes[idx];
+      if ((cand.layerId || 'layer-1') === targetLayerId) {
+        targetCandidate = cand;
+        break;
       }
-      if (!isAutoLineOrArrow && !isStraightFreehand) continue;
+    }
+    if (!targetCandidate) return null;
+    const s = targetCandidate;
+    if (s.groupId || s.points.length < 2 || s.points[0]?.twist === 999) return null;
 
-      const p0 = s.points[0];
-      const p1 = s.points[s.points.length - 1];
-      const lineLen = distance(p0, p1);
-      if (lineLen < 20 || diag > Math.min(95, Math.max(38, lineLen * 0.8))) continue;
+    const isAutoLineOrArrow =
+      s.isShape && (s.shapeType === 'line' || s.shapeType === 'arrow') && s.points.length === 2;
+    let isStraightFreehand = false;
+    if (!isAutoLineOrArrow && !s.isShape && s.points.length >= 2) {
+      let sPathLen = 0;
+      for (let k = 1; k < s.points.length; k++) {
+        sPathLen += distance(s.points[k - 1], s.points[k]);
+      }
+      const sChord = distance(s.points[0], s.points[s.points.length - 1]);
+      // Require a long, genuinely straight shaft (>= 65px, >= 0.95 straightness) so letter stems (μ, ρ, π, 1, -, =) are NEVER matched!
+      if (sChord >= 65 && sChord / Math.max(1, sPathLen) >= 0.95) {
+        isStraightFreehand = true;
+      }
+    }
+    if (!isAutoLineOrArrow && !isStraightFreehand) return null;
 
-      const endpoints: { which: 'end' | 'start'; E: BezierPoint; A: BezierPoint }[] = [];
-      if (!s.arrowEnd) endpoints.push({ which: 'end', E: p1, A: p0 });
-      if (!s.arrowStart) endpoints.push({ which: 'start', E: p0, A: p1 });
+    const p0 = s.points[0];
+    const p1 = s.points[s.points.length - 1];
+    const lineLen = distance(p0, p1);
+    if (lineLen < 60 || diag > Math.min(72, lineLen * 0.55)) return null;
 
-      for (const ep of endpoints) {
-        const ux = (ep.E.x - ep.A.x) / lineLen;
-        const uy = (ep.E.y - ep.A.y) / lineLen;
-        const nx = -uy;
-        const ny = ux;
+    const endpoints: { which: 'end' | 'start'; E: BezierPoint; A: BezierPoint }[] = [];
+    if (!s.arrowEnd) endpoints.push({ which: 'end', E: p1, A: p0 });
+    if (!s.arrowStart) endpoints.push({ which: 'start', E: p0, A: p1 });
 
-        let apexIdx = 0;
-        let maxLx = -Infinity;
-        let minLx = Infinity;
-        let minLy = Infinity;
-        let maxLy = -Infinity;
-        let minLyIdx = 0;
-        let maxLyIdx = 0;
-        const lxArr: number[] = [];
-        const lyArr: number[] = [];
+    for (const ep of endpoints) {
+      const ux = (ep.E.x - ep.A.x) / lineLen;
+      const uy = (ep.E.y - ep.A.y) / lineLen;
+      const nx = -uy;
+      const ny = ux;
 
-        for (let i = 0; i < rawPts.length; i++) {
-          const dx = rawPts[i].x - ep.E.x;
-          const dy = rawPts[i].y - ep.E.y;
-          const lx = dx * ux + dy * uy;
-          const ly = dx * nx + dy * ny;
-          lxArr.push(lx);
-          lyArr.push(ly);
-          if (lx > maxLx) {
-            maxLx = lx;
-            apexIdx = i;
-          }
-          if (lx < minLx) minLx = lx;
-          if (ly < minLy) {
-            minLy = ly;
-            minLyIdx = i;
-          }
-          if (ly > maxLy) {
-            maxLy = ly;
-            maxLyIdx = i;
-          }
+      let apexIdx = 0;
+      let maxLx = -Infinity;
+      let minLx = Infinity;
+      let minLy = Infinity;
+      let maxLy = -Infinity;
+      const lxArr: number[] = [];
+      const lyArr: number[] = [];
+
+      for (let i = 0; i < rawPts.length; i++) {
+        const dx = rawPts[i].x - ep.E.x;
+        const dy = rawPts[i].y - ep.E.y;
+        const lx = dx * ux + dy * uy;
+        const ly = dx * nx + dy * ny;
+        lxArr.push(lx);
+        lyArr.push(ly);
+        if (lx > maxLx) {
+          maxLx = lx;
+          apexIdx = i;
         }
+        if (lx < minLx) minLx = lx;
+        if (ly < minLy) minLy = ly;
+        if (ly > maxLy) maxLy = ly;
+      }
 
-        const apexLy = lyArr[apexIdx];
-        const perpSpan = maxLy - minLy;
+      if (apexIdx <= 0 || apexIdx >= rawPts.length - 1) continue;
+      const apexPt = rawPts[apexIdx];
+      const apexLy = lyArr[apexIdx];
+      const perpSpan = maxLy - minLy;
 
-        if (maxLx < -12 || maxLx > 48) continue;
-        if (minLx < -46 || minLx > 32) continue;
-        if (maxLx - minLx < 3.2) continue;
-        if (perpSpan < 5 || perpSpan > 76) continue;
-        if (minLy > 10 || maxLy < -10) continue;
-        if (Math.abs(apexLy) > Math.max(16, perpSpan * 0.68)) continue;
+      // Apex must sit directly on/at the tip of the line endpoint E
+      if (distance(apexPt, ep.E) > 14) continue;
+      if (maxLx < -5 || maxLx > 16) continue;
+      if (minLx < -38 || minLx > -4) continue;
+      if (maxLx - minLx < 6) continue;
+      if (perpSpan < 9 || perpSpan > 56) continue;
+      if (Math.abs(apexLy) > 8) continue;
 
-        const firstLx = lxArr[0];
-        const lastLx = lxArr[rawPts.length - 1];
-        const firstLy = lyArr[0];
-        const lastLy = lyArr[rawPts.length - 1];
+      const firstLx = lxArr[0];
+      const lastLx = lxArr[rawPts.length - 1];
+      const firstLy = lyArr[0];
+      const lastLy = lyArr[rawPts.length - 1];
 
-        const leg1Chord = distance(rawPts[0], rawPts[apexIdx]);
-        const leg2Chord = distance(rawPts[apexIdx], rawPts[rawPts.length - 1]);
-        const isChevronV =
-          apexIdx > 0 &&
-          apexIdx < rawPts.length - 1 &&
-          maxLx - firstLx >= 2.5 &&
-          maxLx - lastLx >= 2.5 &&
-          Math.abs(firstLy - lastLy) >= 4.5 &&
-          (firstLy - apexLy) * (lastLy - apexLy) <= 6 &&
-          leg1Chord + leg2Chord >= totalLen * 0.56;
+      let leg1PathLen = 0;
+      for (let i = 1; i <= apexIdx; i++) {
+        leg1PathLen += distance(rawPts[i - 1], rawPts[i]);
+      }
+      let leg2PathLen = 0;
+      for (let i = apexIdx + 1; i < rawPts.length; i++) {
+        leg2PathLen += distance(rawPts[i - 1], rawPts[i]);
+      }
 
-        const isClosedTipTriangle =
-          directDist <= Math.max(18, diag * 0.48) &&
-          maxLx - lxArr[minLyIdx] >= 3.2 &&
-          maxLx - lxArr[maxLyIdx] >= 3.2 &&
-          Math.abs(minLy - maxLy) >= 6;
+      const leg1Chord = distance(rawPts[0], apexPt);
+      const leg2Chord = distance(apexPt, rawPts[rawPts.length - 1]);
 
-        if (!isChevronV && !isClosedTipTriangle) continue;
+      // Both legs of the '>' chevron must be straight segments of balanced length straddling opposite sides of the shaft
+      const isStrictChevronV =
+        leg1Chord >= 7 &&
+        leg2Chord >= 7 &&
+        leg1Chord <= 42 &&
+        leg2Chord <= 42 &&
+        Math.min(leg1Chord, leg2Chord) >= Math.max(leg1Chord, leg2Chord) * 0.45 &&
+        leg1Chord / Math.max(1, leg1PathLen) >= 0.88 &&
+        leg2Chord / Math.max(1, leg2PathLen) >= 0.88 &&
+        leg1Chord + leg2Chord >= totalLen * 0.88 &&
+        maxLx - firstLx >= Math.max(6, leg1Chord * 0.48) &&
+        maxLx - lastLx >= Math.max(6, leg2Chord * 0.48) &&
+        firstLy * lastLy < 0 &&
+        Math.min(Math.abs(firstLy), Math.abs(lastLy)) >= 4 &&
+        Math.abs(firstLy - lastLy) >= 9;
 
-        const tipAdvance = Math.max(0, Math.min(38, maxLx));
-        const newTipPt: BezierPoint = {
-          x: ep.E.x + ux * tipAdvance,
-          y: ep.E.y + uy * tipAdvance,
-          pressure: 0.7,
+      if (!isStrictChevronV) continue;
+
+      const tipAdvance = Math.max(0, Math.min(18, maxLx));
+      const newTipPt: BezierPoint = {
+        x: ep.E.x + ux * tipAdvance,
+        y: ep.E.y + uy * tipAdvance,
+        pressure: 0.7,
+      };
+      const tailPt: BezierPoint = {
+        x: ep.A.x,
+        y: ep.A.y,
+        pressure: 0.7,
+      };
+
+      if (ep.which === 'end') {
+        const isDouble = Boolean(s.arrowStart);
+        return {
+          ...s,
+          isShape: true,
+          shapeType: isDouble ? 'double-arrow' : 'arrow',
+          arrowEnd: true,
+          arrowStart: isDouble ? true : false,
+          points: [
+            tailPt,
+            {
+              ...newTipPt,
+              cx: (tailPt.x + newTipPt.x) / 2,
+              cy: (tailPt.y + newTipPt.y) / 2,
+            },
+          ],
+          keyNodeIndices: undefined,
         };
-        const tailPt: BezierPoint = {
-          x: ep.A.x,
-          y: ep.A.y,
-          pressure: 0.7,
+      } else if (s.arrowEnd) {
+        return {
+          ...s,
+          isShape: true,
+          shapeType: 'double-arrow',
+          arrowStart: true,
+          arrowEnd: true,
+          points: [
+            newTipPt,
+            {
+              ...tailPt,
+              cx: (newTipPt.x + tailPt.x) / 2,
+              cy: (newTipPt.y + tailPt.y) / 2,
+            },
+          ],
+          keyNodeIndices: undefined,
         };
-
-        if (ep.which === 'end') {
-          const isDouble = Boolean(s.arrowStart);
-          return {
-            ...s,
-            isShape: true,
-            shapeType: isDouble ? 'double-arrow' : 'arrow',
-            arrowEnd: true,
-            arrowStart: isDouble ? true : false,
-            points: [
-              tailPt,
-              {
-                ...newTipPt,
-                cx: (tailPt.x + newTipPt.x) / 2,
-                cy: (tailPt.y + newTipPt.y) / 2,
-              },
-            ],
-            keyNodeIndices: undefined,
-          };
-        } else if (s.arrowEnd) {
-          return {
-            ...s,
-            isShape: true,
-            shapeType: 'double-arrow',
-            arrowStart: true,
-            arrowEnd: true,
-            points: [
-              newTipPt,
-              {
-                ...tailPt,
-                cx: (newTipPt.x + tailPt.x) / 2,
-                cy: (newTipPt.y + tailPt.y) / 2,
-              },
-            ],
-            keyNodeIndices: undefined,
-          };
-        } else {
-          return {
-            ...s,
-            isShape: true,
-            shapeType: 'arrow',
-            arrowEnd: true,
-            arrowStart: false,
-            points: [
-              tailPt,
-              {
-                ...newTipPt,
-                cx: (tailPt.x + newTipPt.x) / 2,
-                cy: (tailPt.y + newTipPt.y) / 2,
-              },
-            ],
-            keyNodeIndices: undefined,
-          };
-        }
+      } else {
+        return {
+          ...s,
+          isShape: true,
+          shapeType: 'arrow',
+          arrowEnd: true,
+          arrowStart: false,
+          points: [
+            tailPt,
+            {
+              ...newTipPt,
+              cx: (tailPt.x + newTipPt.x) / 2,
+              cy: (tailPt.y + newTipPt.y) / 2,
+            },
+          ],
+          keyNodeIndices: undefined,
+        };
       }
     }
     return null;
@@ -47431,30 +47492,10 @@ export default function App() {
       return;
     }
 
-    // Check if a freehand stroke drawn with Pen/Pencil forms a closed loop (one end touches/approaches the other)
-    // WITHOUT needing to hold the pencil at the end!
-    const isClosedFreehand = !isShape && isFreehandLoopClosed(finalPts, false);
-    if (
-      isClosedFreehand &&
-      fillStyle !== 'none' &&
-      finalPts.length >= 4 &&
-      distance(finalPts[0], finalPts[finalPts.length - 1]) <= 38
-    ) {
-      const pStart = finalPts[0];
-      const pPrev = finalPts[finalPts.length - 2];
-      finalPts = [
-        ...finalPts,
-        {
-          x: pStart.x,
-          y: pStart.y,
-          cx: (pPrev.x + pStart.x) / 2,
-          cy: (pPrev.y + pStart.y) / 2,
-          pressure: pStart.pressure ?? 0.6,
-        },
-      ];
-    }
+    // Never auto-close or auto-fill un-snapped freehand pen/pencil/highlighter handwriting strokes!
+    // Only snapped geometric shapes (isShape === true) can receive automatic fill on pointerUp.
     const canAutoFillStroke =
-      (isShape || isClosedFreehand) &&
+      isShape &&
       shapeType !== 'line' &&
       shapeType !== 'arrow' &&
       shapeType !== 'spring-pointer' &&
@@ -57670,9 +57711,9 @@ export default function App() {
                         return;
                       }
                       setShowAlignSubBar(false);
-                      if (tool.id === 'pen') {
+                      if (tool.id === 'pen' || tool.id === 'pencil' || tool.id === 'highlighter') {
                         setFillStyle('none');
-                        if (activeTool !== 'pen') {
+                        if (tool.id === 'pen' && activeTool !== 'pen') {
                           setActiveWidthSlotIdx(lastPenWidthRef.current.slotIdx);
                           setStrokeWidth(lastPenWidthRef.current.width);
                         }
@@ -57707,7 +57748,13 @@ export default function App() {
                           setSelectedStrokeIds([]);
                           setActiveNodeStrokeId(null);
                           setSelectedImageId(null);
-                          heatSim.setSelectedObjectIds([]);
+                          if (
+                            heatSim.activeHeatSim?.selectedObjectId ||
+                            (heatSim.activeHeatSim?.selectedObjectIds &&
+                              heatSim.activeHeatSim.selectedObjectIds.length > 0)
+                          ) {
+                            heatSim.setSelectedObjectIds([]);
+                          }
                         }
                         if (tool.id !== 'text') {
                           setEditingCaretRange(null);
@@ -62030,7 +62077,6 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setSimActiveCategory('heat');
-                      heatSim.ensureActiveHeatSim(activePage);
                     }}
                     className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'heat'
