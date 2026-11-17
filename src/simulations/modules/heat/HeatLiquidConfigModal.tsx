@@ -267,10 +267,26 @@ export const HeatLiquidConfigModal: React.FC<HeatLiquidConfigModalProps> = ({
                     <span className="text-[11px] sm:text-[11.5px] font-bold text-[#1e293b] truncate">
                       {lp.nameEl}
                     </span>
-                    <span
-                      className="w-3 h-3 rounded-full border border-black/15 shadow-2xs shrink-0"
-                      style={{ backgroundColor: lp.color }}
-                    />
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-3.5 h-3.5 shrink-0 drop-shadow-2xs"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"
+                        fill={lp.color}
+                        stroke={
+                          type === 'water'
+                            ? '#0284c7'
+                            : type === 'milk'
+                            ? '#94a3b8'
+                            : '#4d7c0f'
+                        }
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </div>
 
                   {/* Physical Properties: Density (ρ) & Specific Heat (c) with standard units */}
