@@ -272,6 +272,7 @@ import {
   SmartSketchAudioEngine,
 } from './utils/geometryAndAlgorithms';
 import { LibraryNoteMiniThumb } from './components/LibraryNoteMiniThumb';
+import { PageHeatSimsThumbCanvas } from './components/PageHeatSimsThumbCanvas';
 import { WarmStudioToggle } from './components/WarmStudioToggle';
 import {
   StopwatchWidget,
@@ -5126,6 +5127,19 @@ export default function App() {
         const texts = p.texts || [];
         for (let j = 0; j < texts.length; j++) {
           pBytes += 160 + (texts[j].text?.length || 0) * 3;
+        }
+        const heatSims = p.heatSims || [];
+        for (let j = 0; j < heatSims.length; j++) {
+          const hs = heatSims[j];
+          pBytes += 480 + (hs.objects?.length || 0) * 280 + (hs.history?.length || 0) * 64;
+        }
+        const springSims = p.springSims || [];
+        for (let j = 0; j < springSims.length; j++) {
+          pBytes += 420;
+        }
+        const circuitSims = p.circuitSims || [];
+        for (let j = 0; j < circuitSims.length; j++) {
+          pBytes += 420;
         }
         pageByteSizeCacheRef.current.set(p, pBytes);
       }
@@ -53992,6 +54006,10 @@ export default function App() {
           <button
             onClick={() => {
               if (viewMode === 'editor') {
+                const liveHeat = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : null;
+                if (liveHeat && activePage.heatSims && activePage.heatSims.length > 0) {
+                  heatSim.updateActiveHeatSim(() => ({ ...liveHeat, isRunning: false }));
+                }
                 setIsClosingDocument(true);
                 window.setTimeout(() => {
                   setActiveLibraryFolder(null);
@@ -56937,6 +56955,15 @@ export default function App() {
                                     })}
                                     {renderSvgPageTextsPreview(p0.texts, pW, pH)}
                                   </svg>
+                                )}
+                                {p0?.heatSims && p0.heatSims.length > 0 && (
+                                  <PageHeatSimsThumbCanvas
+                                    page={p0}
+                                    width={pW}
+                                    height={pH}
+                                    scale={0.45}
+                                    className="pl-3"
+                                  />
                                 )}
                               </>
                             );
@@ -66346,7 +66373,8 @@ export default function App() {
                     isPreviewImgMounted &&
                     ((pageObj.strokes?.length || 0) > 0 ||
                       (pageObj.images?.length || 0) > 0 ||
-                      (pageObj.texts?.length || 0) > 0);
+                      (pageObj.texts?.length || 0) > 0 ||
+                      (pageObj.heatSims?.length || 0) > 0);
                   return (
                     <div
                       key={pageObj.id}
@@ -66416,6 +66444,14 @@ export default function App() {
                           })}
                           {renderSvgPageTextsPreview(pageObj.texts, pW, pH)}
                         </svg>
+                      )}
+                      {hasPreviewOverlay && pageObj.heatSims && pageObj.heatSims.length > 0 && (
+                        <PageHeatSimsThumbCanvas
+                          page={pageObj}
+                          width={pW}
+                          height={pH}
+                          scale={0.5}
+                        />
                       )}
                     </div>
                   );
@@ -70031,7 +70067,8 @@ export default function App() {
                     const hasOverlayContent =
                       (pObj.strokes?.length || 0) > 0 ||
                       (pObj.images?.length || 0) > 0 ||
-                      (pObj.texts?.length || 0) > 0;
+                      (pObj.texts?.length || 0) > 0 ||
+                      (pObj.heatSims?.length || 0) > 0;
 
                     return (
                       <div
@@ -70161,6 +70198,14 @@ export default function App() {
                               })}
                               {renderSvgPageTextsPreview(pObj.texts, pW, pH)}
                             </svg>
+                          )}
+                          {isThumbInWindow && pObj.heatSims && pObj.heatSims.length > 0 && (
+                            <PageHeatSimsThumbCanvas
+                              page={pObj}
+                              width={pW}
+                              height={pH}
+                              scale={0.45}
+                            />
                           )}
                         </div>
                       </div>

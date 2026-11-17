@@ -11,6 +11,7 @@ import {
   decimatePointsForMiniThumb,
   selectStrokesForMiniThumb,
 } from '../utils/libraryUiHelpers';
+import { PageHeatSimsThumbCanvas } from './PageHeatSimsThumbCanvas';
 
 export interface LibraryNoteMiniThumbProps {
   notebookId: string;
@@ -271,6 +272,15 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
           {svgShapes.strokeEls}
           {svgShapes.textEls}
         </svg>
+      )}
+      {firstPage?.heatSims && firstPage.heatSims.length > 0 && (
+        <PageHeatSimsThumbCanvas
+          page={firstPage}
+          width={pW}
+          height={pH}
+          scale={variant === 'list' ? 0.22 : variant === 'recent' ? 0.32 : 0.45}
+          className={cfg.svgPadClass}
+        />
       )}
     </div>
   );

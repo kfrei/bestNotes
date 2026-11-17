@@ -13,6 +13,9 @@ export function getNotebookContentScore(nb: Notebook): number {
       (p.images?.length || 0) * 8 +
       (p.texts?.length || 0) * 3 +
       (p.tapes?.length || 0) * 2 +
+      (p.heatSims?.reduce((sAcc, hs) => sAcc + 10 + (hs.objects?.length || 0) * 4, 0) || 0) +
+      (p.springSims?.length || 0) * 6 +
+      (p.circuitSims?.length || 0) * 6 +
       (p.backgroundDataUrl ? 10 : 0),
     0
   );
@@ -110,6 +113,20 @@ export function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
           strokes: (p.strokes || []).slice(0, 400),
           texts: (p.texts || []).slice(0, 80),
           images: (p.images || []).slice(0, 5),
+          heatSims: p.heatSims
+            ? p.heatSims.map((hs) => ({
+                ...hs,
+                history:
+                  hs.history && hs.history.length > 120
+                    ? hs.history.filter(
+                        (_, hIdx) =>
+                          hIdx === 0 ||
+                          hIdx === hs.history.length - 1 ||
+                          hIdx % Math.ceil(hs.history.length / 120) === 0
+                      )
+                    : hs.history,
+              }))
+            : undefined,
         };
       }
       return {
@@ -119,6 +136,7 @@ export function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
         texts: [],
         images: [],
         tapes: [],
+        heatSims: undefined,
         backgroundDataUrl: undefined,
       };
     }),
