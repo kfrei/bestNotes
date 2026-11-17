@@ -1084,39 +1084,41 @@ export function getLiquidSurfaceProfile(
   // Maximum vertical tilt displacement: up to 36px (very noticeable and exciting wave crests!)
   const maxTilt = Math.min(36, Math.max(12, liquidH * 0.55));
 
-  // Multi-staged Thermal Convection & Boiling Waves:
-  // Stage 1 (T < 35°C): Calm fluid (~0.8px subtle life)
-  // Stage 2 (35°C - 60°C): Warm convection rolling (~2.5px - 5.5px)
-  // Stage 3 (60°C - 85°C): Active simmering (~6.0px - 10.0px)
-  // Stage 4 (85°C - 98°C): Vigorous pre-boil ripples (~11.0px - 15.0px)
-  // Stage 5 (98°C - 100°C+): Full rolling boil surge (~15.0px - 22.0px)
-  let baseAmp = 0.8;
-  if (temperature > 25 && temperature <= 50) {
-    baseAmp = 0.8 + ((temperature - 25) / 25) * 3.5;
-  } else if (temperature > 50 && temperature <= 75) {
-    baseAmp = 4.3 + ((temperature - 50) / 25) * 4.7;
-  } else if (temperature > 75 && temperature <= 95) {
-    baseAmp = 9.0 + ((temperature - 75) / 20) * 5.0;
-  } else if (temperature > 95) {
-    baseAmp = 14.0 + Math.min(8.0, ((temperature - 95) / 5) * 6.0);
+  // Multi-staged Thermal Convection & Boiling Waves (kept natural and gentle across temperatures):
+  // Stage 1 (T <= 35°C): Calm fluid (~0.35px - 0.55px subtle life)
+  // Stage 2 (35°C - 60°C): Warm convection rolling (~0.55px - 1.45px)
+  // Stage 3 (60°C - 85°C): Active simmering (~1.45px - 3.1px)
+  // Stage 4 (85°C - 98°C): Pre-boil ripples (~3.1px - 4.8px)
+  // Stage 5 (98°C - 100°C+): Full rolling boil (~5.0px - 7.0px)
+  let baseAmp = 0.35;
+  if (temperature > 25 && temperature <= 35) {
+    baseAmp = 0.35 + ((temperature - 25) / 10) * 0.2;
+  } else if (temperature > 35 && temperature <= 60) {
+    baseAmp = 0.55 + ((temperature - 35) / 25) * 0.9;
+  } else if (temperature > 60 && temperature <= 85) {
+    baseAmp = 1.45 + ((temperature - 60) / 25) * 1.65;
+  } else if (temperature > 85 && temperature <= 98) {
+    baseAmp = 3.1 + ((temperature - 85) / 13) * 1.7;
+  } else if (temperature > 98) {
+    baseAmp = 4.8 + Math.min(2.2, ((temperature - 98) / 4) * 2.2);
   }
 
   const isActuallyBoiling = isBoiling || temperature >= 98;
   if (isActuallyBoiling) {
-    baseAmp = Math.max(baseAmp, 15.0 + Math.max(0.4, boilingIntensity) * 6.0);
+    baseAmp = Math.max(baseAmp, 5.0 + Math.max(0.3, boilingIntensity) * 2.0);
   }
 
-  // Wave speed accelerates as heat builds up
+  // Wave speed accelerates gently as heat builds up
   const speedMultiplier =
     temperature < 35
-      ? 1.4
+      ? 0.85
       : temperature < 65
-      ? 2.2
+      ? 1.25
       : temperature < 85
-      ? 3.2
+      ? 1.75
       : isActuallyBoiling
-      ? 4.6
-      : 3.8;
+      ? 2.65
+      : 2.15;
 
   const tSec = nowMs / 1000;
   const phase1 = tSec * speedMultiplier;
