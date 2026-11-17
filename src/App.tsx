@@ -217,6 +217,7 @@ import {
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
   getCircuitComponentsWithTerminals,
+  repairCircuitMeterStrokes,
   classifyCircuitStrokeKind,
   splitWiresUnderCircuitComponent,
   getCircuitWireRailSnapDelta,
@@ -1237,6 +1238,12 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       }
       return s;
     });
+    const meterRepair = repairCircuitMeterStrokes(nextStrokes);
+    const finalPageStrokes = meterRepair.repaired ? meterRepair.strokes : nextStrokes;
+    if (meterRepair.repaired) {
+      pageModified = true;
+      repaired = true;
+    }
     const origHeatSims = p.heatSims || [];
     const nextHeatSims = origHeatSims.filter((hs) => {
       if (!hs || !Array.isArray(hs.objects) || hs.objects.length === 0) return false;
@@ -1267,7 +1274,7 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       ? {
           ...p,
           id: pid,
-          strokes: nextStrokes,
+          strokes: finalPageStrokes,
           texts: nextTexts,
           heatSims: nextHeatSims,
           activeHeatSimId: nextHeatSims[0]?.id,
@@ -11564,6 +11571,59 @@ export default function App() {
           .filter((s) => allSimBaseSet.has(s.id) && s.groupId)
           .map((s) => s.groupId!)
       );
+      for (const s of strokeList) {
+        if (s.groupId && allSimGroupIds.has(s.groupId)) {
+          allSimBaseSet.add(s.id);
+        }
+      }
+      if (allSimBaseSet.size > 0) {
+        const isSimEligible = (s: StrokeObject) =>
+          s.shapeType === 'line' ||
+          (!s.isShape && s.points.length >= 2) ||
+          classifyCircuitStrokeKind(s) !== null;
+        const areConnectedTol = (a: StrokeObject, b: StrokeObject, tol = 40): boolean => {
+          for (const pt of a.points) {
+            if (b.points.length === 1) {
+              if (Math.hypot(pt.x - b.points[0].x, pt.y - b.points[0].y) <= tol) return true;
+            } else {
+              for (let i = 0; i < b.points.length - 1; i++) {
+                if (isPointNearSegment(pt, b.points[i], b.points[i + 1], tol)) return true;
+              }
+            }
+          }
+          for (const pt of b.points) {
+            if (a.points.length === 1) {
+              if (Math.hypot(pt.x - a.points[0].x, pt.y - a.points[0].y) <= tol) return true;
+            } else {
+              for (let i = 0; i < a.points.length - 1; i++) {
+                if (isPointNearSegment(pt, a.points[i], a.points[i + 1], tol)) return true;
+              }
+            }
+          }
+          return false;
+        };
+        const eligible = strokeList.filter((s) => allSimBaseSet.has(s.id) || isSimEligible(s));
+        let expandedSim = true;
+        while (expandedSim) {
+          expandedSim = false;
+          const members = eligible.filter((s) => allSimBaseSet.has(s.id));
+          for (const cand of eligible) {
+            if (allSimBaseSet.has(cand.id)) continue;
+            if (members.some((m) => areConnectedTol(cand, m, 40))) {
+              allSimBaseSet.add(cand.id);
+              expandedSim = true;
+              if (cand.groupId) {
+                allSimGroupIds.add(cand.groupId);
+                for (const g of strokeList) {
+                  if (g.groupId === cand.groupId && !allSimBaseSet.has(g.id)) {
+                    allSimBaseSet.add(g.id);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
       const isStrokeInAnySim = (s: StrokeObject) =>
         allSimBaseSet.has(s.id) || Boolean(s.groupId && allSimGroupIds.has(s.groupId));
 
@@ -11716,6 +11776,41 @@ export default function App() {
         const l = visibleLayerMap.get(t.layerId);
         return !l || l.visible;
       });
+
+      const pageAutoSwitches: Array<{
+        simId: string;
+        x: number;
+        yCenter: number;
+        yTop: number;
+        yBottom: number;
+        closed: boolean;
+      }> = [];
+      if (pageValidSims.length > 0) {
+        if (isCurrentActivePage && autoSwitchHitsRef.current.length > 0) {
+          pageAutoSwitches.push(...autoSwitchHitsRef.current);
+        } else if (isCurrentActivePage && autoSwitchHitRef.current) {
+          pageAutoSwitches.push({
+            ...autoSwitchHitRef.current,
+            simId: autoSwitchHitRef.current.simId || '',
+          });
+        }
+        if (pageAutoSwitches.length === 0) {
+          for (const sim of pageValidSims) {
+            const sStrokes = strokeList.filter((st) => isStrokeInAnySim(st));
+            const sData = analyzeCircuitForSimulation(sStrokes, sim.switchClosed ?? true);
+            if (sData.autoSwitch) {
+              pageAutoSwitches.push({
+                simId: sim.id,
+                x: sData.autoSwitch.x,
+                yCenter: sData.autoSwitch.yCenter,
+                yTop: sData.autoSwitch.yTop,
+                yBottom: sData.autoSwitch.yBottom,
+                closed: sData.autoSwitch.closed,
+              });
+            }
+          }
+        }
+      }
 
       for (const entry of entries) {
         let targetCtx = ctx;
@@ -11883,34 +11978,8 @@ export default function App() {
 
           // If this stroke is a vertical wire passing straight through an automatic knife switch gap,
           // clip it so the region between sw.yTop and sw.yBottom is completely clear paper (no black line behind the switch)!
-          if (
-            isCurrentActivePage &&
-            pageValidSims.length > 0 &&
-            s.points.length >= 2
-          ) {
-            const hits =
-              autoSwitchHitsRef.current.length > 0
-                ? [...autoSwitchHitsRef.current]
-                : autoSwitchHitRef.current
-                ? [{ ...autoSwitchHitRef.current, simId: autoSwitchHitRef.current.simId || '' }]
-                : [];
-            if (hits.length === 0 && pageValidSims.length > 0) {
-              for (const sim of pageValidSims) {
-                const sStrokes = strokeList.filter((st) => sim.strokeIds.includes(st.id));
-                const sData = analyzeCircuitForSimulation(sStrokes, sim.switchClosed ?? true);
-                if (sData.autoSwitch) {
-                  hits.push({
-                    simId: sim.id,
-                    x: sData.autoSwitch.x,
-                    yCenter: sData.autoSwitch.yCenter,
-                    yTop: sData.autoSwitch.yTop,
-                    yBottom: sData.autoSwitch.yBottom,
-                    closed: sData.autoSwitch.closed,
-                  });
-                }
-              }
-            }
-            const swHit = hits.find((sw) => {
+          if (pageAutoSwitches.length > 0 && s.points.length >= 2) {
+            const swHit = pageAutoSwitches.find((sw) => {
               const p0 = s.points[0];
               const p1 = s.points[s.points.length - 1];
               const isVert = Math.abs(p1.y - p0.y) >= 12;
@@ -11931,23 +12000,21 @@ export default function App() {
               const p1 = s.points[s.points.length - 1];
               const yMin = Math.min(p0.y, p1.y);
               const yMax = Math.max(p0.y, p1.y);
-              // If wire stroke lies entirely inside the knife switch gap, completely omit it from static rendering!
-              if (yMin >= swHit.yTop - 6 && yMax <= swHit.yBottom + 6) {
-                continue;
+              if (!(yMin >= swHit.yTop - 6 && yMax <= swHit.yBottom + 6)) {
+                targetCtx.save();
+                targetCtx.beginPath();
+                targetCtx.rect(0, 0, pWidth, swHit.yTop);
+                targetCtx.rect(0, swHit.yBottom, pWidth, pHeight - swHit.yBottom);
+                targetCtx.clip();
+                drawStrokeOnContext(
+                  targetCtx,
+                  faintVoltmeterStrokeIds.has(s.id)
+                    ? { ...s, opacity: Math.min(s.opacity ?? 1, 0.38) }
+                    : s,
+                  false
+                );
+                targetCtx.restore();
               }
-              targetCtx.save();
-              targetCtx.beginPath();
-              targetCtx.rect(0, 0, pWidth, swHit.yTop);
-              targetCtx.rect(0, swHit.yBottom, pWidth, pHeight - swHit.yBottom);
-              targetCtx.clip();
-              drawStrokeOnContext(
-                targetCtx,
-                faintVoltmeterStrokeIds.has(s.id)
-                  ? { ...s, opacity: Math.min(s.opacity ?? 1, 0.38) }
-                  : s,
-                false
-              );
-              targetCtx.restore();
               continue;
             }
           }
@@ -11971,6 +12038,72 @@ export default function App() {
               : s,
             false
           );
+        }
+      }
+
+      // 3b. When simulation is paused (`!isSimulating` or on inactive pages), render any automatic knife switches
+      // directly on `staticCanvas` so the switch NEVER disappears when pressing Pause!
+      if (pageAutoSwitches.length > 0 && !(isCurrentActivePage && isSimulating)) {
+        const paperBg = getEffectivePaperColor(pageObj);
+        for (const swHit of pageAutoSwitches) {
+          ctx.save();
+          ctx.strokeStyle = paperBg;
+          ctx.lineWidth = 16;
+          ctx.lineCap = 'butt';
+          ctx.beginPath();
+          ctx.moveTo(swHit.x, swHit.yTop + 2);
+          ctx.lineTo(swHit.x, swHit.yBottom - 2);
+          ctx.stroke();
+
+          for (const ty of [swHit.yTop, swHit.yBottom]) {
+            ctx.beginPath();
+            ctx.arc(swHit.x, ty, 4.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#334155';
+            ctx.fill();
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+          if (!swHit.closed) {
+            const bladeTipX = swHit.x + 25;
+            const bladeTipY = swHit.yTop + 4;
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3.6;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(swHit.x, swHit.yBottom);
+            ctx.lineTo(bladeTipX, bladeTipY);
+            ctx.stroke();
+
+            const knobX = swHit.x + (bladeTipX - swHit.x) * 0.78;
+            const knobY = swHit.yBottom + (bladeTipY - swHit.yBottom) * 0.78;
+            ctx.beginPath();
+            ctx.arc(knobX, knobY, 6.4, 0, Math.PI * 2);
+            ctx.fillStyle = '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#fecaca';
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          } else {
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3.8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(swHit.x, swHit.yBottom);
+            ctx.lineTo(swHit.x, swHit.yTop);
+            ctx.stroke();
+
+            const knobX = swHit.x + 14.5;
+            const knobY = swHit.yCenter;
+            ctx.beginPath();
+            ctx.arc(knobX, knobY, 6.4, 0, Math.PI * 2);
+            ctx.fillStyle = '#22c55e';
+            ctx.fill();
+            ctx.strokeStyle = '#bbf7d0';
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          }
+          ctx.restore();
         }
       }
 
@@ -27195,7 +27328,7 @@ export default function App() {
         (st) => visibleLayerIds.has(st.layerId) && simSet.has(st.id)
       );
       const simData = analyzeCircuitForSimulation(simStrokes, closed);
-      if (!hasProposal && isSimulating && simData.autoSwitch) {
+      if (!hasProposal && simData.autoSwitch) {
         nextAutoSwitchHits.push({
           simId: s.id,
           x: simData.autoSwitch.x,
@@ -27528,8 +27661,8 @@ export default function App() {
             ctx.restore();
           }
 
-      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (Always active in simulation!)
-      for (const cs of simData.components) {
+      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (Only when simulation is actively running!)
+      for (const cs of isSimulating ? simData.components : []) {
         if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
         const b = cs.comp;
         const domeCx = b.cx;
@@ -27611,8 +27744,8 @@ export default function App() {
         ctx.restore();
       }
 
-      // 3. Spinning Fan / Propeller Blades (Always active in simulation: Clean lead wires + Grey circle backplate + Solid Blue Blades!)
-      for (const cs of simData.components) {
+      // 3. Spinning Fan / Propeller Blades (Only when simulation is actively running so static fan is used when paused!)
+      for (const cs of isSimulating ? simData.components : []) {
         if (cs.comp.kind !== 'fan') continue;
         const f = cs.comp;
         const rOuter = Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
@@ -27701,9 +27834,8 @@ export default function App() {
         ctx.restore();
       }
 
-      // 3b. Live Ammeter & Voltmeter Needles (Image 2 style: pivoted strictly on bottom-left circle perimeter;
-      //     stationary when inactive, gentle left-right needle micro-oscillation when measuring current/voltage!)
-      for (let mIdx = 0; mIdx < simData.components.length; mIdx++) {
+      // 3b. Live Ammeter & Voltmeter Needles (Only when simulation is actively running so paused state never draws a 2nd needle over staticCanvas!)
+      for (let mIdx = 0; mIdx < (isSimulating ? simData.components.length : 0); mIdx++) {
         const cs = simData.components[mIdx];
         if (cs.comp.kind !== 'ammeter' && cs.comp.kind !== 'voltmeter') continue;
         const m = cs.comp;
@@ -27834,7 +27966,7 @@ export default function App() {
       }
 
       // 5. Automatic Interactive Switch on the Left Vertical Conductor (starts OPEN with Red Dot 🔴, click to toggle CLOSED 🟢!)
-      if (simData.autoSwitch) {
+      if (isSimulating && simData.autoSwitch) {
         const sw = simData.autoSwitch;
         ctx.save();
         // Cleanly mask the underlying vertical wire between yTop and yBottom with the effective paper background color,
@@ -43709,7 +43841,7 @@ export default function App() {
                   const effectiveScaleSet = new Set(
                     expandWholeCircuitStrokeIds(page, selectedStrokeIds)
                   );
-                  return page.strokes.map((s) => {
+                  const scaledStrokes = page.strokes.map((s) => {
                     if (!effectiveScaleSet.has(s.id)) return s;
                     return {
                       ...s,
@@ -43736,6 +43868,7 @@ export default function App() {
                       })),
                     };
                   });
+                  return repairCircuitMeterStrokes(scaledStrokes).strokes;
                 })(),
                 forceSims: (page.forceSims || []).map((fs) => {
                   const movesPivot =
@@ -44259,7 +44392,7 @@ export default function App() {
                     }),
                   };
                 });
-              const adaptedStrokes =
+              const rawAdaptedStrokes =
                 !isWholeCircuitSideStretch &&
                 (tf.mode === 'scale-x' || tf.mode === 'scale-y') &&
                 expandedSideStretchIds.length > 0 &&
@@ -44271,6 +44404,7 @@ export default function App() {
                       tf.mode
                     )
                   : stretchedStrokes;
+              const adaptedStrokes = repairCircuitMeterStrokes(rawAdaptedStrokes).strokes;
               return {
                 ...page,
                 texts:

@@ -2744,10 +2744,17 @@ export function createPhysicsStencilStrokes(
     });
 
     // 3. Crisp condensed bold 'A' or 'V' above-right of the needle arrowhead tip
-    const lblCx = tipX + rCircle * 0.25;
-    const lblBotY = tipY - rCircle * 0.04;
+    // ('A' is widest at the bottom, so offset its center slightly further right/up so its bottom-left leg never touches the needle tip!)
     const lblH = Math.max(11.5, rCircle * 0.5);
     const lblHalfW = Math.max(3.6, lblH * 0.31);
+    const lblCx =
+      preset === 'ammeter'
+        ? tipX + rCircle * 0.34 + lblHalfW * 0.55
+        : tipX + rCircle * 0.25;
+    const lblBotY =
+      preset === 'ammeter'
+        ? tipY - rCircle * 0.08
+        : tipY - rCircle * 0.04;
     const lblTopY = lblBotY - lblH;
     const lblStrokeW = Math.max(2.2, baseWidth * 1.12);
 
@@ -6959,6 +6966,248 @@ export function getCircuitComponentsWithTerminals(
   }
 
   return out;
+}
+
+/**
+ * Ensures all Ammeter and Voltmeter components have a true 1:1 circular ring,
+ * a single crisp -45° needle, and clean 'A'/'V' label spacing (so 'A' never touches the needle tip,
+ * and no duplicate or squished needle strokes remain after a non-uniform resize).
+ */
+export function repairCircuitMeterStrokes(strokes: StrokeObject[]): {
+  strokes: StrokeObject[];
+  repaired: boolean;
+} {
+  if (!strokes || strokes.length === 0) return { strokes, repaired: false };
+  const comps = getCircuitComponentsWithTerminals(strokes).filter(
+    (c) => c.kind === 'ammeter' || c.kind === 'voltmeter'
+  );
+  if (comps.length === 0) return { strokes, repaired: false };
+
+  let repaired = false;
+  const updatedById = new Map<string, StrokeObject>();
+  const removedIds = new Set<string>();
+
+  for (const comp of comps) {
+    const memberStrokes = strokes.filter((s) => comp.strokeIds.includes(s.id));
+    const ringStroke = memberStrokes.find(
+      (s) => s.shapeType === comp.kind && s.points.length >= 4
+    );
+    if (!ringStroke) continue;
+
+    let rMinX = Infinity,
+      rMinY = Infinity,
+      rMaxX = -Infinity,
+      rMaxY = -Infinity;
+    for (const p of ringStroke.points) {
+      if (p.x < rMinX) rMinX = p.x;
+      if (p.y < rMinY) rMinY = p.y;
+      if (p.x > rMaxX) rMaxX = p.x;
+      if (p.y > rMaxY) rMaxY = p.y;
+    }
+    if (!Number.isFinite(rMinX)) continue;
+
+    const ccx = (rMinX + rMaxX) / 2;
+    const ccy = (rMinY + rMaxY) / 2;
+    const rW = rMaxX - rMinX;
+    const rH = rMaxY - rMinY;
+    const rCircle = Math.max(12, (rW + rH) / 4);
+
+    const ang = -Math.PI / 4;
+    const pivX = ccx - Math.SQRT1_2 * rCircle;
+    const pivY = ccy + Math.SQRT1_2 * rCircle;
+    const needleLen = rCircle * 2.60;
+    const tipX = pivX + Math.cos(ang) * needleLen;
+    const tipY = pivY + Math.sin(ang) * needleLen;
+    const headLen = Math.max(8.0, rCircle * 0.32);
+    const headHalfW = headLen * 0.52;
+    const shaftEndX = tipX - Math.cos(ang) * headLen * 0.78;
+    const shaftEndY = tipY - Math.sin(ang) * headLen * 0.78;
+    const baseCenterX = tipX - Math.cos(ang) * headLen;
+    const baseCenterY = tipY - Math.sin(ang) * headLen;
+    const nx = -Math.sin(ang);
+    const ny = Math.cos(ang);
+
+    const lblH = Math.max(11.5, rCircle * 0.5);
+    const lblHalfW = Math.max(3.6, lblH * 0.31);
+    const lblCx =
+      comp.kind === 'ammeter'
+        ? tipX + rCircle * 0.34 + lblHalfW * 0.55
+        : tipX + rCircle * 0.25;
+    const lblBotY =
+      comp.kind === 'ammeter'
+        ? tipY - rCircle * 0.08
+        : tipY - rCircle * 0.04;
+    const lblTopY = lblBotY - lblH;
+
+    // 1. Check if ring is squished into an ellipse
+    if (Math.abs(rW - rH) > 1.2) {
+      const steps = 44;
+      const pts: BezierPoint[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const px = ccx + Math.cos(a) * rCircle;
+        const py = ccy + Math.sin(a) * rCircle;
+        const prev = pts.length > 0 ? pts[pts.length - 1] : null;
+        pts.push({
+          x: px,
+          y: py,
+          cx: prev ? (prev.x + px) / 2 : undefined,
+          cy: prev ? (prev.y + py) / 2 : undefined,
+          pressure: 0.7,
+          twist: i === 0 || i === steps ? 999 : undefined,
+        });
+      }
+      updatedById.set(ringStroke.id, { ...ringStroke, points: pts });
+      repaired = true;
+    }
+
+    // 2. Check needle strokes (deduplicate if multiple shafts/heads exist, and snap to exact -45° chord)
+    const needleStrokes = memberStrokes.filter(
+      (s) => s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle'
+    );
+    const shaftStrokes = needleStrokes.filter((s) => s.points.length === 2);
+    const headStrokes = needleStrokes.filter((s) => s.points.length >= 3);
+
+    if (shaftStrokes.length > 1) {
+      for (let i = 1; i < shaftStrokes.length; i++) {
+        removedIds.add(shaftStrokes[i].id);
+        repaired = true;
+      }
+    }
+    if (headStrokes.length > 1) {
+      for (let i = 1; i < headStrokes.length; i++) {
+        removedIds.add(headStrokes[i].id);
+        repaired = true;
+      }
+    }
+
+    if (shaftStrokes.length >= 1) {
+      const sh = shaftStrokes[0];
+      const d0 = Math.hypot(sh.points[0].x - pivX, sh.points[0].y - pivY);
+      const d1 = Math.hypot(sh.points[1].x - shaftEndX, sh.points[1].y - shaftEndY);
+      if (d0 > 1.2 || d1 > 1.2) {
+        updatedById.set(sh.id, {
+          ...sh,
+          points: [
+            { x: pivX, y: pivY, pressure: 0.7 },
+            {
+              x: shaftEndX,
+              y: shaftEndY,
+              cx: (pivX + shaftEndX) / 2,
+              cy: (pivY + shaftEndY) / 2,
+              pressure: 0.7,
+            },
+          ],
+        });
+        repaired = true;
+      }
+    }
+
+    if (headStrokes.length >= 1) {
+      const hd = headStrokes[0];
+      const dTip = Math.hypot(hd.points[0].x - tipX, hd.points[0].y - tipY);
+      if (dTip > 1.2) {
+        const w1 = { x: baseCenterX + nx * headHalfW, y: baseCenterY + ny * headHalfW };
+        const w2 = { x: baseCenterX - nx * headHalfW, y: baseCenterY - ny * headHalfW };
+        updatedById.set(hd.id, {
+          ...hd,
+          points: [
+            { x: tipX, y: tipY, pressure: 0.7, twist: 999 },
+            { x: w1.x, y: w1.y, cx: (tipX + w1.x) / 2, cy: (tipY + w1.y) / 2, pressure: 0.7 },
+            { x: w2.x, y: w2.y, cx: (w1.x + w2.x) / 2, cy: (w1.y + w2.y) / 2, pressure: 0.7 },
+            { x: tipX, y: tipY, cx: (w2.x + tipX) / 2, cy: (w2.y + tipY) / 2, pressure: 0.7, twist: 999 },
+          ],
+        });
+        repaired = true;
+      }
+    }
+
+    // 3. Check 'A' or 'V' label strokes so 'A' never overlaps the needle tip
+    const labelStrokes = memberStrokes.filter(
+      (s) => s.shapeType === 'ammeter-label' || s.shapeType === 'voltmeter-label'
+    );
+    if (comp.kind === 'ammeter' && labelStrokes.length >= 1) {
+      const archStroke = labelStrokes.find((s) => s.points.length === 3) || labelStrokes[0];
+      const barStroke = labelStrokes.find((s) => s.points.length === 2);
+      const targetLeftFootX = lblCx - lblHalfW;
+      const curLeftFoot = archStroke.points[0];
+      if (
+        Math.hypot(curLeftFoot.x - targetLeftFootX, curLeftFoot.y - lblBotY) > 1.2
+      ) {
+        updatedById.set(archStroke.id, {
+          ...archStroke,
+          points: [
+            { x: lblCx - lblHalfW, y: lblBotY, pressure: 0.7 },
+            {
+              x: lblCx,
+              y: lblTopY,
+              cx: (lblCx - lblHalfW + lblCx) / 2,
+              cy: (lblBotY + lblTopY) / 2,
+              pressure: 0.7,
+            },
+            {
+              x: lblCx + lblHalfW,
+              y: lblBotY,
+              cx: (lblCx + lblCx + lblHalfW) / 2,
+              cy: (lblTopY + lblBotY) / 2,
+              pressure: 0.7,
+            },
+          ],
+        });
+        if (barStroke) {
+          const barY = lblTopY + lblH * 0.64;
+          updatedById.set(barStroke.id, {
+            ...barStroke,
+            points: [
+              { x: lblCx - lblHalfW * 0.64, y: barY, pressure: 0.7 },
+              {
+                x: lblCx + lblHalfW * 0.64,
+                y: barY,
+                cx: lblCx,
+                cy: barY,
+                pressure: 0.7,
+              },
+            ],
+          });
+        }
+        repaired = true;
+      }
+    } else if (comp.kind === 'voltmeter' && labelStrokes.length >= 1) {
+      const vStroke = labelStrokes.find((s) => s.points.length === 3) || labelStrokes[0];
+      if (vStroke.points.length === 3) {
+        const curBotVertex = vStroke.points[1];
+        if (Math.hypot(curBotVertex.x - lblCx, curBotVertex.y - lblBotY) > 1.2) {
+          updatedById.set(vStroke.id, {
+            ...vStroke,
+            points: [
+              { x: lblCx - lblHalfW, y: lblTopY, pressure: 0.7 },
+              {
+                x: lblCx,
+                y: lblBotY,
+                cx: (lblCx - lblHalfW + lblCx) / 2,
+                cy: (lblTopY + lblBotY) / 2,
+                pressure: 0.7,
+              },
+              {
+                x: lblCx + lblHalfW,
+                y: lblTopY,
+                cx: (lblCx + lblCx + lblHalfW) / 2,
+                cy: (lblBotY + lblTopY) / 2,
+                pressure: 0.7,
+              },
+            ],
+          });
+          repaired = true;
+        }
+      }
+    }
+  }
+
+  if (!repaired) return { strokes, repaired: false };
+  const nextStrokes = strokes
+    .filter((s) => !removedIds.has(s.id))
+    .map((s) => updatedById.get(s.id) || s);
+  return { strokes: nextStrokes, repaired: true };
 }
 
 export function splitWiresUnderCircuitComponent(
