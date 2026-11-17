@@ -354,76 +354,83 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       container.containerState = cs;
     }
 
-    // 3. Thermal Interaction & Calorimetric Equilibrium between ANY nested vessels (e.g., Γ inside Β)
-    for (const { outer, inner } of nestedPairs) {
-      if (!outer.containerState || !inner.containerState) continue;
-      const bs = outer.containerState;
-      const is = inner.containerState;
+    // 3. Thermal Interaction & Calorimetric Equilibrium across connected nested vessel groups (e.g., Β inside Α, or Γ inside Β inside Α)
+    // Using exact energy-conserving calorimetric relaxation toward the group's instantaneous equilibrium temperature
+    // θ_eq = (Σ m_i c_i θ_i) / (Σ m_i c_i), guaranteeing:
+    //  - 100% conservation of thermal energy (Σ C_i Δθ_i = 0),
+    //  - Monotonic convergence from each vessel's initial side without unphysical curve crossovers (e.g. θΒ never drops below θΓ),
+    //  - Smooth ~10–12 minute thermal equilibration across 2 or 3 nested vessels.
+    if (nestedPairs.length > 0) {
+      const adj = new Map<string, Set<string>>();
+      const vesselById = new Map<string, HeatObject>();
+      for (const { outer, inner } of nestedPairs) {
+        if (!outer.containerState || !inner.containerState) continue;
+        if (outer.containerState.volumeMl <= 0 || inner.containerState.volumeMl <= 0) continue;
+        vesselById.set(outer.id, outer);
+        vesselById.set(inner.id, inner);
+        if (!adj.has(outer.id)) adj.set(outer.id, new Set());
+        if (!adj.has(inner.id)) adj.set(inner.id, new Set());
+        adj.get(outer.id)!.add(inner.id);
+        adj.get(inner.id)!.add(outer.id);
+      }
 
-      if (bs.volumeMl <= 0 || is.volumeMl <= 0) continue;
+      const visited = new Set<string>();
+      for (const startId of vesselById.keys()) {
+        if (visited.has(startId)) continue;
+        const groupIds: string[] = [];
+        const queue = [startId];
+        visited.add(startId);
+        while (queue.length > 0) {
+          const curr = queue.shift()!;
+          groupIds.push(curr);
+          const neighbors = adj.get(curr);
+          if (neighbors) {
+            for (const nbId of neighbors) {
+              if (!visited.has(nbId)) {
+                visited.add(nbId);
+                queue.push(nbId);
+              }
+            }
+          }
+        }
 
-      // Conduction between outer vessel liquid and inner vessel liquid: Q = m · c · ΔT
-      const pOuter = LIQUID_REGISTRY[bs.liquidType];
-      const pInner = LIQUID_REGISTRY[is.liquidType];
+        if (groupIds.length < 2) continue;
+        const groupVessels = groupIds.map((id) => vesselById.get(id)!);
 
-      const mOuter = bs.volumeMl * pOuter.density;
-      const mInner = is.volumeMl * pInner.density;
+        let totalCap = 0;
+        let weightedTempSum = 0;
+        let invCapSum = 0;
+        let geomVolProduct = 1;
 
-      const cOuter = pOuter.specificHeat;
-      const cInner = pInner.specificHeat;
+        const caps: number[] = [];
+        for (const v of groupVessels) {
+          const cs = v.containerState!;
+          const props = LIQUID_REGISTRY[cs.liquidType];
+          const cap = Math.max(1, cs.volumeMl * props.density * props.specificHeat);
+          caps.push(cap);
+          totalCap += cap;
+          weightedTempSum += cap * cs.temperature;
+          invCapSum += 1 / cap;
+          geomVolProduct *= Math.max(80, cs.volumeMl);
+        }
 
-      const capOuter = Math.max(1, mOuter * cOuter);
-      const capInner = Math.max(1, mInner * cInner);
+        const instEq = weightedTempSum / totalCap;
+        const geomMeanVol = Math.pow(geomVolProduct, 1 / groupVessels.length);
+        const wettedScale = Math.pow(Math.max(120, geomMeanVol) / 500, 0.5);
+        // Normalize pairwise inverse-capacity sum so 2-vessel and 3-vessel baths converge in ~10–12 minutes
+        const meanInvCap = invCapSum / groupVessels.length;
+        const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale;
+        const lambda = effectiveK * meanInvCap * 2.0;
+        const decay = Math.exp(-lambda * timeStep);
 
-      // Contact area scales gently with the wetted liquid level of the submerged vessel
-      const wettedScale = Math.pow(
-        Math.max(120, Math.sqrt(bs.volumeMl * is.volumeMl)) / 500,
-        0.5
-      );
-      const isOuterBathPair = nestedPairs.length >= 2 && !bs.parentBasinId;
-      const chainBoost = nestedPairs.length >= 2 ? (isOuterBathPair ? 2.15 : 1.75) : 1.0;
-      const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale * chainBoost;
-
-      const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
-      const tempDiff = bs.temperature - is.temperature; // Outer - Inner
-      const rawDQ = effectiveK * tempDiff * timeStep; // Joules
-      // Clamp so vessels converge smoothly to instEq without overshooting in a single step
-      const maxDQ = Math.abs(bs.temperature - instEq) * capOuter;
-      const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
-
-      bs.temperature -= dQ / capOuter;
-      is.temperature += dQ / capInner;
-
-      // Clamp to boiling if reached
-      if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
-      if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
-    }
-
-    // 3b. In 3-vessel nested chains (Γ inside Β inside Α), if the innermost vessel Γ also sits below
-    // the water surface of the outermost bath Α, apply secondary radial bath coupling across the bath
-    // so Α, Β, and Γ reach full thermal equilibrium together within ~10–12 minutes without Α lagging behind!
-    if (nestedPairs.length >= 2) {
-      for (const { outer: midVessel, inner: deepVessel } of nestedPairs) {
-        const rootBathPair = nestedPairs.find((np) => np.inner.id === midVessel.id);
-        if (!rootBathPair) continue;
-        const rootBath = rootBathPair.outer;
-        const rs = rootBath.containerState;
-        const ds = deepVessel.containerState;
-        if (!rs || !ds || rs.volumeMl <= 0 || ds.volumeMl <= 0) continue;
-
-        const pRoot = LIQUID_REGISTRY[rs.liquidType];
-        const pDeep = LIQUID_REGISTRY[ds.liquidType];
-        const capRoot = Math.max(1, rs.volumeMl * pRoot.density * pRoot.specificHeat);
-        const capDeep = Math.max(1, ds.volumeMl * pDeep.density * pDeep.specificHeat);
-
-        const crossK = WATER_BATH_HEAT_TRANSFER_COEFF * 0.65;
-        const instEqRD = (capRoot * rs.temperature + capDeep * ds.temperature) / (capRoot + capDeep);
-        const rawDQ = crossK * (rs.temperature - ds.temperature) * timeStep;
-        const maxDQ = Math.abs(rs.temperature - instEqRD) * capRoot;
-        const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
-
-        rs.temperature -= dQ / capRoot;
-        ds.temperature += dQ / capDeep;
+        for (const v of groupVessels) {
+          const cs = v.containerState!;
+          const props = LIQUID_REGISTRY[cs.liquidType];
+          cs.temperature = instEq + (cs.temperature - instEq) * decay;
+          if (cs.temperature > props.boilingPoint) {
+            cs.temperature = props.boilingPoint;
+          }
+        }
       }
     }
   }
