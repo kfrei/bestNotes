@@ -240,6 +240,7 @@ import {
   matchesNotebookSmartSearch,
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
+  formatGreekPseudocodeIfDetected,
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
   transcribeHandwrittenChemistryWithGemini,
@@ -15745,7 +15746,7 @@ export default function App() {
     }
     const ctx = textMeasureCtxRef.current;
     const tokenRegex =
-      /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+))/g;
+      /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)\b)[+-]?(?:[0-9.,+-]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
 
     const stripSubSupSyntax = (s: string) =>
       s.replace(tokenRegex, (m) => {
@@ -15837,18 +15838,23 @@ export default function App() {
 
       const wrappedLines: string[] = [];
       for (const rawLine of rawTxt.split(/\r?\n/)) {
+        const leadingSpaceMatch = rawLine.match(/^[ \t]+/);
+        const leadingSpaces = leadingSpaceMatch
+          ? leadingSpaceMatch[0].replace(/\t/g, '    ').length
+          : 0;
+        const leadNbsp = '\u00A0'.repeat(leadingSpaces);
         const trimmed = rawLine.trim();
         if (!trimmed) {
           wrappedLines.push('');
           continue;
         }
         if (tx.isMath && !tx.boxWidth) {
-          wrappedLines.push(trimmed);
+          wrappedLines.push(leadNbsp + trimmed);
           continue;
         }
         const words = trimmed.split(/\s+/);
-        let curLine = words[0];
-        let curW = measureWordWidth(words[0]);
+        let curLine = leadNbsp + words[0];
+        let curW = leadingSpaces * spaceW + measureWordWidth(words[0]);
         for (let wIdx = 1; wIdx < words.length; wIdx++) {
           const word = words[wIdx];
           const wordW = measureWordWidth(word);
@@ -16190,17 +16196,26 @@ export default function App() {
       const hasPermanentBreak = prevRaw.endsWith('\u200B');
       const curHasPerm = lines[i].endsWith('\u200B');
       const prev = prevRaw.replace(/\u200B/g, '').trim();
-      const cur = lines[i].replace(/\u200B+$/, '').trimStart() + (curHasPerm ? '\u200B' : '');
-      const curClean = cur.replace(/\u200B/g, '');
+      const rawLineNoPerm = lines[i].replace(/\u200B+$/, '');
+      const hasLeadingIndent = /^[ \t]{2,}\S/.test(rawLineNoPerm);
+      const curPreserved = rawLineNoPerm.trimEnd() + (curHasPerm ? '\u200B' : '');
+      const curTrimmed = rawLineNoPerm.trimStart() + (curHasPerm ? '\u200B' : '');
+      const curClean = curTrimmed.replace(/\u200B/g, '');
       const isBulletOrNumbered = /^(?:[-•*▪‣]|\d+[.)]|[α-ωΑ-Ωa-zA-Z][.)])\s/.test(curClean);
-      if (hasPermanentBreak || prev.length === 0 || curClean.length === 0 || isBulletOrNumbered) {
-        if (hasPermanentBreak && !out.endsWith('\u200B')) {
+      if (
+        hasPermanentBreak ||
+        hasLeadingIndent ||
+        prev.length === 0 ||
+        curClean.length === 0 ||
+        isBulletOrNumbered
+      ) {
+        if ((hasPermanentBreak || hasLeadingIndent) && !out.endsWith('\u200B')) {
           out += '\u200B';
         }
-        out += '\n' + cur;
+        out += '\n' + (hasPermanentBreak || hasLeadingIndent ? curPreserved : curTrimmed);
       } else {
         out = out.replace(/\u200B+$/, '');
-        out += (out.endsWith(' ') ? '' : ' ') + cur;
+        out += (out.endsWith(' ') ? '' : ' ') + curTrimmed;
       }
     }
     return out;
@@ -16243,20 +16258,28 @@ export default function App() {
         let totalLines = 0;
 
         for (const para of paragraphs) {
-          const words = para.replace(/\u200B/g, '').split(/\s+/).filter(Boolean);
+          const cleanPara = para.replace(/\u200B/g, '');
+          const leadingMatch = cleanPara.match(/^[ \t]+/);
+          const leadingSpaces = leadingMatch
+            ? leadingMatch[0].replace(/\t/g, '    ').length
+            : 0;
+          const indentW = leadingSpaces * spaceW;
+          const words = cleanPara.trim().split(/\s+/).filter(Boolean);
           if (words.length === 0) {
             totalLines += 1;
             continue;
           }
           let lineW = 0;
           let linesInPara = 1;
-          for (const word of words) {
+          for (let wIdx = 0; wIdx < words.length; wIdx++) {
+            const word = words[wIdx];
             const wordW = ctx.measureText(word).width * 1.01;
-            if (wordW > availW) {
+            const reqW = wIdx === 0 ? indentW + wordW : wordW;
+            if (reqW > availW) {
               return false;
             }
             if (lineW === 0) {
-              lineW = wordW;
+              lineW = reqW;
             } else if (lineW + spaceW + wordW <= availW) {
               lineW += spaceW + wordW;
             } else {
@@ -16325,17 +16348,25 @@ export default function App() {
       let maxLineW = 0;
 
       for (const para of paragraphs) {
-        const words = para.replace(/\u200B/g, '').split(/\s+/).filter(Boolean);
+        const cleanPara = para.replace(/\u200B/g, '');
+        const leadingMatch = cleanPara.match(/^[ \t]+/);
+        const leadingSpaces = leadingMatch
+          ? leadingMatch[0].replace(/\t/g, '    ').length
+          : 0;
+        const indentW = leadingSpaces * spaceW;
+        const words = cleanPara.trim().split(/\s+/).filter(Boolean);
         if (words.length === 0) {
           totalLines += 1;
           continue;
         }
         let lineW = 0;
         let linesInPara = 1;
-        for (const word of words) {
+        for (let wIdx = 0; wIdx < words.length; wIdx++) {
+          const word = words[wIdx];
           const wordW = ctx.measureText(word).width * 1.02;
+          const firstReqW = wIdx === 0 ? indentW + wordW : wordW;
           if (lineW === 0) {
-            lineW = wordW;
+            lineW = firstReqW;
           } else if (lineW + spaceW + wordW <= availW) {
             lineW += spaceW + wordW;
           } else {
@@ -16388,13 +16419,17 @@ export default function App() {
       const outLines: string[] = [];
 
       for (const para of paragraphs) {
-        const words = para.split(/[ \t]+/).filter(Boolean);
+        const leadingMatch = para.match(/^[ \t]+/);
+        const leadingWS = leadingMatch ? leadingMatch[0].replace(/\t/g, '    ') : '';
+        const words = para.trim().split(/[ \t]+/).filter(Boolean);
         if (words.length === 0) {
           outLines.push('');
           continue;
         }
-        let curLine = words[0];
-        let lineW = ctx.measureText(words[0].replace(/\u200B/g, '')).width * 1.01;
+        let curLine = leadingWS + words[0];
+        let lineW =
+          leadingWS.length * spaceW +
+          ctx.measureText(words[0].replace(/\u200B/g, '')).width * 1.01;
         for (let i = 1; i < words.length; i++) {
           const word = words[i];
           const wordW = ctx.measureText(word.replace(/\u200B/g, '')).width * 1.01;
@@ -49943,7 +49978,29 @@ export default function App() {
     showToast,
   ]);
 
-  // 1. Manual (on-demand) Lasso Handwriting -> Calligraphic / Greek Text OCR conversion via Gemini Vision
+  const loadImageElementForOcr = useCallback(
+    async (dataUrl: string): Promise<HTMLImageElement | null> => {
+      const cached = imageElementsCacheRef.current.get(dataUrl);
+      if (cached && cached.complete && cached.naturalWidth > 0) {
+        return cached;
+      }
+      return new Promise((resolve) => {
+        const img = new Image();
+        if (dataUrl.startsWith('http')) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.onload = () => {
+          imageElementsCacheRef.current.set(dataUrl, img);
+          resolve(img);
+        };
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+      });
+    },
+    []
+  );
+
+  // 1. Manual (on-demand) Lasso Handwriting or Imported/Pasted Image -> Calligraphic / Greek Text & Pseudocode OCR conversion via Gemini Vision
   const handleConvertLassoToCalligraphic = useCallback(async () => {
     if (isConvertingHandwriting) return;
     const baseIds =
@@ -49952,17 +50009,29 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
+    const effImgIds =
+      selectedImageIds.length > 0
+        ? selectedImageIds
+        : selectedImageId
+        ? [selectedImageId]
+        : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const imgIdSet = new Set(effImgIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgIdSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
-    if (selStrokes.length === 0) {
-      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει Κείμενο OCR!');
+    const selImages = (activePage.images || []).filter(
+      (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
+    if (selStrokes.length === 0 && selImages.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο κείμενο ή μια εικόνα με κείμενο για μετατροπή σε Κείμενο OCR!');
       return;
     }
     trackAiAction('text', currentUser);
@@ -50001,66 +50070,129 @@ export default function App() {
       if (b.maxX > maxX) maxX = b.maxX;
       if (b.maxY > maxY) maxY = b.maxY;
     }
+    for (const im of selImages) {
+      if (im.clipPolygon && im.clipPolygon.length >= 3) {
+        for (const pt of im.clipPolygon) {
+          const px = im.x + pt.x;
+          const py = im.y + pt.y;
+          if (px < minX) minX = px;
+          if (py < minY) minY = py;
+          if (px > maxX) maxX = px;
+          if (py > maxY) maxY = py;
+        }
+      } else {
+        if (im.x < minX) minX = im.x;
+        if (im.y < minY) minY = im.y;
+        if (im.x + im.width > maxX) maxX = im.x + im.width;
+        if (im.y + im.height > maxY) maxY = im.y + im.height;
+      }
+    }
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
 
-    const pad = 32;
-    const rawW = Math.max(48, Math.ceil(maxX - minX));
-    const rawH = Math.max(32, Math.ceil(maxY - minY));
-    const scale = 2;
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = (rawW + pad * 2) * scale;
-    cropCanvas.height = (rawH + pad * 2) * scale;
-    const cropCtx = cropCanvas.getContext('2d');
-    if (!cropCtx) return;
-
-    cropCtx.fillStyle = '#ffffff';
-    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-    cropCtx.save();
-    cropCtx.scale(scale, scale);
-    cropCtx.translate(-minX + pad, -minY + pad);
-    for (const st of ocrStrokes) {
-      drawStrokeOnContext(cropCtx, st);
-    }
-    cropCtx.restore();
-
-    const cropDataUrl = cropCanvas.toDataURL('image/png');
     setIsConvertingHandwriting(true);
-    showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου...');
+    showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου / ψευδογλώσσας...');
 
     try {
+      const loadedImgs = await Promise.all(
+        selImages.map(async (im) => ({
+          im,
+          el: await loadImageElementForOcr(im.dataUrl),
+        }))
+      );
+
+      const pad = 32;
+      const rawW = Math.max(48, Math.ceil(maxX - minX));
+      const rawH = Math.max(32, Math.ceil(maxY - minY));
+      const scale = 2;
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = (rawW + pad * 2) * scale;
+      cropCanvas.height = (rawH + pad * 2) * scale;
+      const cropCtx = cropCanvas.getContext('2d');
+      if (!cropCtx) return;
+
+      cropCtx.fillStyle = '#ffffff';
+      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.save();
+      cropCtx.scale(scale, scale);
+      cropCtx.translate(-minX + pad, -minY + pad);
+      for (const { im, el } of loadedImgs) {
+        if (!el) continue;
+        cropCtx.save();
+        if (im.rotation) {
+          const icx = im.x + im.width / 2;
+          const icy = im.y + im.height / 2;
+          cropCtx.translate(icx, icy);
+          cropCtx.rotate((im.rotation * Math.PI) / 180);
+          cropCtx.translate(-icx, -icy);
+        }
+        if (im.clipPolygon && im.clipPolygon.length >= 3) {
+          cropCtx.beginPath();
+          cropCtx.moveTo(im.x + im.clipPolygon[0].x, im.y + im.clipPolygon[0].y);
+          for (let i = 1; i < im.clipPolygon.length; i++) {
+            cropCtx.lineTo(im.x + im.clipPolygon[i].x, im.y + im.clipPolygon[i].y);
+          }
+          cropCtx.closePath();
+          cropCtx.clip();
+        }
+        cropCtx.drawImage(el, im.x, im.y, im.width, im.height);
+        cropCtx.restore();
+      }
+      for (const st of ocrStrokes) {
+        drawStrokeOnContext(cropCtx, st);
+      }
+      cropCtx.restore();
+
+      const cropDataUrl = cropCanvas.toDataURL('image/png');
       const transcribed = await Promise.race([
         transcribeHandwrittenStrokesWithGemini(cropDataUrl, activeNotebook?.title || ''),
         new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!transcribed || !transcribed.trim()) {
-        const beautified = beautifyHandwritingStrokes(selStrokes);
-        const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
-        updateActivePage((page) => ({
-          ...page,
-          strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
-        }));
+        if (selStrokes.length > 0) {
+          const beautified = beautifyHandwritingStrokes(selStrokes);
+          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
+          updateActivePage((page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
+          }));
+        }
         showToast(getUnifiedOcrErrorMessage());
         return;
       }
 
       const rawCleanText = transcribed.trim();
-      const reflowedText = reflowTextForResponsiveBox(rawCleanText);
-      const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
-      const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
+      const { text: formattedCode, isPseudocode } = formatGreekPseudocodeIfDetected(rawCleanText);
+      const finalOcrText = isPseudocode ? formattedCode : rawCleanText;
+      const dominantColor = selStrokes[0]?.color || '#1e293b';
+      const targetLayerId = selStrokes[0]?.layerId || selImages[0]?.layerId || activeLayerId;
       const chosenFont: TextFontStyle = 'marker';
       const boxX = Math.max(12, Math.round(minX));
       const boxY = Math.max(12, Math.round(minY));
       const pW = getPageLogicalWidth(activePage);
       const pH = getPageLogicalHeight(activePage);
-      const initBoxW = Math.max(160, Math.min(pW - boxX - 12, Math.round(maxX - minX + 32)));
-      const initBoxH = Math.max(48, Math.min(pH - boxY - 12, Math.round(maxY - minY + 24)));
+      const maxAvailW = Math.max(160, pW - boxX - 12);
+      const maxAvailH = Math.max(48, pH - boxY - 12);
+      const baseBoxW = Math.max(
+        isPseudocode ? 260 : 160,
+        Math.min(maxAvailW, Math.round(maxX - minX + (isPseudocode ? 96 : 32)))
+      );
+      const baseBoxH = Math.max(48, Math.min(maxAvailH, Math.round(maxY - minY + 24)));
       const finalFontSize = Math.max(
         18,
         Math.min(
           64,
-          computeMaxFitFontSizeForBox(reflowedText, chosenFont, false, initBoxW, initBoxH)
+          computeMaxFitFontSizeForBox(finalOcrText, chosenFont, false, baseBoxW, baseBoxH)
         )
       );
+      const measuredLayout = measureWrappedTextLayout(
+        finalOcrText,
+        chosenFont,
+        false,
+        finalFontSize,
+        maxAvailW
+      );
+      const initBoxW = Math.max(baseBoxW, Math.min(maxAvailW, measuredLayout.tightW + 16));
+      const initBoxH = Math.max(baseBoxH, Math.min(maxAvailH, measuredLayout.tightH + 8));
 
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -50068,7 +50200,7 @@ export default function App() {
         y: boxY,
         boxWidth: initBoxW,
         boxHeight: initBoxH,
-        text: reflowedText,
+        text: finalOcrText,
         isMath: false,
         color: dominantColor,
         fontSize: finalFontSize,
@@ -50077,37 +50209,50 @@ export default function App() {
         layerId: targetLayerId,
       };
 
-      const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      const removeStrokeSet = new Set(selStrokes.map((s) => s.id));
+      const removeImageSet = new Set(selImages.map((im) => im.id));
       updateActivePage((page) => ({
         ...page,
-        strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
+        strokes: page.strokes.filter((s) => !removeStrokeSet.has(s.id)),
+        images: (page.images || []).filter((im) => !removeImageSet.has(im.id)),
         texts: [...(page.texts || []), newTxt],
       }));
 
       setSelectedStrokeIds([]);
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
       setActiveNodeStrokeId(null);
       setSelectedTextId(newTxt.id);
       setTextFontFamily(chosenFont);
       setTextBold(false);
       setTextFontSize(finalFontSize);
       setShowToolSubBar(true);
-      showToast('✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε Πένα! (Ctrl+Z για αναίρεση)');
+      showToast(
+        isPseudocode
+          ? "✍️ Κείμενο OCR: Αναγνωρίστηκε Ψευδογλώσσα Γ' Λυκείου με αυτόματες εσοχές! (Ctrl+Z για αναίρεση)"
+          : '✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε κείμενο! (Ctrl+Z για αναίρεση)'
+      );
     } finally {
       setIsConvertingHandwriting(false);
     }
   }, [
     isConvertingHandwriting,
     selectedStrokeIds,
+    selectedImageIds,
+    selectedImageId,
     activeNodeStrokeId,
     activePage,
     activeNotebook?.title,
     strokeColor,
     activeLayerId,
+    loadImageElementForOcr,
+    computeMaxFitFontSizeForBox,
+    measureWrappedTextLayout,
     updateActivePage,
     showToast,
   ]);
 
-  // 2. Manual (on-demand) Lasso Handwriting -> MathOCR / MathType (KaTeX fractions, ⇒, =, units) via Gemini Vision
+  // 2. Manual (on-demand) Lasso Handwriting or Image -> MathOCR / MathType (KaTeX fractions, ⇒, =, units) via Gemini Vision
   const handleConvertLassoToMathOCR = useCallback(async () => {
     if (isConvertingHandwriting) return;
     const baseIds =
@@ -50116,16 +50261,28 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
+    const effImgIds =
+      selectedImageIds.length > 0
+        ? selectedImageIds
+        : selectedImageId
+        ? [selectedImageId]
+        : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const imgIdSet = new Set(effImgIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgIdSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
-    if (selStrokes.length === 0) {
+    const selImages = (activePage.images || []).filter(
+      (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
+    if (selStrokes.length === 0 && selImages.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
@@ -50165,44 +50322,92 @@ export default function App() {
       if (b.maxX > maxX) maxX = b.maxX;
       if (b.maxY > maxY) maxY = b.maxY;
     }
+    for (const im of selImages) {
+      if (im.clipPolygon && im.clipPolygon.length >= 3) {
+        for (const pt of im.clipPolygon) {
+          const px = im.x + pt.x;
+          const py = im.y + pt.y;
+          if (px < minX) minX = px;
+          if (py < minY) minY = py;
+          if (px > maxX) maxX = px;
+          if (py > maxY) maxY = py;
+        }
+      } else {
+        if (im.x < minX) minX = im.x;
+        if (im.y < minY) minY = im.y;
+        if (im.x + im.width > maxX) maxX = im.x + im.width;
+        if (im.y + im.height > maxY) maxY = im.y + im.height;
+      }
+    }
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
 
-    const pad = 32;
-    const rawW = Math.max(48, Math.ceil(maxX - minX));
-    const rawH = Math.max(32, Math.ceil(maxY - minY));
-    const scale = 2;
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = (rawW + pad * 2) * scale;
-    cropCanvas.height = (rawH + pad * 2) * scale;
-    const cropCtx = cropCanvas.getContext('2d');
-    if (!cropCtx) return;
-
-    cropCtx.fillStyle = '#ffffff';
-    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-    cropCtx.save();
-    cropCtx.scale(scale, scale);
-    cropCtx.translate(-minX + pad, -minY + pad);
-    for (const st of ocrStrokes) {
-      drawStrokeOnContext(cropCtx, st);
-    }
-    cropCtx.restore();
-
-    const cropDataUrl = cropCanvas.toDataURL('image/png');
     setIsConvertingHandwriting(true);
     showToast('🧮 MathOCR: Αναγνώριση εξισώσεων, κλασμάτων, συνεπαγωγών & μονάδων...');
 
     try {
+      const loadedImgs = await Promise.all(
+        selImages.map(async (im) => ({
+          im,
+          el: await loadImageElementForOcr(im.dataUrl),
+        }))
+      );
+
+      const pad = 32;
+      const rawW = Math.max(48, Math.ceil(maxX - minX));
+      const rawH = Math.max(32, Math.ceil(maxY - minY));
+      const scale = 2;
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = (rawW + pad * 2) * scale;
+      cropCanvas.height = (rawH + pad * 2) * scale;
+      const cropCtx = cropCanvas.getContext('2d');
+      if (!cropCtx) return;
+
+      cropCtx.fillStyle = '#ffffff';
+      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.save();
+      cropCtx.scale(scale, scale);
+      cropCtx.translate(-minX + pad, -minY + pad);
+      for (const { im, el } of loadedImgs) {
+        if (!el) continue;
+        cropCtx.save();
+        if (im.rotation) {
+          const icx = im.x + im.width / 2;
+          const icy = im.y + im.height / 2;
+          cropCtx.translate(icx, icy);
+          cropCtx.rotate((im.rotation * Math.PI) / 180);
+          cropCtx.translate(-icx, -icy);
+        }
+        if (im.clipPolygon && im.clipPolygon.length >= 3) {
+          cropCtx.beginPath();
+          cropCtx.moveTo(im.x + im.clipPolygon[0].x, im.y + im.clipPolygon[0].y);
+          for (let i = 1; i < im.clipPolygon.length; i++) {
+            cropCtx.lineTo(im.x + im.clipPolygon[i].x, im.y + im.clipPolygon[i].y);
+          }
+          cropCtx.closePath();
+          cropCtx.clip();
+        }
+        cropCtx.drawImage(el, im.x, im.y, im.width, im.height);
+        cropCtx.restore();
+      }
+      for (const st of ocrStrokes) {
+        drawStrokeOnContext(cropCtx, st);
+      }
+      cropCtx.restore();
+
+      const cropDataUrl = cropCanvas.toDataURL('image/png');
       const mathRes = await Promise.race([
         transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
         new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!mathRes || !mathRes.latex.trim()) {
-        const beautified = beautifyHandwritingStrokes(selStrokes);
-        const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
-        updateActivePage((page) => ({
-          ...page,
-          strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
-        }));
+        if (selStrokes.length > 0) {
+          const beautified = beautifyHandwritingStrokes(selStrokes);
+          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
+          updateActivePage((page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
+          }));
+        }
         showToast(getUnifiedOcrErrorMessage());
         return;
       }
@@ -50215,8 +50420,8 @@ export default function App() {
       const lineCount = Math.max(1, cleanedRows.length);
       const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.42);
       const finalFontSize = Math.max(18, Math.min(34, estimatedSize || 22));
-      const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
-      const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
+      const dominantColor = selStrokes[0]?.color || '#1e293b';
+      const targetLayerId = selStrokes[0]?.layerId || selImages[0]?.layerId || activeLayerId;
 
       let inheritedGraphSuffix = '';
       for (const st of selStrokes) {
@@ -50241,13 +50446,17 @@ export default function App() {
       };
 
       const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      const removeImgSet = new Set(selImages.map((im) => im.id));
       updateActivePage((page) => ({
         ...page,
         strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
+        images: (page.images || []).filter((im) => !removeImgSet.has(im.id)),
         texts: [...(page.texts || []), newTxt],
       }));
 
       setSelectedStrokeIds([]);
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
       setActiveNodeStrokeId(null);
       setSelectedTextId(newTxt.id);
       setTextFontSize(finalFontSize);
@@ -50293,11 +50502,14 @@ export default function App() {
   }, [
     isConvertingHandwriting,
     selectedStrokeIds,
+    selectedImageIds,
+    selectedImageId,
     activeNodeStrokeId,
-    activePage.strokes,
+    activePage,
     activeNotebook?.title,
     strokeColor,
     activeLayerId,
+    loadImageElementForOcr,
     updateActivePage,
     showToast,
   ]);
@@ -59113,7 +59325,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    {selectedStrokeIds.length > 0 && (
+                    {(selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || selectedImageIds.length > 0) && (
                       <LassoOcrButtons
                         isConvertingHandwriting={isConvertingHandwriting}
                         openMenu={openLassoOcrMenu}
@@ -67659,7 +67871,7 @@ export default function App() {
                                   const multiM = txt.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
                                   const multiGrp = multiM ? multiM[1] : null;
                                   const tokenRegex =
-                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
+                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)\b)[+-]?(?:[0-9.,]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
                                   const renderLineTokens = (lineStr: string) =>
                                     lineStr.split(tokenRegex).map((part, pIdx) => {
                                       if (!part) return null;

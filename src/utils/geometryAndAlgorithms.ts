@@ -5260,8 +5260,241 @@ export async function generateSmartGreekTagsFromImages(
 }
 
 /**
- * Uses Gemini Flash Vision to transcribe Lasso-selected Greek handwritten strokes into clean
- * Greek text (preserving line breaks and accents) so it can be rendered in a Calligraphic font.
+ * Detects whether transcribed OCR text is Greek programming pseudocode (Ψευδογλώσσα Γ' Λυκείου / ΑΕΠΠ)
+ * and formats it with canonical underscore keywords, clean line breaks, and 4-space structural indentation.
+ */
+export function formatGreekPseudocodeIfDetected(rawText: string): {
+  text: string;
+  isPseudocode: boolean;
+} {
+  if (!rawText || !rawText.trim()) {
+    return { text: rawText, isPseudocode: false };
+  }
+
+  let working = rawText
+    .replace(/\r\n/g, '\n')
+    .replace(/\u200B/g, '')
+    .trim();
+
+  // Normalize assignment arrows (<-, <--, ⟵, ⇐) into canonical ' ← '
+  working = working.replace(/\s*(?:<--+|<-[>-]?|\u2190|\u27F5)\s*/g, ' ← ');
+
+  // Normalize multi-word Greek pseudocode underscore keywords (handling spaces/hyphens/underscores, missing accents, and Latin homoglyphs)
+  working = working
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
+      'Τέλος_επανάληψης'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΑαA]ρχ[ηή][_\s-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
+      'Αρχή_επανάληψης'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΜμM][εέe]χρι[ςsς]?[\s_-]+[οόo]του(?=$|[\s\n.,;(])/gi,
+      'Μέχρις_ότου'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+[αάaA][νv](?=$|[\s\n.,;)])/gi,
+      'Τέλος_αν'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΑαA]λλι[ωώo][ςsς][\s_-]+[αάaA][νv](?=$|[\s\n.,;(])/gi,
+      'Αλλιώς_αν'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))μ[εe][\s_-]+β[ηή]μα(?=$|[\s\n.,;+-])/gi,
+      'με_βήμα'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+επιλογ[ωώo]ν(?=$|[\s\n.,;)])/gi,
+      'Τέλος_επιλογών'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+προγρ[αάa]μματο[ςsς](?=$|[\s\n.,;)])/gi,
+      'Τέλος_προγράμματος'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+συν[αάa]ρτηση[ςsς](?=$|[\s\n.,;)])/gi,
+      'Τέλος_συνάρτησης'
+    )
+    .replace(
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+διαδικασ[ιίi]α[ςsς](?=$|[\s\n.,;)])/gi,
+      'Τέλος_διαδικασίας'
+    );
+
+  // Check if the text is Greek pseudocode (ΑΕΠΠ)
+  const hasExplicitUnderscoreKeyword =
+    /(?:Τέλος_επανάληψης|Αρχή_επανάληψης|Μέχρις_ότου|Τέλος_αν|Αλλιώς_αν|με_βήμα|Τέλος_επιλογών|Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας)/.test(
+      working
+    );
+  const hasForLoop =
+    /(?:^|[\s\n])[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*\s+[αa]π[οόo]\s+.+?\s+μ[εέe]χρι\b/i.test(
+      working
+    );
+  const hasWhileLoop =
+    /(?:^|[\s\n])[ΟΌοόO]σ[οόo]\s+.+?\s+επαν[αάa]λαβε\b/i.test(working);
+  const hasIfThen =
+    /(?:^|[\s\n])[ΑαA][νv]\s+.+?\s+τ[οόo]τε\b/i.test(working);
+  const hasAlgoHeader =
+    /(?:^|[\s\n])(?:[ΑαA]λγ[οόo]ριθμο[ςsς]|ΠΡΟΓΡΑΜΜΑ|Πρόγραμμα|ΣΥΝΑΡΤΗΣΗ|Συνάρτηση|ΔΙΑΔΙΚΑΣΙΑ|Διαδικασία)\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]/i.test(
+      working
+    );
+  const hasAssignmentArrow = working.includes('←');
+  const hasIoCommand =
+    /(?:^|[\s\n])(?:[Δδ]ι[αάa]βασε|[ΕεE]μφ[αάa]νισε|[ΕεE]κτ[υύ]πωσε|[Κκ]άλεσε)\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_"']/i.test(
+      working
+    );
+
+  const isPseudocode =
+    hasExplicitUnderscoreKeyword ||
+    hasForLoop ||
+    hasWhileLoop ||
+    hasIfThen ||
+    hasAlgoHeader ||
+    (hasAssignmentArrow && (hasIoCommand || working.split('\n').length >= 2));
+
+  if (!isPseudocode) {
+    return { text: rawText, isPseudocode: false };
+  }
+
+  // Split merged single-line statements onto their own lines
+  working = working
+    // After block-opening or standalone keywords that never take trailing inline arguments
+    .replace(
+      /\b(τ[οόo]τε|επαν[αάa]λαβε|Αρχή_επανάληψης|Τέλος_επανάληψης|Τέλος_αν|Τέλος_επιλογών|Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας)[ \t]+(?=\S)/gi,
+      '$1\n'
+    )
+    // After standalone Αλλιώς (not Αλλιώς_αν)
+    .replace(/(?:^|(?<=[\s\n]))([ΑαA]λλι[ωώo][ςsς])(?![_\w])[ \t]+(?=\S)/g, '$1\n')
+    // Before major statement starters when preceded by something on the same line
+    .replace(
+      /([^\n])[ \t]+(?=(?:[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*\s+[αa]π[οόo]\b|[ΟΌοόO]σ[οόo]\s+[^\n]+?\s+επαν[αάa]λαβε\b|Αρχή_επανάληψης\b|Τέλος_επανάληψης\b|Μέχρις_ότου\b|Αλλιώς_αν\b|Τέλος_αν\b|Τέλος_επιλογών\b|Τέλος_προγράμματος\b|Τέλος_συνάρτησης\b|Τέλος_διαδικασίας\b|[ΕεE]π[ιίi]λεξε\b|[ΠπP]ερ[ιίi]πτωση\b|[Δδ]ι[αάa]βασε\b|[ΕεE]μφ[αάa]νισε\b|[ΕεE]κτ[υύ]πωσε\b))(?!_)/g,
+      '$1\n'
+    )
+    // Before Αν ... τότε (when not preceded by Αλλιώς_)
+    .replace(
+      /([^\n_])[ \t]+(?=[ΑαA][νv]\s+[^\n]+?\s+τ[οόo]τε\b)/g,
+      '$1\n'
+    )
+    // After Για ... από ... μέχρι <expr> [με_βήμα <expr>] if followed by an assignment on the same line
+    .replace(
+      /([Γγ]ι[αάa]\s+\S+\s+[αa]π[οόo]\s+\S+\s+μ[εέe]χρι\s+\S+(?:\s+με_βήμα\s+\S+)?)[ \t]+(?=[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*(?:\s*\[[^\]]*\])?\s*←)/g,
+      '$1\n'
+    );
+
+  const hasUntilKeyword = /Μέχρις_ότου/i.test(working);
+  const rawLines = working
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  let indent = 0;
+  const selectCaseOpenStack: boolean[] = [];
+  const formattedLines: string[] = [];
+
+  for (let line of rawLines) {
+    // Normalize statement-leading keywords
+    if (/^[Γγ]ι[αάa]\s+/i.test(line)) {
+      line = line
+        .replace(/^[Γγ]ι[αάa]\s+/i, 'Για ')
+        .replace(/\s+[αa]π[οόo]\s+/i, ' από ')
+        .replace(/\s+μ[εέe]χρι\s+/i, ' μέχρι ');
+    } else if (/^[ΟΌοόO]σ[οόo]\s+/i.test(line)) {
+      line = line
+        .replace(/^[ΟΌοόO]σ[οόo]\s+/i, 'Όσο ')
+        .replace(/\s+επαν[αάa]λαβε$/i, ' επανάλαβε');
+    } else if (/^[ΑαA][νv]\s+/i.test(line)) {
+      line = line
+        .replace(/^[ΑαA][νv]\s+/i, 'Αν ')
+        .replace(/\s+τ[οόo]τε$/i, ' τότε');
+    } else if (/^Αλλιώς_αν\s+/i.test(line)) {
+      line = line.replace(/\s+τ[οόo]τε$/i, ' τότε');
+    } else if (/^[ΑαA]λλι[ωώo][ςsς]$/i.test(line)) {
+      line = 'Αλλιώς';
+    } else if (/^[ΑαA]ρχ[ηή]$/i.test(line) && hasUntilKeyword) {
+      // Shorthand 'Αρχή' paired with 'Μέχρις_ότου'
+      line = 'Αρχή_επανάληψης';
+    } else if (/^[ΕεE]π[ιίi]λεξε\s+/i.test(line)) {
+      line = line.replace(/^[ΕεE]π[ιίi]λεξε\s+/i, 'Επίλεξε ');
+    } else if (/^[ΠπP]ερ[ιίi]πτωση\s+/i.test(line)) {
+      line = line.replace(/^[ΠπP]ερ[ιίi]πτωση\s+/i, 'Περίπτωση ');
+    } else if (/^[Δδ]ι[αάa]βασε\s+/i.test(line)) {
+      line = line.replace(/^[Δδ]ι[αάa]βασε\s+/i, 'Διάβασε ');
+    } else if (/^[ΕεE]μφ[αάa]νισε\s+/i.test(line)) {
+      line = line.replace(/^[ΕεE]μφ[αάa]νισε\s+/i, 'Εμφάνισε ');
+    } else if (/^[ΕεE]κτ[υύ]πωσε\s+/i.test(line)) {
+      line = line.replace(/^[ΕεE]κτ[υύ]πωσε\s+/i, 'Εκτύπωσε ');
+    } else if (/^[ΑαA]λγ[οόo]ριθμο[ςsς]\s+/i.test(line)) {
+      line = line.replace(/^[ΑαA]λγ[οόo]ριθμο[ςsς]\s+/i, 'Αλγόριθμος ');
+    }
+
+    // Determine indentation before and after this line
+    const isEndLoopOrUntil = /^(?:Τέλος_επανάληψης|Μέχρις_ότου)\b/.test(line);
+    const isEndIf = /^Τέλος_αν\b/.test(line);
+    const isEndSelect = /^Τέλος_επιλογών\b/.test(line);
+    const isEndUnit =
+      /^(?:Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας|Τέλος\s+\S+)\b/i.test(line) &&
+      !isEndLoopOrUntil &&
+      !isEndIf &&
+      !isEndSelect;
+    const isElseOrElseIf = /^(?:Αλλιώς_αν|Αλλιώς)\b/.test(line);
+    const isCase = /^Περίπτωση\b/.test(line);
+
+    const isForOpener = /^Για\s+.+?\s+από\s+.+?\s+μέχρι\b/.test(line);
+    const isWhileOpener = /^Όσο\s+.+?\s+επανάλαβε\b/.test(line);
+    const isRepeatOpener = /^Αρχή_επανάληψης\b/.test(line);
+    const isIfOpener = /^Αν\s+.+?\s+τότε\b/.test(line);
+    const isSelectOpener = /^Επίλεξε\b/.test(line);
+
+    let lineIndent = indent;
+
+    if (isEndLoopOrUntil || isEndIf) {
+      indent = Math.max(0, indent - 1);
+      lineIndent = indent;
+    } else if (isEndSelect) {
+      const hadOpenCase = selectCaseOpenStack.pop() ?? false;
+      indent = Math.max(0, indent - (hadOpenCase ? 2 : 1));
+      lineIndent = indent;
+    } else if (isEndUnit) {
+      indent = 0;
+      lineIndent = 0;
+    } else if (isElseOrElseIf) {
+      lineIndent = Math.max(0, indent - 1);
+    } else if (isCase) {
+      if (selectCaseOpenStack.length > 0) {
+        const alreadyInCase = selectCaseOpenStack[selectCaseOpenStack.length - 1];
+        if (alreadyInCase) {
+          lineIndent = Math.max(0, indent - 1);
+        } else {
+          lineIndent = indent;
+          selectCaseOpenStack[selectCaseOpenStack.length - 1] = true;
+          indent += 1;
+        }
+      } else {
+        lineIndent = indent;
+        indent += 1;
+      }
+    }
+
+    formattedLines.push(`${'    '.repeat(lineIndent)}${line}\u200B`);
+
+    if (isForOpener || isWhileOpener || isRepeatOpener || isIfOpener) {
+      indent += 1;
+    } else if (isSelectOpener) {
+      selectCaseOpenStack.push(false);
+      indent += 1;
+    }
+  }
+
+  return {
+    text: formattedLines.join('\n'),
+    isPseudocode: true,
+  };
+}
+
+/**
+ * Uses Gemini Flash Vision to transcribe Lasso-selected Greek handwritten strokes (or an image) into clean
+ * Greek text (preserving line breaks, accents, and Greek Γ' Λυκείου ΑΕΠΠ pseudocode indentation).
  */
 export async function transcribeHandwrittenStrokesWithGemini(
   imageDataUrl: string,
@@ -5282,7 +5515,14 @@ export async function transcribeHandwrittenStrokesWithGemini(
 
   const parts: any[] = [
     {
-      text: `Διάβασε με απόλυτη ακρίβεια το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ κείμενο (ή αριθμούς/σύμβολα) που φαίνεται στην εικόνα${contextHint}. Διόρθωσε αυτόματα τυχόν ατελή γράμματα ή τόνους ώστε οι ελληνικές λέξεις να είναι ορθογραφικά σωστές και να βγάζουν νόημα, διατήρησε τις αλλαγές γραμμής (\\n) αν το κείμενο είναι γραμμένο σε πολλές σειρές, και επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής {"text": "..."} χωρίς κανένα άλλο σχόλιο.`,
+      text: `Διάβασε με απόλυτη ακρίβεια το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ ή τυπωμένο κείμενο (ή κώδικα/ψευδογλώσσα/αριθμούς/σύμβολα) που φαίνεται στην εικόνα${contextHint}.
+1. Διόρθωσε αυτόματα τυχόν ατελή γράμματα ή τόνους ώστε οι ελληνικές λέξεις να είναι ορθογραφικά σωστές και να βγάζουν νόημα.
+2. Διατήρησε τις αλλαγές γραμμής (\\n) αν το κείμενο είναι γραμμένο σε πολλές σειρές.
+3. ΕΙΔΙΚΑ αν το κείμενο είναι Ψευδογλώσσα Προγραμματισμού Γ' Λυκείου (ΑΕΠΠ) ή κώδικας:
+   - Αναγνώρισε σωστά το βέλος εκχώρησης (←) π.χ. Σ ← 0 ή Σ ← Σ + Α[i, j].
+   - Χρησιμοποίησε την επίσημη σύνταξη εντολών ΑΕΠΠ με κάτω παύλα όπου προβλέπεται: Για ... από ... μέχρι ... [με_βήμα ...], Τέλος_επανάληψης, Όσο ... επανάλαβε, Αρχή_επανάληψης, Μέχρις_ότου ..., Αν ... τότε, Αλλιώς_αν ... τότε, Αλλιώς, Τέλος_αν, Επίλεξε ..., Περίπτωση ..., Τέλος_επιλογών, Διάβασε, Εμφάνισε, Εκτύπωσε, Αλγόριθμος, Τέλος_προγράμματος, Τέλος_συνάρτησης, Τέλος_διαδικασίας.
+   - Τοποθέτησε κάθε εντολή σε ξεχωριστή γραμμή (\\n) και εφάρμοσε σωστές εσοχές (4 κενά ανά επίπεδο εμφώλευσης) για τα μπλοκ Για..Τέλος_επανάληψης, Όσο..Τέλος_επανάληψης, Αρχή_επανάληψης..Μέχρις_ότου, Αν/Αλλιώς_αν/Αλλιώς..Τέλος_αν.
+Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής {"text": "..."} χωρίς κανένα άλλο σχόλιο.`,
     },
     {
       inlineData: {
