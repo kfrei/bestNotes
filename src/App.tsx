@@ -3645,6 +3645,41 @@ export default function App() {
     }
     return 'date';
   });
+  const [librarySortAsc, setLibrarySortAsc] = useState<boolean>(() => {
+    try {
+      const savedAsc = localStorage.getItem('bestnotes_lib_sort_asc_v1');
+      if (savedAsc === 'true') return true;
+      if (savedAsc === 'false') return false;
+      const savedSort = localStorage.getItem('bestnotes_lib_sort_v1');
+      return savedSort === 'alpha';
+    } catch {
+      return false;
+    }
+  });
+  const handleSelectLibrarySort = useCallback(
+    (mode: 'alpha' | 'date' | 'size') => {
+      if (librarySortBy === mode) {
+        const nextAsc = !librarySortAsc;
+        setLibrarySortAsc(nextAsc);
+        try {
+          localStorage.setItem('bestnotes_lib_sort_asc_v1', String(nextAsc));
+        } catch {
+          // ignore
+        }
+      } else {
+        const defaultAsc = mode === 'alpha';
+        setLibrarySortBy(mode);
+        setLibrarySortAsc(defaultAsc);
+        try {
+          localStorage.setItem('bestnotes_lib_sort_v1', mode);
+          localStorage.setItem('bestnotes_lib_sort_asc_v1', String(defaultAsc));
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [librarySortBy, librarySortAsc]
+  );
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
   const [activeLibrarySubjectFilter, setActiveLibrarySubjectFilter] = useState<string>('all');
   const [recentOpenedAtMap, setRecentOpenedAtMap] = useState<Record<string, number>>(() => {
@@ -11139,12 +11174,13 @@ export default function App() {
             : s.fillTransparency ?? 90;
         ctx.save();
         ctx.fillStyle = shadeColor;
-        ctx.globalAlpha =
+        const baseFillAlpha =
           fillTrans === 0
             ? 0.94
             : isStencilCustomFill && s.fillTransparency === undefined
             ? 0.85
             : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
+        ctx.globalAlpha = baseFillAlpha * (s.opacity ?? 1);
         ctx.fill();
         ctx.restore();
       }
@@ -24752,11 +24788,18 @@ export default function App() {
 
       if (vmDxMap.size > 0) {
         shiftedCompStrokes = shiftedCompStrokes.map((s) => {
+          const isVmStroke =
+            vmDxMap.has(s.id) ||
+            s.shapeType === 'voltmeter' ||
+            s.shapeType === 'voltmeter-needle' ||
+            s.shapeType === 'voltmeter-label' ||
+            Boolean(s.groupId && s.groupId.startsWith('voltmeter-'));
           const dx = vmDxMap.get(s.id) || 0;
           const dy = vmDyMap.get(s.id) || 0;
-          if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) return s;
+          if (!isVmStroke && Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) return s;
           return {
             ...s,
+            opacity: isVmStroke ? 0.44 : s.opacity,
             points: s.points.map((pt) => ({
               ...pt,
               x: pt.x + dx,
@@ -25927,14 +25970,17 @@ export default function App() {
         continue;
       }
 
+      const isParVmWire = sp.id.startsWith('par-vm-');
       createdWires.push({
         id: `st-wire-comp-${Date.now()}-${sp.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Math.random().toString(36).slice(2, 5)}`,
         tool: 'pen',
         penType: prop.wirePenSubType,
         lineStyle: prop.wireLineStyle || 'solid',
         color: prop.wireColor || '#111827',
-        width: prop.wireWidth || 2.0,
-        opacity: prop.wireOpacity ?? 1,
+        width: isParVmWire
+          ? Math.max(1.5, (prop.wireWidth || 2.0) * 0.85)
+          : prop.wireWidth || 2.0,
+        opacity: isParVmWire ? 0.42 : prop.wireOpacity ?? 1,
         layerId: prop.layerId,
         isShape: true,
         shapeType: 'line',
@@ -25964,7 +26010,17 @@ export default function App() {
     updateActivePage((page) => {
       const combined = [...page.strokes, ...createdWires];
       const subStrokes = combined.filter((s) => circuitIdSet.has(s.id));
-      const alignedSubStrokes = subStrokes;
+      const alignedSubStrokes = subStrokes.map((s) => {
+        const isVmComp =
+          s.shapeType === 'voltmeter' ||
+          s.shapeType === 'voltmeter-needle' ||
+          s.shapeType === 'voltmeter-label' ||
+          Boolean(s.groupId && s.groupId.startsWith('voltmeter-'));
+        if (isVmComp) {
+          return { ...s, opacity: 0.44 };
+        }
+        return s;
+      });
       const alignedIds = alignedSubStrokes.map((s) => s.id);
 
       const nextStrokes: StrokeObject[] = [];
@@ -26943,9 +26999,13 @@ export default function App() {
             continue;
           }
           const c = evalCircuitProposalSpan(prop, sp);
+          const isParVmSpan = sp.id.startsWith('par-vm-');
           ctx.save();
+          if (isParVmSpan) {
+            ctx.globalAlpha = 0.42;
+          }
           ctx.strokeStyle = dashColor;
-          ctx.lineWidth = dashWidth;
+          ctx.lineWidth = isParVmSpan ? Math.max(1.6, dashWidth * 0.85) : dashWidth;
           ctx.setLineDash([9, 7]);
           ctx.beginPath();
           if (sp.id === 'v-left') {
@@ -27368,6 +27428,14 @@ export default function App() {
         const shaftEndY = tipY - uy * (headLen * 0.78);
 
         ctx.save();
+        if (cs.comp.kind === 'voltmeter') {
+          ctx.globalAlpha =
+            ringStroke?.opacity !== undefined && ringStroke.opacity < 0.9
+              ? ringStroke.opacity
+              : 0.44;
+        } else if (ringStroke?.opacity !== undefined) {
+          ctx.globalAlpha = ringStroke.opacity;
+        }
         ctx.strokeStyle = needleColor;
         ctx.fillStyle = needleColor;
         ctx.lineWidth = lineW;
@@ -54471,13 +54539,14 @@ export default function App() {
                   }
                   return f.parentPath === currentFolderPath;
                 })
-                .sort((a, b) =>
-                  librarySortBy === 'alpha'
-                    ? a.name.localeCompare(b.name, 'el')
+                .sort((a, b) => {
+                  const dir = librarySortAsc ? 1 : -1;
+                  return librarySortBy === 'alpha'
+                    ? dir * a.name.localeCompare(b.name, 'el')
                     : librarySortBy === 'size'
-                    ? (b.totalBytes || 0) - (a.totalBytes || 0)
-                    : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-                );
+                    ? dir * ((a.totalBytes || 0) - (b.totalBytes || 0))
+                    : dir * (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+                });
 
               const searchMatchMap = new Map<
                 string,
@@ -54525,13 +54594,16 @@ export default function App() {
                   }
                   return true;
                 })
-                .sort((a, b) =>
-                  librarySortBy === 'alpha'
-                    ? a.title.localeCompare(b.title, 'el')
+                .sort((a, b) => {
+                  const dir = librarySortAsc ? 1 : -1;
+                  return librarySortBy === 'alpha'
+                    ? dir * a.title.localeCompare(b.title, 'el')
                     : librarySortBy === 'size'
-                    ? getNotebookSizeBytes(b) - getNotebookSizeBytes(a)
-                    : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
-                );
+                    ? dir * (getNotebookSizeBytes(a) - getNotebookSizeBytes(b))
+                    : dir *
+                      (new Date(a.updatedAt || 0).getTime() -
+                        new Date(b.updatedAt || 0).getTime());
+                });
 
               const recentlyOpenedNotebooks =
                 currentFolderPath === '' &&
@@ -55533,61 +55605,58 @@ export default function App() {
                             )}
                           </button>
 
-                          {/* Sort Selector (Left of View Toggle) */}
+                          {/* Sort Selector (Left of View Toggle) — 2nd click on active sort toggles Ascending / Descending */}
                           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
                             <span className="flex items-center px-1.5 text-slate-400">
                               <ArrowUpDown className="w-3.5 h-3.5" />
                             </span>
                             <button
-                              onClick={() => {
-                                setLibrarySortBy('alpha');
-                                try {
-                                  localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
-                                } catch {
-                                  // ignore
-                                }
-                              }}
-                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              onClick={() => handleSelectLibrarySort('alpha')}
+                              title="Ταξινόμηση Αλφαβητικά (2ο κλικ: Αύξουσα Α→Ω ↔ Φθίνουσα Ω→Α)"
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
                                 librarySortBy === 'alpha'
                                   ? 'bg-white text-[#234978] shadow-2xs'
                                   : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
-                              Αλφαβητικά
+                              <span>Αλφαβητικά</span>
+                              {librarySortBy === 'alpha' && (
+                                <span className="text-[10px] font-bold leading-none">
+                                  {librarySortAsc ? '↑' : '↓'}
+                                </span>
+                              )}
                             </button>
                             <button
-                              onClick={() => {
-                                setLibrarySortBy('date');
-                                try {
-                                  localStorage.setItem('bestnotes_lib_sort_v1', 'date');
-                                } catch {
-                                  // ignore
-                                }
-                              }}
-                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              onClick={() => handleSelectLibrarySort('date')}
+                              title="Ταξινόμηση κατά Ημερομηνία (2ο κλικ: Φθίνουσα ↔ Αύξουσα)"
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
                                 librarySortBy === 'date'
                                   ? 'bg-white text-[#234978] shadow-2xs'
                                   : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
-                              Ημερομηνία
+                              <span>Ημερομηνία</span>
+                              {librarySortBy === 'date' && (
+                                <span className="text-[10px] font-bold leading-none">
+                                  {librarySortAsc ? '↑' : '↓'}
+                                </span>
+                              )}
                             </button>
                             <button
-                              onClick={() => {
-                                setLibrarySortBy('size');
-                                try {
-                                  localStorage.setItem('bestnotes_lib_sort_v1', 'size');
-                                } catch {
-                                  // ignore
-                                }
-                              }}
-                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              onClick={() => handleSelectLibrarySort('size')}
+                              title="Ταξινόμηση κατά Μέγεθος (2ο κλικ: Φθίνουσα ↔ Αύξουσα)"
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
                                 librarySortBy === 'size'
                                   ? 'bg-white text-[#234978] shadow-2xs'
                                   : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
-                              Μέγεθος
+                              <span>Μέγεθος</span>
+                              {librarySortBy === 'size' && (
+                                <span className="text-[10px] font-bold leading-none">
+                                  {librarySortAsc ? '↑' : '↓'}
+                                </span>
+                              )}
                             </button>
                           </div>
 
