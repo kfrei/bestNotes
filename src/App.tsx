@@ -62334,13 +62334,6 @@ export default function App() {
                         }
                         setSimCircuitSwitchClosed(Boolean(activeSim.switchClosed));
                         setIsSimulating(true);
-                        updateActivePage((page) =>
-                          runScopedCircuitOperationOnPage(
-                            page,
-                            (sub) => autoAlignAndConnectCircuit(sub),
-                            activeSim.id
-                          )
-                        );
                       } else {
                         setIsSimulating(false);
                       }

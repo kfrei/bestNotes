@@ -10796,6 +10796,7 @@ export function autoAlignAndConnectCircuit(
           };
         });
       }
+      curWireY += comp.rightTerm.y - comp.leftTerm.y;
     }
   }
 
@@ -11136,8 +11137,19 @@ export function autoAlignAndConnectCircuit(
       )
       .sort((a, b) => a.cx - b.cx);
 
-    // Keep horizontal wires straight at yRow so there is zero stepped jog across bulbs or components!
-    const getRowSegY = (_segXL: number, _segXR: number): number => yRow;
+    // Compute exact wire Y for any horizontal segment [segXL, segXR] along this row,
+    // stepping smoothly across 2-terminal bulbs whose rightTerm.y sits at the bottom contact!
+    const getRowSegY = (segXL: number, segXR: number): number => {
+      const segMidX = (segXL + segXR) / 2;
+      let curY = yRow;
+      for (const c of rowComps) {
+        if (segMidX < c.cx) {
+          return Math.round(c.leftTerm.y);
+        }
+        curY = Math.round(c.rightTerm.y);
+      }
+      return curY;
+    };
 
     // Identify vertical columns that connect to this row
     const activeRowCols = vCols
@@ -11273,6 +11285,9 @@ export function autoAlignAndConnectCircuit(
         );
         if (gap <= 38 && !compBetween) {
           prev.xR = Math.max(prev.xR, seg.xR);
+          if ((seg.stroke.opacity ?? 1) > (prev.stroke.opacity ?? 1)) {
+            prev.stroke = seg.stroke;
+          }
         } else {
           merged.push({ ...seg });
         }
@@ -11411,10 +11426,18 @@ export function autoAlignAndConnectCircuit(
 
   // 5. Snap vertical wire endpoints ONLY when visibly close (<= 44px) to horizontal wire endpoints,
   //    merge collinear vertical segments (gap <= 38px), and split at real T-junctions!
-  const hWireEndpoints: { x: number; y: number }[] = [];
+  const hWireSpans: { xL: number; xR: number; y: number }[] = [];
   for (const nw of newWireStrokes) {
     if (nw.points.length >= 2) {
-      hWireEndpoints.push(nw.points[0], nw.points[1]);
+      const p0 = nw.points[0];
+      const p1 = nw.points[nw.points.length - 1];
+      if (Math.abs(p0.y - p1.y) <= 2) {
+        hWireSpans.push({
+          xL: Math.min(p0.x, p1.x),
+          xR: Math.max(p0.x, p1.x),
+          y: Math.round((p0.y + p1.y) / 2),
+        });
+      }
     }
   }
 
@@ -11432,13 +11455,13 @@ export function autoAlignAndConnectCircuit(
       let yT = Math.min(w.y1, w.y2);
       let yB = Math.max(w.y1, w.y2);
 
-      for (const hep of hWireEndpoints) {
-        if (Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL) {
-          if (Math.abs(yT - hep.y) <= CLOSE_SNAP_TOL && yB > hep.y + 8) {
-            yT = hep.y;
+      for (const hsp of hWireSpans) {
+        if (xCol >= hsp.xL - CLOSE_SNAP_TOL && xCol <= hsp.xR + CLOSE_SNAP_TOL) {
+          if (Math.abs(yT - hsp.y) <= CLOSE_SNAP_TOL && yB > hsp.y + 8) {
+            yT = hsp.y;
           }
-          if (Math.abs(yB - hep.y) <= CLOSE_SNAP_TOL && yT < hep.y - 8) {
-            yB = hep.y;
+          if (Math.abs(yB - hsp.y) <= CLOSE_SNAP_TOL && yT < hsp.y - 8) {
+            yB = hsp.y;
           }
         }
       }
@@ -11498,9 +11521,9 @@ export function autoAlignAndConnectCircuit(
       const minY = Math.min(...mergedV.map((v) => v.yT));
       let maxY = Math.max(...mergedV.map((v) => v.yB));
 
-      // Check if there is a bottom horizontal wire endpoint at this column that needs to be reached
-      const bottomHep = hWireEndpoints
-        .filter((hep) => Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL && hep.y > minY + 50)
+      // Check if there is a bottom horizontal wire at this column that needs to be reached
+      const bottomHep = hWireSpans
+        .filter((hsp) => xCol >= hsp.xL - CLOSE_SNAP_TOL && xCol <= hsp.xR + CLOSE_SNAP_TOL && hsp.y > minY + 50)
         .sort((a, b) => b.y - a.y)[0];
       if (bottomHep && bottomHep.y > maxY + 30) {
         maxY = bottomHep.y;
@@ -11541,14 +11564,15 @@ export function autoAlignAndConnectCircuit(
     for (let mIdx = 0; mIdx < mergedV.length; mIdx++) {
       const mv = mergedV[mIdx];
       const yBreaks: number[] = [mv.yT];
-      for (const hep of hWireEndpoints) {
+      for (const hsp of hWireSpans) {
         if (
-          Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL &&
-          hep.y > mv.yT + 10 &&
-          hep.y < mv.yB - 10 &&
-          !yBreaks.some((yb) => Math.abs(yb - hep.y) <= 8)
+          xCol >= hsp.xL - CLOSE_SNAP_TOL &&
+          xCol <= hsp.xR + CLOSE_SNAP_TOL &&
+          hsp.y > mv.yT + 10 &&
+          hsp.y < mv.yB - 10 &&
+          !yBreaks.some((yb) => Math.abs(yb - hsp.y) <= 8)
         ) {
-          yBreaks.push(hep.y);
+          yBreaks.push(hsp.y);
         }
       }
       yBreaks.push(mv.yB);
