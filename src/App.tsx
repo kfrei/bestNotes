@@ -57258,7 +57258,7 @@ export default function App() {
                                   e.stopPropagation();
                                   deleteNotebookById(nb);
                                 }}
-                                className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                className="p-2 rounded-lg text-rose-600 hover:bg-rose-600 hover:text-white transition cursor-pointer"
                                 title={`Διαγραφή σημείωσης "${nb.title}"`}
                               >
                                 <Trash2 className="w-4 h-4" />
