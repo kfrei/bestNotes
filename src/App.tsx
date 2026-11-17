@@ -20019,6 +20019,9 @@ export default function App() {
             return cur;
           });
         }
+      } else {
+        setHeatStopwatchRunning(false);
+        heatSim.pauseHeatingAndSim();
       }
       return next;
     });
@@ -33306,6 +33309,9 @@ export default function App() {
           });
         }
 
+        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatSim.activeHeatSim?.isRunning) {
+          heatSim.pauseHeatingAndSim();
+        }
         if (heatSimLastFrameRef.current !== null) {
           const hDt = Math.max(0.001, Math.min(0.05, (now - heatSimLastFrameRef.current) / 1000));
           heatSim.stepPhysicsFrame(hDt);
@@ -64648,6 +64654,9 @@ export default function App() {
                     sim={heatSim.activeHeatSim}
                     onToggleRun={() => {
                       const willRun = !heatSim.activeHeatSim?.isRunning;
+                      if (willRun && !showHeatStopwatch) {
+                        toggleHeatStopwatch();
+                      }
                       heatSim.toggleRun();
                       setHeatStopwatchRunning(willRun);
                     }}
@@ -64747,7 +64756,11 @@ export default function App() {
                 elapsedMs={heatStopwatchElapsedMs}
                 onPosChange={setHeatStopwatchPos}
                 onWidthChange={setHeatStopwatchWidth}
-                onClose={() => setShowHeatStopwatch(false)}
+                onClose={() => {
+                  setShowHeatStopwatch(false);
+                  setHeatStopwatchRunning(false);
+                  heatSim.pauseHeatingAndSim();
+                }}
                 sourceTitle="Θερμότητα"
                 sourceBadgeColor="amber"
                 storagePrefix="heat"

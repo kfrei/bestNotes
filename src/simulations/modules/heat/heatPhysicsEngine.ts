@@ -181,34 +181,6 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   );
   const thermometers = objects.filter((o) => o.type === 'thermometer');
 
-  // 1. Update Tripod wire gauze temperatures & burner snap states
-  for (const tripod of tripods) {
-    if (!tripod.tripodState) continue;
-    let targetGauzeTemp = ambientTemp;
-
-    // Check if any active burner is positioned directly under the tripod base
-    const burnerUnderneath = burners.find((b) => {
-      if (!b.burnerState?.isOn) return false;
-      const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
-      const isHoriz = dx <= 35;
-      // Burner top is under tripod wire gauze (including the lower locked position)
-      const isUnderGauze = b.y >= tripod.y - 10 && b.y <= tripod.y + 85;
-      return isHoriz && isUnderGauze;
-    });
-
-    if (burnerUnderneath && burnerUnderneath.burnerState) {
-      const pWatts = getBurnerPowerWatts(burnerUnderneath.burnerState);
-      targetGauzeTemp = ambientTemp + (pWatts / 1470) * 580; // Up to ~600°C
-    }
-
-    const currentGauze = tripod.tripodState.wireGauzeTemp ?? ambientTemp;
-    const gauzeAlpha = 1.0 - Math.exp(-timeStep * 1.8);
-    tripod.tripodState = {
-      ...tripod.tripodState,
-      wireGauzeTemp: currentGauze + (targetGauzeTemp - currentGauze) * gauzeAlpha,
-    };
-  }
-
   // Pre-detect nested container pairs (e.g., vessel Γ placed inside wider vessel Β)
   // so both thermal conduction and ambient shielding know which vessels are nested!
   for (const c of containers) {
@@ -232,157 +204,187 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     }
   }
 
-  // 2. Identify heat sources for each container
-  for (const container of containers) {
-    if (!container.containerState) continue;
-    const cs = { ...container.containerState };
-    const liquidProps = LIQUID_REGISTRY[cs.liquidType];
+  // Strictly gate ALL thermal interactions (burner heating, tripod gauze heating/cooling,
+  // container-to-environment cooling/heating, and nested container-to-container heat transfer)
+  // behind `sim.isRunning` (i.e. only when the Heat Stopwatch is active and running)!
+  if (sim.isRunning) {
+    // 1. Update Tripod wire gauze temperatures & burner snap states
+    for (const tripod of tripods) {
+      if (!tripod.tripodState) continue;
+      let targetGauzeTemp = ambientTemp;
 
-    let receivedPowerWatts = 0;
-
-    // A. Check if resting on a tripod (with heated wire gauze)
-    const tripodBelow = tripods.find((t) => {
-      const dx = Math.abs(container.x + container.width / 2 - (t.x + t.width / 2));
-      const cBot = container.y + container.height;
-      const isHorizAligned = dx <= 35;
-      // Container base rests directly on or very close to the wire gauze ring
-      const isVertOnGauze = cBot >= t.y && cBot <= t.y + 42;
-      return isHorizAligned && isVertOnGauze;
-    });
-
-    let burnerUnderTripod: HeatObject | undefined;
-    if (tripodBelow) {
-      burnerUnderTripod = burners.find((b) => {
+      // Check if any active burner is positioned directly under the tripod base
+      const burnerUnderneath = burners.find((b) => {
         if (!b.burnerState?.isOn) return false;
-        const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
+        const dx = Math.abs(b.x + b.width / 2 - (tripod.x + tripod.width / 2));
         const isHoriz = dx <= 35;
-        const isUnderGauze = b.y >= tripodBelow.y - 10 && b.y <= tripodBelow.y + 85;
+        // Burner top is under tripod wire gauze (including the lower locked position)
+        const isUnderGauze = b.y >= tripod.y - 10 && b.y <= tripod.y + 85;
         return isHoriz && isUnderGauze;
       });
-    }
 
-    if (burnerUnderTripod?.burnerState) {
-      // Direct heat transfer from active burner through the tripod wire gauze
-      receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(burnerUnderTripod.burnerState));
-    } else if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
-      // Residual cooling heat transfer from the hot wire gauze after burner was turned off
-      const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
-      if (deltaTGauze > 0) {
-        receivedPowerWatts = Math.max(receivedPowerWatts, deltaTGauze * 2.0);
+      if (burnerUnderneath && burnerUnderneath.burnerState) {
+        const pWatts = getBurnerPowerWatts(burnerUnderneath.burnerState);
+        targetGauzeTemp = ambientTemp + (pWatts / 1470) * 580; // Up to ~600°C
       }
+
+      const currentGauze = tripod.tripodState.wireGauzeTemp ?? ambientTemp;
+      const gauzeAlpha = 1.0 - Math.exp(-timeStep * 1.8);
+      tripod.tripodState = {
+        ...tripod.tripodState,
+        wireGauzeTemp: currentGauze + (targetGauzeTemp - currentGauze) * gauzeAlpha,
+      };
     }
 
-    // B. Direct flame check (burner positioned directly below container, touching flame)
-    const directBurner = burners.find((b) => {
-      if (!b.burnerState?.isOn) return false;
-      const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
-      const cBot = container.y + container.height;
-      const isHoriz = dx <= 32;
-      // Burner nozzle / flame physically reaches container base
-      const isVert = b.y >= cBot - 25 && b.y <= cBot + 40;
-      return isHoriz && isVert;
-    });
+    // 2. Identify heat sources for each container
+    for (const container of containers) {
+      if (!container.containerState) continue;
+      const cs = { ...container.containerState };
+      const liquidProps = LIQUID_REGISTRY[cs.liquidType];
 
-    if (directBurner?.burnerState) {
-      receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(directBurner.burnerState));
-    }
+      let receivedPowerWatts = 0;
 
-    // Apply Q = P·dt => ΔT = dQ / (m·c)
-    const massGrams = Math.max(10, cs.volumeMl * liquidProps.density);
-    const heatCapJoulesPerC = massGrams * liquidProps.specificHeat;
+      // A. Check if resting on a tripod (with heated wire gauze)
+      const tripodBelow = tripods.find((t) => {
+        const dx = Math.abs(container.x + container.width / 2 - (t.x + t.width / 2));
+        const cBot = container.y + container.height;
+        const isHorizAligned = dx <= 35;
+        // Container base rests directly on or very close to the wire gauze ring
+        const isVertOnGauze = cBot >= t.y && cBot <= t.y + 42;
+        return isHorizAligned && isVertOnGauze;
+      });
 
-    if (receivedPowerWatts > 0) {
-      // Actively being heated by burner / flame!
-      // Per thermodynamic & educational requirements:
-      // As long as a burner is active under the vessel (even on low), the liquid must
-      // steadily heat up until it reaches its boiling point without flatlining.
-      const dQ = receivedPowerWatts * timeStep;
-      const heatDT = dQ / heatCapJoulesPerC;
-
-      // Gentle ambient convective loss:
-      const ambientLossDT = Math.max(0, (cs.temperature - ambientTemp) * 0.00025 * timeStep);
-      // Flame power strictly guarantees continuous upward heating (at least 75% of power)
-      const netDT = Math.max(heatDT * 0.75, heatDT - ambientLossDT);
-
-      if (cs.temperature < liquidProps.boilingPoint) {
-        cs.temperature = Math.min(liquidProps.boilingPoint, cs.temperature + netDT);
+      let burnerUnderTripod: HeatObject | undefined;
+      if (tripodBelow) {
+        burnerUnderTripod = burners.find((b) => {
+          if (!b.burnerState?.isOn) return false;
+          const dx = Math.abs(b.x + b.width / 2 - (tripodBelow.x + tripodBelow.width / 2));
+          const isHoriz = dx <= 35;
+          const isUnderGauze = b.y >= tripodBelow.y - 10 && b.y <= tripodBelow.y + 85;
+          return isHoriz && isUnderGauze;
+        });
       }
-    } else if (cs.volumeMl > 0) {
-      // No active heating: Natural cooling towards room ambient temperature (Newton's Law of Cooling),
-      // properly scaled by thermal capacity (m · c) so quantity and material affect cooling rate!
-      const coolDelta = cs.temperature - ambientTemp;
-      if (Math.abs(coolDelta) > 0.005) {
-        const baseEnvWattsPerDeg = 1.78 * Math.pow(Math.max(50, cs.volumeMl) / 500, 0.45);
-        // When nested in a water bath, the inner vessel is shielded by the outer liquid,
-        // and the ambient environment plays a subtle secondary role over the ~12-minute equilibration.
-        const envShieldFactor = cs.parentBasinId ? 0.03 : cs.nestedVesselId ? 0.05 : 1.0;
-        const dQEnv = envShieldFactor * baseEnvWattsPerDeg * coolDelta * timeStep;
-        cs.temperature -= dQEnv / heatCapJoulesPerC;
+
+      if (burnerUnderTripod?.burnerState) {
+        // Direct heat transfer from active burner through the tripod wire gauze
+        receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(burnerUnderTripod.burnerState));
+      } else if (tripodBelow?.tripodState && tripodBelow.tripodState.wireGauzeTemp > ambientTemp) {
+        // Residual cooling heat transfer from the hot wire gauze after burner was turned off
+        const deltaTGauze = tripodBelow.tripodState.wireGauzeTemp - cs.temperature;
+        if (deltaTGauze > 0) {
+          receivedPowerWatts = Math.max(receivedPowerWatts, deltaTGauze * 2.0);
+        }
       }
+
+      // B. Direct flame check (burner positioned directly below container, touching flame)
+      const directBurner = burners.find((b) => {
+        if (!b.burnerState?.isOn) return false;
+        const dx = Math.abs(container.x + container.width / 2 - (b.x + b.width / 2));
+        const cBot = container.y + container.height;
+        const isHoriz = dx <= 32;
+        // Burner nozzle / flame physically reaches container base
+        const isVert = b.y >= cBot - 25 && b.y <= cBot + 40;
+        return isHoriz && isVert;
+      });
+
+      if (directBurner?.burnerState) {
+        receivedPowerWatts = Math.max(receivedPowerWatts, getBurnerPowerWatts(directBurner.burnerState));
+      }
+
+      // Apply Q = P·dt => ΔT = dQ / (m·c)
+      const massGrams = Math.max(10, cs.volumeMl * liquidProps.density);
+      const heatCapJoulesPerC = massGrams * liquidProps.specificHeat;
+
+      if (receivedPowerWatts > 0) {
+        // Actively being heated by burner / flame!
+        const dQ = receivedPowerWatts * timeStep;
+        const heatDT = dQ / heatCapJoulesPerC;
+
+        // Gentle ambient convective loss:
+        const ambientLossDT = Math.max(0, (cs.temperature - ambientTemp) * 0.00025 * timeStep);
+        // Flame power strictly guarantees continuous upward heating (at least 75% of power)
+        const netDT = Math.max(heatDT * 0.75, heatDT - ambientLossDT);
+
+        if (cs.temperature < liquidProps.boilingPoint) {
+          cs.temperature = Math.min(liquidProps.boilingPoint, cs.temperature + netDT);
+        }
+      } else if (cs.volumeMl > 0) {
+        // No active heating: Natural cooling towards room ambient temperature (Newton's Law of Cooling),
+        // properly scaled by thermal capacity (m · c) so quantity and material affect cooling rate!
+        const coolDelta = cs.temperature - ambientTemp;
+        if (Math.abs(coolDelta) > 0.005) {
+          const baseEnvWattsPerDeg = 1.78 * Math.pow(Math.max(50, cs.volumeMl) / 500, 0.45);
+          // When nested in a water bath, the inner vessel is shielded by the outer liquid,
+          // and the ambient environment plays a subtle secondary role over the ~12-minute equilibration.
+          const envShieldFactor = cs.parentBasinId ? 0.03 : cs.nestedVesselId ? 0.05 : 1.0;
+          const dQEnv = envShieldFactor * baseEnvWattsPerDeg * coolDelta * timeStep;
+          cs.temperature -= dQEnv / heatCapJoulesPerC;
+        }
+      }
+
+      // Boiling plateau check (only if container has liquid!)
+      if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint - 1.5) {
+        if (cs.temperature > liquidProps.boilingPoint) {
+          cs.temperature = liquidProps.boilingPoint;
+        }
+        cs.isBoiling = true;
+        cs.boilingIntensity = receivedPowerWatts > 0
+          ? Math.min(1.0, Math.max(0.65, receivedPowerWatts / 500))
+          : 0.65;
+      } else if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint * 0.88) {
+        // Simmering / near boil active bubbles
+        cs.isBoiling = true;
+        cs.boilingIntensity = Math.max(
+          0.3,
+          ((cs.temperature - liquidProps.boilingPoint * 0.88) / (liquidProps.boilingPoint * 0.12)) * 0.6
+        );
+      } else {
+        cs.isBoiling = false;
+        cs.boilingIntensity = 0;
+      }
+
+      container.containerState = cs;
     }
 
-    // Boiling plateau check (only if container has liquid!)
-    if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint - 1.5) {
-      if (cs.temperature > liquidProps.boilingPoint) {
-        cs.temperature = liquidProps.boilingPoint;
-      }
-      cs.isBoiling = true;
-      cs.boilingIntensity = receivedPowerWatts > 0
-        ? Math.min(1.0, Math.max(0.65, receivedPowerWatts / 500))
-        : 0.65;
-    } else if (cs.volumeMl > 0 && cs.temperature >= liquidProps.boilingPoint * 0.88) {
-      // Simmering / near boil active bubbles
-      cs.isBoiling = true;
-      cs.boilingIntensity = Math.max(
-        0.3,
-        ((cs.temperature - liquidProps.boilingPoint * 0.88) / (liquidProps.boilingPoint * 0.12)) * 0.6
-      );
-    } else {
-      cs.isBoiling = false;
-      cs.boilingIntensity = 0;
+    // 3. Thermal Interaction & Calorimetric Equilibrium between ANY nested vessels (e.g., Γ inside Β)
+    for (const { outer, inner } of nestedPairs) {
+      if (!outer.containerState || !inner.containerState) continue;
+      const bs = outer.containerState;
+      const is = inner.containerState;
+
+      if (bs.volumeMl <= 0 || is.volumeMl <= 0) continue;
+
+      // Conduction between outer vessel liquid and inner vessel liquid: Q = m · c · ΔT
+      const pOuter = LIQUID_REGISTRY[bs.liquidType];
+      const pInner = LIQUID_REGISTRY[is.liquidType];
+
+      const mOuter = bs.volumeMl * pOuter.density;
+      const mInner = is.volumeMl * pInner.density;
+
+      const cOuter = pOuter.specificHeat;
+      const cInner = pInner.specificHeat;
+
+      const capOuter = Math.max(1, mOuter * cOuter);
+      const capInner = Math.max(1, mInner * cInner);
+
+      // Contact area scales gently with the wetted liquid level of the submerged vessel
+      const wettedScale = Math.pow(Math.max(80, Math.min(bs.volumeMl, is.volumeMl)) / 500, 0.55);
+      const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale;
+
+      const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
+      const tempDiff = bs.temperature - is.temperature; // Outer - Inner
+      const rawDQ = effectiveK * tempDiff * timeStep; // Joules
+      // Clamp so vessels converge smoothly to instEq without overshooting in a single step
+      const maxDQ = Math.abs(bs.temperature - instEq) * capOuter;
+      const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
+
+      bs.temperature -= dQ / capOuter;
+      is.temperature += dQ / capInner;
+
+      // Clamp to boiling if reached
+      if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
+      if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
     }
-
-    container.containerState = cs;
-  }
-
-  // 3. Thermal Interaction & Calorimetric Equilibrium between ANY nested vessels (e.g., Γ inside Β)
-  for (const { outer, inner } of nestedPairs) {
-    if (!outer.containerState || !inner.containerState) continue;
-    const bs = outer.containerState;
-    const is = inner.containerState;
-
-    if (bs.volumeMl <= 0 || is.volumeMl <= 0) continue;
-
-    // Conduction between outer vessel liquid and inner vessel liquid: Q = m · c · ΔT
-    const pOuter = LIQUID_REGISTRY[bs.liquidType];
-    const pInner = LIQUID_REGISTRY[is.liquidType];
-
-    const mOuter = bs.volumeMl * pOuter.density;
-    const mInner = is.volumeMl * pInner.density;
-
-    const cOuter = pOuter.specificHeat;
-    const cInner = pInner.specificHeat;
-
-    const capOuter = Math.max(1, mOuter * cOuter);
-    const capInner = Math.max(1, mInner * cInner);
-
-    // Contact area scales gently with the wetted liquid level of the submerged vessel
-    const wettedScale = Math.pow(Math.max(80, Math.min(bs.volumeMl, is.volumeMl)) / 500, 0.55);
-    const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale;
-
-    const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
-    const tempDiff = bs.temperature - is.temperature; // Outer - Inner
-    const rawDQ = effectiveK * tempDiff * timeStep; // Joules
-    // Clamp so vessels converge smoothly to instEq without overshooting in a single step
-    const maxDQ = Math.abs(bs.temperature - instEq) * capOuter;
-    const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);
-
-    bs.temperature -= dQ / capOuter;
-    is.temperature += dQ / capInner;
-
-    // Clamp to boiling if reached
-    if (bs.temperature > pOuter.boilingPoint) bs.temperature = pOuter.boilingPoint;
-    if (is.temperature > pInner.boilingPoint) is.temperature = pInner.boilingPoint;
   }
 
   // 4. Update Thermometer readings (smooth probe response, prioritizing inner nested vessels)
