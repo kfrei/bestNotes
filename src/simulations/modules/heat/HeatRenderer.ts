@@ -1704,7 +1704,10 @@ function renderTripod(
       const backEndY = legBotY - 6;
 
       ctx.save();
-      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(100, 116, 139, 0.28)';
+      if (hasContainerOnTop) {
+        ctx.filter = 'blur(1.2px)';
+      }
+      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.28)' : 'rgba(100, 116, 139, 0.24)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(backStartX, backStartY);
@@ -1713,12 +1716,15 @@ function renderTripod(
       ctx.restore();
 
       // When a container sits on top of the tripod, its glass base & liquid cover the wire gauze,
-      // inner ring, and back collar arc: soften with subtle blur & reduced opacity so it's less prominent!
+      // inner ring, and back collar arc: soften with glass blur & reduced opacity ("σαν να βάλαμε μπροστά γυαλί")!
       ctx.save();
       if (hasContainerOnTop) {
-        ctx.globalAlpha = 0.28;
-        ctx.filter = 'blur(1.8px)';
+        ctx.globalAlpha = 0.22;
+        ctx.filter = 'blur(2.6px)';
       }
+      const coveredRingStroke = hasContainerOnTop
+        ? (isDark ? 'rgba(203, 213, 225, 0.65)' : 'rgba(71, 85, 105, 0.60)')
+        : strokeColor;
 
       // 2. Wire Gauze mesh crosshatch (Top/Back half: y <= collarCy + 0.5)
       // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
@@ -1759,14 +1765,14 @@ function renderTripod(
       } else {
         ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
       }
-      ctx.strokeStyle = strokeColor;
+      ctx.strokeStyle = coveredRingStroke;
       ctx.lineWidth = 1.2;
       ctx.stroke();
       ctx.restore();
 
       // 4. Back Arc of Circular Top Collar Ring
       ctx.save();
-      ctx.strokeStyle = strokeColor;
+      ctx.strokeStyle = coveredRingStroke;
       ctx.lineWidth = 2.2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1789,9 +1795,12 @@ function renderTripod(
       if (part === 'front') {
         ctx.save();
         if (hasContainerOnTop) {
-          ctx.globalAlpha = 0.28;
-          ctx.filter = 'blur(1.8px)';
+          ctx.globalAlpha = 0.22;
+          ctx.filter = 'blur(2.6px)';
         }
+        const coveredFrontRingStroke = hasContainerOnTop
+          ? (isDark ? 'rgba(203, 213, 225, 0.65)' : 'rgba(71, 85, 105, 0.60)')
+          : strokeColor;
 
         // Wire Gauze mesh crosshatch (Bottom/Front half: y >= collarCy - 0.5)
         // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
@@ -1826,7 +1835,7 @@ function renderTripod(
         ctx.save();
         ctx.beginPath();
         ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI);
-        ctx.strokeStyle = strokeColor;
+        ctx.strokeStyle = coveredFrontRingStroke;
         ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.restore();
@@ -2656,6 +2665,48 @@ function drawBeakerPhysical(
   layer: 'all' | 'apparatus' | 'ui' = 'all',
   isSubmergedPass: boolean = false
 ): void {
+  const span = bw - 2 * cornerR;
+
+  // 0. Subtle Borosilicate Glass Body Sheen (so even when empty or above the liquid, the vessel looks like real glass!)
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x - spoutW, y + 1.5);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + bw, y);
+  ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(x + bw, y + bh - cornerR);
+  ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+  ctx.bezierCurveTo(
+    x + bw - cornerR - span * 0.28,
+    y + bh + botCurve * 1.25,
+    x + cornerR + span * 0.28,
+    y + bh + botCurve * 1.25,
+    x + cornerR,
+    y + bh + botCurve * 0.25
+  );
+  ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+  ctx.lineTo(x, y + 13);
+  ctx.lineTo(x - spoutW, y + 1.5);
+  ctx.closePath();
+
+  const glassBodyGrad = ctx.createLinearGradient(x, y, x + bw, y);
+  if (isDark) {
+    glassBodyGrad.addColorStop(0, 'rgba(148, 163, 184, 0.16)');
+    glassBodyGrad.addColorStop(0.18, 'rgba(203, 213, 225, 0.10)');
+    glassBodyGrad.addColorStop(0.55, 'rgba(148, 163, 184, 0.06)');
+    glassBodyGrad.addColorStop(0.88, 'rgba(226, 232, 240, 0.14)');
+    glassBodyGrad.addColorStop(1, 'rgba(148, 163, 184, 0.18)');
+  } else {
+    glassBodyGrad.addColorStop(0, 'rgba(226, 232, 240, 0.36)');
+    glassBodyGrad.addColorStop(0.16, 'rgba(255, 255, 255, 0.46)');
+    glassBodyGrad.addColorStop(0.52, 'rgba(241, 245, 249, 0.26)');
+    glassBodyGrad.addColorStop(0.86, 'rgba(255, 255, 255, 0.48)');
+    glassBodyGrad.addColorStop(1, 'rgba(226, 232, 240, 0.34)');
+  }
+  ctx.fillStyle = glassBodyGrad;
+  ctx.fill();
+  ctx.restore();
+
   // Draw Liquid Fill if volume > 0 - Dynamic wave/slosh surface + perfectly filling curved base
   if (vol > 0 && liquidH > 2) {
     const surface = getLiquidSurfaceProfile(
@@ -2672,7 +2723,6 @@ function drawBeakerPhysical(
       performance.now()
     );
 
-    const span = bw - 2 * cornerR;
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(surface[0].x, surface[0].y);
@@ -2739,7 +2789,6 @@ function drawBeakerPhysical(
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const span = bw - 2 * cornerR;
   ctx.beginPath();
   // Spout top tip
   ctx.moveTo(x - spoutW, y + 1.5);
@@ -2862,17 +2911,51 @@ function renderBeaker(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    if (!isSubmerged || basinWaterLocalY === null) {
+    if (!isSubmerged) {
       // Normal Sharp Render
       drawBeakerPhysical(
         ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
         objId, objX, objY, layer, false
       );
-    } else {
-      const surfaceY = Math.max(y, basinWaterLocalY);
-      const bcs = parentBasin!.containerState!;
+    } else if (basinWaterLocalY === null) {
+      // Nested inside an EMPTY outer container:
+      // Above outer container rim -> 100% sharp; Below outer container rim -> softened behind outer glass wall!
       const bPad = 8;
+      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+      const splitY = Math.max(y, basinRimLocalY);
+
+      if (splitY > y) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-30, -30, w + 60, splitY + 30);
+        ctx.clip();
+        drawBeakerPhysical(
+          ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+          state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+          objId, objX, objY, layer, false
+        );
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-30, splitY, w + 60, h - splitY + 40);
+      ctx.clip();
+      ctx.globalAlpha = 0.58;
+      ctx.filter = 'blur(2.0px)';
+      drawBeakerPhysical(
+        ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+        state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+        objId, objX, objY, layer, true
+      );
+      ctx.restore();
+    } else {
+      const bPad = 8;
+      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+      const rimSplitY = Math.max(y, basinRimLocalY);
+      const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
+      const bcs = parentBasin!.containerState!;
       const bBw = parentBasin!.width - bPad * 2;
       const bBh = parentBasin!.height - bPad * 2 - 6;
       const isBasin = parentBasin!.type === 'wide-basin';
@@ -2896,13 +2979,27 @@ function renderBeaker(
       const dxBasin = parentBasin!.x - (objX ?? 0);
       const dyBasin = parentBasin!.y - (objY ?? 0);
 
-      // PASS 1: Emergent Part (in the air: from top down to the outer vessel's actual wavy surface) - 100% sharp and crisp
-      if (surfaceY > y) {
+      // PASS 1: Emergent Part above the outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
+      if (rimSplitY > y) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-30, -30, w + 60, rimSplitY + 30);
+        ctx.clip();
+        drawBeakerPhysical(
+          ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
+          state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
+          objId, objX, objY, layer, false
+        );
+        ctx.restore();
+      }
+
+      // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
+      if (surfaceY > rimSplitY - 4) {
         ctx.save();
         ctx.beginPath();
         if (basinSurface.length > 1) {
-          ctx.moveTo(-30, -30);
-          ctx.lineTo(w + 30, -30);
+          ctx.moveTo(-30, rimSplitY);
+          ctx.lineTo(w + 30, rimSplitY);
           ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
           for (let i = basinSurface.length - 1; i >= 0; i--) {
             ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
@@ -2910,13 +3007,15 @@ function renderBeaker(
           ctx.lineTo(-30, basinSurface[0].y + dyBasin);
           ctx.closePath();
         } else {
-          ctx.rect(-15, -15, w + 30, surfaceY + 15);
+          ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
         }
         ctx.clip();
+        ctx.globalAlpha = 0.62;
+        ctx.filter = 'blur(1.8px)';
         drawBeakerPhysical(
           ctx, w, h, x, y, bw, bh, cornerR, botCurve, spoutW, beadH,
           state, liquidType, vol, liquidH, liquidTopY, strokeColor, isDark,
-          objId, objX, objY, layer, false
+          objId, objX, objY, layer, true
         );
         ctx.restore();
       }
@@ -3038,6 +3137,48 @@ function renderWideBasin(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
+    const span = bw - 2 * cornerR;
+
+    // 0. Subtle Borosilicate Glass Body Sheen (so even when empty or above the liquid, the basin looks like real glass!)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x - spoutW, y + 1.5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + bw, y);
+    ctx.arc(x + bw, y + beadH / 2, beadH / 2, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x + bw, y + bh - cornerR);
+    ctx.quadraticCurveTo(x + bw, y + bh, x + bw - cornerR, y + bh + botCurve * 0.25);
+    ctx.bezierCurveTo(
+      x + bw - cornerR - span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR + span * 0.28,
+      y + bh + botCurve * 1.25,
+      x + cornerR,
+      y + bh + botCurve * 0.25
+    );
+    ctx.quadraticCurveTo(x, y + bh, x, y + bh - cornerR);
+    ctx.lineTo(x, y + 13);
+    ctx.lineTo(x - spoutW, y + 1.5);
+    ctx.closePath();
+
+    const glassBodyGrad = ctx.createLinearGradient(x, y, x + bw, y);
+    if (isDark) {
+      glassBodyGrad.addColorStop(0, 'rgba(148, 163, 184, 0.16)');
+      glassBodyGrad.addColorStop(0.18, 'rgba(203, 213, 225, 0.10)');
+      glassBodyGrad.addColorStop(0.55, 'rgba(148, 163, 184, 0.06)');
+      glassBodyGrad.addColorStop(0.88, 'rgba(226, 232, 240, 0.14)');
+      glassBodyGrad.addColorStop(1, 'rgba(148, 163, 184, 0.18)');
+    } else {
+      glassBodyGrad.addColorStop(0, 'rgba(226, 232, 240, 0.36)');
+      glassBodyGrad.addColorStop(0.16, 'rgba(255, 255, 255, 0.46)');
+      glassBodyGrad.addColorStop(0.52, 'rgba(241, 245, 249, 0.26)');
+      glassBodyGrad.addColorStop(0.86, 'rgba(255, 255, 255, 0.48)');
+      glassBodyGrad.addColorStop(1, 'rgba(226, 232, 240, 0.34)');
+    }
+    ctx.fillStyle = glassBodyGrad;
+    ctx.fill();
+    ctx.restore();
+
     // Liquid Fill - Dynamic wave/slosh surface + rounded base (fills 100% with no gaps)
     if (vol > 0 && liquidH > 2) {
       const surface = getLiquidSurfaceProfile(
@@ -3054,7 +3195,6 @@ function renderWideBasin(
         performance.now()
       );
 
-      const span = bw - 2 * cornerR;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(surface[0].x, surface[0].y);
@@ -3109,7 +3249,6 @@ function renderWideBasin(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const span = bw - 2 * cornerR;
     ctx.beginPath();
     // Spout top tip
     ctx.moveTo(x - spoutW, y + 1.5);
@@ -3205,6 +3344,37 @@ function drawFlaskPhysical(
   const isAboveNeck = liquidTopY < coneTopY;
   const t = isAboveNeck ? 0 : Math.max(0, Math.min(1, (liquidTopY - coneTopY) / Math.max(1, coneBotY - coneTopY)));
   const surfaceHalfW = isAboveNeck ? neckW / 2 : (neckW / 2) + t * (baseHalfW - neckW / 2);
+  const span = baseHalfW * 2 - 2 * cornerR;
+
+  // 0. Subtle Borosilicate Glass Body Sheen (so even when empty or above the liquid, the flask looks like real glass!)
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx + neckW / 2, y + collarH);
+  ctx.lineTo(cx + neckW / 2, y + neckH);
+  ctx.lineTo(cx + baseHalfW, y + bh - cornerR);
+  ctx.quadraticCurveTo(cx + baseHalfW, y + bh, cx + baseHalfW - cornerR, y + bh + botCurve * 0.25);
+  ctx.bezierCurveTo(
+    cx + baseHalfW - cornerR - span * 0.28,
+    y + bh + botCurve * 1.25,
+    cx - baseHalfW + cornerR + span * 0.28,
+    y + bh + botCurve * 1.25,
+    cx - baseHalfW + cornerR,
+    y + bh + botCurve * 0.25
+  );
+  ctx.quadraticCurveTo(cx - baseHalfW, y + bh, cx - baseHalfW, y + bh - cornerR);
+  ctx.lineTo(cx - neckW / 2, y + neckH);
+  ctx.lineTo(cx - neckW / 2, y + collarH);
+  ctx.closePath();
+
+  const glassBodyGrad = ctx.createLinearGradient(cx - baseHalfW, y, cx + baseHalfW, y);
+  glassBodyGrad.addColorStop(0, 'rgba(226, 232, 240, 0.34)');
+  glassBodyGrad.addColorStop(0.18, 'rgba(255, 255, 255, 0.44)');
+  glassBodyGrad.addColorStop(0.52, 'rgba(241, 245, 249, 0.24)');
+  glassBodyGrad.addColorStop(0.86, 'rgba(255, 255, 255, 0.46)');
+  glassBodyGrad.addColorStop(1, 'rgba(226, 232, 240, 0.32)');
+  ctx.fillStyle = glassBodyGrad;
+  ctx.fill();
+  ctx.restore();
 
   // Liquid Fill - Dynamic wave/slosh surface + smooth conical base
   if (vol > 0 && liquidH > 2) {
@@ -3222,7 +3392,6 @@ function drawFlaskPhysical(
       performance.now()
     );
 
-    const span = baseHalfW * 2 - 2 * cornerR;
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(surface[0].x, surface[0].y);
@@ -3348,7 +3517,6 @@ function drawFlaskPhysical(
 
   const collarLeft = cx - neckW / 2 - collarExt;
   const collarRight = cx + neckW / 2 + collarExt;
-  const span = baseHalfW * 2 - 2 * cornerR;
 
   // Body & Neck Outline
   ctx.beginPath();
@@ -3459,15 +3627,46 @@ function renderFlask(
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    if (!isSubmerged || basinWaterLocalY === null) {
+    if (!isSubmerged) {
       drawFlaskPhysical(
         ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
         state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
       );
-    } else {
-      const surfaceY = Math.max(y, basinWaterLocalY);
-      const bcs = parentBasin!.containerState!;
+    } else if (basinWaterLocalY === null) {
       const bPad = 8;
+      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+      const splitY = Math.max(y, basinRimLocalY);
+
+      if (splitY > y) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-30, -30, w + 60, splitY + 30);
+        ctx.clip();
+        drawFlaskPhysical(
+          ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
+        );
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-30, splitY, w + 60, h - splitY + 40);
+      ctx.clip();
+      ctx.globalAlpha = 0.58;
+      ctx.filter = 'blur(2.0px)';
+      drawFlaskPhysical(
+        ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+        state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId,
+        objX, objY, layer, true
+      );
+      ctx.restore();
+    } else {
+      const bPad = 8;
+      const basinRimLocalY = parentBasin!.y + bPad + 4 - (objY ?? 0);
+      const rimSplitY = Math.max(y, basinRimLocalY);
+      const surfaceY = Math.max(rimSplitY, basinWaterLocalY);
+      const bcs = parentBasin!.containerState!;
       const bBw = parentBasin!.width - bPad * 2;
       const bBh = parentBasin!.height - bPad * 2 - 6;
       const isBasin = parentBasin!.type === 'wide-basin';
@@ -3491,13 +3690,26 @@ function renderFlask(
       const dxBasin = parentBasin!.x - (objX ?? 0);
       const dyBasin = parentBasin!.y - (objY ?? 0);
 
-      // PASS 1: Emergent Part (in the air: from top down to outer vessel's actual wavy surface) - 100% sharp and crisp
-      if (surfaceY > y) {
+      // PASS 1: Emergent Part above outer container's rim (in open air: from top down to rimSplitY) - 100% sharp and crisp
+      if (rimSplitY > y) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-30, -30, w + 60, rimSplitY + 30);
+        ctx.clip();
+        drawFlaskPhysical(
+          ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
+          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
+        );
+        ctx.restore();
+      }
+
+      // PASS 1.5: Inside the outer container's empty glass region (from rimSplitY down to outer wavy liquid surface) - glass blur
+      if (surfaceY > rimSplitY - 4) {
         ctx.save();
         ctx.beginPath();
         if (basinSurface.length > 1) {
-          ctx.moveTo(-30, -30);
-          ctx.lineTo(w + 30, -30);
+          ctx.moveTo(-30, rimSplitY);
+          ctx.lineTo(w + 30, rimSplitY);
           ctx.lineTo(w + 30, basinSurface[basinSurface.length - 1].y + dyBasin);
           for (let i = basinSurface.length - 1; i >= 0; i--) {
             ctx.lineTo(basinSurface[i].x + dxBasin, basinSurface[i].y + dyBasin);
@@ -3505,12 +3717,14 @@ function renderFlask(
           ctx.lineTo(-30, basinSurface[0].y + dyBasin);
           ctx.closePath();
         } else {
-          ctx.rect(-15, -15, w + 30, surfaceY + 15);
+          ctx.rect(-15, rimSplitY, w + 30, Math.max(0, surfaceY - rimSplitY));
         }
         ctx.clip();
+        ctx.globalAlpha = 0.62;
+        ctx.filter = 'blur(1.8px)';
         drawFlaskPhysical(
           ctx, w, h, x, y, cx, neckW, neckH, collarH, collarExt, cornerR, baseHalfW, botCurve, bh,
-          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, false
+          state, liquidType, vol, liquidH, liquidTopY, strokeColor, objId, objX, objY, layer, true
         );
         ctx.restore();
       }
@@ -3705,31 +3919,38 @@ function renderThermometer(
   const liquidTopY = botY - stemH * tempFrac;
   const liquidColor = getThermometerColor(temp);
 
-  // Compute depth & submerged level if thermometer is dipped into a liquid container
+  // Compute glass rim level & liquid submerged level if thermometer is placed inside a container
+  let glassRimLocalY: number | null = null;
   let submergedLocalY: number | null = null;
   let dippedLiquidType: LiquidType = 'water';
-  if (dippedContainer && dippedContainer.containerState && dippedContainer.containerState.volumeMl > 0) {
-    const cs = dippedContainer.containerState;
-    dippedLiquidType = cs.liquidType || 'water';
-    const fillRatio = Math.max(0, Math.min(1.0, cs.volumeMl / cs.capacityMl));
+  if (dippedContainer) {
     const cPad = 8;
-    const cBh = dippedContainer.height - cPad * 2 - 6;
-    const isBasin = dippedContainer.type === 'wide-basin';
-    const cHeadspace = isBasin ? (0.15 * cBh + 8.5) * 0.40 : (0.14 * cBh + 8.6) * 0.40;
-    const cLiquidH = Math.max(0, (cBh - cHeadspace) * fillRatio);
-    const cLiquidTopY = cPad + 4 + cBh - cLiquidH;
-    const containerLiquidTopGlobalY = dippedContainer.y + cLiquidTopY;
-    submergedLocalY = containerLiquidTopGlobalY - (thermY ?? 0);
+    const containerRimGlobalY = dippedContainer.y + cPad + 4;
+    glassRimLocalY = containerRimGlobalY - (thermY ?? 0);
+
+    if (dippedContainer.containerState && dippedContainer.containerState.volumeMl > 0) {
+      const cs = dippedContainer.containerState;
+      dippedLiquidType = cs.liquidType || 'water';
+      const fillRatio = Math.max(0, Math.min(1.0, cs.volumeMl / cs.capacityMl));
+      const cBh = dippedContainer.height - cPad * 2 - 6;
+      const isBasin = dippedContainer.type === 'wide-basin';
+      const cHeadspace = isBasin ? (0.15 * cBh + 8.5) * 0.40 : (0.14 * cBh + 8.6) * 0.40;
+      const cLiquidH = Math.max(0, (cBh - cHeadspace) * fillRatio);
+      const cLiquidTopY = cPad + 4 + cBh - cLiquidH;
+      const containerLiquidTopGlobalY = dippedContainer.y + cLiquidTopY;
+      submergedLocalY = containerLiquidTopGlobalY - (thermY ?? 0);
+    }
   }
 
   // 1. Physical Thermometer Sketch (apparatus / all)
   if (layer === 'all' || layer === 'apparatus') {
     ctx.save();
 
-    const isDipped = submergedLocalY !== null && submergedLocalY < botY + bulbR + 3;
+    const isInsideGlass = glassRimLocalY !== null && glassRimLocalY < botY + bulbR + 3;
+    const isDippedInLiquid = submergedLocalY !== null && submergedLocalY < botY + bulbR + 3;
 
-    if (!isDipped) {
-      // Completely in the air: 100% sharp and crisp
+    if (!isInsideGlass && !isDippedInLiquid) {
+      // Completely outside in open air: 100% sharp and crisp
       drawThermometerApparatus(
         ctx,
         cx,
@@ -3747,14 +3968,15 @@ function renderThermometer(
         false
       );
     } else {
-      const surfaceY = Math.max(topY, submergedLocalY!);
+      const rimY = glassRimLocalY !== null ? Math.max(topY, glassRimLocalY) : topY;
+      const surfaceY = isDippedInLiquid ? Math.max(rimY, submergedLocalY!) : h + 10;
 
-      // PASS 1: Emergent Part (in the air: from 0 down to surfaceY)
+      // PASS 1: Emergent Part above the container rim (in open air: from 0 down to rimY)
       // Crystal clear, unblurred, full contrast
-      if (surfaceY > topY) {
+      if (rimY > topY) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(0, 0, w, surfaceY);
+        ctx.rect(0, 0, w, rimY);
         ctx.clip();
         drawThermometerApparatus(
           ctx,
@@ -3775,47 +3997,70 @@ function renderThermometer(
         ctx.restore();
       }
 
-      // PASS 2: Submerged Part (inside liquid: from surfaceY downwards)
-      // Realistic liquid refraction & diffusion blur according to liquid optical density:
-      // - Milk: almost completely invisible (σχεδόν αόρατο, opaque white)
-      // - Oil: heavily obscured & deep refractive blur (ήπια σκιά μέσα στο λάδι)
-      // - Water: strong liquid diffusion blur (έντονο θόλωμα υγρού)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, surfaceY, w, h - surfaceY + 10);
-      ctx.clip();
-
-      if (dippedLiquidType === 'milk') {
-        // Milk: softened & diffused shadow ("πολύ θολό και άχνο", partially discernible)
-        ctx.globalAlpha = 0.22;
-        ctx.filter = 'blur(4.5px)';
-      } else if (dippedLiquidType === 'oil') {
-        // Oil: slightly more transparent, diffused & refracted in amber-olive oil
-        ctx.globalAlpha = 0.32;
-        ctx.filter = 'blur(3.8px)';
-      } else {
-        // Water: transparent liquid refraction
-        ctx.globalAlpha = 0.55;
-        ctx.filter = 'blur(3.2px)';
+      // PASS 2: Inside the Empty Glass Part of the Container (from rimY down to surfaceY)
+      // Softened and blurred as if viewed through the front borosilicate glass wall ("σαν να βάλαμε μπροστά γυαλί")!
+      if (surfaceY > rimY) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, rimY, w, surfaceY - rimY);
+        ctx.clip();
+        ctx.globalAlpha = 0.50;
+        ctx.filter = 'blur(2.2px)';
+        drawThermometerApparatus(
+          ctx,
+          cx,
+          topY,
+          botY,
+          stemW,
+          stemH,
+          bulbR,
+          temp,
+          tempFrac,
+          liquidTopY,
+          liquidColor,
+          strokeColor,
+          isDark,
+          true
+        );
+        ctx.restore();
       }
 
-      drawThermometerApparatus(
-        ctx,
-        cx,
-        topY,
-        botY,
-        stemW,
-        stemH,
-        bulbR,
-        temp,
-        tempFrac,
-        liquidTopY,
-        liquidColor,
-        strokeColor,
-        isDark,
-        true
-      );
-      ctx.restore();
+      // PASS 3: Submerged Part inside Liquid (from surfaceY downwards)
+      if (isDippedInLiquid) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, surfaceY, w, h - surfaceY + 10);
+        ctx.clip();
+
+        if (dippedLiquidType === 'milk') {
+          ctx.globalAlpha = 0.22;
+          ctx.filter = 'blur(4.5px)';
+        } else if (dippedLiquidType === 'oil') {
+          ctx.globalAlpha = 0.32;
+          ctx.filter = 'blur(3.8px)';
+        } else {
+          ctx.globalAlpha = 0.48;
+          ctx.filter = 'blur(3.2px)';
+        }
+
+        drawThermometerApparatus(
+          ctx,
+          cx,
+          topY,
+          botY,
+          stemW,
+          stemH,
+          bulbR,
+          temp,
+          tempFrac,
+          liquidTopY,
+          liquidColor,
+          strokeColor,
+          isDark,
+          true
+        );
+        ctx.restore();
+      }
     }
 
     ctx.restore();

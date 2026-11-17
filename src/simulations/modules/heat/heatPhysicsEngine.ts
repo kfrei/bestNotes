@@ -89,7 +89,7 @@ export function findDippedVesselForThermometer(
 
   const matching = allObjects.filter((c) => {
     if (c.type !== 'beaker' && c.type !== 'flask' && c.type !== 'wide-basin') return false;
-    if (!c.containerState || c.containerState.volumeMl <= 0) return false;
+    if (requireBulbInLiquid && (!c.containerState || c.containerState.volumeMl <= 0)) return false;
 
     const isHorizInside = bulbX >= c.x + 4 && bulbX <= c.x + c.width - 4;
     if (!isHorizInside) return false;

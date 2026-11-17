@@ -11394,13 +11394,9 @@ export default function App() {
           const liveSim = (isCurrentActivePage && (heatSim as any).getLiveSim)
             ? (heatSim as any).getLiveSim()
             : hSim;
-          if (
-            isCurrentActivePage &&
-            (liveSim?.isRunning ||
-              (heatSim as any).isDragging?.() ||
-              liveSim?.objects?.some((o: any) => o.type === 'burner' && o.burnerState?.isOn) ||
-              liveSim?.objects?.some((o: any) => o.containerState && (o.containerState.temperature > 30 || o.containerState.isBoiling)))
-          ) {
+          // On the active page, Layer 1.5 (simCanvas) renders the entire Heat Simulation ('all' layer),
+          // so never double-render the apparatus on staticCanvas (which would double the alpha of blurred elements)!
+          if (isCurrentActivePage) {
             continue;
           }
           renderHeatSimulation(ctx, liveSim || hSim, { isDark, layer: 'apparatus' });
