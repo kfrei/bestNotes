@@ -4550,7 +4550,7 @@ function renderThermometer(
     ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6.5);
     ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)';
     ctx.fill();
-    ctx.strokeStyle = liquidColor;
+    ctx.strokeStyle = customColor || liquidColor;
     ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.restore();

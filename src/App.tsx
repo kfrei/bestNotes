@@ -65462,9 +65462,9 @@ export default function App() {
                   setHeatStopwatchRunning(false);
                   heatSim.pauseHeatingAndSim();
                 }}
-                sourceTitle="Θερμότητα"
-                sourceBadgeColor="amber"
                 storagePrefix="heat"
+                ambientTemperature={heatSim.activeHeatSim?.ambientTemperature ?? 20}
+                onSetAmbientTemperature={heatSim.setAmbientTemperature}
                 onTogglePlayPause={() => {
                   const nextRunning = !heatStopwatchRunning;
                   setHeatStopwatchRunning(nextRunning);
