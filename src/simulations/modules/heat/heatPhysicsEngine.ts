@@ -13,7 +13,9 @@ import {
 } from './types';
 
 export const ROOM_TEMPERATURE_C = 20.0;
-const WATER_BATH_HEAT_TRANSFER_COEFF = 42.0; // W / °C effective contact conduction between nested vessels
+// Calibrated to 6.35 W/°C for borosilicate glass wall conduction so thermal equilibrium
+// between nested vessels stabilizes over ~10–12 minutes, matching the Greek school textbook!
+const WATER_BATH_HEAT_TRANSFER_COEFF = 6.35; // W / °C effective contact conduction between nested vessels
 
 /**
  * Finds the outer vessel (water bath / larger beaker / basin) in which `inner` is physically nested.
@@ -311,9 +313,9 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
       const coolDelta = cs.temperature - ambientTemp;
       if (Math.abs(coolDelta) > 0.005) {
         const baseEnvWattsPerDeg = 1.78 * Math.pow(Math.max(50, cs.volumeMl) / 500, 0.45);
-        // When nested in a water bath, the inner vessel is largely shielded by the outer liquid,
-        // and the ambient environment plays a subtle secondary role compared to inter-vessel heat exchange.
-        const envShieldFactor = cs.parentBasinId ? 0.12 : cs.nestedVesselId ? 0.22 : 1.0;
+        // When nested in a water bath, the inner vessel is shielded by the outer liquid,
+        // and the ambient environment plays a subtle secondary role over the ~12-minute equilibration.
+        const envShieldFactor = cs.parentBasinId ? 0.03 : cs.nestedVesselId ? 0.05 : 1.0;
         const dQEnv = envShieldFactor * baseEnvWattsPerDeg * coolDelta * timeStep;
         cs.temperature -= dQEnv / heatCapJoulesPerC;
       }
@@ -364,9 +366,13 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     const capOuter = Math.max(1, mOuter * cOuter);
     const capInner = Math.max(1, mInner * cInner);
 
+    // Contact area scales gently with the wetted liquid level of the submerged vessel
+    const wettedScale = Math.pow(Math.max(80, Math.min(bs.volumeMl, is.volumeMl)) / 500, 0.55);
+    const effectiveK = WATER_BATH_HEAT_TRANSFER_COEFF * wettedScale;
+
     const instEq = (capOuter * bs.temperature + capInner * is.temperature) / (capOuter + capInner);
     const tempDiff = bs.temperature - is.temperature; // Outer - Inner
-    const rawDQ = WATER_BATH_HEAT_TRANSFER_COEFF * tempDiff * timeStep; // Joules
+    const rawDQ = effectiveK * tempDiff * timeStep; // Joules
     // Clamp so vessels converge smoothly to instEq without overshooting in a single step
     const maxDQ = Math.abs(bs.temperature - instEq) * capOuter;
     const dQ = Math.sign(rawDQ) * Math.min(Math.abs(rawDQ), maxDQ);

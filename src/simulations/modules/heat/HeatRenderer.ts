@@ -26,7 +26,6 @@ import {
   FlameIntensity,
 } from './types';
 import {
-  calculateEquilibriumTemperature,
   findDippedVesselForThermometer,
   findParentVessel,
 } from './heatPhysicsEngine';
@@ -4186,53 +4185,23 @@ function renderThermalGraph(
 
   // Plot Curves from history
   if (sim.history.length > 1) {
-    // Determine if any plotted container is part of a nested water-bath pair (e.g., Γ inside Β)
-    let nestedEqTemp: number | undefined;
-    for (const cId of boundIds) {
-      const cObj = sim.objects.find((o) => o.id === cId);
-      if (!cObj?.containerState) continue;
-      const partner =
-        (cObj.containerState.parentBasinId &&
-          sim.objects.find((o) => o.id === cObj.containerState?.parentBasinId)) ||
-        (cObj.containerState.nestedVesselId &&
-          sim.objects.find((o) => o.id === cObj.containerState?.nestedVesselId)) ||
-        findParentVessel(cObj, sim.objects) ||
-        sim.objects.find(
-          (o) =>
-            (o.type === 'beaker' || o.type === 'flask' || o.type === 'wide-basin') &&
-            findParentVessel(o, sim.objects)?.id === cObj.id
-        );
-      if (partner?.containerState && cObj.containerState.volumeMl > 0 && partner.containerState.volumeMl > 0) {
-        nestedEqTemp = calculateEquilibriumTemperature(cObj.containerState, partner.containerState);
-        break;
-      }
-    }
-
+    // Only draw the ambient room temperature line (θπεριβάλλοντος);
+    // do NOT draw a dashed spoiler line at θισορ so students discover the equilibrium temperature themselves!
     const ambient = sim.ambientTemperature ?? 20.0;
-    const isNestedEquilibrium = nestedEqTemp !== undefined;
-    const lastEq = isNestedEquilibrium
-      ? nestedEqTemp
-      : sim.history[sim.history.length - 1].tempEquilibrium ?? ambient;
-
-    if (lastEq !== undefined) {
-      const eqY = mapY(lastEq);
-      ctx.save();
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(plotX, eqY);
-      ctx.lineTo(plotX + plotW, eqY);
-      ctx.stroke();
-      ctx.fillStyle = '#059669';
-      ctx.font = 'bold 8.5px system-ui, sans-serif';
-      ctx.textAlign = 'right';
-      const eqLabel = isNestedEquilibrium
-        ? `θισορ = ${lastEq.toFixed(1)}°C`
-        : `θπεριβάλλοντος = ${lastEq.toFixed(1)}°C`;
-      ctx.fillText(eqLabel, plotX + plotW - 4, eqY - 4);
-      ctx.restore();
-    }
+    const eqY = mapY(ambient);
+    ctx.save();
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(plotX, eqY);
+    ctx.lineTo(plotX + plotW, eqY);
+    ctx.stroke();
+    ctx.fillStyle = '#059669';
+    ctx.font = 'bold 8.5px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`θπεριβάλλοντος = ${ambient.toFixed(1)}°C`, plotX + plotW - 4, eqY - 4);
+    ctx.restore();
 
     let legendX = plotX + 32;
     const legendY = gy + 34;
