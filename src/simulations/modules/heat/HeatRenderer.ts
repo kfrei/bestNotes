@@ -3113,7 +3113,7 @@ function renderBeaker(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  _isSelected: boolean,
+  isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
   customColor?: string,
   objId?: string,
@@ -3345,29 +3345,31 @@ function renderBeaker(
   }
 
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
-  // When submerged, slides smoothly up to the top-right empty area!
+  // Hidden when the container's selection frame is active so the right-side orange resize handle is unobstructed!
   if (layer === 'all' || layer === 'ui') {
-    const outerRimLocalY = computeEffectiveOuterRimLocalY(
-      objX ?? 0,
-      objY ?? 0,
-      w,
-      'beaker',
-      parentBasin,
-      _allObjects
-    );
-    renderContainerActionButtons(
-      ctx,
-      objId,
-      w,
-      h,
-      isDark,
-      state,
-      isGraphActive,
-      isSubmerged,
-      'beaker',
-      outerRimLocalY,
-      customColor
-    );
+    if (!isSelected) {
+      const outerRimLocalY = computeEffectiveOuterRimLocalY(
+        objX ?? 0,
+        objY ?? 0,
+        w,
+        'beaker',
+        parentBasin,
+        _allObjects
+      );
+      renderContainerActionButtons(
+        ctx,
+        objId,
+        w,
+        h,
+        isDark,
+        state,
+        isGraphActive,
+        isSubmerged,
+        'beaker',
+        outerRimLocalY,
+        customColor
+      );
+    }
     if (letter && color) {
       renderContainerLetterBadge(
         ctx,
@@ -3396,7 +3398,7 @@ function renderWideBasin(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  _isSelected: boolean,
+  isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
   customColor?: string,
   objId?: string,
@@ -3597,20 +3599,23 @@ function renderWideBasin(
   }
 
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph) at bottom-right
+  // Hidden when the container's selection frame is active so the right-side orange resize handle is unobstructed!
   if (layer === 'all' || layer === 'ui') {
-    renderContainerActionButtons(
-      ctx,
-      objId,
-      w,
-      h,
-      isDark,
-      state,
-      isGraphActive,
-      false,
-      'wide-basin',
-      null,
-      customColor
-    );
+    if (!isSelected) {
+      renderContainerActionButtons(
+        ctx,
+        objId,
+        w,
+        h,
+        isDark,
+        state,
+        isGraphActive,
+        false,
+        'wide-basin',
+        null,
+        customColor
+      );
+    }
     if (letter && color) {
       renderContainerLetterBadge(ctx, letter, color, x + 16, y + bh - 10, isDark);
     }
@@ -3869,7 +3874,7 @@ function renderFlask(
   h: number,
   state: HeatContainerState | undefined,
   isDark: boolean,
-  _isSelected: boolean,
+  isSelected: boolean,
   layer: 'all' | 'apparatus' | 'ui' = 'all',
   customColor?: string,
   objId?: string,
@@ -4097,29 +4102,31 @@ function renderFlask(
   }
 
   // 2. Permanent Discreet Action Buttons (Droplet, Pencil & Graph)
-  // When submerged, slides smoothly up to the top-right empty area!
+  // Hidden when the container's selection frame is active so the right-side orange resize handle is unobstructed!
   if (layer === 'all' || layer === 'ui') {
-    const outerRimLocalY = computeEffectiveOuterRimLocalY(
-      objX ?? 0,
-      objY ?? 0,
-      w,
-      'flask',
-      parentBasin,
-      _allObjects
-    );
-    renderContainerActionButtons(
-      ctx,
-      objId,
-      w,
-      h,
-      isDark,
-      state,
-      isGraphActive,
-      isSubmerged,
-      'flask',
-      outerRimLocalY,
-      customColor
-    );
+    if (!isSelected) {
+      const outerRimLocalY = computeEffectiveOuterRimLocalY(
+        objX ?? 0,
+        objY ?? 0,
+        w,
+        'flask',
+        parentBasin,
+        _allObjects
+      );
+      renderContainerActionButtons(
+        ctx,
+        objId,
+        w,
+        h,
+        isDark,
+        state,
+        isGraphActive,
+        isSubmerged,
+        'flask',
+        outerRimLocalY,
+        customColor
+      );
+    }
     if (letter && color) {
       renderContainerLetterBadge(
         ctx,

@@ -1041,9 +1041,16 @@ export function useHeatSimulation(
       const sim = liveSimRef.current || activeHeatSim;
       if (!sim) return false;
 
+      const selectedIds =
+        sim.selectedObjectIds && sim.selectedObjectIds.length > 0
+          ? sim.selectedObjectIds
+          : sim.selectedObjectId
+          ? [sim.selectedObjectId]
+          : [];
+
       // 0. Permanent Flame Toggle Button (bottom-right of burner cast-iron base)
       for (const obj of sim.objects) {
-        if (obj.type === 'burner') {
+        if (obj.type === 'burner' && !selectedIds.includes(obj.id)) {
           const { btnCenterX, btnCenterY } = getBurnerActionButtonWorldPos(obj);
           if (Math.hypot(lx - btnCenterX, ly - btnCenterY) <= 16) {
             setSelectedObjectIds([]);
@@ -1054,9 +1061,12 @@ export function useHeatSimulation(
       }
 
       // 0b. Permanent Container Action Buttons (Droplet, Pencil & Graph at bottom-right of container glassware)
-      // Clicking these action buttons directly toggles actions without lasso-selecting the container!
+      // Hidden & inactive when the container's selection frame is active!
       for (const obj of sim.objects) {
-        if (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') {
+        if (
+          (obj.type === 'beaker' || obj.type === 'wide-basin' || obj.type === 'flask') &&
+          !selectedIds.includes(obj.id)
+        ) {
           const { dropletX, dropletY, pencilX, pencilY, graphX, graphY } =
             getContainerActionButtonsWorldPos(obj, sim.objects);
           const dDroplet = Math.hypot(lx - dropletX, ly - dropletY);
@@ -1154,12 +1164,6 @@ export function useHeatSimulation(
       }
 
       // 2. Check if currently selected object's Handles / Action Pills were clicked!
-      const selectedIds =
-        sim.selectedObjectIds && sim.selectedObjectIds.length > 0
-          ? sim.selectedObjectIds
-          : sim.selectedObjectId
-          ? [sim.selectedObjectId]
-          : [];
       const selectedObjs = sim.objects.filter((o) => selectedIds.includes(o.id));
 
       // 2A. Multiple objects selected: Check Group Selection Handles, Trash Button, and Group Drag
