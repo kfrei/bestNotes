@@ -2354,6 +2354,7 @@ export default function App() {
     magnetTargetStrokeId?: string;
     magnetCandidateId?: string;
     magnetStartTime?: number;
+    hasMoved?: boolean;
   } | null>(null);
   const forceOverlayHitRef = useRef<{
     simId: string;
@@ -11717,7 +11718,7 @@ export default function App() {
       const pageForceSims = pageObj.forceSims || [];
       const activePageForceSim =
         pageForceSims.find((fs) => fs.id === pageObj.activeForceSimId) || pageForceSims[0] || null;
-      if (activePageForceSim && activePageForceSim.mode === 'pendulum') {
+      if (isCurrentActivePage && activePageForceSim && activePageForceSim.mode === 'pendulum') {
         if (activePageForceSim.primaryStrokeId) {
           hiddenNaturalSpringIds.add(activePageForceSim.primaryStrokeId);
         }
@@ -12034,8 +12035,8 @@ export default function App() {
               continue;
             }
           }
-          // While a pendulum force simulation is active on the current page, hide the static rod & bob strokes so only the 60fps swinging pendulum renders on the overlay!
-          if (isCurrentActivePage && showSimulationPanel && simActiveCategory === 'forces') {
+          // While a pendulum force simulation is active on the current page, hide the static rod & bob strokes so only the interactive pendulum renders on the overlay!
+          if (isCurrentActivePage) {
             const actForceSim =
               (pageObj.forceSims || []).find((fs) => fs.id === pageObj.activeForceSimId) ||
               (pageObj.forceSims || [])[0];
@@ -27071,10 +27072,9 @@ export default function App() {
       pageHeatSims.length > 0 ||
       (showSimulationPanel && simActiveCategory === 'heat');
     const hasAtomOverlay =
-      (isSimModeActive || atomReactionAnim !== null || draggingAtomHandleRef.current !== null) &&
-      (pageAtomSims.length > 0 ||
-        atomReactionAnim !== null ||
-        draggingAtomHandleRef.current !== null);
+      pageAtomSims.length > 0 ||
+      atomReactionAnim !== null ||
+      draggingAtomHandleRef.current !== null;
     const allPageForceVectors = activePage.strokes.filter(
       (st) =>
         (st.shapeType === 'spring-pointer' ||
@@ -27090,21 +27090,19 @@ export default function App() {
         )
     );
     const hasForceOverlay =
-      (isSimModeActive || forceSimAnim !== null || draggingForceHandleRef.current !== null) &&
-      (Boolean(activeForceSim) ||
-        (allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
-        forceSimAnim !== null ||
-        draggingForceHandleRef.current !== null);
+      Boolean(activeForceSim) ||
+      (isSimModeActive && allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
+      forceSimAnim !== null ||
+      draggingForceHandleRef.current !== null;
     const hasSpringOverlay =
-      (isSimModeActive ||
-        Boolean(springSettleAnim?.springStrokeId) ||
-        springSettleAnim !== null ||
-        springPhaseShiftAnim !== null ||
-        draggingSpringMassRef.current !== null ||
-        draggingSpringAmpHandleRef.current !== null ||
-        draggingSpringGraphResizeRef.current !== null ||
-        draggingSpringGraphRef.current !== null) &&
-      (Boolean(springSettleAnim?.springStrokeId) || Boolean(activeSpringSim));
+      Boolean(activeSpringSim) ||
+      Boolean(springSettleAnim?.springStrokeId) ||
+      springSettleAnim !== null ||
+      springPhaseShiftAnim !== null ||
+      draggingSpringMassRef.current !== null ||
+      draggingSpringAmpHandleRef.current !== null ||
+      draggingSpringGraphResizeRef.current !== null ||
+      draggingSpringGraphRef.current !== null;
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
     const hasAnySimInLivePdf =
@@ -28482,6 +28480,7 @@ export default function App() {
           const showSpringOscGuides =
             !isSettlingToEq &&
             (isSpringSimulating ||
+              Boolean(activeSpringSim) ||
               (showSimulationPanel && simActiveCategory === 'springs') ||
               draggingSpringMassRef.current?.simId === activeSpringSim.id ||
               draggingSpringAmpHandleRef.current?.simId === activeSpringSim.id ||
@@ -42016,6 +42015,10 @@ export default function App() {
       }
 
       if (dragF.kind === 'pendulum-bob') {
+        if (!dragF.hasMoved && Math.hypot(latestPt.x - dragF.startX, latestPt.y - dragF.startY) <= 6) {
+          return;
+        }
+        dragF.hasMoved = true;
         const curForceSim = getActiveForceSim(activePage);
         if (curForceSim && curForceSim.id === dragF.simId) {
           const px = curForceSim.originX;
@@ -47058,63 +47061,117 @@ export default function App() {
         if (fSim && pState) {
           const curA = pState.ang;
           const absA = Math.abs(curA);
-          pState.av = 0;
-          pState.lastTime = performance.now();
-          // When pendulum stopwatch is open, releasing the bob starts oscillation & starts the stopwatch automatically!
-          const shouldStartOscillation =
-            showPendulumStopwatch || (!fSim.isPaused && (!fSim.anMode || fSim.anMode === 'none'));
-          const shouldStayPaused = !shouldStartOscillation;
-          if (absA > 0.04) {
-            pState.maxAngleRad = absA;
-            if (showPendulumStopwatch) {
-              setPendulumStopwatchElapsedMs(0);
-              setPendulumStopwatchRunning(true);
+          const wasSimpleClick = !finishedForceDrag.hasMoved;
+
+          if (wasSimpleClick) {
+            if (fSim.isPaused && absA > 0.02) {
+              // 1-Click on displaced pendulum bob -> Start oscillation!
+              pState.av = 0;
+              pState.lastTime = performance.now();
+              pState.maxAngleRad = absA;
+              if (showPendulumStopwatch) {
+                setPendulumStopwatchRunning(true);
+              }
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).map((f) =>
+                    f.id === fSim.id
+                      ? {
+                          ...f,
+                          isPaused: false,
+                          pendulumAngleRad: curA,
+                          pendulumInitialAngleRad: curA,
+                          pendulumMaxAngleRad: absA,
+                          angleDeg: Math.round((absA * 180) / Math.PI),
+                        }
+                      : f
+                  ),
+                }),
+                false
+              );
+            } else if (!fSim.isPaused) {
+              // 1-Click on swinging pendulum bob -> Pause oscillation at current position!
+              pState.av = 0;
+              pState.lastTime = performance.now();
+              if (showPendulumStopwatch) {
+                setPendulumStopwatchRunning(false);
+              }
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).map((f) =>
+                    f.id === fSim.id
+                      ? {
+                          ...f,
+                          isPaused: true,
+                          pendulumAngleRad: curA,
+                        }
+                      : f
+                  ),
+                }),
+                false
+              );
             }
-            updateActivePage(
-              (p) => ({
-                ...p,
-                forceSims: (p.forceSims || []).map((f) =>
-                  f.id === fSim.id
-                    ? {
-                        ...f,
-                        isPaused: shouldStayPaused,
-                        pendulumAngleRad: curA,
-                        pendulumInitialAngleRad: curA,
-                        pendulumMaxAngleRad: absA,
-                        angleDeg: Math.round((absA * 180) / Math.PI),
-                      }
-                    : f
-                ),
-              }),
-              false
-            );
           } else {
-            // Snapped and locked at vertical equilibrium (θ = 0)
-            pState.ang = 0;
             pState.av = 0;
-            pState.maxAngleRad = 0;
-            if (showPendulumStopwatch) {
-              setPendulumStopwatchRunning(false);
-              setPendulumStopwatchElapsedMs(0);
+            pState.lastTime = performance.now();
+            // After dragging to an extreme position:
+            // If the pendulum stopwatch is open, releasing starts oscillation & stopwatch;
+            // otherwise hold at the extreme position (isPaused: true) so a single click on the bob starts it!
+            const shouldStayPaused = !showPendulumStopwatch;
+            if (absA > 0.04) {
+              pState.maxAngleRad = absA;
+              if (showPendulumStopwatch) {
+                setPendulumStopwatchElapsedMs(0);
+                setPendulumStopwatchRunning(true);
+              }
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).map((f) =>
+                    f.id === fSim.id
+                      ? {
+                          ...f,
+                          isPaused: shouldStayPaused,
+                          pendulumAngleRad: curA,
+                          pendulumInitialAngleRad: curA,
+                          pendulumMaxAngleRad: absA,
+                          angleDeg: Math.round((absA * 180) / Math.PI),
+                        }
+                      : f
+                  ),
+                }),
+                false
+              );
+            } else {
+              // Snapped and locked at vertical equilibrium (θ = 0)
+              pState.ang = 0;
+              pState.av = 0;
+              pState.maxAngleRad = 0;
+              if (showPendulumStopwatch) {
+                setPendulumStopwatchRunning(false);
+                setPendulumStopwatchElapsedMs(0);
+              }
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).map((f) =>
+                    f.id === fSim.id
+                      ? {
+                          ...f,
+                          isPaused: true,
+                          pendulumAngleRad: 0,
+                          pendulumInitialAngleRad: 0,
+                          pendulumMaxAngleRad: 0,
+                          angleDeg: 0,
+                        }
+                      : f
+                  ),
+                }),
+                false
+              );
             }
-            updateActivePage(
-              (p) => ({
-                ...p,
-                forceSims: (p.forceSims || []).map((f) =>
-                  f.id === fSim.id
-                    ? {
-                        ...f,
-                        isPaused: true,
-                        pendulumAngleRad: 0,
-                        pendulumInitialAngleRad: 0,
-                        pendulumMaxAngleRad: 0,
-                        angleDeg: 0,
-                      }
-                    : f
-                ),
-              }),
-              false
-            );
           }
         }
       }
@@ -58805,6 +58862,29 @@ export default function App() {
                             if ((activePage.atomSims || []).length > 0) return 'atoms';
                             return 'heat';
                           });
+                        } else {
+                          // When closing the panel, pause active motion while keeping all simulations visible on paper
+                          if (isSimulating) setIsSimulating(false);
+                          if (isSpringSimulating && !isSpringPaused) setIsSpringPaused(true);
+                          if (!showHeatStopwatch && heatSim.activeHeatSim?.isRunning) {
+                            heatSim.pauseHeatingAndSim();
+                          }
+                          const curF = getActiveForceSim(activePage);
+                          if (curF && curF.mode === 'pendulum' && !curF.isPaused && !showPendulumStopwatch) {
+                            const pSt = pendulumPhysRef.current[curF.id];
+                            updateActivePage(
+                              (p) => ({
+                                ...p,
+                                forceSims: (p.forceSims || []).map((f) =>
+                                  f.id === curF.id
+                                    ? { ...f, isPaused: true, pendulumAngleRad: pSt?.ang ?? f.pendulumAngleRad }
+                                    : f
+                                ),
+                              }),
+                              false
+                            );
+                          }
+                          queueMicrotask(() => renderStaticSceneRef.current?.());
                         }
                         // Do NOT reset simActiveCategory when closing, so user's active tab is preserved!
                         return next;
@@ -62789,7 +62869,28 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setShowSimulationPanel(false);
-                      // Preserve simActiveCategory so reopening restores the active tab (e.g. 'heat')
+                      // Pause active motion when closing the control panel, while keeping all simulations visible on paper
+                      if (isSimulating) setIsSimulating(false);
+                      if (isSpringSimulating && !isSpringPaused) setIsSpringPaused(true);
+                      if (!showHeatStopwatch && heatSim.activeHeatSim?.isRunning) {
+                        heatSim.pauseHeatingAndSim();
+                      }
+                      const curF = getActiveForceSim(activePage);
+                      if (curF && curF.mode === 'pendulum' && !curF.isPaused && !showPendulumStopwatch) {
+                        const pSt = pendulumPhysRef.current[curF.id];
+                        updateActivePage(
+                          (p) => ({
+                            ...p,
+                            forceSims: (p.forceSims || []).map((f) =>
+                              f.id === curF.id
+                                ? { ...f, isPaused: true, pendulumAngleRad: pSt?.ang ?? f.pendulumAngleRad }
+                                : f
+                            ),
+                          }),
+                          false
+                        );
+                      }
+                      renderStaticSceneRef.current();
                     }}
                     className="p-1 rounded-lg hover:bg-[#efebe3] text-[#64748b] hover:text-[#234978] cursor-pointer transition"
                     title="Κλείσιμο παραθύρου"
