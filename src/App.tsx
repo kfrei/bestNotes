@@ -1240,6 +1240,20 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
           nextPts = spikeRepair.points;
           strokeChanged = true;
         }
+        const compacted = compactStrokeForStorage(
+          strokeChanged
+            ? {
+                ...s,
+                points: nextPts,
+                fillStyle: nextFillStyle,
+                fillColor: nextFillColor,
+              }
+            : s
+        );
+        if (compacted.points !== s.points) {
+          nextPts = compacted.points;
+          strokeChanged = true;
+        }
         if (strokeChanged) {
           pageModified = true;
           repaired = true;

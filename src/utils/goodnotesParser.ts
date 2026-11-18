@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { Notebook, NotePage, StrokeObject, BezierPoint, TextObject } from '../types/note';
-import { compactStrokeForStorage } from '../services/storage/storageCleaners';
+import { cleanNotebookForStorage, compactStrokeForStorage } from '../services/storage/storageCleaners';
 
 /**
  * Decompresses an Apple 'bv41' raw LZ4 block into a Uint8Array.
@@ -331,9 +331,9 @@ export function createBestnotesFileBlob(notebook: Notebook): { blob: Blob; fileN
   const payload = {
     format: 'bestnotes-v2',
     exportedAt: new Date().toISOString(),
-    notebook,
+    notebook: cleanNotebookForStorage(notebook),
   };
-  const jsonStr = JSON.stringify(payload, null, 2);
+  const jsonStr = JSON.stringify(payload);
   const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
   const safeTitle =
     (notebook.title || 'Σημείωση')
