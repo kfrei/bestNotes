@@ -65,9 +65,50 @@ export function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind
   return null;
 }
 
+const circuitCompsByArrayCache = new WeakMap<StrokeObject[], CircuitComponentInfo[]>();
+const circuitCompsBySigCache = new Map<string, CircuitComponentInfo[]>();
+
+function buildCircuitStrokesFastSig(strokes: StrokeObject[]): string | null {
+  if (strokes.length > 96) return null;
+  let sig = `${strokes.length}:`;
+  for (let i = 0; i < strokes.length; i++) {
+    const s = strokes[i];
+    const p0 = s.points[0];
+    const pN = s.points[s.points.length - 1];
+    sig += `${s.id},${s.points.length},${p0 ? Math.round(p0.x * 2) : 0},${p0 ? Math.round(p0.y * 2) : 0},${pN ? Math.round(pN.x * 2) : 0},${pN ? Math.round(pN.y * 2) : 0};`;
+  }
+  return sig;
+}
+
 export function getCircuitComponentsWithTerminals(
   strokes: StrokeObject[]
 ): CircuitComponentInfo[] {
+  if (!strokes || strokes.length === 0) return [];
+  const cachedByRef = circuitCompsByArrayCache.get(strokes);
+  if (cachedByRef) return cachedByRef;
+
+  let hasAnyCircuitComp = false;
+  for (let i = 0; i < strokes.length; i++) {
+    if (classifyCircuitStrokeKind(strokes[i]) !== null) {
+      hasAnyCircuitComp = true;
+      break;
+    }
+  }
+  if (!hasAnyCircuitComp) {
+    const empty: CircuitComponentInfo[] = [];
+    circuitCompsByArrayCache.set(strokes, empty);
+    return empty;
+  }
+
+  const fastSig = buildCircuitStrokesFastSig(strokes);
+  if (fastSig) {
+    const cachedBySig = circuitCompsBySigCache.get(fastSig);
+    if (cachedBySig) {
+      circuitCompsByArrayCache.set(strokes, cachedBySig);
+      return cachedBySig;
+    }
+  }
+
   interface CompCandidate {
     stroke: StrokeObject;
     kind: CircuitComponentKind;
@@ -442,6 +483,14 @@ export function getCircuitComponentsWithTerminals(
     });
   }
 
+  circuitCompsByArrayCache.set(strokes, out);
+  if (fastSig) {
+    if (circuitCompsBySigCache.size >= 64) {
+      const oldest = circuitCompsBySigCache.keys().next().value;
+      if (oldest !== undefined) circuitCompsBySigCache.delete(oldest);
+    }
+    circuitCompsBySigCache.set(fastSig, out);
+  }
   return out;
 }
 
@@ -6426,9 +6475,12 @@ function analyzeCircuitForSimulationUncached(
     const visited = new Uint8Array(nodeCenters.length);
     const pathNodes: number[] = [startNode];
     const pathEdges: GraphEdge[] = [];
+    let dfsSteps = 0;
+    const MAX_DFS_STEPS = 2048;
 
     const dfs = (curr: number, depth: number) => {
-      if (depth > 32) return;
+      if (depth > 28 || dfsSteps > MAX_DFS_STEPS) return;
+      dfsSteps++;
       if (targetNodes.has(curr) && pathEdges.length >= 1) {
         anyClosedLoop = true;
         for (const nIdx of pathNodes) nodeInLoop[nIdx] = 1;
@@ -6476,6 +6528,7 @@ function analyzeCircuitForSimulationUncached(
     isFixed[primarySourceNode.v] = 1;
 
     for (let iter = 0; iter < 240; iter++) {
+      let maxDelta = 0;
       for (let u = 0; u < nodeCenters.length; u++) {
         if (isFixed[u] || !nodeInLoop[u]) continue;
         let sumGV = 0;
@@ -6489,9 +6542,13 @@ function analyzeCircuitForSimulationUncached(
           sumG += g;
         }
         if (sumG > 0) {
-          V[u] = sumGV / sumG;
+          const nextVu = sumGV / sumG;
+          const d = Math.abs(nextVu - V[u]);
+          if (d > maxDelta) maxDelta = d;
+          V[u] = nextVu;
         }
       }
+      if (iter >= 4 && maxDelta < 1e-5) break;
     }
 
     const voltageBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
@@ -7117,6 +7174,7 @@ function analyzeCircuitForSimulationUncached(
     fixedGen[primarySourceNode.v] = 1;
 
     for (let iter = 0; iter < 200; iter++) {
+      let maxDelta = 0;
       for (let u = 0; u < nodeCenters.length; u++) {
         if (fixedGen[u] || !Number.isFinite(Vgen[u])) continue;
         let sumGV = 0;
@@ -7126,8 +7184,14 @@ function analyzeCircuitForSimulationUncached(
           sumGV += e.g * Vgen[e.to];
           sumG += e.g;
         }
-        if (sumG > 0) Vgen[u] = sumGV / sumG;
+        if (sumG > 0) {
+          const nextVu = sumGV / sumG;
+          const d = Math.abs(nextVu - Vgen[u]);
+          if (d > maxDelta) maxDelta = d;
+          Vgen[u] = nextVu;
+        }
       }
+      if (iter >= 4 && maxDelta < 1e-5) break;
     }
 
     const vBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);

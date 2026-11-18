@@ -125,6 +125,36 @@ let activePdfRenderWorkers = 0;
 const MAX_CONCURRENT_PDF_RENDERS = 3;
 const MAX_PENDING_PDF_QUEUE = 28;
 
+/**
+ * Releases PDF.js worker proxy memory, pending page render jobs, and decoded page data-URLs
+ * when a notebook tab is closed or deleted, keeping only Page 1's tiny thumbnail if requested.
+ */
+export function evictPdfCachesForNotebook(notebookId: string, keepPage1Thumb = true): void {
+  if (!notebookId) return;
+  for (let i = pendingPdfRenderQueue.length - 1; i >= 0; i--) {
+    if (pendingPdfRenderQueue[i].notebookId === notebookId) {
+      const removed = pendingPdfRenderQueue.splice(i, 1)[0];
+      removed.resolve(null);
+    }
+  }
+  const prefix = `${notebookId}__p`;
+  const keepKey = `${notebookId}__p1__thumb`;
+  for (const key of Array.from(renderedPdfPageCache.keys())) {
+    if (key.startsWith(prefix) && (!keepPage1Thumb || key !== keepKey)) {
+      renderedPdfPageCache.delete(key);
+    }
+  }
+  const docProxy = pdfDocProxyCache.get(notebookId);
+  if (docProxy) {
+    pdfDocProxyCache.delete(notebookId);
+    try {
+      void docProxy.destroy();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function executeSinglePdfPageRender(
   notebookId: string,
   pageNumber: number,

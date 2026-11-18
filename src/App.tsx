@@ -205,8 +205,15 @@ import {
   ensurePdfPageDataUrl,
   loadRawPdfFromIndexedDB,
   saveRawPdfToIndexedDB,
+  evictPdfCachesForNotebook,
   type PdfQualityMode,
 } from './utils/pdfAndImageImporter';
+import {
+  IS_SIM_BENCH_ENABLED,
+  recordBenchAppRender,
+  registerBenchActions,
+  updateBenchAppMeta,
+} from './utils/simBenchmarkHud';
 import {
   distance,
   smoothStrokeToBezier,
@@ -270,6 +277,7 @@ import {
   HeatLiquidConfigModal,
   HeatGraphChoiceModal,
   renderHeatSimulation,
+  evictHeatSimCaches,
   isHeatSimulationVisuallyActive,
   getHeatSimulationWorldBounds,
   stepHeatSimulation,
@@ -294,6 +302,7 @@ import {
   getActiveCircuitSim,
   getNextDefaultCircuitSimName,
   isCircuitEligibleStroke,
+  isCircuitSimConnectedStroke,
   areStrokesWithinCircuitTol,
   getSimExpandedStrokeSet,
   expandWholeCircuitStrokeIds,
@@ -1889,6 +1898,8 @@ export default function App() {
   const paperTransformElRef = useRef<HTMLDivElement | null>(null);
   const activeTextFloatingBarRef = useRef<HTMLDivElement | null>(null);
   const lastTextBarDirectTapTimeRef = useRef<number>(0);
+  const textBarDirectPointerActiveRef = useRef<boolean>(false);
+  const suppressTrustedTextBarClickUntilRef = useRef<number>(0);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRectRef = useRef<DOMRect | null>(null);
   const pinchStateRef = useRef<{
@@ -1904,6 +1915,7 @@ export default function App() {
     lastMidY: number;
     lastMoveTime: number;
     velocityY: number;
+    accumBoostY: number;
     paperOffsetX: number;
     paperOffsetY: number;
     startTime: number;
@@ -1920,11 +1932,16 @@ export default function App() {
   const [pageControlsVisible, setPageControlsVisible] = useState<boolean>(false);
   const pageControlsVisibleRef = useRef<boolean>(false);
   const pageControlsTimerRef = useRef<number | null>(null);
+  const lastPageControlsTouchMsRef = useRef<number>(0);
   const triggerPageControlsVisibility = useCallback(() => {
+    const now = performance.now();
     if (!pageControlsVisibleRef.current) {
       pageControlsVisibleRef.current = true;
       setPageControlsVisible(true);
+    } else if (pageControlsTimerRef.current !== null && now - lastPageControlsTouchMsRef.current < 260) {
+      return;
     }
+    lastPageControlsTouchMsRef.current = now;
     if (pageControlsTimerRef.current !== null) {
       window.clearTimeout(pageControlsTimerRef.current);
     }
@@ -2182,20 +2199,24 @@ export default function App() {
   });
   const [pendulumStopwatchRunning, setPendulumStopwatchRunning] = useState<boolean>(false);
   const [pendulumStopwatchElapsedMs, setPendulumStopwatchElapsedMs] = useState<number>(0);
+  const pendulumStopwatchAccumMsRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!pendulumStopwatchRunning) return;
+    if (!pendulumStopwatchRunning || viewMode !== 'editor') return;
     let animId: number;
     let lastTime = performance.now();
     const loop = (now: number) => {
-      const delta = now - lastTime;
+      const delta = Math.min(100, Math.max(0, now - lastTime));
       lastTime = now;
-      setPendulumStopwatchElapsedMs((prev) => prev + delta);
+      pendulumStopwatchAccumMsRef.current += delta;
       animId = requestAnimationFrame(loop);
     };
     animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, [pendulumStopwatchRunning]);
+    return () => {
+      setPendulumStopwatchElapsedMs(pendulumStopwatchAccumMsRef.current);
+      cancelAnimationFrame(animId);
+    };
+  }, [pendulumStopwatchRunning, viewMode]);
 
   // Digital Stopwatch State (⏱️) for Heat & Thermodynamics (Θερμότητα)
   const hasUserCustomizedHeatStopwatchRef = useRef<boolean>(
@@ -2233,6 +2254,7 @@ export default function App() {
   });
   const [heatStopwatchRunning, setHeatStopwatchRunning] = useState<boolean>(false);
   const [heatStopwatchElapsedMs, setHeatStopwatchElapsedMs] = useState<number>(0);
+  const heatStopwatchLiveMsRef = useRef<number>(0);
   const [heatSimSpeed, setHeatSimSpeed] = useState<1 | 2 | 5>(1);
 
   const formatStopwatch = (ms: number): string => {
@@ -4416,6 +4438,10 @@ export default function App() {
     []
   );
 
+  const pauseAndReleaseSimulationsRef = useRef<
+    (opts?: { targetNotebookId?: string; closingTab?: boolean; leavingEditor?: boolean }) => void
+  >(() => {});
+
   const applyNavHistoryEntry = useCallback(
     (
       entry: {
@@ -4426,6 +4452,9 @@ export default function App() {
       direction: 'back' | 'forward'
     ) => {
       isApplyingNavHistoryRef.current = true;
+      pauseAndReleaseSimulationsRef.current({
+        leavingEditor: entry.viewMode !== 'editor',
+      });
       setViewMode(entry.viewMode);
       setActiveLibraryFolder(entry.activeLibraryFolder);
       if (entry.activeNotebookId) {
@@ -7926,24 +7955,22 @@ export default function App() {
   );
 
   // 20-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
+  const secondsToNextSyncRef = useRef<number>(20);
   useEffect(() => {
     const interval = window.setInterval(() => {
-      // 1) Cloud Firestore Sync every 20 seconds (avoid 1s full-App re-renders when !isDirty!)
+      // 1) Cloud Firestore Sync every 20 seconds (zero 1Hz React re-renders while editing or simulating!)
       if (!isDirty) {
-        setSecondsToNextSync((prev) => (prev === 20 ? prev : 20));
+        secondsToNextSyncRef.current = 20;
+      } else if (secondsToNextSyncRef.current <= 1) {
+        secondsToNextSyncRef.current = 20;
+        setSyncStatus('syncing');
+        performCloudFirestoreSyncNow();
+        window.setTimeout(() => {
+          setSyncStatus('synced');
+          setIsDirty(false);
+        }, 350);
       } else {
-        setSecondsToNextSync((prev) => {
-          if (prev <= 1) {
-            setSyncStatus('syncing');
-            performCloudFirestoreSyncNow();
-            window.setTimeout(() => {
-              setSyncStatus('synced');
-              setIsDirty(false);
-            }, 350);
-            return 20;
-          }
-          return prev - 1;
-        });
+        secondsToNextSyncRef.current -= 1;
       }
 
       // 2) Google Drive PDF Sync (/BestNotes):
@@ -8164,6 +8191,7 @@ export default function App() {
       points: (s.points || []).map((pt) => ({ ...pt })),
       keyNodeIndices: s.keyNodeIndices ? [...s.keyNodeIndices] : undefined,
       springSupport: s.springSupport ? { ...s.springSupport } : undefined,
+      rodSupport: s.rodSupport ? { ...s.rodSupport } : undefined,
       circuitBox: s.circuitBox ? { ...s.circuitBox } : undefined,
     })),
     texts: (p.texts || []).map((t) => ({
@@ -8207,6 +8235,12 @@ export default function App() {
       ? p.circuitSims.map((cs) => ({
           ...cs,
           strokeIds: cs.strokeIds ? [...cs.strokeIds] : [],
+          rawStrokesBackup: cs.rawStrokesBackup
+            ? cs.rawStrokesBackup.map((rs) => ({
+                ...rs,
+                points: (rs.points || []).map((pt) => ({ ...pt })),
+              }))
+            : undefined,
         }))
       : undefined,
     atomSims: p.atomSims
@@ -8246,6 +8280,10 @@ export default function App() {
         }))
       : undefined,
     activeHeatSimId: p.activeHeatSimId,
+    activeCircuitSimId: p.activeCircuitSimId,
+    activeSpringSimId: p.activeSpringSimId,
+    activeForceSimId: p.activeForceSimId,
+    activeAtomSimId: p.activeAtomSimId,
   }), []);
 
   const MAX_UNDO_STACK_SIZE = 250;
@@ -8255,6 +8293,7 @@ export default function App() {
   const redoStackRef = useRef<NotePage[]>(redoStack);
 
   const isSamePageStateForUndo = useCallback((a: NotePage, b: NotePage): boolean => {
+    if (a === b) return true;
     if (
       a.id !== b.id ||
       a.template !== b.template ||
@@ -8268,12 +8307,17 @@ export default function App() {
     if ((a.images?.length || 0) !== (b.images?.length || 0)) return false;
     if ((a.tapes?.length || 0) !== (b.tapes?.length || 0)) return false;
     if ((a.layers?.length || 0) !== (b.layers?.length || 0)) return false;
+    if (Boolean(a.ruler?.visible) !== Boolean(b.ruler?.visible)) return false;
     if ((a.springSims?.length || 0) !== (b.springSims?.length || 0)) return false;
     if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
     if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
     if ((a.atomSims?.length || 0) !== (b.atomSims?.length || 0)) return false;
     if ((a.heatSims?.length || 0) !== (b.heatSims?.length || 0)) return false;
     if (a.activeHeatSimId !== b.activeHeatSimId) return false;
+    if (a.activeCircuitSimId !== b.activeCircuitSimId) return false;
+    if (a.activeSpringSimId !== b.activeSpringSimId) return false;
+    if (a.activeForceSimId !== b.activeForceSimId) return false;
+    if (a.activeAtomSimId !== b.activeAtomSimId) return false;
     if (
       a.springSims !== b.springSims &&
       JSON.stringify(a.springSims || []) !== JSON.stringify(b.springSims || [])
@@ -8286,11 +8330,26 @@ export default function App() {
     ) {
       return false;
     }
-    if (
-      a.circuitSims !== b.circuitSims &&
-      JSON.stringify(a.circuitSims || []) !== JSON.stringify(b.circuitSims || [])
-    ) {
-      return false;
+    if (a.circuitSims !== b.circuitSims) {
+      const ca = a.circuitSims || [];
+      const cb = b.circuitSims || [];
+      for (let i = 0; i < ca.length; i++) {
+        if (ca[i] === cb[i]) continue;
+        if (
+          ca[i].id !== cb[i].id ||
+          ca[i].name !== cb[i].name ||
+          Boolean(ca[i].switchClosed) !== Boolean(cb[i].switchClosed) ||
+          (ca[i].flowDirection || 'electrons') !== (cb[i].flowDirection || 'electrons') ||
+          Boolean(ca[i].showElectrons ?? true) !== Boolean(cb[i].showElectrons ?? true) ||
+          (ca[i].speedMultiplier ?? 1) !== (cb[i].speedMultiplier ?? 1) ||
+          Boolean(ca[i].showDarkWireTrack) !== Boolean(cb[i].showDarkWireTrack) ||
+          (ca[i].componentMode || 'pictorial') !== (cb[i].componentMode || 'pictorial') ||
+          ca[i].strokeIds.length !== cb[i].strokeIds.length ||
+          ca[i].strokeIds.some((id, idx) => id !== cb[i].strokeIds[idx])
+        ) {
+          return false;
+        }
+      }
     }
     if (
       a.atomSims !== b.atomSims &&
@@ -8298,136 +8357,171 @@ export default function App() {
     ) {
       return false;
     }
-    if (
-      a.heatSims !== b.heatSims &&
-      JSON.stringify(a.heatSims || []) !== JSON.stringify(b.heatSims || [])
-    ) {
-      return false;
-    }
-
-    for (let i = 0; i < a.strokes.length; i++) {
-      const sa = a.strokes[i];
-      const sb = b.strokes[i];
-      if (
-        sa.id !== sb.id ||
-        sa.color !== sb.color ||
-        sa.width !== sb.width ||
-        (sa.opacity ?? 1) !== (sb.opacity ?? 1) ||
-        (sa.lineStyle || 'solid') !== (sb.lineStyle || 'solid') ||
-        (sa.fillColor || '') !== (sb.fillColor || '') ||
-        (sa.fillStyle || 'none') !== (sb.fillStyle || 'none') ||
-        (sa.fillTransparency ?? 0) !== (sb.fillTransparency ?? 0) ||
-        Boolean(sa.isShape) !== Boolean(sb.isShape) ||
-        sa.shapeType !== sb.shapeType ||
-        Boolean(sa.arrowStart) !== Boolean(sb.arrowStart) ||
-        Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
-        sa.groupId !== sb.groupId ||
-        sa.layerId !== sb.layerId ||
-        sa.zOrder !== sb.zOrder ||
-        sa.switchClosed !== sb.switchClosed ||
-        sa.attachedToSpringId !== sb.attachedToSpringId ||
-        sa.attachedToWeightId !== sb.attachedToWeightId ||
-        sa.springSupport?.supportStrokeId !== sb.springSupport?.supportStrokeId ||
-        sa.springSupport?.fixedEnd !== sb.springSupport?.fixedEnd ||
-        sa.points.length !== sb.points.length
-      ) {
-        return false;
-      }
-      for (let j = 0; j < sa.points.length; j++) {
-        const pa = sa.points[j];
-        const pb = sb.points[j];
+    if (a.heatSims !== b.heatSims) {
+      const ha = a.heatSims || [];
+      const hb = b.heatSims || [];
+      for (let i = 0; i < ha.length; i++) {
+        if (ha[i] === hb[i]) continue;
         if (
-          Math.abs(pa.x - pb.x) > 0.05 ||
-          Math.abs(pa.y - pb.y) > 0.05 ||
-          Math.abs((pa.cx ?? pa.x) - (pb.cx ?? pb.x)) > 0.05 ||
-          Math.abs((pa.cy ?? pa.y) - (pb.cy ?? pb.y)) > 0.05 ||
-          Math.abs((pa.inDx ?? 0) - (pb.inDx ?? 0)) > 0.05 ||
-          Math.abs((pa.inDy ?? 0) - (pb.inDy ?? 0)) > 0.05 ||
-          Math.abs((pa.outDx ?? 0) - (pb.outDx ?? 0)) > 0.05 ||
-          Math.abs((pa.outDy ?? 0) - (pb.outDy ?? 0)) > 0.05 ||
-          Boolean(pa.smooth) !== Boolean(pb.smooth) ||
-          pa.twist !== pb.twist
+          ha[i].id !== hb[i].id ||
+          ha[i].name !== hb[i].name ||
+          (ha[i].ambientTemperature ?? 20) !== (hb[i].ambientTemperature ?? 20) ||
+          ha[i].objects.length !== hb[i].objects.length ||
+          JSON.stringify(ha[i].objects) !== JSON.stringify(hb[i].objects) ||
+          JSON.stringify(ha[i].graphs || [ha[i].graph]) !==
+            JSON.stringify(hb[i].graphs || [hb[i].graph])
         ) {
           return false;
         }
       }
     }
 
+    if (a.strokes !== b.strokes) {
+      for (let i = 0; i < a.strokes.length; i++) {
+        const sa = a.strokes[i];
+        const sb = b.strokes[i];
+        if (sa === sb) continue;
+        if (
+          sa.id !== sb.id ||
+          sa.color !== sb.color ||
+          sa.width !== sb.width ||
+          (sa.opacity ?? 1) !== (sb.opacity ?? 1) ||
+          (sa.lineStyle || 'solid') !== (sb.lineStyle || 'solid') ||
+          (sa.fillColor || '') !== (sb.fillColor || '') ||
+          (sa.fillStyle || 'none') !== (sb.fillStyle || 'none') ||
+          (sa.fillTransparency ?? 0) !== (sb.fillTransparency ?? 0) ||
+          Boolean(sa.isShape) !== Boolean(sb.isShape) ||
+          sa.shapeType !== sb.shapeType ||
+          Boolean(sa.arrowStart) !== Boolean(sb.arrowStart) ||
+          Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
+          sa.groupId !== sb.groupId ||
+          sa.layerId !== sb.layerId ||
+          sa.zOrder !== sb.zOrder ||
+          sa.switchClosed !== sb.switchClosed ||
+          sa.attachedToSpringId !== sb.attachedToSpringId ||
+          sa.attachedToWeightId !== sb.attachedToWeightId ||
+          sa.springSupport?.supportStrokeId !== sb.springSupport?.supportStrokeId ||
+          sa.springSupport?.fixedEnd !== sb.springSupport?.fixedEnd ||
+          sa.rodSupport?.supportStrokeId !== sb.rodSupport?.supportStrokeId ||
+          sa.rodSupport?.fixedEnd !== sb.rodSupport?.fixedEnd ||
+          sa.points.length !== sb.points.length
+        ) {
+          return false;
+        }
+        if (sa.points !== sb.points) {
+          for (let j = 0; j < sa.points.length; j++) {
+            const pa = sa.points[j];
+            const pb = sb.points[j];
+            if (pa === pb) continue;
+            if (
+              Math.abs(pa.x - pb.x) > 0.05 ||
+              Math.abs(pa.y - pb.y) > 0.05 ||
+              Math.abs((pa.cx ?? pa.x) - (pb.cx ?? pb.x)) > 0.05 ||
+              Math.abs((pa.cy ?? pa.y) - (pb.cy ?? pb.y)) > 0.05 ||
+              Math.abs((pa.inDx ?? 0) - (pb.inDx ?? 0)) > 0.05 ||
+              Math.abs((pa.inDy ?? 0) - (pb.inDy ?? 0)) > 0.05 ||
+              Math.abs((pa.outDx ?? 0) - (pb.outDx ?? 0)) > 0.05 ||
+              Math.abs((pa.outDy ?? 0) - (pb.outDy ?? 0)) > 0.05 ||
+              Boolean(pa.smooth) !== Boolean(pb.smooth) ||
+              pa.twist !== pb.twist
+            ) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+
     const ta = a.texts || [];
     const tb = b.texts || [];
-    for (let i = 0; i < ta.length; i++) {
-      if (
-        ta[i].id !== tb[i].id ||
-        ta[i].text !== tb[i].text ||
-        (ta[i].latex || '') !== (tb[i].latex || '') ||
-        Boolean(ta[i].isMath) !== Boolean(tb[i].isMath) ||
-        Math.abs(ta[i].x - tb[i].x) > 0.05 ||
-        Math.abs(ta[i].y - tb[i].y) > 0.05 ||
-        Math.abs((ta[i].boxWidth ?? 0) - (tb[i].boxWidth ?? 0)) > 0.05 ||
-        Math.abs((ta[i].boxHeight ?? 0) - (tb[i].boxHeight ?? 0)) > 0.05 ||
-        Math.abs((ta[i].lineHeight ?? 0) - (tb[i].lineHeight ?? 0)) > 0.005 ||
-        ta[i].fontSize !== tb[i].fontSize ||
-        ta[i].color !== tb[i].color ||
-        Boolean(ta[i].bold) !== Boolean(tb[i].bold) ||
-        (ta[i].fontFamily || 'sans') !== (tb[i].fontFamily || 'sans') ||
-        (ta[i].textAlign || 'left') !== (tb[i].textAlign || 'left') ||
-        ta[i].groupId !== tb[i].groupId ||
-        ta[i].layerId !== tb[i].layerId ||
-        JSON.stringify(ta[i].spans || []) !== JSON.stringify(tb[i].spans || [])
-      ) {
-        return false;
+    if (ta !== tb) {
+      for (let i = 0; i < ta.length; i++) {
+        if (ta[i] === tb[i]) continue;
+        if (
+          ta[i].id !== tb[i].id ||
+          ta[i].text !== tb[i].text ||
+          (ta[i].latex || '') !== (tb[i].latex || '') ||
+          Boolean(ta[i].isMath) !== Boolean(tb[i].isMath) ||
+          Math.abs(ta[i].x - tb[i].x) > 0.05 ||
+          Math.abs(ta[i].y - tb[i].y) > 0.05 ||
+          Math.abs((ta[i].boxWidth ?? 0) - (tb[i].boxWidth ?? 0)) > 0.05 ||
+          Math.abs((ta[i].boxHeight ?? 0) - (tb[i].boxHeight ?? 0)) > 0.05 ||
+          Math.abs((ta[i].lineHeight ?? 0) - (tb[i].lineHeight ?? 0)) > 0.005 ||
+          ta[i].fontSize !== tb[i].fontSize ||
+          ta[i].color !== tb[i].color ||
+          Boolean(ta[i].bold) !== Boolean(tb[i].bold) ||
+          Boolean(ta[i].shadow) !== Boolean(tb[i].shadow) ||
+          (ta[i].fontFamily || 'sans') !== (tb[i].fontFamily || 'sans') ||
+          (ta[i].textAlign || 'left') !== (tb[i].textAlign || 'left') ||
+          ta[i].groupId !== tb[i].groupId ||
+          ta[i].layerId !== tb[i].layerId ||
+          (ta[i].spans !== tb[i].spans &&
+            JSON.stringify(ta[i].spans || []) !== JSON.stringify(tb[i].spans || []))
+        ) {
+          return false;
+        }
       }
     }
 
     const ia = a.images || [];
     const ib = b.images || [];
-    for (let i = 0; i < ia.length; i++) {
-      if (
-        ia[i].id !== ib[i].id ||
-        ia[i].dataUrl !== ib[i].dataUrl ||
-        Math.abs(ia[i].x - ib[i].x) > 0.05 ||
-        Math.abs(ia[i].y - ib[i].y) > 0.05 ||
-        Math.abs(ia[i].width - ib[i].width) > 0.05 ||
-        Math.abs(ia[i].height - ib[i].height) > 0.05 ||
-        (ia[i].rotation ?? 0) !== (ib[i].rotation ?? 0) ||
-        ia[i].groupId !== ib[i].groupId ||
-        ia[i].layerId !== ib[i].layerId ||
-        ia[i].zOrder !== ib[i].zOrder ||
-        JSON.stringify(ia[i].clipPolygon || []) !== JSON.stringify(ib[i].clipPolygon || [])
-      ) {
-        return false;
+    if (ia !== ib) {
+      for (let i = 0; i < ia.length; i++) {
+        if (ia[i] === ib[i]) continue;
+        if (
+          ia[i].id !== ib[i].id ||
+          ia[i].dataUrl !== ib[i].dataUrl ||
+          Math.abs(ia[i].x - ib[i].x) > 0.05 ||
+          Math.abs(ia[i].y - ib[i].y) > 0.05 ||
+          Math.abs(ia[i].width - ib[i].width) > 0.05 ||
+          Math.abs(ia[i].height - ib[i].height) > 0.05 ||
+          (ia[i].rotation ?? 0) !== (ib[i].rotation ?? 0) ||
+          ia[i].groupId !== ib[i].groupId ||
+          ia[i].layerId !== ib[i].layerId ||
+          ia[i].zOrder !== ib[i].zOrder ||
+          (ia[i].clipPolygon !== ib[i].clipPolygon &&
+            JSON.stringify(ia[i].clipPolygon || []) !== JSON.stringify(ib[i].clipPolygon || []))
+        ) {
+          return false;
+        }
       }
     }
 
     const tpa = a.tapes || [];
     const tpb = b.tapes || [];
-    for (let i = 0; i < tpa.length; i++) {
-      if (
-        tpa[i].id !== tpb[i].id ||
-        Math.abs(tpa[i].x1 - tpb[i].x1) > 0.05 ||
-        Math.abs(tpa[i].y1 - tpb[i].y1) > 0.05 ||
-        Math.abs(tpa[i].x2 - tpb[i].x2) > 0.05 ||
-        Math.abs(tpa[i].y2 - tpb[i].y2) > 0.05 ||
-        Boolean(tpa[i].revealed) !== Boolean(tpb[i].revealed) ||
-        tpa[i].color !== tpb[i].color ||
-        tpa[i].width !== tpb[i].width ||
-        tpa[i].layerId !== tpb[i].layerId
-      ) {
-        return false;
+    if (tpa !== tpb) {
+      for (let i = 0; i < tpa.length; i++) {
+        if (tpa[i] === tpb[i]) continue;
+        if (
+          tpa[i].id !== tpb[i].id ||
+          Math.abs(tpa[i].x1 - tpb[i].x1) > 0.05 ||
+          Math.abs(tpa[i].y1 - tpb[i].y1) > 0.05 ||
+          Math.abs(tpa[i].x2 - tpb[i].x2) > 0.05 ||
+          Math.abs(tpa[i].y2 - tpb[i].y2) > 0.05 ||
+          Boolean(tpa[i].revealed) !== Boolean(tpb[i].revealed) ||
+          tpa[i].color !== tpb[i].color ||
+          tpa[i].width !== tpb[i].width ||
+          tpa[i].layerId !== tpb[i].layerId
+        ) {
+          return false;
+        }
       }
     }
 
     const la = a.layers || [];
     const lb = b.layers || [];
-    for (let i = 0; i < la.length; i++) {
-      if (
-        la[i].id !== lb[i].id ||
-        la[i].name !== lb[i].name ||
-        Boolean(la[i].visible) !== Boolean(lb[i].visible) ||
-        Boolean(la[i].locked) !== Boolean(lb[i].locked) ||
-        (la[i].opacity ?? 1) !== (lb[i].opacity ?? 1)
-      ) {
-        return false;
+    if (la !== lb) {
+      for (let i = 0; i < la.length; i++) {
+        if (la[i] === lb[i]) continue;
+        if (
+          la[i].id !== lb[i].id ||
+          la[i].name !== lb[i].name ||
+          Boolean(la[i].visible) !== Boolean(lb[i].visible) ||
+          Boolean(la[i].locked) !== Boolean(lb[i].locked) ||
+          (la[i].opacity ?? 1) !== (lb[i].opacity ?? 1)
+        ) {
+          return false;
+        }
       }
     }
 
@@ -8435,8 +8529,8 @@ export default function App() {
   }, []);
 
   const pushUndoSnapshot = useCallback(
-    (pageSnap: NotePage) => {
-      const snap = clonePageFast(pageSnap);
+    (pageSnap: NotePage, alreadyCloned = false) => {
+      const snap = alreadyCloned ? pageSnap : clonePageFast(pageSnap);
       const curStack = undoStackRef.current;
       if (
         curStack.length > 0 &&
@@ -8453,6 +8547,43 @@ export default function App() {
     [clonePageFast, isSamePageStateForUndo]
   );
 
+  const syncRuntimeSimStateToRestoredPage = useCallback((restoredPage: NotePage) => {
+    const validCircuits = (restoredPage.circuitSims || []).filter(
+      (cs) => cs && Array.isArray(cs.strokeIds) && cs.strokeIds.length > 0
+    );
+    if (validCircuits.length === 0) {
+      setIsSimulating(false);
+    } else {
+      const activeCs =
+        validCircuits.find((cs) => cs.id === restoredPage.activeCircuitSimId) || validCircuits[0];
+      if (activeCs) {
+        setSimCircuitSwitchClosed(Boolean(activeCs.switchClosed));
+      }
+    }
+    const validSprings = restoredPage.springSims || [];
+    if (validSprings.length === 0) {
+      setIsSpringSimulating(false);
+    }
+    forceSimAnimRef.current = null;
+    setForceSimAnim(null);
+    const validForces = restoredPage.forceSims || [];
+    const nextPendMap: typeof pendulumPhysRef.current = {};
+    for (const fs of validForces) {
+      if (fs.mode === 'pendulum') {
+        nextPendMap[fs.id] = {
+          ang: fs.pendulumAngleRad ?? 0,
+          av: 0,
+          lastTime: performance.now(),
+          maxAngleRad: fs.pendulumMaxAngleRad,
+          trajectory: [],
+        };
+      }
+    }
+    pendulumPhysRef.current = nextPendMap;
+    staticPageRenderCacheRef.current.delete(restoredPage.id);
+    queueMicrotask(() => renderStaticSceneRef.current?.());
+  }, []);
+
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       const liveNbId = activeNotebookLiveRef.current.id;
@@ -8463,24 +8594,34 @@ export default function App() {
       saveUserEditedSessionIds(userEditedInSessionRef.current);
       const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
       suppressNextUndoRecordRef.current = false;
-      setNotebooks((prevNotebooks) => {
-        const nextNotebooks = prevNotebooks.map((nb) => {
-          if (nb.id !== liveNbId) return nb;
-          const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
-          const currentPage = nb.pages[safeIdx] || nb.pages[0];
-          const updatedPage = updater(clonePageFast(currentPage));
-          if (shouldRecordUndo && !isSamePageStateForUndo(currentPage, updatedPage)) {
-            pushUndoSnapshot(currentPage);
-          }
-          const newPages = [...nb.pages];
-          newPages[safeIdx] = updatedPage;
-          return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
-        });
-        notebooksRef.current = nextNotebooks;
-        const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
-        if (liveNb) activeNotebookLiveRef.current = liveNb;
-        return nextNotebooks;
+
+      // Compute synchronously against notebooksRef.current so pushUndoSnapshot & notebooksRef never race with React async batching!
+      const baseNotebooks = notebooksRef.current;
+      let didChangeAny = false;
+      const nextNotebooks = baseNotebooks.map((nb) => {
+        if (nb.id !== liveNbId) return nb;
+        const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
+        const currentPage = nb.pages[safeIdx] || nb.pages[0];
+        if (!currentPage) return nb;
+        const preSnap = shouldRecordUndo ? clonePageFast(currentPage) : null;
+        const updatedPage = updater(currentPage);
+        if (updatedPage === currentPage && !preSnap) return nb;
+        if (preSnap && !isSamePageStateForUndo(preSnap, updatedPage)) {
+          pushUndoSnapshot(preSnap, true);
+        } else if (updatedPage === currentPage) {
+          return nb;
+        }
+        didChangeAny = true;
+        const newPages = [...nb.pages];
+        newPages[safeIdx] = updatedPage;
+        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
       });
+
+      if (!didChangeAny) return;
+      notebooksRef.current = nextNotebooks;
+      const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
+      if (liveNb) activeNotebookLiveRef.current = liveNb;
+      setNotebooks(nextNotebooks);
       setIsDirty(true);
       setSyncStatus('dirty');
     },
@@ -8489,7 +8630,577 @@ export default function App() {
 
   // Heat & Thermodynamics Interactive Simulation Hook
   const heatSim = useHeatSimulation(activePage, updateActivePage);
+  const heatSimLiveRef = useRef(heatSim);
+  heatSimLiveRef.current = heatSim;
   const heatSimLastFrameRef = useRef<number | null>(null);
+  const [simCanvasWakeTick, setSimCanvasWakeTick] = useState<number>(0);
+  const wakeSimCanvas = useCallback(() => {
+    setSimCanvasWakeTick((t) => (t + 1) % 1000000);
+  }, []);
+
+  /**
+   * Centralized Tab & Simulation Resource Manager:
+   * - Immediately pauses ALL simulations (Circuits, Heat, Springs, Pendulums, Atoms, Stopwatches)
+   *   when switching tabs, closing a tab, or leaving the editor.
+   * - Evicts 2x Retina canvas backing stores, offscreen blur caches, decoded image bitmaps, and PDF proxies
+   *   for closed or inactive notebooks so 100% of CPU/GPU/VRAM is dedicated ONLY to the current active tab!
+   */
+  const pauseAndReleaseSimulations = useCallback(
+    (opts?: { targetNotebookId?: string; closingTab?: boolean; leavingEditor?: boolean }) => {
+      const targetNbId = opts?.targetNotebookId || activeNotebookId || activeNotebook.id;
+      const isTargetActive = !opts?.targetNotebookId || opts.targetNotebookId === activeNotebook.id;
+      const flushedLiveHeat = isTargetActive ? heatSimLiveRef.current.flushAndPauseLiveSim() : null;
+
+      if (isTargetActive || opts?.leavingEditor) {
+        heatSimLastFrameRef.current = null;
+        setIsSimulating(false);
+        setIsSpringSimulating(false);
+        setIsSpringPaused(true);
+        springSettleAnimRef.current = null;
+        setSpringSettleAnim(null);
+        setSpringPhaseShiftAnim(null);
+        setHookeLineAnim(null);
+        forceSimAnimRef.current = null;
+        setForceSimAnim(null);
+        atomReactionAnimRef.current = null;
+        setAtomReactionAnim(null);
+        setCircuitAlignFlashStart(null);
+        setCircuitProposal(null);
+        setHeatStopwatchRunning(false);
+        setPendulumStopwatchRunning(false);
+        setShowHeatStopwatch(false);
+        setShowPendulumStopwatch(false);
+        if (opts?.closingTab) {
+          setShowPeriodicTableModal(false);
+        }
+      }
+
+      // Update notebook pages so no simulation remains `isRunning: true` or swinging in background/closed tabs
+      setNotebooks((prev) => {
+        let anyNbChanged = false;
+        const nextNbs = prev.map((nb) => {
+          if (nb.id !== targetNbId) return nb;
+          let nbChanged = false;
+          const nextPages = nb.pages.map((p) => {
+            let pChanged = false;
+            let nextHeatSims = p.heatSims;
+            if (p.heatSims && p.heatSims.length > 0) {
+              nextHeatSims = p.heatSims.map((hs) => {
+                if (flushedLiveHeat && hs.id === flushedLiveHeat.id) {
+                  pChanged = true;
+                  return { ...flushedLiveHeat, isRunning: false };
+                }
+                if (hs.isRunning) {
+                  pChanged = true;
+                  return { ...hs, isRunning: false };
+                }
+                return hs;
+              });
+            }
+            let nextForceSims = p.forceSims;
+            if (p.forceSims && p.forceSims.some((fs) => fs.mode === 'pendulum' && !fs.isPaused)) {
+              pChanged = true;
+              nextForceSims = p.forceSims.map((fs) => {
+                if (fs.mode === 'pendulum' && !fs.isPaused) {
+                  const phys = pendulumPhysRef.current[fs.id];
+                  return {
+                    ...fs,
+                    isPaused: true,
+                    pendulumAngleRad: phys ? phys.ang : fs.pendulumAngleRad,
+                  };
+                }
+                return fs;
+              });
+            }
+            let nextAtomSims = p.atomSims;
+            if (opts?.closingTab && p.atomSims && p.atomSims.some((as) => as.isRotating !== false)) {
+              pChanged = true;
+              nextAtomSims = p.atomSims.map((as) =>
+                as.isRotating !== false ? { ...as, isRotating: false } : as
+              );
+            }
+            if (!pChanged) return p;
+            nbChanged = true;
+            return {
+              ...p,
+              heatSims: nextHeatSims,
+              forceSims: nextForceSims,
+              atomSims: nextAtomSims,
+            };
+          });
+          if (!nbChanged) return nb;
+          anyNbChanged = true;
+          return { ...nb, pages: nextPages };
+        });
+        if (!anyNbChanged) return prev;
+        notebooksRef.current = nextNbs;
+        const liveCur = nextNbs.find((n) => n.id === activeNotebook.id);
+        if (liveCur) activeNotebookLiveRef.current = liveCur;
+        return nextNbs;
+      });
+
+      // Evict Canvas, Blur, Physics, Image, and PDF memory for the outgoing/closed notebook!
+      const targetNbObj = notebooksRef.current.find((n) => n.id === targetNbId);
+      if (targetNbObj) {
+        const remainingOpenIds = new Set(
+          openNotebookIds.filter((id) => !opts?.closingTab || id !== targetNbId)
+        );
+        const usedImageUrls = new Set<string>();
+        if (opts?.closingTab) {
+          for (const nb of notebooksRef.current) {
+            if (!remainingOpenIds.has(nb.id) || nb.id === targetNbId) continue;
+            for (const p of nb.pages) {
+              for (const im of p.images || []) {
+                if (im.dataUrl) usedImageUrls.add(im.dataUrl);
+              }
+            }
+          }
+        }
+
+        for (const p of targetNbObj.pages) {
+          const cachedRender = staticPageRenderCacheRef.current.get(p.id);
+          if (cachedRender) {
+            staticPageRenderCacheRef.current.delete(p.id);
+          }
+          overCanvasDirtyMapRef.current.delete(p.id);
+          if (opts?.closingTab || targetNbId !== activeNotebook.id) {
+            const stC = staticCanvasMapRef.current.get(p.id);
+            if (stC && !stC.isConnected) {
+              stC.width = 0;
+              stC.height = 0;
+              staticCanvasMapRef.current.delete(p.id);
+            }
+            const acC = activeCanvasMapRef.current.get(p.id);
+            if (acC && !acC.isConnected) {
+              acC.width = 0;
+              acC.height = 0;
+              activeCanvasMapRef.current.delete(p.id);
+            }
+            const ovC = overTextCanvasMapRef.current.get(p.id);
+            if (ovC && !ovC.isConnected) {
+              ovC.width = 0;
+              ovC.height = 0;
+              overTextCanvasMapRef.current.delete(p.id);
+            }
+          }
+          if (opts?.closingTab) {
+            for (const fs of p.forceSims || []) {
+              delete pendulumPhysRef.current[fs.id];
+            }
+            for (const as of p.atomSims || []) {
+              delete mol3DAutoYawRef.current[as.id];
+            }
+            for (const im of p.images || []) {
+              if (im.dataUrl && !usedImageUrls.has(im.dataUrl)) {
+                const cachedImg = imageElementsCacheRef.current.get(im.dataUrl);
+                if (cachedImg) {
+                  cachedImg.src = '';
+                  imageElementsCacheRef.current.delete(im.dataUrl);
+                }
+              }
+            }
+          }
+        }
+
+        if (opts?.closingTab) {
+          evictPdfCachesForNotebook(targetNbId, true);
+        }
+      }
+      evictHeatSimCaches();
+    },
+    [activeNotebookId, activeNotebook.id, openNotebookIds]
+  );
+  pauseAndReleaseSimulationsRef.current = pauseAndReleaseSimulations;
+
+  if (IS_SIM_BENCH_ENABLED) {
+    const liveH = heatSim.getLiveSim ? heatSim.getLiveSim() : heatSim.activeHeatSim;
+    recordBenchAppRender({
+      cachedPages: staticCanvasMapRef.current.size,
+      openTabs: openNotebookIds.length,
+      activeNotebookId: activeNotebook.id,
+      viewMode,
+      isSimulating,
+      heatRunning: Boolean(liveH?.isRunning),
+    });
+  }
+
+  useEffect(() => {
+    if (!IS_SIM_BENCH_ENABLED) return;
+    const iv = window.setInterval(() => {
+      const liveH = heatSimLiveRef.current.getLiveSim
+        ? heatSimLiveRef.current.getLiveSim()
+        : heatSimLiveRef.current.activeHeatSim;
+      updateBenchAppMeta({
+        cachedPages: staticPageRenderCacheRef.current.size,
+        openTabs: openNotebookIds.length,
+        activeNotebookId: activeNotebook.id,
+        viewMode,
+        isSimulating,
+        heatRunning: Boolean(liveH?.isRunning),
+      });
+    }, 300);
+    return () => window.clearInterval(iv);
+  }, [openNotebookIds.length, activeNotebook.id, viewMode, isSimulating]);
+
+  useEffect(() => {
+    if (!IS_SIM_BENCH_ENABLED) return;
+
+    const buildDenseHandwritingStrokes = (count: number, startY = 80): StrokeObject[] => {
+      const out: StrokeObject[] = [];
+      for (let i = 0; i < count; i++) {
+        const row = Math.floor(i / 20);
+        const col = i % 20;
+        const bx = 60 + col * 38;
+        const by = startY + row * 28;
+        const pts = [];
+        for (let k = 0; k < 12; k++) {
+          pts.push({
+            x: bx + k * 2.4,
+            y: by + Math.sin(k * 0.9 + i) * 6,
+            pressure: 0.65,
+          });
+        }
+        out.push({
+          id: `bench-hw-${i}`,
+          tool: 'pen',
+          color: i % 3 === 0 ? '#dc2626' : '#1e293b',
+          width: 2.2,
+          opacity: 1,
+          layerId: 'layer-1',
+          points: pts,
+        });
+      }
+      return out;
+    };
+
+    const makeWire = (id: string, x1: number, y1: number, x2: number, y2: number): StrokeObject => ({
+      id,
+      tool: 'pen',
+      isShape: true,
+      shapeType: 'line',
+      color: '#1e293b',
+      width: 2.4,
+      opacity: 1,
+      layerId: 'layer-1',
+      points: [
+        { x: x1, y: y1, pressure: 0.7 },
+        { x: x2, y: y2, cx: (x1 + x2) / 2, cy: (y1 + y2) / 2, pressure: 0.7 },
+      ],
+    });
+
+    const buildHeavyCircuitStrokesAndSim = (): {
+      strokes: StrokeObject[];
+      sim: CircuitSimConfig;
+    } => {
+      const bat = createPhysicsStencilStrokes('battery', 340, 560, 110, 46, '#1e293b', 'layer-1');
+      const bulb = createPhysicsStencilStrokes('bulb', 360, 320, 70, 86, '#1e293b', 'layer-1');
+      const amm = createPhysicsStencilStrokes('ammeter', 548, 445, 56, 56, '#1e293b', 'layer-1');
+      const vm1 = createPhysicsStencilStrokes('voltmeter', 367, 225, 56, 56, '#64748b', 'layer-1');
+      const vm2 = createPhysicsStencilStrokes('voltmeter', 367, 645, 56, 56, '#64748b', 'layer-1');
+
+      const allComps = [...bat, ...bulb, ...amm, ...vm1, ...vm2];
+      const info = getCircuitComponentsWithTerminals(allComps);
+      const batC = info.find((c) => c.kind === 'battery')!;
+      const bulbC = info.find((c) => c.kind === 'bulb')!;
+      const ammC = info.find((c) => c.kind === 'ammeter')!;
+      const vms = info.filter((c) => c.kind === 'voltmeter');
+      const vmTop = vms[0];
+      const vmBot = vms[1];
+
+      const leftX = 230;
+      const rightX = ammC.cx;
+      const wires: StrokeObject[] = [
+        makeWire('bw-l1', leftX, bulbC.leftTerm.y, bulbC.leftTerm.x, bulbC.leftTerm.y),
+        makeWire('bw-l2', leftX, batC.leftTerm.y, leftX, bulbC.leftTerm.y),
+        makeWire('bw-l3', leftX, batC.leftTerm.y, batC.leftTerm.x, batC.leftTerm.y),
+        makeWire('bw-r1', bulbC.rightTerm.x, bulbC.rightTerm.y, rightX, bulbC.rightTerm.y),
+        makeWire('bw-r2', rightX, bulbC.rightTerm.y, rightX, ammC.topTerm?.y ?? ammC.minY),
+        makeWire('bw-r3', rightX, ammC.bottomTerm?.y ?? ammC.maxY, rightX, batC.rightTerm.y),
+        makeWire('bw-r4', batC.rightTerm.x, batC.rightTerm.y, rightX, batC.rightTerm.y),
+        // Parallel Voltmeter 1 across Bulb
+        makeWire('par-vm-1a', 310, bulbC.leftTerm.y, 310, vmTop.leftTerm.y),
+        makeWire('par-vm-1b', 310, vmTop.leftTerm.y, vmTop.leftTerm.x, vmTop.leftTerm.y),
+        makeWire('par-vm-1c', vmTop.rightTerm.x, vmTop.rightTerm.y, 480, vmTop.rightTerm.y),
+        makeWire('par-vm-1d', 480, vmTop.rightTerm.y, 480, bulbC.rightTerm.y),
+        // Parallel Voltmeter 2 across Battery
+        makeWire('par-vm-2a', 300, batC.leftTerm.y, 300, vmBot.leftTerm.y),
+        makeWire('par-vm-2b', 300, vmBot.leftTerm.y, vmBot.leftTerm.x, vmBot.leftTerm.y),
+        makeWire('par-vm-2c', vmBot.rightTerm.x, vmBot.rightTerm.y, 490, vmBot.rightTerm.y),
+        makeWire('par-vm-2d', 490, vmBot.rightTerm.y, 490, batC.rightTerm.y),
+      ];
+
+      const cStrokes = [...allComps, ...wires];
+      const sim: CircuitSimConfig = {
+        id: 'bench-circuit-1',
+        name: 'κύκλωμα1',
+        strokeIds: cStrokes.map((s) => s.id),
+        switchClosed: true,
+        flowDirection: 'electrons',
+        showElectrons: true,
+        speedMultiplier: 1.2,
+      };
+      return {
+        strokes: [...buildDenseHandwritingStrokes(240, 60), ...cStrokes],
+        sim,
+      };
+    };
+
+    const buildHeavyBoilingHeatSim = (): HeatSimConfig => {
+      const history = [];
+      for (let i = 0; i <= 200; i++) {
+        const tSec = i * 0.5;
+        const t1 = Math.min(100, 20 + i * 0.55);
+        const t2 = Math.min(96, 20 + i * 0.45);
+        history.push({
+          timeSec: tSec,
+          temp1: t1,
+          temp2: t2,
+          tempsByContainerId: { 'bench-beaker-1': t1, 'bench-basin-1': t2 },
+          tempEquilibrium: 20,
+        });
+      }
+      return {
+        id: 'bench-heat-1',
+        name: 'θερμότητα1',
+        selectedObjectId: null,
+        selectedObjectIds: [],
+        isRunning: true,
+        elapsedSec: 100,
+        ambientTemperature: 20,
+        objects: [
+          {
+            id: 'bench-tripod-1',
+            type: 'tripod',
+            x: 150,
+            y: 890,
+            width: 150,
+            height: 120,
+            tripodState: { wireGauzeTemp: 340 },
+          },
+          {
+            id: 'bench-burner-1',
+            type: 'burner',
+            x: 195,
+            y: 925,
+            width: 60,
+            height: 85,
+            burnerState: { isOn: true, intensity: 'high', flameCycle: 0.2 },
+          },
+          {
+            id: 'bench-basin-1',
+            type: 'wide-basin',
+            x: 140,
+            y: 775,
+            width: 170,
+            height: 120,
+            containerState: {
+              liquidType: 'water',
+              volumeMl: 500,
+              capacityMl: 600,
+              temperature: 96,
+              initialTemp: 20,
+              isBoiling: true,
+              boilingIntensity: 0.75,
+              nestedVesselId: 'bench-beaker-1',
+            },
+          },
+          {
+            id: 'bench-beaker-1',
+            type: 'beaker',
+            x: 182,
+            y: 790,
+            width: 86,
+            height: 98,
+            containerState: {
+              liquidType: 'water',
+              volumeMl: 220,
+              capacityMl: 250,
+              temperature: 100,
+              initialTemp: 20,
+              isBoiling: true,
+              boilingIntensity: 1.0,
+              parentBasinId: 'bench-basin-1',
+            },
+          },
+          {
+            id: 'bench-therm-1',
+            type: 'thermometer',
+            x: 215,
+            y: 685,
+            width: 24,
+            height: 175,
+            thermometerState: {
+              temperature: 99.6,
+              dippedVesselId: 'bench-beaker-1',
+              showBadge: true,
+            },
+          },
+        ],
+        graph: {
+          visible: true,
+          x: 420,
+          y: 740,
+          width: 340,
+          height: 220,
+          boundContainerIds: ['bench-beaker-1', 'bench-basin-1'],
+        },
+        graphs: [
+          {
+            visible: true,
+            x: 420,
+            y: 740,
+            width: 340,
+            height: 220,
+            boundContainerIds: ['bench-beaker-1', 'bench-basin-1'],
+          },
+        ],
+        history,
+      };
+    };
+
+    registerBenchActions({
+      spawnHeavyCircuitMeters: () => {
+        const { strokes, sim } = buildHeavyCircuitStrokesAndSim();
+        const nbId = 'nb-bench-circuit';
+        const newNb: Notebook = {
+          id: nbId,
+          title: 'Bench Κύκλωμα + Όργανα',
+          folder: '',
+          coverColor: '#2563eb',
+          updatedAt: new Date().toISOString(),
+          sourceFormat: '.bestnotes',
+          pages: [
+            {
+              id: 'page-bench-circuit-1',
+              title: 'Σελίδα 1',
+              template: 'grid',
+              orientation: 'portrait',
+              layers: [{ id: 'layer-1', name: 'Σημειώσεις', visible: true, locked: false, opacity: 1 }],
+              strokes,
+              texts: [],
+              images: [],
+              tapes: [],
+              circuitSims: [sim],
+              activeCircuitSimId: sim.id,
+            },
+          ],
+        };
+        setNotebooks((prev) => [newNb, ...prev.filter((n) => n.id !== nbId)]);
+        setOpenNotebookIds((prev) => (prev.includes(nbId) ? prev : [...prev, nbId]));
+        setActiveNotebookId(nbId);
+        setActivePageIndex(0);
+        activeDrawingPageIndexRef.current = 0;
+        setViewMode('editor');
+        setSimCircuitSwitchClosed(true);
+        setIsSimulating(true);
+      },
+      spawnHeavyBoilingHeat: () => {
+        const hSim = buildHeavyBoilingHeatSim();
+        const nbId = 'nb-bench-heat';
+        const newNb: Notebook = {
+          id: nbId,
+          title: 'Bench Θερμότητα Βρασμός',
+          folder: '',
+          coverColor: '#dc2626',
+          updatedAt: new Date().toISOString(),
+          sourceFormat: '.bestnotes',
+          pages: [
+            {
+              id: 'page-bench-heat-1',
+              title: 'Σελίδα 1',
+              template: 'grid',
+              orientation: 'portrait',
+              layers: [{ id: 'layer-1', name: 'Σημειώσεις', visible: true, locked: false, opacity: 1 }],
+              strokes: buildDenseHandwritingStrokes(200, 60),
+              texts: [],
+              images: [],
+              tapes: [],
+              heatSims: [hSim],
+              activeHeatSimId: hSim.id,
+            },
+          ],
+        };
+        setNotebooks((prev) => [newNb, ...prev.filter((n) => n.id !== nbId)]);
+        setOpenNotebookIds((prev) => (prev.includes(nbId) ? prev : [...prev, nbId]));
+        setActiveNotebookId(nbId);
+        setActivePageIndex(0);
+        activeDrawingPageIndexRef.current = 0;
+        setViewMode('editor');
+        setShowHeatStopwatch(true);
+        setHeatStopwatchRunning(true);
+        window.setTimeout(() => {
+          heatSimLiveRef.current.startHeatingAndSim();
+          wakeSimCanvas();
+        }, 80);
+      },
+      spawnComboHeavyPage: () => {
+        const { strokes, sim } = buildHeavyCircuitStrokesAndSim();
+        const hSim = buildHeavyBoilingHeatSim();
+        const nbId = 'nb-bench-combo';
+        const newNb: Notebook = {
+          id: nbId,
+          title: 'Bench Ταυτόχρονα Κύκλωμα + Θερμότητα',
+          folder: '',
+          coverColor: '#7c3aed',
+          updatedAt: new Date().toISOString(),
+          sourceFormat: '.bestnotes',
+          pages: [
+            {
+              id: 'page-bench-combo-1',
+              title: 'Σελίδα 1',
+              template: 'grid',
+              orientation: 'portrait',
+              layers: [{ id: 'layer-1', name: 'Σημειώσεις', visible: true, locked: false, opacity: 1 }],
+              strokes,
+              texts: [],
+              images: [],
+              tapes: [],
+              circuitSims: [sim],
+              activeCircuitSimId: sim.id,
+              heatSims: [hSim],
+              activeHeatSimId: hSim.id,
+            },
+          ],
+        };
+        setNotebooks((prev) => [newNb, ...prev.filter((n) => n.id !== nbId)]);
+        setOpenNotebookIds((prev) => (prev.includes(nbId) ? prev : [...prev, nbId]));
+        setActiveNotebookId(nbId);
+        setActivePageIndex(0);
+        activeDrawingPageIndexRef.current = 0;
+        setViewMode('editor');
+        setSimCircuitSwitchClosed(true);
+        setIsSimulating(true);
+        setShowHeatStopwatch(true);
+        setHeatStopwatchRunning(true);
+        window.setTimeout(() => {
+          heatSimLiveRef.current.startHeatingAndSim();
+          wakeSimCanvas();
+        }, 80);
+      },
+      pauseAllSims: () => {
+        setIsSimulating(false);
+        setHeatStopwatchRunning(false);
+        heatSimLiveRef.current.pauseHeatingAndSim();
+      },
+      openFreshEmptyTab: () => {
+        handleCreateNewNoteTab();
+      },
+      closeFirstTab: () => {
+        const firstId = openNotebookIds[0];
+        if (!firstId) return;
+        pauseAndReleaseSimulationsRef.current({ targetNotebookId: firstId, closingTab: true });
+        const rem = openNotebookIds.filter((id) => id !== firstId);
+        setOpenNotebookIds(rem);
+        if (rem.length === 0) {
+          setActiveNotebookId('');
+          setViewMode('library');
+        } else if (activeNotebook.id === firstId || activeNotebookId === firstId) {
+          setActiveNotebookId(rem[rem.length - 1]);
+          setActivePageIndex(0);
+        }
+      },
+    });
+  });
 
   // When switching tool to drawing tools (pen, pencil, highlighter, eraser), deselect any simulation object bounding box
   // and ensure fillStyle is reset to 'none' so normal handwriting is never filled!
@@ -8545,6 +9256,8 @@ export default function App() {
       if (typeof prop.preProposalSimCircuitSwitchClosed === 'boolean') {
         setSimCircuitSwitchClosed(prop.preProposalSimCircuitSwitchClosed);
       }
+      staticPageRenderCacheRef.current.delete(activePage.id);
+      queueMicrotask(() => renderStaticSceneRef.current?.());
       showToast('✕ Η πρόταση ολοκλήρωσης ακυρώθηκε.');
       return;
     }
@@ -8556,11 +9269,13 @@ export default function App() {
     }
 
     textEditUndoRecordedForIdRef.current = null;
+    suppressNextUndoRecordRef.current = false;
+    const liveNbId = activeNotebookLiveRef.current.id || activeNotebook.id;
     const curNb =
-      notebooksRef.current.find((n) => n.id === activeNotebook.id) || activeNotebook;
+      notebooksRef.current.find((n) => n.id === liveNbId) || activeNotebook;
     let prevPage: NotePage | null = null;
     let targetIdx = Math.min(
-      activeDrawingPageIndexRef.current ?? activePageIndex,
+      activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
       curNb.pages.length - 1
     );
     let currentTargetPage = curNb.pages[targetIdx] || activePage;
@@ -8572,7 +9287,10 @@ export default function App() {
       const cIdx =
         matchedIdx >= 0
           ? matchedIdx
-          : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, curNb.pages.length - 1);
+          : Math.min(
+              activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
+              curNb.pages.length - 1
+            );
       const cTarget = curNb.pages[cIdx] || activePage;
       if (!isSamePageStateForUndo(candidate, cTarget) || stack.length === 0) {
         prevPage = candidate;
@@ -8591,37 +9309,46 @@ export default function App() {
 
     undoStackRef.current = stack;
     setUndoStack(stack);
-    userEditedInSessionRef.current.add(activeNotebook.id);
+    userEditedInSessionRef.current.add(liveNbId);
+    saveUserEditedSessionIds(userEditedInSessionRef.current);
 
     const redoSnap = clonePageFast(currentTargetPage);
     const nextR = [...redoStackRef.current.slice(-(MAX_UNDO_STACK_SIZE - 1)), redoSnap];
     redoStackRef.current = nextR;
     setRedoStack(nextR);
 
+    if (circuitProposal && circuitProposal.pageId === prevPage.id) {
+      setCircuitProposal(null);
+      proposalOverlayHitRef.current = null;
+      draggingProposalCornerRef.current = null;
+    }
+
     if (targetIdx !== activePageIndex) {
       activeDrawingPageIndexRef.current = targetIdx;
       activePageIndexLiveRef.current = targetIdx;
       setActivePageIndex(targetIdx);
     }
-    const targetPrevPage = prevPage;
-    setNotebooks((prevNotebooks) => {
-      const nextNotebooks = prevNotebooks.map((nb) => {
-        if (nb.id !== activeNotebook.id) return nb;
-        const idxById = nb.pages.findIndex((p) => p.id === targetPrevPage.id);
-        const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
-        const newPages = [...nb.pages];
-        newPages[safeIdx] = clonePageFast(targetPrevPage);
-        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
-      });
-      notebooksRef.current = nextNotebooks;
-      return nextNotebooks;
+    const restoredPage = clonePageFast(prevPage);
+    const nextNotebooks = notebooksRef.current.map((nb) => {
+      if (nb.id !== liveNbId) return nb;
+      const idxById = nb.pages.findIndex((p) => p.id === restoredPage.id);
+      const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
+      const newPages = [...nb.pages];
+      newPages[safeIdx] = restoredPage;
+      return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
     });
+    notebooksRef.current = nextNotebooks;
+    const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
+    if (liveNb) activeNotebookLiveRef.current = liveNb;
+    setNotebooks(nextNotebooks);
     setIsDirty(true);
     setSyncStatus('dirty');
 
-    const validStrokeIds = new Set(targetPrevPage.strokes.map((s) => s.id));
-    const validImgIds = new Set((targetPrevPage.images || []).map((im) => im.id));
-    const validTxtIds = new Set((targetPrevPage.texts || []).map((t) => t.id));
+    syncRuntimeSimStateToRestoredPage(restoredPage);
+
+    const validStrokeIds = new Set(restoredPage.strokes.map((s) => s.id));
+    const validImgIds = new Set((restoredPage.images || []).map((im) => im.id));
+    const validTxtIds = new Set((restoredPage.texts || []).map((t) => t.id));
     setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
     setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
@@ -8639,6 +9366,7 @@ export default function App() {
     clonePageFast,
     isSamePageStateForUndo,
     showToast,
+    syncRuntimeSimStateToRestoredPage,
     updateActivePage,
   ]);
 
@@ -8649,19 +9377,48 @@ export default function App() {
       return;
     }
     textEditUndoRecordedForIdRef.current = null;
-    const nextPage = stack.pop()!;
+    suppressNextUndoRecordRef.current = false;
+    const liveNbId = activeNotebookLiveRef.current.id || activeNotebook.id;
+    const curNb =
+      notebooksRef.current.find((n) => n.id === liveNbId) || activeNotebook;
+
+    let nextPage: NotePage | null = null;
+    let targetIdx = Math.min(
+      activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
+      curNb.pages.length - 1
+    );
+    let currentTargetPage = curNb.pages[targetIdx] || activePage;
+
+    while (stack.length > 0) {
+      const candidate = stack.pop()!;
+      const matchedIdx = curNb.pages.findIndex((p) => p.id === candidate.id);
+      const cIdx =
+        matchedIdx >= 0
+          ? matchedIdx
+          : Math.min(
+              activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
+              curNb.pages.length - 1
+            );
+      const cTarget = curNb.pages[cIdx] || activePage;
+      if (!isSamePageStateForUndo(candidate, cTarget) || stack.length === 0) {
+        nextPage = candidate;
+        targetIdx = cIdx;
+        currentTargetPage = cTarget;
+        break;
+      }
+    }
+
+    if (!nextPage || isSamePageStateForUndo(nextPage, currentTargetPage)) {
+      redoStackRef.current = stack;
+      setRedoStack(stack);
+      showToast('ℹ️ Δεν υπάρχει ενέργεια για Επανάληψη (Redo)!');
+      return;
+    }
+
     redoStackRef.current = stack;
     setRedoStack(stack);
-    userEditedInSessionRef.current.add(activeNotebook.id);
-
-    const curNb =
-      notebooksRef.current.find((n) => n.id === activeNotebook.id) || activeNotebook;
-    const matchedIdx = curNb.pages.findIndex((p) => p.id === nextPage.id);
-    const targetIdx =
-      matchedIdx >= 0
-        ? matchedIdx
-        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, curNb.pages.length - 1);
-    const currentTargetPage = curNb.pages[targetIdx] || activePage;
+    userEditedInSessionRef.current.add(liveNbId);
+    saveUserEditedSessionIds(userEditedInSessionRef.current);
 
     const undoSnap = clonePageFast(currentTargetPage);
     const nextU = [...undoStackRef.current.slice(-(MAX_UNDO_STACK_SIZE - 1)), undoSnap];
@@ -8673,24 +9430,27 @@ export default function App() {
       activePageIndexLiveRef.current = targetIdx;
       setActivePageIndex(targetIdx);
     }
-    setNotebooks((prevNotebooks) => {
-      const nextNotebooks = prevNotebooks.map((nb) => {
-        if (nb.id !== activeNotebook.id) return nb;
-        const idxById = nb.pages.findIndex((p) => p.id === nextPage.id);
-        const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
-        const newPages = [...nb.pages];
-        newPages[safeIdx] = clonePageFast(nextPage);
-        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
-      });
-      notebooksRef.current = nextNotebooks;
-      return nextNotebooks;
+    const restoredPage = clonePageFast(nextPage);
+    const nextNotebooks = notebooksRef.current.map((nb) => {
+      if (nb.id !== liveNbId) return nb;
+      const idxById = nb.pages.findIndex((p) => p.id === restoredPage.id);
+      const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
+      const newPages = [...nb.pages];
+      newPages[safeIdx] = restoredPage;
+      return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
     });
+    notebooksRef.current = nextNotebooks;
+    const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
+    if (liveNb) activeNotebookLiveRef.current = liveNb;
+    setNotebooks(nextNotebooks);
     setIsDirty(true);
     setSyncStatus('dirty');
 
-    const validStrokeIds = new Set(nextPage.strokes.map((s) => s.id));
-    const validImgIds = new Set((nextPage.images || []).map((im) => im.id));
-    const validTxtIds = new Set((nextPage.texts || []).map((t) => t.id));
+    syncRuntimeSimStateToRestoredPage(restoredPage);
+
+    const validStrokeIds = new Set(restoredPage.strokes.map((s) => s.id));
+    const validImgIds = new Set((restoredPage.images || []).map((im) => im.id));
+    const validTxtIds = new Set((restoredPage.texts || []).map((t) => t.id));
     setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
     setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
@@ -8700,7 +9460,15 @@ export default function App() {
     setSelectedLassoTextIds((prev) => prev.filter((id) => validTxtIds.has(id)));
     setImageCropMode('none');
     showToast('↪️ Επανάληψη (Redo)!');
-  }, [activeNotebook, activePageIndex, activePage, clonePageFast, showToast]);
+  }, [
+    activeNotebook,
+    activePageIndex,
+    activePage,
+    clonePageFast,
+    isSamePageStateForUndo,
+    showToast,
+    syncRuntimeSimStateToRestoredPage,
+  ]);
 
   const getNextPageZOrder = (page: NotePage): number => {
     const imgCount = (page.images || []).length;
@@ -8837,7 +9605,34 @@ export default function App() {
     return false;
   };
 
+  const strokeBoundsCacheRef = useRef(
+    new WeakMap<
+      StrokeObject,
+      {
+        ptsRef: StrokeObject['points'];
+        ptsLen: number;
+        width: number;
+        arrowStart?: boolean;
+        arrowEnd?: boolean;
+        shapeType?: string;
+        bounds: { minX: number; minY: number; maxX: number; maxY: number };
+      }
+    >()
+  );
+
   const getStrokeBounds = (s: StrokeObject) => {
+    const cached = strokeBoundsCacheRef.current.get(s);
+    if (
+      cached &&
+      cached.ptsRef === s.points &&
+      cached.ptsLen === s.points.length &&
+      cached.width === s.width &&
+      cached.arrowStart === s.arrowStart &&
+      cached.arrowEnd === s.arrowEnd &&
+      cached.shapeType === s.shapeType
+    ) {
+      return cached.bounds;
+    }
     const pts = getStrokeSamplePoints(s);
     let minX = Infinity,
       minY = Infinity,
@@ -8924,7 +9719,17 @@ export default function App() {
         }
       }
     }
-    return { minX, minY, maxX, maxY };
+    const bounds = { minX, minY, maxX, maxY };
+    strokeBoundsCacheRef.current.set(s, {
+      ptsRef: s.points,
+      ptsLen: s.points.length,
+      width: s.width,
+      arrowStart: s.arrowStart,
+      arrowEnd: s.arrowEnd,
+      shapeType: s.shapeType,
+      bounds,
+    });
+    return bounds;
   };
 
   const isPointNearSegment = (
@@ -8946,9 +9751,10 @@ export default function App() {
     pt: { x: number; y: number },
     s: StrokeObject,
     baseTol = 18,
-    allowInteriorFill = false
+    allowInteriorFill = false,
+    preserveExactTol = false
   ): boolean => {
-    const effectiveBaseTol = Math.min(baseTol, 9);
+    const effectiveBaseTol = preserveExactTol ? baseTol : Math.min(baseTol, 9);
     const tol =
       s.tool === 'highlighter'
         ? effectiveBaseTol + (s.width || 3) * 1.9
@@ -11044,7 +11850,7 @@ export default function App() {
         grad.addColorStop(1, '#020617');
         ctx.fillStyle = grad;
 
-        const SHADOW_STEPS = 16;
+        const SHADOW_STEPS = 6;
         for (let step = 0; step < SHADOW_STEPS; step++) {
           const u = step / (SHADOW_STEPS - 1);
           const shiftX = (1.1 + u * 9.6) * shadowScale;
@@ -11069,7 +11875,7 @@ export default function App() {
             y: q3.y + shiftY + uy * leadInset + vy * feather,
           };
 
-          const layerAlpha = (0.056 * Math.pow(1 - u, 0.55) + 0.012) * baseAlpha;
+          const layerAlpha = (0.138 * Math.pow(1 - u, 0.55) + 0.03) * baseAlpha;
           ctx.globalAlpha = layerAlpha;
           ctx.beginPath();
           traceRoundedQuad(s0, s1, s2, s3, rCorner + feather * 0.85 + 1.2);
@@ -11462,8 +12268,48 @@ export default function App() {
 
   // RENDER STATIC SCENE ACROSS MOUNTED PAGES AT 2x RETINA HiDPI (1840x2520)
   // (Only runs on mounted viewport canvases when page state changes, NEVER while Apple Pencil is moving!)
-  const renderStaticSceneRef = useRef<() => void>(() => {});
+  const renderStaticSceneRef = useRef<(forceActive?: boolean) => void>(() => {});
   const pendingStaticRenderRafRef = useRef<number | null>(null);
+  const overCanvasDirtyMapRef = useRef<Map<string, boolean>>(new Map());
+  const isActivelyErasingRef = useRef<boolean>(false);
+  const eraserDidModifyRef = useRef<boolean>(false);
+  const eraserRenderRafRef = useRef<number | null>(null);
+  const staticPageRenderCacheRef = useRef<
+    Map<
+      string,
+      {
+        pageRef: NotePage;
+        wasActive: boolean;
+        canvas: HTMLCanvasElement;
+        overCanvas: HTMLCanvasElement | null;
+        canvasW: number;
+        canvasH: number;
+        strokes: NotePage['strokes'];
+        images: NotePage['images'];
+        texts: NotePage['texts'];
+        tapes: NotePage['tapes'];
+        layers: NotePage['layers'];
+        template: NotePage['template'];
+        paperColor: NotePage['paperColor'];
+        backgroundDataUrl: NotePage['backgroundDataUrl'];
+        pdfPageNumber: NotePage['pdfPageNumber'];
+        circuitSims: NotePage['circuitSims'];
+        springSims: NotePage['springSims'];
+        forceSims: NotePage['forceSims'];
+        heatSims: NotePage['heatSims'];
+        overRoutingSig: string;
+        activeOverlaySig: string;
+        autoSwitches: Array<{
+          simId: string;
+          x: number;
+          yCenter: number;
+          yTop: number;
+          yBottom: number;
+          closed: boolean;
+        }>;
+      }
+    >
+  >(new Map());
   const isReadyMadeSimComponent = (strokes: StrokeObject[], page?: NotePage | null): boolean => {
     if (!strokes || strokes.length === 0) return false;
     return strokes.some((s) => {
@@ -11541,16 +12387,292 @@ export default function App() {
     if (pendingStaticRenderRafRef.current !== null) return;
     pendingStaticRenderRafRef.current = window.requestAnimationFrame(() => {
       pendingStaticRenderRafRef.current = null;
-      renderStaticSceneRef.current();
+      renderStaticSceneRef.current(false);
     });
   }, []);
 
-  const renderStaticScene = useCallback(() => {
-    activeNotebook.pages.forEach((pageObj, pageIdx) => {
-      const canvas = staticCanvasMapRef.current.get(pageObj.id) || (pageIdx === activePageIndex ? staticCanvasRef.current : null);
+  const isDirectNodeTool = activeTool === 'direct-node';
+  const isShapeTool = activeTool === 'shape';
+  const isLassoTool = activeTool === 'lasso';
+  const isHeatSelectTool =
+    activeTool === 'lasso' || activeTool === 'shape' || activeTool === 'magnetic-lasso';
+
+  const renderStaticScene = useCallback((forceActive = true) => {
+    const pagesSource = isActivelyErasingRef.current
+      ? activeNotebookLiveRef.current.pages
+      : activeNotebook.pages;
+    const effectiveActiveIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
+
+    pagesSource.forEach((pageObj, pageIdx) => {
+      const canvas = staticCanvasMapRef.current.get(pageObj.id) || (pageIdx === effectiveActiveIdx ? staticCanvasRef.current : null);
       if (!canvas) return;
+      const overCanvas =
+        overTextCanvasMapRef.current.get(pageObj.id) ||
+        (pageIdx === effectiveActiveIdx ? overTextCanvasRef.current : null);
+
+      const isCurrentActivePage = pageIdx === effectiveActiveIdx;
+      const cachedPage = staticPageRenderCacheRef.current.get(pageObj.id);
+
+      let activeOverlaySig = '';
+      if (isCurrentActivePage) {
+        const hasAnySelectionOrOverlay =
+          selectedStrokeIds.length > 0 ||
+          Boolean(selectedImageId) ||
+          selectedImageIds.length > 0 ||
+          selectedLassoTextIds.length > 0 ||
+          Boolean(activeNodeStrokeId) ||
+          rulerState.visible ||
+          (isShapeTool && lastCreatedShapeIdsRef.current.length > 0) ||
+          (isSimulating && Boolean(pageObj.circuitSims?.length)) ||
+          Boolean(pageObj.springSims?.length) ||
+          Boolean(pageObj.forceSims?.some((fs) => fs.mode === 'pendulum')) ||
+          Boolean(pageObj.heatSims?.length);
+        if (hasAnySelectionOrOverlay) {
+          const sb =
+            selectedStrokeIds.length > 0 ||
+            Boolean(selectedImageId) ||
+            selectedImageIds.length > 0 ||
+            selectedLassoTextIds.length > 0
+              ? getSelectionBounds()
+              : null;
+          const sbSig = sb
+            ? `${sb.cx.toFixed(1)},${sb.cy.toFixed(1)},${sb.hw.toFixed(1)},${sb.hh.toFixed(1)},${(
+                sb.angle || 0
+              ).toFixed(3)}`
+            : '';
+          activeOverlaySig = `${isDirectNodeTool ? 1 : 0}|${isLassoTool ? 1 : 0}|${
+            isShapeTool ? 1 : 0
+          }|${activeNodeStrokeId || ''}|${selectedStrokeIds.join(',')}|${
+            selectedImageId || ''
+          }|${selectedImageIds.join(',')}|${selectedLassoTextIds.join(',')}|${
+            isMoveOnlyLassoSelection ? 1 : 0
+          }|${sbSig}|${isSimulating ? 1 : 0}|${isSpringSimulating ? 1 : 0}|${
+            springSettleAnim ? springSettleAnim.simId : ''
+          }|${springPhaseShiftAnim ? springPhaseShiftAnim.simId : ''}|${
+            rulerState.visible ? 1 : 0
+          }|${rulerState.showMm ? 1 : 0}|${
+            showSimulationPanel && simActiveCategory === 'heat' ? 1 : 0
+          }`;
+        }
+      }
+
+      const activeVisualsDiffer =
+        Boolean(pageObj.heatSims?.length) ||
+        Boolean(pageObj.springSims?.length) ||
+        Boolean(pageObj.forceSims?.some((fs) => fs.mode === 'pendulum')) ||
+        (isSimulating && Boolean(pageObj.circuitSims?.length)) ||
+        Boolean(cachedPage?.activeOverlaySig) ||
+        Boolean(activeOverlaySig);
+
+      // O(1) zero-allocation skip BEFORE building/sorting entries whenever page arrays & overlay signatures match!
+      if (
+        (!isCurrentActivePage || !forceActive) &&
+        cachedPage &&
+        (!activeVisualsDiffer || cachedPage.wasActive === isCurrentActivePage) &&
+        cachedPage.canvas === canvas &&
+        cachedPage.overCanvas === overCanvas &&
+        cachedPage.canvasW === canvas.width &&
+        cachedPage.canvasH === canvas.height &&
+        cachedPage.strokes === pageObj.strokes &&
+        cachedPage.images === pageObj.images &&
+        cachedPage.texts === pageObj.texts &&
+        cachedPage.tapes === pageObj.tapes &&
+        cachedPage.layers === pageObj.layers &&
+        cachedPage.template === pageObj.template &&
+        cachedPage.paperColor === pageObj.paperColor &&
+        cachedPage.backgroundDataUrl === pageObj.backgroundDataUrl &&
+        cachedPage.pdfPageNumber === pageObj.pdfPageNumber &&
+        cachedPage.circuitSims === pageObj.circuitSims &&
+        cachedPage.springSims === pageObj.springSims &&
+        cachedPage.forceSims === pageObj.forceSims &&
+        cachedPage.heatSims === pageObj.heatSims &&
+        cachedPage.activeOverlaySig === activeOverlaySig
+      ) {
+        cachedPage.pageRef = pageObj;
+        cachedPage.wasActive = isCurrentActivePage;
+        if (isCurrentActivePage && cachedPage.autoSwitches.length > 0) {
+          autoSwitchHitsRef.current = cachedPage.autoSwitches;
+          autoSwitchHitRef.current =
+            cachedPage.autoSwitches.find((h) => h.simId === pageObj.activeCircuitSimId) ||
+            cachedPage.autoSwitches[0] ||
+            null;
+        }
+        return;
+      }
+
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+
+      const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
+      // Top of pageObj.layers list (index 0) has the highest layerRank -> rendered ON TOP of layers below it!
+      const layerRankMap = new Map(
+        pageObj.layers.map((l, lIdx) => [l.id, pageObj.layers.length - lIdx])
+      );
+
+      const imgList = pageObj.images || [];
+      const strokeList = pageObj.strokes || [];
+
+      type RenderEntry =
+        | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
+        | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
+      const entries: RenderEntry[] = [];
+
+      imgList.forEach((imgObj, idx) => {
+        entries.push({
+          kind: 'image',
+          layerRank: layerRankMap.get(imgObj.layerId) ?? 1,
+          z: imgObj.zOrder ?? idx + 1,
+          img: imgObj,
+        });
+      });
+
+      strokeList.forEach((s, idx) => {
+        const isHighlighter = s.tool === 'highlighter';
+        const defaultZ = isHighlighter
+          ? -100000 + idx
+          : imgList.length + idx + 1;
+        entries.push({
+          kind: 'stroke',
+          layerRank: layerRankMap.get(s.layerId) ?? 1,
+          z:
+            s.zOrder !== undefined && s.zOrder < 0
+              ? s.zOrder
+              : isHighlighter
+              ? -100000 + idx
+              : s.zOrder ?? defaultZ,
+          stroke: s,
+        });
+      });
+
+      entries.sort((a, b) => {
+        // Highlighters always render at the very bottom / back behind all handwriting, shapes, and images
+        // so that they never obscure handwriting, stencils, or shapes!
+        const aIsHl = Boolean(a.kind === 'stroke' && a.stroke.tool === 'highlighter');
+        const bIsHl = Boolean(b.kind === 'stroke' && b.stroke.tool === 'highlighter');
+        if (aIsHl !== bIsHl) {
+          return aIsHl ? -1 : 1;
+        }
+
+        if (a.layerRank !== b.layerRank) return a.layerRank - b.layerRank;
+        return a.z - b.z;
+      });
+
+      const pageTextsForZ = (pageObj.texts || []).filter((t) => {
+        const l = visibleLayerMap.get(t.layerId);
+        return !l || l.visible;
+      });
+
+      const overFrontFlags = new Uint8Array(entries.length);
+      let overRoutingSig = '';
+      if (overCanvas && pageTextsForZ.length > 0) {
+        const routedIds: string[] = [];
+        for (let eIdx = 0; eIdx < entries.length; eIdx++) {
+          const entry = entries[eIdx];
+          const entryBounds =
+            entry.kind === 'stroke'
+              ? getStrokeBounds(entry.stroke)
+              : {
+                  minX: entry.img.x,
+                  minY: entry.img.y,
+                  maxX: entry.img.x + entry.img.width,
+                  maxY: entry.img.y + entry.img.height,
+                };
+          const isFrontOfText = pageTextsForZ.some((t) => {
+            const tRank = layerRankMap.get(t.layerId) ?? 1;
+            const tZ = t.zOrder ?? 0;
+            const isAbove = entry.layerRank > tRank || (entry.layerRank === tRank && entry.z > tZ);
+            if (!isAbove) return false;
+            const tw = t.boxWidth || (Math.max(t.text.length, 1) * (t.fontSize || 20) * 0.6);
+            const th = t.boxHeight || ((t.fontSize || 20) * 1.5);
+            return (
+              entryBounds.minX <= t.x + tw &&
+              entryBounds.maxX >= t.x &&
+              entryBounds.minY <= t.y + th &&
+              entryBounds.maxY >= t.y
+            );
+          });
+          if (isFrontOfText) {
+            overFrontFlags[eIdx] = 1;
+            routedIds.push(entry.kind === 'stroke' ? entry.stroke.id : entry.img.id);
+          }
+        }
+        overRoutingSig = routedIds.join(',');
+      }
+
+      // Secondary cache hit when only DOM text content changed without altering overTextCanvas z-routing!
+      if (
+        (!isCurrentActivePage || !forceActive) &&
+        cachedPage &&
+        (!activeVisualsDiffer || cachedPage.wasActive === isCurrentActivePage) &&
+        cachedPage.canvas === canvas &&
+        cachedPage.overCanvas === overCanvas &&
+        cachedPage.canvasW === canvas.width &&
+        cachedPage.canvasH === canvas.height &&
+        cachedPage.strokes === pageObj.strokes &&
+        cachedPage.images === pageObj.images &&
+        cachedPage.tapes === pageObj.tapes &&
+        cachedPage.layers === pageObj.layers &&
+        cachedPage.template === pageObj.template &&
+        cachedPage.paperColor === pageObj.paperColor &&
+        cachedPage.backgroundDataUrl === pageObj.backgroundDataUrl &&
+        cachedPage.pdfPageNumber === pageObj.pdfPageNumber &&
+        cachedPage.circuitSims === pageObj.circuitSims &&
+        cachedPage.springSims === pageObj.springSims &&
+        cachedPage.forceSims === pageObj.forceSims &&
+        cachedPage.heatSims === pageObj.heatSims &&
+        cachedPage.overRoutingSig === overRoutingSig &&
+        cachedPage.activeOverlaySig === activeOverlaySig
+      ) {
+        cachedPage.pageRef = pageObj;
+        cachedPage.texts = pageObj.texts;
+        cachedPage.wasActive = isCurrentActivePage;
+        if (isCurrentActivePage && cachedPage.autoSwitches.length > 0) {
+          autoSwitchHitsRef.current = cachedPage.autoSwitches;
+          autoSwitchHitRef.current =
+            cachedPage.autoSwitches.find((h) => h.simId === pageObj.activeCircuitSimId) ||
+            cachedPage.autoSwitches[0] ||
+            null;
+        }
+        return;
+      }
+
+      const needsOverCtx =
+        Boolean(overCanvas) &&
+        (overRoutingSig.length > 0 || Boolean(overCanvasDirtyMapRef.current.get(pageObj.id)));
+      const overCtx = needsOverCtx && overCanvas ? overCanvas.getContext('2d') : null;
+
+      const cacheEntry = {
+        pageRef: pageObj,
+        wasActive: isCurrentActivePage,
+        canvas,
+        overCanvas,
+        canvasW: canvas.width,
+        canvasH: canvas.height,
+        strokes: pageObj.strokes,
+        images: pageObj.images,
+        texts: pageObj.texts,
+        tapes: pageObj.tapes,
+        layers: pageObj.layers,
+        template: pageObj.template,
+        paperColor: pageObj.paperColor,
+        backgroundDataUrl: pageObj.backgroundDataUrl,
+        pdfPageNumber: pageObj.pdfPageNumber,
+        circuitSims: pageObj.circuitSims,
+        springSims: pageObj.springSims,
+        forceSims: pageObj.forceSims,
+        heatSims: pageObj.heatSims,
+        overRoutingSig,
+        activeOverlaySig,
+        autoSwitches: [] as Array<{
+          simId: string;
+          x: number;
+          yCenter: number;
+          yTop: number;
+          yBottom: number;
+          closed: boolean;
+        }>,
+      };
+      staticPageRenderCacheRef.current.set(pageObj.id, cacheEntry);
 
       const pWidth = getPageLogicalWidth(pageObj);
       const pHeight = getPageLogicalHeight(pageObj);
@@ -11559,15 +12681,12 @@ export default function App() {
       ctx.imageSmoothingQuality = 'high';
       ctx.clearRect(0, 0, pWidth, pHeight);
 
-      const overCanvas =
-        overTextCanvasMapRef.current.get(pageObj.id) ||
-        (pageIdx === activePageIndex ? overTextCanvasRef.current : null);
-      const overCtx = overCanvas ? overCanvas.getContext('2d') : null;
       if (overCtx) {
         overCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         overCtx.imageSmoothingEnabled = true;
         overCtx.imageSmoothingQuality = 'high';
         overCtx.clearRect(0, 0, pWidth, pHeight);
+        overCanvasDirtyMapRef.current.set(pageObj.id, overRoutingSig.length > 0);
       }
 
       // 0. Full-Page PDF or JPG/PNG Document Background:
@@ -11577,8 +12696,6 @@ export default function App() {
       } else {
         drawPaperBackground(ctx, pWidth, pHeight, pageObj.template, pageObj.paperColor);
       }
-
-      const isCurrentActivePage = pageIdx === activePageIndex;
 
       // 0.5. Heat Simulation Apparatus Base (rendered directly on paper, under handwriting & pencil so user can color apparatus with pencil/highlighter)
       if (pageObj.heatSims && pageObj.heatSims.length > 0) {
@@ -11596,81 +12713,16 @@ export default function App() {
         }
       }
 
-      const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
-      // Top of pageObj.layers list (index 0) has the highest layerRank -> rendered ON TOP of layers below it!
-      const layerRankMap = new Map(
-        pageObj.layers.map((l, lIdx) => [l.id, pageObj.layers.length - lIdx])
-      );
-
       // 1-3. Unified Layer-Order + Z-Order Rendering for BOTH Images and Strokes/Shapes!
       // Moving a Layer UP in the Layers panel brings all its contents in front of lower Layers,
       // while within the same Layer items sort by their individual zOrder (-1 / +1 / Πίσω / Μπροστά).
-      const imgList = pageObj.images || [];
-      const strokeList = pageObj.strokes || [];
-      const pageValidSims = (pageObj.circuitSims || []).filter((sim) =>
-        sim.strokeIds.some((id) => strokeList.some((s) => s.id === id))
-      );
-      const allSimBaseSet = new Set(pageValidSims.flatMap((sim) => sim.strokeIds));
-      const allSimGroupIds = new Set(
-        strokeList
-          .filter((s) => allSimBaseSet.has(s.id) && s.groupId)
-          .map((s) => s.groupId!)
-      );
-      for (const s of strokeList) {
-        if (s.groupId && allSimGroupIds.has(s.groupId)) {
-          allSimBaseSet.add(s.id);
-        }
+      const pageValidSims = getValidCircuitSims(pageObj);
+      const allSimBaseSet = new Set<string>();
+      for (const sim of pageValidSims) {
+        const simSet = getSimExpandedStrokeSet(pageObj, sim);
+        for (const id of simSet) allSimBaseSet.add(id);
       }
-      if (allSimBaseSet.size > 0) {
-        const isSimEligible = (s: StrokeObject) =>
-          s.shapeType === 'line' ||
-          (!s.isShape && s.points.length >= 2) ||
-          classifyCircuitStrokeKind(s) !== null;
-        const areConnectedTol = (a: StrokeObject, b: StrokeObject, tol = 40): boolean => {
-          for (const pt of a.points) {
-            if (b.points.length === 1) {
-              if (Math.hypot(pt.x - b.points[0].x, pt.y - b.points[0].y) <= tol) return true;
-            } else {
-              for (let i = 0; i < b.points.length - 1; i++) {
-                if (isPointNearSegment(pt, b.points[i], b.points[i + 1], tol)) return true;
-              }
-            }
-          }
-          for (const pt of b.points) {
-            if (a.points.length === 1) {
-              if (Math.hypot(pt.x - a.points[0].x, pt.y - a.points[0].y) <= tol) return true;
-            } else {
-              for (let i = 0; i < a.points.length - 1; i++) {
-                if (isPointNearSegment(pt, a.points[i], a.points[i + 1], tol)) return true;
-              }
-            }
-          }
-          return false;
-        };
-        const eligible = strokeList.filter((s) => allSimBaseSet.has(s.id) || isSimEligible(s));
-        let expandedSim = true;
-        while (expandedSim) {
-          expandedSim = false;
-          const members = eligible.filter((s) => allSimBaseSet.has(s.id));
-          for (const cand of eligible) {
-            if (allSimBaseSet.has(cand.id)) continue;
-            if (members.some((m) => areConnectedTol(cand, m, 40))) {
-              allSimBaseSet.add(cand.id);
-              expandedSim = true;
-              if (cand.groupId) {
-                allSimGroupIds.add(cand.groupId);
-                for (const g of strokeList) {
-                  if (g.groupId === cand.groupId && !allSimBaseSet.has(g.id)) {
-                    allSimBaseSet.add(g.id);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      const isStrokeInAnySim = (s: StrokeObject) =>
-        allSimBaseSet.has(s.id) || Boolean(s.groupId && allSimGroupIds.has(s.groupId));
+      const isStrokeInAnySim = (s: StrokeObject) => allSimBaseSet.has(s.id);
 
       const faintVoltmeterStrokeIds = new Set<string>();
       if (pageValidSims.length > 0) {
@@ -11772,55 +12824,6 @@ export default function App() {
           }
         }
       }
-      type RenderEntry =
-        | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
-        | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
-      const entries: RenderEntry[] = [];
-
-      imgList.forEach((imgObj, idx) => {
-        entries.push({
-          kind: 'image',
-          layerRank: layerRankMap.get(imgObj.layerId) ?? 1,
-          z: imgObj.zOrder ?? idx + 1,
-          img: imgObj,
-        });
-      });
-
-      strokeList.forEach((s, idx) => {
-        const isHighlighter = s.tool === 'highlighter';
-        const defaultZ = isHighlighter
-          ? -100000 + idx
-          : imgList.length + idx + 1;
-        entries.push({
-          kind: 'stroke',
-          layerRank: layerRankMap.get(s.layerId) ?? 1,
-          z:
-            s.zOrder !== undefined && s.zOrder < 0
-              ? s.zOrder
-              : isHighlighter
-              ? -100000 + idx
-              : s.zOrder ?? defaultZ,
-          stroke: s,
-        });
-      });
-
-      entries.sort((a, b) => {
-        // Highlighters always render at the very bottom / back behind all handwriting, shapes, and images
-        // so that they never obscure handwriting, stencils, or shapes!
-        const aIsHl = Boolean(a.kind === 'stroke' && a.stroke.tool === 'highlighter');
-        const bIsHl = Boolean(b.kind === 'stroke' && b.stroke.tool === 'highlighter');
-        if (aIsHl !== bIsHl) {
-          return aIsHl ? -1 : 1;
-        }
-
-        if (a.layerRank !== b.layerRank) return a.layerRank - b.layerRank;
-        return a.z - b.z;
-      });
-
-      const pageTextsForZ = (pageObj.texts || []).filter((t) => {
-        const l = visibleLayerMap.get(t.layerId);
-        return !l || l.visible;
-      });
 
       const pageAutoSwitches: Array<{
         simId: string;
@@ -11831,62 +12834,34 @@ export default function App() {
         closed: boolean;
       }> = [];
       if (pageValidSims.length > 0) {
-        if (isCurrentActivePage && autoSwitchHitsRef.current.length > 0) {
-          pageAutoSwitches.push(...autoSwitchHitsRef.current);
-        } else if (isCurrentActivePage && autoSwitchHitRef.current) {
-          pageAutoSwitches.push({
-            ...autoSwitchHitRef.current,
-            simId: autoSwitchHitRef.current.simId || '',
-          });
-        }
-        if (pageAutoSwitches.length === 0) {
-          for (const sim of pageValidSims) {
-            const sStrokes = strokeList.filter((st) => isStrokeInAnySim(st));
-            const sData = analyzeCircuitForSimulation(sStrokes, sim.switchClosed ?? true);
-            if (sData.autoSwitch) {
-              pageAutoSwitches.push({
-                simId: sim.id,
-                x: sData.autoSwitch.x,
-                yCenter: sData.autoSwitch.yCenter,
-                yTop: sData.autoSwitch.yTop,
-                yBottom: sData.autoSwitch.yBottom,
-                closed: sData.autoSwitch.closed,
-              });
-            }
+        for (const sim of pageValidSims) {
+          const simSet = getSimExpandedStrokeSet(pageObj, sim);
+          const sStrokes = strokeList.filter((st) => simSet.has(st.id));
+          const sData = analyzeCircuitForSimulation(sStrokes, Boolean(sim.switchClosed));
+          if (sData.autoSwitch) {
+            pageAutoSwitches.push({
+              simId: sim.id,
+              x: sData.autoSwitch.x,
+              yCenter: sData.autoSwitch.yCenter,
+              yTop: sData.autoSwitch.yTop,
+              yBottom: sData.autoSwitch.yBottom,
+              closed: sData.autoSwitch.closed,
+            });
           }
+        }
+        cacheEntry.autoSwitches = pageAutoSwitches;
+        if (isCurrentActivePage) {
+          autoSwitchHitsRef.current = pageAutoSwitches;
+          autoSwitchHitRef.current =
+            pageAutoSwitches.find((h) => h.simId === pageObj.activeCircuitSimId) ||
+            pageAutoSwitches[0] ||
+            null;
         }
       }
 
-      for (const entry of entries) {
-        let targetCtx = ctx;
-        if (overCtx && pageTextsForZ.length > 0) {
-          const entryBounds =
-            entry.kind === 'stroke'
-              ? getStrokeBounds(entry.stroke)
-              : {
-                  minX: entry.img.x,
-                  minY: entry.img.y,
-                  maxX: entry.img.x + entry.img.width,
-                  maxY: entry.img.y + entry.img.height,
-                };
-          const isFrontOfText = pageTextsForZ.some((t) => {
-            const tRank = layerRankMap.get(t.layerId) ?? 1;
-            const tZ = t.zOrder ?? 0;
-            const isAbove = entry.layerRank > tRank || (entry.layerRank === tRank && entry.z > tZ);
-            if (!isAbove) return false;
-            const tw = t.boxWidth || (Math.max(t.text.length, 1) * (t.fontSize || 20) * 0.6);
-            const th = t.boxHeight || ((t.fontSize || 20) * 1.5);
-            return (
-              entryBounds.minX <= t.x + tw &&
-              entryBounds.maxX >= t.x &&
-              entryBounds.minY <= t.y + th &&
-              entryBounds.maxY >= t.y
-            );
-          });
-          if (isFrontOfText) {
-            targetCtx = overCtx;
-          }
-        }
+      for (let eIdx = 0; eIdx < entries.length; eIdx++) {
+        const entry = entries[eIdx];
+        const targetCtx = overCtx && overFrontFlags[eIdx] === 1 ? overCtx : ctx;
 
         if (entry.kind === 'image') {
           const imgObj = entry.img;
@@ -11899,7 +12874,11 @@ export default function App() {
             if (imgObj.dataUrl.startsWith('http')) {
               imgEl.crossOrigin = 'anonymous';
             }
-            imgEl.onload = () => renderStaticSceneRef.current();
+            const loadedPageId = pageObj.id;
+            imgEl.onload = () => {
+              staticPageRenderCacheRef.current.delete(loadedPageId);
+              renderStaticSceneRef.current(true);
+            };
             imgEl.src = imgObj.dataUrl;
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
@@ -12023,16 +13002,14 @@ export default function App() {
 
           // If this stroke is a vertical wire passing straight through an automatic knife switch gap,
           // clip it so the region between sw.yTop and sw.yBottom is completely clear paper (no black line behind the switch)!
-          if (pageAutoSwitches.length > 0 && s.points.length >= 2) {
+          if (pageAutoSwitches.length > 0 && s.points.length >= 2 && isStrokeInAnySim(s)) {
+            const sb = getStrokeBounds(s);
             const swHit = pageAutoSwitches.find((sw) => {
               const p0 = s.points[0];
               const p1 = s.points[s.points.length - 1];
               const isVert = Math.abs(p1.y - p0.y) >= 12;
               if (!isVert) return false;
-              const allX = s.points.map((p) => p.x);
-              const minX = Math.min(...allX);
-              const maxX = Math.max(...allX);
-              if (sw.x < minX - 28 || sw.x > maxX + 28) return false;
+              if (sw.x < sb.minX - 28 || sw.x > sb.maxX + 28) return false;
               const yMin = Math.min(p0.y, p1.y);
               const yMax = Math.max(p0.y, p1.y);
               return (
@@ -12171,7 +13148,7 @@ export default function App() {
         if (
           selBounds &&
           !isSelectedForceSimVector &&
-          (activeTool !== 'direct-node' || isShapeWithoutNodes(activeNodeTarget))
+          (!isDirectNodeTool || isShapeWithoutNodes(activeNodeTarget))
         ) {
           const pad = 8;
           const hw = selBounds.hw + pad;
@@ -12720,7 +13697,7 @@ export default function App() {
         }
 
         // 4b. When a single Sine or Cosine wave is selected in Lasso mode, highlight open endpoints of other matching waves on the page!
-        if (!isMoveOnlyLassoSelection && activeTool === 'lasso' && selectedStrokeIds.length === 1 && selectedImageIds.length === 0) {
+        if (!isMoveOnlyLassoSelection && isLassoTool && selectedStrokeIds.length === 1 && selectedImageIds.length === 0) {
           const selWave = pageObj.strokes.find((s) => s.id === selectedStrokeIds[0]);
           if (
             selWave &&
@@ -12762,7 +13739,7 @@ export default function App() {
             ? selectedStrokeIds
             : activeNodeStrokeId
             ? [activeNodeStrokeId]
-            : activeTool === 'shape'
+            : isShapeTool
             ? lastCreatedShapeIdsRef.current
             : [];
         const activeWaveDiag = !isMoveOnlyLassoSelection
@@ -12990,7 +13967,7 @@ export default function App() {
         }
 
         // 5. Direct Node Handles ("Λευκό Βελάκι"):
-        if (activeTool === 'direct-node' && activeNodeStrokeId) {
+        if (isDirectNodeTool && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target && !isShapeWithoutNodes(target)) {
             ctx.save();
@@ -13314,21 +14291,39 @@ export default function App() {
             isDark,
             layer: 'ui',
             isSelectActive:
-              activeTool === 'lasso' ||
-              activeTool === 'shape' ||
-              activeTool === 'magnetic-lasso' ||
+              isHeatSelectTool ||
               (showSimulationPanel && simActiveCategory === 'heat'),
           });
         }
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm]);
+  }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
+  const eraserUndoRecordedRef = useRef<boolean>(false);
+  const commitLiveEraserStateIfNeeded = useCallback(() => {
+    if (eraserRenderRafRef.current !== null) {
+      window.cancelAnimationFrame(eraserRenderRafRef.current);
+      eraserRenderRafRef.current = null;
+    }
+    const wasErasing = isActivelyErasingRef.current;
+    const didMod = eraserDidModifyRef.current;
+    isActivelyErasingRef.current = false;
+    eraserDidModifyRef.current = false;
+    eraserUndoRecordedRef.current = false;
+    if (wasErasing && didMod) {
+      renderStaticSceneRef.current(false);
+      userEditedInSessionRef.current.add(activeNotebookLiveRef.current.id);
+      setIsDirty(true);
+      setSyncStatus('dirty');
+      setNotebooks([...notebooksRef.current]);
+    }
+  }, []);
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
+  // Pass `false` so unchanged pages and pure DOM text-box keystrokes skip staticCanvas clearing & redrawing completely!
   useLayoutEffect(() => {
     if (viewMode === 'editor') {
-      renderStaticScene();
+      renderStaticScene(false);
     }
   }, [renderStaticScene, viewMode, activeNotebook.id]);
 
@@ -13576,8 +14571,14 @@ export default function App() {
         }
       }
 
+      const isTouchGestureActive = Boolean(
+        pinchStateRef.current?.active || outsidePanDragRef.current?.active
+      );
+      const isActiveScrollOrMomentum =
+        isTouchGestureActive || scrollMomentumRafRef.current !== null;
+
       // Update activePageIndex live as the user scrolls across pages so the virtualized 5-page canvas window
-      // and top-bar page counter (1/170 -> 2/170) track the viewport at 120fps!
+      // shifts on long PDFs while avoiding synchronous React re-renders across adjacent pages mid-swipe!
       if (!keepActivePage && didScrollVertically && activeNotebook.pages.length > 1) {
         const docFocusY = (-clampedPanY + wsHeight * 0.5) / clampedZoom;
         let accumY = 0;
@@ -13617,8 +14618,11 @@ export default function App() {
           const colOffset = activeDrawingPageIndexRef.current % cols;
           bestIdx = Math.min(activeNotebook.pages.length - 1, bestRow * cols + colOffset);
         }
-        if (bestIdx !== activeDrawingPageIndexRef.current) {
-          activeDrawingPageIndexRef.current = bestIdx;
+        activeDrawingPageIndexRef.current = bestIdx;
+        if (
+          bestIdx !== activePageIndex &&
+          (!isActiveScrollOrMomentum || Math.abs(bestIdx - activePageIndex) >= 2)
+        ) {
           setActivePageIndex(bestIdx);
         }
       }
@@ -13629,9 +14633,6 @@ export default function App() {
         checkScrollSpyActiveCircuitRef.current?.(clampedPanY, clampedZoom, wsHeight);
       }
 
-      const isTouchGestureActive = Boolean(
-        pinchStateRef.current?.active || outsidePanDragRef.current?.active
-      );
       if (attemptedVerticalScroll) {
         triggerPageControlsVisibility();
       }
@@ -13875,12 +14876,12 @@ export default function App() {
         const colOffset = activeDrawingPageIndexRef.current % cols;
         bestIdx = Math.min(activeNotebook.pages.length - 1, bestRow * cols + colOffset);
       }
-      if (bestIdx !== activeDrawingPageIndexRef.current) {
-        activeDrawingPageIndexRef.current = bestIdx;
+      activeDrawingPageIndexRef.current = bestIdx;
+      if (bestIdx !== activePageIndex) {
         setActivePageIndex(bestIdx);
       }
     },
-    [activeNotebook.pages, getMultiPageSpreadCols]
+    [activeNotebook.pages, activePageIndex, getMultiPageSpreadCols]
   );
 
   const insertPageAtIndex = useCallback(
@@ -14065,12 +15066,12 @@ export default function App() {
     }
   }, []);
 
-  // 120Hz Physics-Based Kinetic Momentum Scroll (Slow finger = slow 1:1 stop; Fast finger = fast accelerated glide)
+  // 120Hz Physics-Based Kinetic Momentum Scroll (Slow finger = slow 1:1 stop; Fast finger = fast iPadOS-grade glide)
   const startScrollMomentum = useCallback(
     (initialVelocityPxPerMs: number) => {
       cancelScrollMomentum();
-      let vy = Math.max(-7.5, Math.min(7.5, initialVelocityPxPerMs));
-      if (Math.abs(vy) < 0.15) {
+      let vy = Math.max(-12.5, Math.min(12.5, initialVelocityPxPerMs));
+      if (Math.abs(vy) < 0.13) {
         setPan({ ...panRef.current });
         syncActivePageFromPanY(panRef.current.y);
         return;
@@ -14089,8 +15090,8 @@ export default function App() {
 
         let nextPanY = panRef.current.y + vy * dt;
 
-        // Exponential friction (0.945 per 60Hz frame, smoothly scaled for 120Hz ProMotion)
-        vy *= Math.pow(0.945, dt / 16.67);
+        // Natural iPadOS-grade exponential friction (0.966 per 60Hz frame, smoothly scaled for 120Hz ProMotion)
+        vy *= Math.pow(0.966, dt / 16.67);
 
         // Hard stop at document top/bottom boundaries so fast flicks never leave empty screen space
         if (nextPanY >= maxPanY) {
@@ -14101,10 +15102,9 @@ export default function App() {
           vy = 0;
         }
 
-        applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
-        syncActivePageFromPanY(nextPanY);
+        applyPaperTransformDirect(zoomRef.current, panRef.current.x, nextPanY, false);
 
-        if (Math.abs(vy) > 0.035) {
+        if (Math.abs(vy) > 0.03) {
           scrollMomentumRafRef.current = window.requestAnimationFrame(step);
         } else {
           scrollMomentumRafRef.current = null;
@@ -16067,7 +17067,6 @@ export default function App() {
           fontWeight: boldActive ? 700 : 500,
           letterSpacing: '0em',
           WebkitTextStroke: boldActive ? '0.5px currentColor' : '0.15px currentColor',
-          paintOrder: 'stroke fill',
         };
       case 'marker':
         return {
@@ -16079,8 +17078,7 @@ export default function App() {
           fontSynthesis: 'none',
           lineHeight: 1.44,
           letterSpacing: '0em',
-          WebkitTextStroke: '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: '0px',
         };
       case 'fun':
         return {
@@ -16092,8 +17090,7 @@ export default function App() {
           fontSynthesis: 'none',
           lineHeight: 1.38,
           letterSpacing: '0em',
-          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px',
         };
       case 'diary':
         return {
@@ -16105,8 +17102,7 @@ export default function App() {
           fontSynthesis: 'none',
           lineHeight: 1.38,
           letterSpacing: '0.01em',
-          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px',
         };
       case 'mansalva':
         return {
@@ -16114,8 +17110,7 @@ export default function App() {
           fontStyle: 'oblique 6deg',
           fontWeight: boldActive ? 700 : 400,
           letterSpacing: boldActive ? '0em' : '-0.015em',
-          WebkitTextStroke: boldActive ? '1.2px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '1.2px currentColor' : '0px',
         };
       case 'handwritten':
         return {
@@ -16123,8 +17118,7 @@ export default function App() {
           fontStyle: 'oblique 7deg',
           fontWeight: boldActive ? 800 : 400,
           letterSpacing: boldActive ? '0em' : '-0.01em',
-          WebkitTextStroke: boldActive ? '0.85px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '0.85px currentColor' : '0px',
         };
       case 'neohellenic':
         return {
@@ -16132,8 +17126,7 @@ export default function App() {
           fontStyle: 'italic',
           fontWeight: boldActive ? 700 : 400,
           letterSpacing: boldActive ? '0.015em' : '0.005em',
-          WebkitTextStroke: boldActive ? '0.9px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '0.9px currentColor' : '0px',
         };
       case 'sans':
       default:
@@ -16142,8 +17135,7 @@ export default function App() {
           fontStyle: 'normal',
           fontWeight: boldActive ? 800 : 500,
           letterSpacing: boldActive ? '0.01em' : '0em',
-          WebkitTextStroke: boldActive ? '0.6px currentColor' : '0px transparent',
-          paintOrder: 'stroke fill',
+          WebkitTextStroke: boldActive ? '0.6px currentColor' : '0px',
         };
     }
   };
@@ -16473,6 +17465,28 @@ export default function App() {
       };
     },
     []
+  );
+
+  const getEffectiveTextShadow = useCallback(
+    (txt: TextObject): boolean => {
+      const len = (txt.text || '').length;
+      if (!txt.isMath && len > 0 && txt.spans && txt.spans.length > 0) {
+        return getRangeEffectiveStyle(txt, 0, len).shadow;
+      }
+      return Boolean(txt.shadow);
+    },
+    [getRangeEffectiveStyle]
+  );
+
+  const getEffectiveTextBold = useCallback(
+    (txt: TextObject): boolean => {
+      const len = (txt.text || '').length;
+      if (!txt.isMath && len > 0 && txt.spans && txt.spans.length > 0) {
+        return getRangeEffectiveStyle(txt, 0, len).bold;
+      }
+      return Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+    },
+    [getRangeEffectiveStyle]
   );
 
   const applyStyleToTextRange = useCallback(
@@ -17829,11 +18843,11 @@ export default function App() {
     };
 
     // Nonlinear Finger-Speed Gain Curve:
-    // - Slow finger (<= 0.35 px/ms) -> 1.0x exact 1:1 slow scroll
-    // - Fast finger (> 0.35 px/ms) -> up to 3.6x accelerated fast scroll!
+    // - Slow finger (<= 0.22 px/ms) -> 1.0x exact 1:1 slow scroll
+    // - Normal-to-fast finger (> 0.22 px/ms) -> up to 4.2x effortless accelerated scroll!
     const computeFingerSpeedGain = (speedPxPerMs: number): number => {
-      if (speedPxPerMs <= 0.35) return 1.0;
-      return 1.0 + Math.min(2.6, Math.pow((speedPxPerMs - 0.35) * 1.45, 1.15));
+      if (speedPxPerMs <= 0.22) return 1.0;
+      return 1.0 + Math.min(3.2, Math.pow((speedPxPerMs - 0.22) * 1.75, 1.12));
     };
 
     const initPinchFromTouches = (t1: Touch, t2: Touch, touchCount: number) => {
@@ -17847,6 +18861,7 @@ export default function App() {
         holdTimerRef.current = null;
       }
       if (isDrawingRef.current && activePointerTypeRef.current !== 'pen') {
+        commitLiveEraserStateIfNeeded();
         isDrawingRef.current = false;
         activePointerIdRef.current = null;
         activePointerTypeRef.current = null;
@@ -17890,6 +18905,7 @@ export default function App() {
         lastMidY: midY,
         lastMoveTime: now,
         velocityY: 0,
+        accumBoostY: 0,
         paperOffsetX,
         paperOffsetY,
         startTime: now,
@@ -17965,12 +18981,12 @@ export default function App() {
       // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on paper when Pencil-Only Mode is ON -> Scroll pages like Word!
       // IMPORTANT:
       // - Keep any selectedTextId (and its dark floating toolbar) active during finger scroll/zoom!
-      // - When Laser ('laser') is active, 1 finger on the paper draws the red laser beam!
+      // - Works even when Laser ('laser') is active so finger scrolling up/down is always smooth while Apple Pencil / Mouse draws the laser on the page!
       // - In Pencil-Only Mode, if the 1 finger touches an active Lasso selection box/handle or Text Box,
       //   do NOT scroll — let handlePointerDown / text box handlers drag, resize, or rotate it!
       if (
         directTouches.length === 1 &&
-        (isOutsideCanvas || (pencilOnlyMode && activeTool !== 'laser'))
+        (isOutsideCanvas || pencilOnlyMode)
       ) {
         const t = directTouches[0] as any;
         if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 78) || (t.radiusY && t.radiusY > 78))) {
@@ -18054,21 +19070,39 @@ export default function App() {
         if (moved > st.maxMoved) st.maxMoved = moved;
 
         const now = performance.now();
-        const dt = Math.max(4, Math.min(60, now - st.lastMoveTime));
+        const rawDt = now - st.lastMoveTime;
+        const stepMidX = currMidX - st.lastMidX;
         const stepMidY = currMidY - st.lastMidY;
-        const instVy = stepMidY / dt;
-        st.velocityY = st.velocityY * 0.4 + instVy * 0.6;
+        const isPureTwoFingerVertPan =
+          Math.abs(currDist - st.initialDist) < 22 && Math.abs(stepMidY) >= Math.abs(stepMidX);
+        if (rawDt >= 2) {
+          const dt = Math.min(60, rawDt);
+          const instVy = stepMidY / dt;
+          const panGain = isPureTwoFingerVertPan ? computeFingerSpeedGain(Math.abs(instVy)) : 1.0;
+          const boostedVy = instVy * panGain;
+          if (Math.abs(stepMidY) < 1.5 && rawDt < 18 && Math.abs(st.velocityY) > 0.35) {
+            st.velocityY *= 0.9;
+          } else if (Math.abs(boostedVy) >= Math.abs(st.velocityY)) {
+            st.velocityY = st.velocityY * 0.32 + boostedVy * 0.68;
+          } else {
+            st.velocityY = st.velocityY * 0.5 + boostedVy * 0.5;
+          }
+          st.accumBoostY += stepMidY * (panGain - 1.0);
+          st.lastMoveTime = now;
+        }
         st.lastDist = currDist;
         st.lastMidX = currMidX;
         st.lastMidY = currMidY;
-        st.lastMoveTime = now;
 
         const minZ = isMultiPageSpreadEnabledRef.current ? 0.15 : 0.2;
         const newZoom = Math.min(3.5, Math.max(minZ, st.initialZoom * (currDist / st.initialDist)));
         const nextPanX =
           st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
         const nextPanY =
-          st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
+          st.initialPanY +
+          (currMidY - st.startMidY) +
+          st.accumBoostY -
+          st.paperOffsetY * (newZoom - st.initialZoom);
 
         applyPaperTransformDirect(newZoom, nextPanX, nextPanY, false);
         if (Math.abs(newZoom - st.initialZoom) < 0.04) {
@@ -18121,16 +19155,29 @@ export default function App() {
           if (e.cancelable) e.preventDefault();
           const drag = outsidePanDragRef.current;
           const now = performance.now();
-          const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
+          const rawDt = now - drag.lastMoveTime;
           const stepDx = t.clientX - drag.lastClientX;
           const stepDy = t.clientY - drag.lastClientY;
-          const instVy = stepDy / dt;
-          const gain = computeFingerSpeedGain(Math.abs(instVy));
-
-          drag.velocityY = drag.velocityY * 0.4 + instVy * gain * 0.6;
+          let gain = 1.0;
+          if (rawDt >= 2) {
+            const dt = Math.min(60, rawDt);
+            const instVy = stepDy / dt;
+            gain = computeFingerSpeedGain(Math.abs(instVy));
+            const boostedVy = instVy * gain;
+            // Protect flick momentum from 120Hz finger lift-off micro-jitter (|stepDy| < 1.5px in < 18ms)
+            if (Math.abs(stepDy) < 1.5 && rawDt < 18 && Math.abs(drag.velocityY) > 0.35) {
+              drag.velocityY *= 0.9;
+            } else if (Math.abs(boostedVy) >= Math.abs(drag.velocityY)) {
+              drag.velocityY = drag.velocityY * 0.32 + boostedVy * 0.68;
+            } else {
+              drag.velocityY = drag.velocityY * 0.5 + boostedVy * 0.5;
+            }
+            drag.lastMoveTime = now;
+          } else {
+            gain = computeFingerSpeedGain(Math.abs(drag.velocityY));
+          }
           drag.lastClientX = t.clientX;
           drag.lastClientY = t.clientY;
-          drag.lastMoveTime = now;
 
           const nextPanX = panRef.current.x + stepDx;
           const nextPanY = panRef.current.y + stepDy * gain;
@@ -18250,7 +19297,7 @@ export default function App() {
         const drag = outsidePanDragRef.current;
         outsidePanDragRef.current = null;
         triggerPageControlsVisibility();
-        if (performance.now() - drag.lastMoveTime < 90 && Math.abs(drag.velocityY) > 0.16) {
+        if (performance.now() - drag.lastMoveTime < 120 && Math.abs(drag.velocityY) > 0.14) {
           startScrollMomentum(drag.velocityY);
         } else {
           setPan({ ...panRef.current });
@@ -18305,8 +19352,8 @@ export default function App() {
           triggerPageControlsVisibility();
           setZoom(zoomRef.current);
           if (
-            performance.now() - st.lastMoveTime < 90 &&
-            Math.abs(st.velocityY) > 0.16 &&
+            performance.now() - st.lastMoveTime < 120 &&
+            Math.abs(st.velocityY) > 0.14 &&
             Math.abs(zoomRef.current - st.initialZoom) < 0.08
           ) {
             startScrollMomentum(st.velocityY);
@@ -18438,22 +19485,14 @@ export default function App() {
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   };
 
-  // Render Persistent Red Laser Pointer Strokes on Fullscreen Viewport Canvas
-  // (Works everywhere across entire browser, over all dashboards & stopwatch, stays while drawing + for 0.8s after lifting, then fades out over 0.28s)
+  // Render Persistent Red Laser Pointer Strokes on the Active Page Overlay Canvas
+  // (Draws strictly on the page so finger scrolling outside/on-page works freely and laser strokes track page coordinates)
   const renderLaserOverlay = (alpha = 1) => {
-    const c = globalLaserCanvasRef.current;
-    if (!c) return;
-    const ctx = globalLaserCtxRef.current || c.getContext('2d');
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || CANVAS_DPR || 1;
-    const targetW = Math.round(window.innerWidth * dpr);
-    const targetH = Math.round(window.innerHeight * dpr);
-    if (c.width !== targetW || c.height !== targetH) {
-      c.width = targetW;
-      c.height = targetH;
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    const c = activeCanvasRef.current;
+    const ctx = activeCtxRef.current || c?.getContext('2d');
+    if (!c || !ctx) return;
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
 
     const allLaserPaths = [
       ...laserStrokesRef.current,
@@ -18519,8 +19558,6 @@ export default function App() {
           pts: currentStrokePtsRef.current.slice(-180),
           laserPaths: laserStrokesRef.current.slice(-10).map((p) => p.slice(-180)),
           laserAlpha: alpha,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
         } as any);
       }
     }
@@ -18596,7 +19633,7 @@ export default function App() {
     }, 800);
   };
 
-  // Reset & clean global laser canvas whenever user leaves laser tool
+  // Reset & clean laser overlay whenever user leaves laser tool
   useEffect(() => {
     if (activeTool !== 'laser') {
       cancelLaserTimers();
@@ -18604,6 +19641,7 @@ export default function App() {
       laserStrokesRef.current = [];
       currentStrokePtsRef.current = [];
       clearGlobalLaserCanvas();
+      clearActiveOverlay();
     }
   }, [activeTool]);
 
@@ -18685,13 +19723,13 @@ export default function App() {
             }
             pageChanged = true;
             for (let i = 1; i <= 99; i++) {
-              const cand = `sim${String(i).padStart(2, '0')}`;
+              const cand = `κύκλωμα${i}`;
               if (!used.has(cand)) {
                 used.add(cand);
                 return { ...sim, name: cand };
               }
             }
-            const fallback = `sim${used.size + 1}`;
+            const fallback = `κύκλωμα${used.size + 1}`;
             used.add(fallback);
             return { ...sim, name: fallback };
           });
@@ -18702,9 +19740,15 @@ export default function App() {
     );
   }, [activeNotebook]);
 
+  const lastScrollSpyCheckMsRef = useRef<number>(0);
   const checkScrollSpyActiveCircuit = useCallback(
     (panY: number, zoom: number, wsH: number) => {
+      if (!showSimulationPanel || simActiveCategory !== 'circuits') return;
       if (simScrollAnimRef.current !== null) return;
+      const now = performance.now();
+      if (now - lastScrollSpyCheckMsRef.current < 120) return;
+      lastScrollSpyCheckMsRef.current = now;
+
       const nb = activeNotebookLiveRef.current;
       const allSims = getAllNotebookCircuitSims(nb);
       if (allSims.length === 0) return;
@@ -18723,10 +19767,9 @@ export default function App() {
         let maxY = -Infinity;
         for (const s of page.strokes) {
           if (!strokeIdSet.has(s.id)) continue;
-          for (const p of s.points) {
-            if (p.y < minY) minY = p.y;
-            if (p.y > maxY) maxY = p.y;
-          }
+          const sb = getStrokeBounds(s);
+          if (sb.minY < minY) minY = sb.minY;
+          if (sb.maxY > maxY) maxY = sb.maxY;
         }
         const simCenterY = Number.isFinite(minY)
           ? (minY + maxY) / 2
@@ -18781,6 +19824,8 @@ export default function App() {
       }
     },
     [
+      showSimulationPanel,
+      simActiveCategory,
       getAllNotebookCircuitSims,
       getPageTopOffset,
     ]
@@ -18907,10 +19952,10 @@ export default function App() {
       }
     }
     for (let i = 1; i <= 99; i++) {
-      const candidate = `ελ${String(i).padStart(2, '0')}`;
+      const candidate = `ελατήριο${i}`;
       if (!usedNames.has(candidate)) return candidate;
     }
-    return `ελ${usedNames.size + 1}`;
+    return `ελατήριο${usedNames.size + 1}`;
   };
 
   // ============================================================================
@@ -18966,7 +20011,16 @@ export default function App() {
     );
   };
 
-  const getNextDefaultForceSimName = (page?: NotePage): string => {
+  const getNextDefaultForceSimName = (page?: NotePage, mode?: ForceSimMode): string => {
+    const effectiveMode: ForceSimMode = mode || forceSimSubTab || 'analysis';
+    const prefix =
+      effectiveMode === 'pendulum'
+        ? 'εκκρεμές'
+        : effectiveMode === 'incline'
+        ? 'κεκλιμένο'
+        : effectiveMode === 'synthesis'
+        ? 'δυνάμεις'
+        : 'δύναμη';
     const usedNames = new Set<string>();
     for (const p of activeNotebook.pages) {
       for (const s of getValidForceSims(p)) {
@@ -18979,10 +20033,10 @@ export default function App() {
       }
     }
     for (let i = 1; i <= 99; i++) {
-      const candidate = `δυν${String(i).padStart(2, '0')}`;
+      const candidate = `${prefix}${i}`;
       if (!usedNames.has(candidate)) return candidate;
     }
-    return `δυν${usedNames.size + 1}`;
+    return `${prefix}${usedNames.size + 1}`;
   };
 
   const simplifyRootText = (n: number): string => {
@@ -19215,7 +20269,7 @@ export default function App() {
 
       const targetSimId =
         existingSyn?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const targetSimName = existingSyn?.name || getNextDefaultForceSimName(page);
+      const targetSimName = existingSyn?.name || getNextDefaultForceSimName(page, 'synthesis');
       const newSim: ForceSimConfig = {
         id: targetSimId,
         name: targetSimName,
@@ -19384,7 +20438,7 @@ export default function App() {
       );
       const targetSimId =
         existingSim?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page);
+      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page, 'pendulum');
 
       pendulumPhysRef.current[targetSimId] = {
         ang: initAng,
@@ -19548,7 +20602,7 @@ export default function App() {
       );
       const targetSimId =
         existingSim?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page);
+      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page, 'incline');
 
       const newSim: ForceSimConfig = {
         id: targetSimId,
@@ -19601,9 +20655,29 @@ export default function App() {
   };
 
   const registerOrActivateForceSimFromLasso = (preferredMode?: ForceSimMode): boolean => {
-    if (selectedStrokeIds.length === 0) return false;
+    const showMissingSelectionHint = (mode?: ForceSimMode) => {
+      if (mode === 'pendulum') {
+        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το ταβάνι, το νήμα και το σφαιρίδιο και πατήστε «+ Νέο Εκκρεμές»!');
+      } else if (mode === 'incline') {
+        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο και το σώμα και πατήστε «+ Νέο Κεκλιμένο»!');
+      } else if (mode === 'synthesis') {
+        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί τα 2 διανύσματα δυνάμεων και πατήστε «+ Νέες Δυνάμεις»!');
+      } else if (mode === 'analysis') {
+        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το διάνυσμα δύναμης και πατήστε «+ Νέα Δύναμη»!');
+      } else {
+        showToast('🎯 Επιλέξτε πρώτα με το Λάσο τα σχεδιασμένα αντικείμενα/γραμμές στο χαρτί!');
+      }
+    };
+
+    if (selectedStrokeIds.length === 0) {
+      showMissingSelectionHint(preferredMode);
+      return false;
+    }
     const candidateStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-    if (candidateStrokes.length === 0) return false;
+    if (candidateStrokes.length === 0) {
+      showMissingSelectionHint(preferredMode);
+      return false;
+    }
 
     const bobShapes = ['circle', 'ellipse', 'sphere'];
     const inclineShapes = ['incline-wedge', 'inclined-plane', 'triangle'];
@@ -19618,9 +20692,28 @@ export default function App() {
 
     // 1. Check for Pendulum (Circle/Sphere Bob + Line String [+ optional Horizontal Ceiling])
     if (!preferredMode || preferredMode === 'pendulum') {
-      const bobs = candidateStrokes.filter((s) => bobShapes.includes(s.shapeType || ''));
+      const bobs = candidateStrokes.filter((s) => {
+        if (bobShapes.includes(s.shapeType || '')) return true;
+        if (!s.isShape && s.points.length >= 6 && !s.arrowEnd && !s.arrowStart) {
+          const b = getStrokeBounds(s);
+          const w = b.maxX - b.minX;
+          const h = b.maxY - b.minY;
+          const closeGap = Math.hypot(
+            s.points[s.points.length - 1].x - s.points[0].x,
+            s.points[s.points.length - 1].y - s.points[0].y
+          );
+          return w >= 16 && h >= 16 && Math.max(w, h) / Math.max(1, Math.min(w, h)) <= 1.8 && closeGap <= Math.max(w, h) * 0.65;
+        }
+        return false;
+      });
+      const bobIdSet = new Set(bobs.map((b) => b.id));
       const lines = candidateStrokes.filter(
-        (s) => s.shapeType === 'line' && s.points.length >= 2
+        (s) =>
+          !bobIdSet.has(s.id) &&
+          (s.shapeType === 'line' || !s.isShape) &&
+          !s.arrowEnd &&
+          !s.arrowStart &&
+          s.points.length >= 2
       );
       for (const bob of bobs) {
         const bb = getStrokeBounds(bob);
@@ -19631,19 +20724,39 @@ export default function App() {
           const p0 = ln.points[0];
           const p1 = ln.points[ln.points.length - 1];
           const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-          if (len < 45) continue;
+          if (len < 40) continue;
           const d0 = Math.hypot(p0.x - bcx, p0.y - bcy);
           const d1 = Math.hypot(p1.x - bcx, p1.y - bcy);
           const minD = Math.min(d0, d1);
           const topPt = d0 < d1 ? p1 : p0;
           const botPt = d0 < d1 ? p0 : p1;
-          if (minD <= br + 75 && botPt.y > topPt.y + 20) {
-            attachBobToRodForPendulum(ln.id, bob.id);
+          if (minD <= br + 80 && botPt.y > topPt.y + 20) {
+            const explicitCeiling = lines.find((sup) => {
+              if (sup.id === ln.id) return false;
+              const spA = sup.points[0];
+              const spB = sup.points[sup.points.length - 1];
+              const abx = spB.x - spA.x;
+              const aby = spB.y - spA.y;
+              const lenSq = abx * abx + aby * aby;
+              if (lenSq < 35 * 35 || Math.abs(abx) < Math.abs(aby) * 1.3) return false;
+              const t = Math.max(
+                0.02,
+                Math.min(0.98, ((topPt.x - spA.x) * abx + (topPt.y - spA.y) * aby) / lenSq)
+              );
+              const projX = spA.x + t * abx;
+              const projY = spA.y + t * aby;
+              return Math.hypot(topPt.x - projX, topPt.y - projY) <= 55;
+            });
+            attachBobToRodForPendulum(ln.id, bob.id, explicitCeiling?.id);
             setSimActiveCategory('forces');
             setShowSimulationPanel(true);
             return true;
           }
         }
+      }
+      if (preferredMode === 'pendulum') {
+        showMissingSelectionHint('pendulum');
+        return false;
       }
     }
 
@@ -19658,6 +20771,10 @@ export default function App() {
         setSimActiveCategory('forces');
         setShowSimulationPanel(true);
         return true;
+      }
+      if (preferredMode === 'incline') {
+        showMissingSelectionHint('incline');
+        return false;
       }
     }
 
@@ -19678,6 +20795,10 @@ export default function App() {
       setShowSimulationPanel(true);
       return true;
     }
+    if (preferredMode === 'synthesis') {
+      showMissingSelectionHint('synthesis');
+      return false;
+    }
 
     // 4. Check for 1 Force Vector -> Analysis (Fx, Fy)
     if ((!preferredMode || preferredMode === 'analysis') && vecStrokes.length >= 1) {
@@ -19687,7 +20808,12 @@ export default function App() {
       setShowSimulationPanel(true);
       return true;
     }
+    if (preferredMode === 'analysis') {
+      showMissingSelectionHint('analysis');
+      return false;
+    }
 
+    showMissingSelectionHint(preferredMode);
     return false;
   };
 
@@ -19743,7 +20869,7 @@ export default function App() {
 
     const U = A4_GRID_STEP_PX; // 23px per 1 N grid square
     const newSimId = `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const newSimName = getNextDefaultForceSimName(activePage);
+    const newSimName = getNextDefaultForceSimName(activePage, mode);
     const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
 
     updateActivePage((page) => {
@@ -20309,7 +21435,7 @@ export default function App() {
       const cy = Math.round(((st.points[0].y - pEnd.y) / U) * 10) / 10;
       const newSim: ForceSimConfig = {
         id: newSimId,
-        name: getNextDefaultForceSimName(activePage),
+        name: getNextDefaultForceSimName(activePage, 'analysis'),
         mode: 'analysis',
         originX: ox,
         originY: oy,
@@ -20391,7 +21517,7 @@ export default function App() {
       const newSimId = `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newSim: ForceSimConfig = {
         id: newSimId,
-        name: getNextDefaultForceSimName(activePage),
+        name: getNextDefaultForceSimName(activePage, 'synthesis'),
         mode: 'synthesis',
         originX: ox,
         originY: oy,
@@ -21029,15 +22155,22 @@ export default function App() {
 
   const getNextDefaultAtomSimName = useCallback(
     (page: NotePage): string => {
-      const valid = getValidAtomSims(page);
-      const used = new Set(valid.map((s) => s.name));
+      const used = new Set<string>();
+      for (const p of activeNotebook.pages) {
+        for (const s of getValidAtomSims(p)) {
+          used.add(s.name.trim().toLowerCase());
+        }
+      }
+      for (const s of getValidAtomSims(page)) {
+        used.add(s.name.trim().toLowerCase());
+      }
       for (let i = 1; i <= 99; i++) {
-        const candidate = `ατ${String(i).padStart(2, '0')}`;
+        const candidate = `άτομο${i}`;
         if (!used.has(candidate)) return candidate;
       }
-      return `ατ${valid.length + 1}`;
+      return `άτομο${used.size + 1}`;
     },
-    [getValidAtomSims]
+    [activeNotebook.pages, getValidAtomSims]
   );
 
   const getActiveAtomSim = useCallback(
@@ -21200,40 +22333,44 @@ export default function App() {
     const selectedStrokes = activePage.strokes.filter((s) =>
       selectedStrokeIds.includes(s.id)
     );
+    if (selectedStrokes.length === 0) {
+      showToast(
+        '🎯 Επιλέξτε πρώτα με το Λάσο το σχέδιο ατόμου (πυρήνα & τροχιές) στο χαρτί ή επιλέξτε στοιχείο από τον Περιοδικό Πίνακα!'
+      );
+      return;
+    }
     let cx = 360;
     let cy = 340;
     let outerR = 88;
     let strokeColor = '#8b5cf6';
     let initialZ = 2; // Ήλιο (He) ως προεπιλογή
 
-    if (selectedStrokes.length > 0) {
-      let minX = Infinity,
-        maxX = -Infinity,
-        minY = Infinity,
-        maxY = -Infinity;
-      for (const st of selectedStrokes) {
-        if (st.color && st.color !== '#000000') strokeColor = st.color;
-        for (const p of st.points) {
-          if (p.x < minX) minX = p.x;
-          if (p.x > maxX) maxX = p.x;
-          if (p.y < minY) minY = p.y;
-          if (p.y > maxY) maxY = p.y;
-        }
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const st of selectedStrokes) {
+      if (st.color && st.color !== '#000000') strokeColor = st.color;
+      for (const p of st.points) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
       }
-      if (Number.isFinite(minX)) {
-        cx = Math.round((minX + maxX) / 2);
-        cy = Math.round((minY + maxY) / 2);
-        outerR = Math.max(
-          58,
-          Math.min(130, Math.round(Math.max(maxX - minX, maxY - minY) / 2))
-        );
-      }
-      // Εκτίμηση αρχικού στοιχείου από τον αριθμό των κύκλων που ζωγράφισε ο χρήστης (πυρήνας + τροχιές)
-      const circleLikeCount = selectedStrokes.filter((st) => st.points.length >= 6).length;
-      if (circleLikeCount >= 4) initialZ = 11; // Na (3 τροχιές)
-      else if (circleLikeCount === 3) initialZ = 6; // C (2 τροχιές)
-      else initialZ = 2; // He (1 τροχιά)
     }
+    if (Number.isFinite(minX)) {
+      cx = Math.round((minX + maxX) / 2);
+      cy = Math.round((minY + maxY) / 2);
+      outerR = Math.max(
+        58,
+        Math.min(130, Math.round(Math.max(maxX - minX, maxY - minY) / 2))
+      );
+    }
+    // Εκτίμηση αρχικού στοιχείου από τον αριθμό των κύκλων που ζωγράφισε ο χρήστης (πυρήνας + τροχιές)
+    const circleLikeCount = selectedStrokes.filter((st) => st.points.length >= 6).length;
+    if (circleLikeCount >= 4) initialZ = 11; // Na (3 τροχιές)
+    else if (circleLikeCount === 3) initialZ = 6; // C (2 τροχιές)
+    else initialZ = 2; // He (1 τροχιά)
 
     const selectedSet = new Set(selectedStrokeIds);
     const ts = Date.now();
@@ -24005,7 +25142,10 @@ export default function App() {
     const rawSelSet = new Set(selectedStrokeIds);
     const selStrokes = activePage.strokes.filter((s) => rawSelSet.has(s.id));
     const springsInSel = selStrokes.filter((s) => s.shapeType === 'spring');
-    if (springsInSel.length === 0) return false;
+    if (springsInSel.length === 0) {
+      showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το ελατήριο και το βαρίδιο και πατήστε «+ Νέο Ελατήριο»!');
+      return false;
+    }
 
     // Check if any selected spring already belongs to a SpringSimConfig
     const existing = getValidSpringSims(activePage).find((sm) =>
@@ -24022,30 +25162,30 @@ export default function App() {
       return true;
     }
 
-    // Look for a mass block in the selection or near the spring's free end
+    // Look for a mass block strictly inside the user's Lasso selection
     const sp = springsInSel[springsInSel.length - 1];
     const info = getSpringTerminalsAndWidthVec(sp);
     const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere'];
-    let mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
-    if (!mass) {
-      mass = activePage.strokes.find((s) => {
-        if (s.id === sp.id || !massShapes.includes(s.shapeType || '')) return false;
-        const b = getStrokeBounds(s);
-        const cx = (b.minX + b.maxX) / 2;
-        const cy = (b.minY + b.maxY) / 2;
-        return (
-          Math.hypot(cx - info.endTerm.x, cy - info.endTerm.y) <= 85 ||
-          Math.hypot(cx - info.startTerm.x, cy - info.startTerm.y) <= 85
-        );
-      });
-    }
+    const mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
+    const pointerInSel = selStrokes.find(
+      (s) =>
+        s.id !== sp.id &&
+        (s.shapeType === 'spring-pointer' || s.shapeType === 'arrow' || Boolean(s.arrowEnd))
+    );
 
     if (mass) {
+      pushUndoSnapshot(activePage);
+      suppressNextUndoRecordRef.current = true;
       attachMassToSpringAndCreateEquilibriumClone(sp.id, mass.id);
+      if (pointerInSel) {
+        suppressNextUndoRecordRef.current = true;
+        attachPointerToSpring(sp.id, pointerInSel.id);
+      }
       return true;
     }
 
-    // If only a spring was selected without a mass block, create a clean grey mass block and attach it!
+    // If only a spring was selected without a mass block, create a clean grey mass block and attach it in ONE Undo step!
+    pushUndoSnapshot(activePage);
     const fixedEnd: 'start' | 'end' = sp.springSupport?.fixedEnd || 'start';
     const freePt = fixedEnd === 'start' ? info.endTerm : info.startTerm;
     const fixedPt = fixedEnd === 'start' ? info.startTerm : info.endTerm;
@@ -24079,9 +25219,12 @@ export default function App() {
       ],
     };
     updateActivePage((page) => ({ ...page, strokes: [...page.strokes, newMassStroke] }), false);
-    window.setTimeout(() => {
-      attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId);
-    }, 0);
+    suppressNextUndoRecordRef.current = true;
+    attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId);
+    if (pointerInSel) {
+      suppressNextUndoRecordRef.current = true;
+      attachPointerToSpring(sp.id, pointerInSel.id);
+    }
     return true;
   };
 
@@ -24155,8 +25298,9 @@ export default function App() {
     }
 
     // Transitively include all connected circuit wires & components (<= 40px) belonging to this circuit!
+    // Use strict `isCircuitSimConnectedStroke` outside raw Lasso selection so nearby handwritten Greek words are never absorbed.
     const eligible = workingPageStrokes.filter(
-      (s) => expandedIdSet.has(s.id) || isCircuitEligibleStroke(s)
+      (s) => expandedIdSet.has(s.id) || isCircuitSimConnectedStroke(s)
     );
     let addedConnected = true;
     while (addedConnected) {
@@ -24169,7 +25313,9 @@ export default function App() {
           addedConnected = true;
           if (cand.groupId) {
             for (const g of workingPageStrokes) {
-              if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
+              if (g.groupId === cand.groupId && isCircuitSimConnectedStroke(g)) {
+                expandedIdSet.add(g.id);
+              }
             }
           }
         }
@@ -24433,7 +25579,7 @@ export default function App() {
       const eligible = sourcePageStrokes.filter(
         (s) =>
           expandedIdSet.has(s.id) ||
-          (isCircuitEligibleStroke(s) &&
+          (isCircuitSimConnectedStroke(s) &&
             (selectionTouchesExistingSim || !registeredSimStrokeIds.has(s.id)))
       );
       let added = true;
@@ -24447,19 +25593,21 @@ export default function App() {
             added = true;
             if (cand.groupId) {
               for (const g of sourcePageStrokes) {
-                if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
+                if (g.groupId === cand.groupId && isCircuitSimConnectedStroke(g)) {
+                  expandedIdSet.add(g.id);
+                }
               }
             }
           }
         }
       }
     } else {
-      // If nothing is selected with Lasso, first check if there are new unregistered circuit components on this page!
-      const unregisteredEligible = sourcePageStrokes.filter(
-        (s) => isCircuitEligibleStroke(s) && !registeredSimStrokeIds.has(s.id)
+      // If nothing is selected with Lasso, first check if there are new unregistered circuit components/wires on this page!
+      const unregisteredStrict = sourcePageStrokes.filter(
+        (s) => isCircuitSimConnectedStroke(s) && !registeredSimStrokeIds.has(s.id)
       );
-      if (unregisteredEligible.length > 0) {
-        for (const s of unregisteredEligible) expandedIdSet.add(s.id);
+      if (unregisteredStrict.length > 0) {
+        for (const s of unregisteredStrict) expandedIdSet.add(s.id);
       } else if (activeSim) {
         const simSet = getSimExpandedStrokeSet(pageForSimLookup, activeSim);
         for (const id of simSet) expandedIdSet.add(id);
@@ -26782,11 +27930,97 @@ export default function App() {
   // 60FPS / 120FPS INTERACTIVE CIRCUIT SIMULATION OVERLAY ENGINE
   // ============================================================================
   const simAnimOriginMsRef = useRef<number>(performance.now());
+  const simCanvasDirtyRef = useRef<boolean>(false);
+  const simCanvasLastElRef = useRef<HTMLCanvasElement | null>(null);
+  const prevSimDirtyRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const circuitGlowSpritesRef = useRef<{
+    electronGreen: HTMLCanvasElement;
+    electronCyan: HTMLCanvasElement;
+    bulbHalo: HTMLCanvasElement;
+    switchRed: HTMLCanvasElement;
+    switchGreen: HTMLCanvasElement;
+  } | null>(null);
+
+  const getCircuitGlowSprites = () => {
+    if (circuitGlowSpritesRef.current) return circuitGlowSpritesRef.current;
+    if (typeof document === 'undefined') return null;
+
+    const makeDotSprite = (fill: string, glow: string, r: number, blur: number, stroke?: string) => {
+      const logicalSize = 36;
+      const dpr = 2;
+      const c = document.createElement('canvas');
+      c.width = logicalSize * dpr;
+      c.height = logicalSize * dpr;
+      const sCtx = c.getContext('2d');
+      if (sCtx) {
+        sCtx.scale(dpr, dpr);
+        const mid = logicalSize / 2;
+        sCtx.save();
+        sCtx.fillStyle = fill;
+        sCtx.shadowColor = glow;
+        sCtx.shadowBlur = blur;
+        sCtx.beginPath();
+        sCtx.arc(mid, mid, r, 0, Math.PI * 2);
+        sCtx.fill();
+        sCtx.restore();
+        if (stroke) {
+          sCtx.strokeStyle = stroke;
+          sCtx.lineWidth = 1.6;
+          sCtx.beginPath();
+          sCtx.arc(mid, mid, r, 0, Math.PI * 2);
+          sCtx.stroke();
+        }
+      }
+      return c;
+    };
+
+    const haloCanvas = document.createElement('canvas');
+    haloCanvas.width = 128;
+    haloCanvas.height = 128;
+    const hCtx = haloCanvas.getContext('2d');
+    if (hCtx) {
+      const grad = hCtx.createRadialGradient(64, 64, 5, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(254, 240, 138, 1)');
+      grad.addColorStop(0.45, 'rgba(250, 204, 21, 0.62)');
+      grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+      hCtx.fillStyle = grad;
+      hCtx.beginPath();
+      hCtx.arc(64, 64, 64, 0, Math.PI * 2);
+      hCtx.fill();
+    }
+
+    circuitGlowSpritesRef.current = {
+      electronGreen: makeDotSprite('#84cc16', '#4ade80', 4.8, 9),
+      electronCyan: makeDotSprite('#38bdf8', '#0ea5e9', 4.8, 9),
+      bulbHalo: haloCanvas,
+      switchRed: makeDotSprite('#ef4444', 'rgba(239, 68, 68, 0.55)', 6.4, 6, '#fecaca'),
+      switchGreen: makeDotSprite('#22c55e', 'rgba(34, 197, 94, 0.5)', 6.4, 6, '#bbf7d0'),
+    };
+    return circuitGlowSpritesRef.current;
+  };
+
   useEffect(() => {
     const canvas = simCanvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (simCanvasLastElRef.current !== canvas) {
+      simCanvasLastElRef.current = canvas;
+      simCanvasDirtyRef.current = false;
+      prevSimDirtyRectRef.current = null;
+    }
+
+    // Strict active-view gate: NEVER run simulation RAF loops while in Library or Landing view!
+    if (viewMode !== 'editor') {
+      if (simCanvasDirtyRef.current) {
+        const clearCtx = canvas.getContext('2d');
+        if (clearCtx) {
+          clearCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+          clearCtx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+        }
+        simCanvasDirtyRef.current = false;
+        prevSimDirtyRectRef.current = null;
+      }
+      return;
+    }
 
     const activeSim = getActiveCircuitSim(activePage);
     const activeSpringSim = getActiveSpringSim(activePage);
@@ -26801,23 +28035,8 @@ export default function App() {
       pageAtomSims.length > 0 ||
       atomReactionAnim !== null ||
       draggingAtomHandleRef.current !== null;
-    const allPageForceVectors = activePage.strokes.filter(
-      (st) =>
-        (st.shapeType === 'spring-pointer' ||
-          st.shapeType === 'arrow' ||
-          Boolean(st.arrowEnd)) &&
-        !st.attachedToSpringId &&
-        st.points.length >= 2 &&
-        !(
-          st.groupId &&
-          (st.groupId.startsWith('axes-') ||
-            st.groupId.startsWith('wave-axes-') ||
-            st.groupId.startsWith('math-graph-'))
-        )
-    );
     const hasForceOverlay =
       Boolean(activeForceSim) ||
-      (isSimModeActive && allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
       forceSimAnim !== null ||
       draggingForceHandleRef.current !== null;
     const hasSpringOverlay =
@@ -26853,10 +28072,20 @@ export default function App() {
       forceOverlayHitRef.current = null;
       atomOverlayHitRef.current = null;
       livePdfSimButtonsRef.current = [];
-      ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-      ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+      if (simCanvasDirtyRef.current) {
+        const clearCtx = canvas.getContext('2d');
+        if (clearCtx) {
+          clearCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+          clearCtx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+        }
+        simCanvasDirtyRef.current = false;
+      }
       return;
     }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    simCanvasDirtyRef.current = true;
 
     const visibleLayerIds = new Set(
       activePage.layers.filter((l) => l.visible).map((l) => l.id)
@@ -27024,6 +28253,35 @@ export default function App() {
     const simsToSimulate =
       pageValidSims.length > 0 ? pageValidSims : activeSim ? [activeSim] : [];
 
+    interface PreparedMeterMeta {
+      compIdx: number;
+      kind: 'ammeter' | 'voltmeter';
+      active: boolean;
+      pvx: number;
+      pvy: number;
+      totalNeedleLen: number;
+      headLen: number;
+      headHalfW: number;
+      needleColor: string;
+      lineW: number;
+      alpha: number;
+    }
+
+    interface PreparedFanMeta {
+      compIdx: number;
+      active: boolean;
+      powerFactor: number;
+      cx: number;
+      cy: number;
+      minX: number;
+      maxX: number;
+      rOuter: number;
+      rHub: number;
+      ringPerimeterColor: string;
+      bladeFillColor: string;
+      bladeBorderColor: string;
+    }
+
     interface PreparedCircuitSim {
       sim: CircuitSimConfig;
       isThisActive: boolean;
@@ -27035,6 +28293,9 @@ export default function App() {
       simStrokes: StrokeObject[];
       simData: ReturnType<typeof analyzeCircuitForSimulation>;
       particleChains: PreparedParticleChain[];
+      meters: PreparedMeterMeta[];
+      fans: PreparedFanMeta[];
+      bounds: { minX: number; minY: number; maxX: number; maxY: number } | null;
     }
 
     const nextAutoSwitchHits: Array<{
@@ -27067,6 +28328,22 @@ export default function App() {
       const simStrokes = activePage.strokes.filter(
         (st) => visibleLayerIds.has(st.layerId) && simSet.has(st.id)
       );
+      const simStrokeById = new Map(simStrokes.map((st) => [st.id, st]));
+      let cMinX = Infinity,
+        cMinY = Infinity,
+        cMaxX = -Infinity,
+        cMaxY = -Infinity;
+      for (let i = 0; i < simStrokes.length; i++) {
+        const sb = getStrokeBounds(simStrokes[i]);
+        if (sb.minX < cMinX) cMinX = sb.minX;
+        if (sb.minY < cMinY) cMinY = sb.minY;
+        if (sb.maxX > cMaxX) cMaxX = sb.maxX;
+        if (sb.maxY > cMaxY) cMaxY = sb.maxY;
+      }
+      const simBounds = Number.isFinite(cMinX)
+        ? { minX: cMinX - 135, minY: cMinY - 135, maxX: cMaxX + 135, maxY: cMaxY + 135 }
+        : null;
+
       const simData = analyzeCircuitForSimulation(simStrokes, closed);
       if (!hasProposal && simData.autoSwitch) {
         nextAutoSwitchHits.push({
@@ -27078,6 +28355,86 @@ export default function App() {
           closed: simData.autoSwitch.closed,
         });
       }
+
+      const meters: PreparedMeterMeta[] = [];
+      const fans: PreparedFanMeta[] = [];
+      for (let mIdx = 0; mIdx < simData.components.length; mIdx++) {
+        const cs = simData.components[mIdx];
+        if (cs.comp.kind === 'ammeter' || cs.comp.kind === 'voltmeter') {
+          const m = cs.comp;
+          const ccx = m.circleCx ?? m.cx;
+          const ccy = m.circleCy ?? m.cy;
+          const rC =
+            m.circleR ?? Math.max(14, Math.min(m.maxX - m.minX, m.maxY - m.minY) * 0.36);
+          let ringStroke: StrokeObject | undefined;
+          let needleStroke: StrokeObject | undefined;
+          for (const sid of m.strokeIds) {
+            const ms = simStrokeById.get(sid);
+            if (!ms) continue;
+            if (!ringStroke && (ms.shapeType === 'ammeter' || ms.shapeType === 'voltmeter')) {
+              ringStroke = ms;
+            }
+            if (
+              !needleStroke &&
+              (ms.shapeType === 'ammeter-needle' || ms.shapeType === 'voltmeter-needle')
+            ) {
+              needleStroke = ms;
+            }
+          }
+          const needleColor = needleStroke?.color || ringStroke?.color || m.color || '#111827';
+          const lineW = Math.max(1.8, ringStroke?.width || 2.0);
+          const alpha =
+            cs.comp.kind === 'voltmeter'
+              ? ringStroke?.opacity !== undefined && ringStroke.opacity < 0.9
+                ? ringStroke.opacity
+                : 0.38
+              : ringStroke?.opacity ?? 1;
+          const headLen = Math.max(7.2, rC * 0.32);
+          meters.push({
+            compIdx: mIdx,
+            kind: cs.comp.kind,
+            active: cs.active,
+            pvx: ccx - rC * Math.SQRT1_2,
+            pvy: ccy + rC * Math.SQRT1_2,
+            totalNeedleLen: rC * 2.6,
+            headLen,
+            headHalfW: Math.max(4.2, headLen * 0.52),
+            needleColor,
+            lineW,
+            alpha,
+          });
+        } else if (cs.comp.kind === 'fan') {
+          const f = cs.comp;
+          const rOuter = Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
+          const rHub = Math.max(5.5, rOuter * 0.22);
+          let ringStroke: StrokeObject | undefined;
+          let bladeStroke: StrokeObject | undefined;
+          for (const sid of f.strokeIds) {
+            const fs = simStrokeById.get(sid);
+            if (!fs) continue;
+            if (!ringStroke && fs.shapeType === 'fan' && fs.points.length > 2) ringStroke = fs;
+            if (!bladeStroke && fs.shapeType === 'fan-blade') bladeStroke = fs;
+          }
+          fans.push({
+            compIdx: mIdx,
+            active: cs.active,
+            powerFactor: cs.powerFactor,
+            cx: f.cx,
+            cy: f.cy,
+            minX: f.minX,
+            maxX: f.maxX,
+            rOuter,
+            rHub,
+            ringPerimeterColor: ringStroke?.color || '#1e293b',
+            bladeFillColor:
+              bladeStroke?.fillStyle === 'none'
+                ? 'transparent'
+                : bladeStroke?.fillColor || bladeStroke?.color || '#0284c7',
+            bladeBorderColor: bladeStroke?.color || '#0369a1',
+          });
+        }
+      }
+
       const particleChains = buildParticleChainsForSim(simData);
       preparedCircuitSims.push({
         sim: s,
@@ -27090,6 +28447,9 @@ export default function App() {
         simStrokes,
         simData,
         particleChains,
+        meters,
+        fans,
+        bounds: simBounds,
       });
     }
 
@@ -27100,15 +28460,31 @@ export default function App() {
       null;
     autoSwitchHitRef.current = activeHit;
 
+    const anyCircuitActivelyFlowing =
+      isSimulating &&
+      preparedCircuitSims.some(
+        (ps) =>
+          ps.simData.isCircuitClosed &&
+          (!ps.simData.autoSwitch || ps.simData.autoSwitch.closed) &&
+          (ps.particleChains.length > 0 ||
+            ps.simData.components.some(
+              (cs) => (cs.comp.kind === 'bulb' || cs.comp.kind === 'fan') && cs.active && cs.powerFactor > 0.01
+            ))
+      );
+    const anyAtomRotating = pageAtomSims.some((s) => s.isRotating !== false);
+    const glowSprites = getCircuitGlowSprites();
+    const effectivePaperBg = getEffectivePaperColor(activePage);
+
     let rafId = 0;
     let lastHeatIdleSig = '';
 
     const renderSimFrame = (now: number) => {
+      const heatApi = heatSimLiveRef.current;
       const hasHeatSims = Boolean(activePage.heatSims && activePage.heatSims.length > 0);
-      const isOtherSimAnimating =
+      const isOtherSimPresent =
         isLivePdfMode ||
         isSimulating ||
-        (isSpringSimulating && !isSpringPaused) ||
+        Boolean(activeSpringSim) ||
         hasProposal ||
         springSettleAnim !== null ||
         springPhaseShiftAnim !== null ||
@@ -27118,32 +28494,33 @@ export default function App() {
         hasAtomOverlay ||
         atomReactionAnim !== null ||
         atomReactionAnimRef.current !== null ||
-        Boolean(activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
         Boolean(activeForceSim) ||
-        (activePage.springSims && activePage.springSims.length > 0) ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560);
 
       // Fast-path for pages that ONLY contain a Heat Simulation:
-      // 1. Always advance physics & stopwatch in real time when running (even if scrolled off-screen).
-      // 2. If the Heat Simulation is scrolled outside the visible viewport, skip canvas redrawing completely!
-      // 3. If paused/idle (no flame, temp <= 50°C, not sloshing, not dragging) and nothing changed since the last frame,
-      //    skip clearing & redrawing the 2x Retina canvas so scrolling is 100% zero-overhead (120fps)!
-      if (hasHeatSims && !isOtherSimAnimating) {
-        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatSim.activeHeatSim?.isRunning) {
-          heatSim.pauseHeatingAndSim();
+      // 1. Advance physics & stopwatch ONLY when running/sloshing/settling.
+      // 2. When paused & resting (`!isHeatActive`), draw 1 crisp static frame and STOP scheduling RAF (0 FPS / 0% CPU)!
+      if (hasHeatSims && !isOtherSimPresent) {
+        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatApi.activeHeatSim?.isRunning) {
+          heatApi.pauseHeatingAndSim();
         }
-        if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
+        const preLive =
+          (heatApi.getLiveSim ? heatApi.getLiveSim() : heatApi.activeHeatSim) || activePage.heatSims![0];
+        const isHeatActive =
+          Boolean(preLive?.isRunning) ||
+          heatApi.isDragging() ||
+          isHeatSimulationVisuallyActive(preLive);
+
+        if (isHeatActive && heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
           const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
-          heatSim.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
+          heatApi.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
         }
-        const syncedLiveSim = (heatSim as any).getLiveSim
-          ? (heatSim as any).getLiveSim()
-          : heatSim.activeHeatSim;
+        const syncedLiveSim =
+          (heatApi.getLiveSim ? heatApi.getLiveSim() : heatApi.activeHeatSim) || preLive;
         if (syncedLiveSim && typeof syncedLiveSim.elapsedSec === 'number') {
-          const simMs = Math.round(syncedLiveSim.elapsedSec * 1000);
-          setHeatStopwatchElapsedMs((prev) => (Math.abs(prev - simMs) >= 50 ? simMs : prev));
+          heatStopwatchLiveMsRef.current = Math.round(syncedLiveSim.elapsedSec * 1000);
         }
-        heatSimLastFrameRef.current = now;
+        heatSimLastFrameRef.current = isHeatActive ? now : null;
 
         const wCheck = canvas.width / CANVAS_DPR;
         const hCheck = canvas.height / CANVAS_DPR;
@@ -27155,7 +28532,10 @@ export default function App() {
           const scaleY = rect.height / Math.max(1, hCheck);
           let anyVisible = false;
           for (const hSim of activePage.heatSims!) {
-            const liveSim = ((heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim) || hSim;
+            const liveSim =
+              (heatApi.getLiveSim && heatApi.getLiveSim()?.id === hSim.id
+                ? heatApi.getLiveSim()
+                : hSim) || hSim;
             const bounds = getHeatSimulationWorldBounds(liveSim);
             if (!bounds) continue;
             const screenTop = rect.top + bounds.minY * scaleY;
@@ -27173,36 +28553,25 @@ export default function App() {
             }
           }
           if (!anyVisible) {
-            rafId = window.requestAnimationFrame(renderSimFrame);
+            if (isHeatActive) {
+              rafId = window.requestAnimationFrame(renderSimFrame);
+            }
             return;
           }
         }
 
-        // Idle & low-frequency frame deduplication when no 60fps fluid/flame animation is active
-        const primaryLive =
-          ((heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : activePage.heatSims![0]) ||
-          activePage.heatSims![0];
-        const has60FpsFluidOrFlame =
-          heatSim.isDragging() ||
-          isHeatSimulationVisuallyActive(
-            primaryLive ? { ...primaryLive, isRunning: false } : null
-          );
-
-        if (!has60FpsFluidOrFlame) {
-          const hoverPt = heatSim.getHoverPoint();
+        if (!isHeatActive) {
+          const hoverPt = heatApi.getHoverPoint();
           const selectActive =
-            activeTool === 'lasso' ||
-            activeTool === 'shape' ||
-            activeTool === 'magnetic-lasso' ||
+            isHeatSelectTool ||
             (showSimulationPanel && simActiveCategory === 'heat');
-          const timeQuant = primaryLive?.isRunning
-            ? Math.floor((primaryLive.elapsedSec || 0) * 12)
-            : Math.round((primaryLive?.elapsedSec || 0) * 100);
-          const sig = `${primaryLive?.id || ''}|${timeQuant}|${primaryLive?.ambientTemperature ?? 20}|${
-            primaryLive?.selectedObjectId || ''
-          }|${(primaryLive?.selectedObjectIds || []).join(',')}|${selectActive ? 1 : 0}|${
+          const sig = `${syncedLiveSim?.id || ''}|${Math.round((syncedLiveSim?.elapsedSec || 0) * 100)}|${
+            syncedLiveSim?.ambientTemperature ?? 20
+          }|${syncedLiveSim?.selectedObjectId || ''}|${(syncedLiveSim?.selectedObjectIds || []).join(
+            ','
+          )}|${selectActive ? 1 : 0}|${
             hoverPt ? `${Math.round(hoverPt.x)},${Math.round(hoverPt.y)}` : ''
-          }|${(primaryLive?.objects || [])
+          }|${(syncedLiveSim?.objects || [])
             .map(
               (o: any) =>
                 `${o.id}:${Math.round(o.x)},${Math.round(o.y)},${o.width},${o.height},${
@@ -27213,7 +28582,9 @@ export default function App() {
                   o.thermometerState?.temperature ?? 0
                 ).toFixed(1)},${o.burnerState?.isOn ? 1 : 0}`
             )
-            .join(';')}|${(primaryLive?.graphs || (primaryLive?.graph ? [primaryLive.graph] : []))
+            .join(';')}|${(
+            syncedLiveSim?.graphs || (syncedLiveSim?.graph ? [syncedLiveSim.graph] : [])
+          )
             .map(
               (g: any) =>
                 `${g.visible ? 1 : 0},${Math.round(g.x)},${Math.round(g.y)},${g.width},${
@@ -27223,7 +28594,7 @@ export default function App() {
             .join(';')}`;
 
           if (sig === lastHeatIdleSig) {
-            rafId = window.requestAnimationFrame(renderSimFrame);
+            // Truly paused & unchanged -> STOP RAF (0 FPS / 0% CPU)! Woken on demand by wakeSimCanvas().
             return;
           }
           lastHeatIdleSig = sig;
@@ -27237,7 +28608,49 @@ export default function App() {
       const h = canvas.height / CANVAS_DPR;
       ctx.save();
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-      ctx.clearRect(0, 0, w, h);
+
+      // Dirty-rect clear when ONLY circuits are rendered (cuts 20.1 MB full-page Retina clear by ~88%!)
+      const canUseCircuitDirtyClear =
+        !isLivePdfMode &&
+        !hasProposal &&
+        !hasSpringOverlay &&
+        !hasForceOverlay &&
+        !hasAtomOverlay &&
+        !hasHeatOverlay &&
+        circuitAlignFlashStart === null &&
+        preparedCircuitSims.length > 0 &&
+        preparedCircuitSims.every((ps) => ps.bounds !== null);
+
+      if (canUseCircuitDirtyClear) {
+        let dMinX = Infinity,
+          dMinY = Infinity,
+          dMaxX = -Infinity,
+          dMaxY = -Infinity;
+        for (let i = 0; i < preparedCircuitSims.length; i++) {
+          const b = preparedCircuitSims[i].bounds!;
+          if (b.minX < dMinX) dMinX = b.minX;
+          if (b.minY < dMinY) dMinY = b.minY;
+          if (b.maxX > dMaxX) dMaxX = b.maxX;
+          if (b.maxY > dMaxY) dMaxY = b.maxY;
+        }
+        const curRect = {
+          x: Math.max(0, Math.floor(dMinX)),
+          y: Math.max(0, Math.floor(dMinY)),
+          w: Math.min(w, Math.ceil(dMaxX)) - Math.max(0, Math.floor(dMinX)),
+          h: Math.min(h, Math.ceil(dMaxY)) - Math.max(0, Math.floor(dMinY)),
+        };
+        const prevRect = prevSimDirtyRectRef.current;
+        if (prevRect) {
+          ctx.clearRect(prevRect.x, prevRect.y, prevRect.w, prevRect.h);
+        } else {
+          ctx.clearRect(0, 0, w, h);
+        }
+        ctx.clearRect(curRect.x, curRect.y, curRect.w, curRect.h);
+        prevSimDirtyRectRef.current = curRect;
+      } else {
+        ctx.clearRect(0, 0, w, h);
+        prevSimDirtyRectRef.current = null;
+      }
 
       // 0. 0.56s Wire Alignment Flash (triggered when clicking "📐 Ένωση & Ευθυγράμμιση Αγωγών")
       if (circuitAlignFlashStart !== null) {
@@ -27503,7 +28916,8 @@ export default function App() {
             showElectrons,
             speedMultiplier,
             showDarkWireTrack,
-            simStrokes,
+            meters,
+            fans,
           } = pcs;
 
           // 1. Optional PhET-style Dark Conductive Tube Track behind particles
@@ -27530,7 +28944,7 @@ export default function App() {
             ctx.restore();
           }
 
-      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (Only when simulation is actively running!)
+      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (0 shadowBlur / 0 per-frame radialGradient!)
       for (const cs of isSimulating ? simData.components : []) {
         if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
         const b = cs.comp;
@@ -27545,54 +28959,48 @@ export default function App() {
         const glowRadius = domeR * (2.05 + pwr * 1.25) * pulse;
 
         ctx.save();
-        // Outer warm golden halo (pulsing)
-        const grad = ctx.createRadialGradient(
-          domeCx,
-          domeCy,
-          domeR * 0.12,
-          domeCx,
-          domeCy,
-          glowRadius
-        );
-        grad.addColorStop(0, `rgba(254, 240, 138, ${Math.min(0.92, (0.58 + 0.22 * blinkWave) * pwr)})`);
-        grad.addColorStop(0.45, `rgba(250, 204, 21, ${Math.min(0.65, (0.34 + 0.16 * blinkWave) * pwr)})`);
-        grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(domeCx, domeCy, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
+        if (glowSprites?.bulbHalo) {
+          ctx.globalAlpha = Math.min(0.95, (0.58 + 0.22 * blinkWave) * pwr);
+          ctx.drawImage(
+            glowSprites.bulbHalo,
+            domeCx - glowRadius,
+            domeCy - glowRadius,
+            glowRadius * 2,
+            glowRadius * 2
+          );
+          ctx.globalAlpha = 1;
+        }
 
-        // Blinking / Pulsing Radiating Light Rays around the bulb dome!
+        // Batched Radiating Light Rays (2 stroke batches instead of 12 shadowBlur passes!)
         const numRays = 12;
         const startAng = -Math.PI * 1.18;
         const endAng = Math.PI * 0.18;
         ctx.lineCap = 'round';
-        for (let i = 0; i < numRays; i++) {
-          const ang = startAng + ((endAng - startAng) * i) / (numRays - 1);
-          const rayPhase = Math.sin(elapsedSec * 10.5 + (i % 2 === 0 ? 0 : Math.PI * 0.85));
+        for (let parity = 0; parity < 2; parity++) {
+          const rayPhase = Math.sin(elapsedSec * 10.5 + (parity === 0 ? 0 : Math.PI * 0.85));
           const rayAlpha = Math.min(0.98, Math.max(0.28, (0.62 + 0.36 * rayPhase) * pwr));
           const rInner = domeR * (1.12 + 0.06 * (1 - rayPhase));
           const rOuter = domeR * (1.48 + (0.46 + 0.28 * rayPhase) * pwr);
-          ctx.strokeStyle = `rgba(245, 158, 11, ${rayAlpha})`;
-          ctx.shadowColor = '#fbbf24';
-          ctx.shadowBlur = 6;
-          ctx.lineWidth = 2.6 + (rayPhase > 0 ? 0.6 : 0);
           ctx.beginPath();
-          ctx.moveTo(domeCx + Math.cos(ang) * rInner, domeCy + Math.sin(ang) * rInner);
-          ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
+          for (let i = parity; i < numRays; i += 2) {
+            const ang = startAng + ((endAng - startAng) * i) / (numRays - 1);
+            ctx.moveTo(domeCx + Math.cos(ang) * rInner, domeCy + Math.sin(ang) * rInner);
+            ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
+          }
+          ctx.strokeStyle = `rgba(251, 191, 36, ${rayAlpha * 0.32})`;
+          ctx.lineWidth = 6.2;
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(245, 158, 11, ${rayAlpha})`;
+          ctx.lineWidth = 2.6 + (rayPhase > 0 ? 0.6 : 0);
           ctx.stroke();
         }
 
-        // Heated glowing orange/golden filament coil inside the bulb dome (matching reference image!)
+        // Heated glowing orange/golden filament coil (soft outer glow stroke + bright core, 0 shadowBlur!)
         const filY = domeCy - domeRy * 0.02;
         const coilHalfW = Math.max(7, domeRx * 0.34);
         const coilHalfH = Math.max(4, domeRy * 0.15);
         const filLeftX = domeCx - coilHalfW;
         const filRightX = domeCx + coilHalfW;
-        ctx.strokeStyle = '#f97316';
-        ctx.shadowColor = '#fb923c';
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 3.2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -27609,199 +29017,154 @@ export default function App() {
           if (i === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
+        ctx.strokeStyle = 'rgba(251, 146, 60, 0.42)';
+        ctx.lineWidth = 7.4;
+        ctx.stroke();
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 3.2;
         ctx.stroke();
         ctx.restore();
       }
 
-      // 3. Spinning Fan / Propeller Blades (Only when simulation is actively running so static fan is used when paused!)
-      for (const cs of isSimulating ? simData.components : []) {
-        if (cs.comp.kind !== 'fan') continue;
-        const f = cs.comp;
-        const rOuter = Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
-        const rHub = Math.max(5.5, rOuter * 0.22);
-        const spinAng =
-          cs.active && cs.powerFactor > 0.01
-            ? elapsedSec * 5.6 * cs.powerFactor * speedMultiplier
-            : 0;
+      // 3. Spinning Fan / Propeller Blades (uses precomputed fan metadata — 0 .filter()/.find() per frame!)
+      if (isSimulating && fans.length > 0) {
+        for (let fIdx = 0; fIdx < fans.length; fIdx++) {
+          const f = fans[fIdx];
+          const spinAng =
+            f.active && f.powerFactor > 0.01
+              ? elapsedSec * 5.6 * f.powerFactor * speedMultiplier
+              : 0;
 
-        const fanStrokes = simStrokes.filter((s) => f.strokeIds.includes(s.id));
-        const ringStroke = fanStrokes.find((s) => s.shapeType === 'fan' && s.points.length > 2);
-        const bladeStroke = fanStrokes.find((s) => s.shapeType === 'fan-blade');
-        const ringPerimeterColor = ringStroke?.color || '#1e293b';
-        const bladeFillColor =
-          bladeStroke?.fillStyle === 'none'
-            ? 'transparent'
-            : bladeStroke?.fillColor || bladeStroke?.color || '#0284c7';
-        const bladeBorderColor = bladeStroke?.color || '#0369a1';
-
-        ctx.save();
-        // Horizontal left & right lead wires up to the circle edge (always dark wire color)
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 2.8;
-        ctx.lineCap = 'round';
-        if (f.cx - rOuter > f.minX + 2) {
-          ctx.beginPath();
-          ctx.moveTo(f.minX, f.cy);
-          ctx.lineTo(f.cx - rOuter, f.cy);
-          ctx.stroke();
-        }
-        if (f.maxX > f.cx + rOuter + 2) {
-          ctx.beginPath();
-          ctx.moveTo(f.cx + rOuter, f.cy);
-          ctx.lineTo(f.maxX, f.cy);
-          ctx.stroke();
-        }
-
-        // Round grey-filled circle backplate + customizable perimeter color
-        ctx.fillStyle = '#cbd5e1';
-        ctx.strokeStyle = ringPerimeterColor;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(f.cx, f.cy, rOuter, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // Draw 3 blades with customizable blade color
-        for (let b = 0; b < 3; b++) {
-          const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
-          const bladeLen = rOuter * 0.85;
-          const spread = 0.36;
-          ctx.beginPath();
-          ctx.moveTo(
-            f.cx + Math.cos(baseAng - 0.18) * rHub * 0.85,
-            f.cy + Math.sin(baseAng - 0.18) * rHub * 0.85
-          );
-          const arcSteps = 10;
-          for (let k = 0; k <= arcSteps; k++) {
-            const t = k / arcSteps;
-            const ang = baseAng - spread + t * (spread * 2);
-            const rCurve = bladeLen * (0.86 + 0.14 * Math.sin(t * Math.PI));
-            ctx.lineTo(f.cx + Math.cos(ang) * rCurve, f.cy + Math.sin(ang) * rCurve);
+          ctx.save();
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 2.8;
+          ctx.lineCap = 'round';
+          if (f.cx - f.rOuter > f.minX + 2) {
+            ctx.beginPath();
+            ctx.moveTo(f.minX, f.cy);
+            ctx.lineTo(f.cx - f.rOuter, f.cy);
+            ctx.stroke();
           }
-          ctx.lineTo(
-            f.cx + Math.cos(baseAng + 0.18) * rHub * 0.85,
-            f.cy + Math.sin(baseAng + 0.18) * rHub * 0.85
-          );
+          if (f.maxX > f.cx + f.rOuter + 2) {
+            ctx.beginPath();
+            ctx.moveTo(f.cx + f.rOuter, f.cy);
+            ctx.lineTo(f.maxX, f.cy);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = '#cbd5e1';
+          ctx.strokeStyle = f.ringPerimeterColor;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(f.cx, f.cy, f.rOuter, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          for (let b = 0; b < 3; b++) {
+            const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
+            const bladeLen = f.rOuter * 0.85;
+            const spread = 0.36;
+            ctx.beginPath();
+            ctx.moveTo(
+              f.cx + Math.cos(baseAng - 0.18) * f.rHub * 0.85,
+              f.cy + Math.sin(baseAng - 0.18) * f.rHub * 0.85
+            );
+            const arcSteps = 10;
+            for (let k = 0; k <= arcSteps; k++) {
+              const t = k / arcSteps;
+              const ang = baseAng - spread + t * (spread * 2);
+              const rCurve = bladeLen * (0.86 + 0.14 * Math.sin(t * Math.PI));
+              ctx.lineTo(f.cx + Math.cos(ang) * rCurve, f.cy + Math.sin(ang) * rCurve);
+            }
+            ctx.lineTo(
+              f.cx + Math.cos(baseAng + 0.18) * f.rHub * 0.85,
+              f.cy + Math.sin(baseAng + 0.18) * f.rHub * 0.85
+            );
+            ctx.closePath();
+            if (f.bladeFillColor !== 'transparent') {
+              ctx.fillStyle = f.bladeFillColor;
+              ctx.fill();
+            }
+            ctx.strokeStyle = f.bladeBorderColor;
+            ctx.lineWidth = 1.9;
+            ctx.stroke();
+          }
+
+          ctx.beginPath();
+          ctx.arc(f.cx, f.cy, f.rHub, 0, Math.PI * 2);
+          ctx.fillStyle = f.bladeFillColor !== 'transparent' ? f.bladeFillColor : f.bladeBorderColor;
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // 3b. Live Ammeter & Voltmeter Needles (uses precomputed meter metadata — 0 .filter()/.find() per frame!)
+      // Only jitter needle when closed-loop current actually flows so open-switch circuits sleep at 0 FPS!
+      if (isSimulating && meters.length > 0) {
+        const isFlowingNow =
+          simData.isCircuitClosed && (!simData.autoSwitch || simData.autoSwitch.closed);
+        for (let mIdx = 0; mIdx < meters.length; mIdx++) {
+          const m = meters[mIdx];
+          const baseAng = -Math.PI / 4;
+          const phaseSeed = m.compIdx * 1.37;
+          const oscAng =
+            m.active && isFlowingNow
+              ? Math.sin(elapsedSec * 9.4 * speedMultiplier + phaseSeed) * 0.052 +
+                Math.sin(elapsedSec * 16.3 * speedMultiplier + phaseSeed + 0.85) * 0.021
+              : 0;
+          const ang = baseAng + oscAng;
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          const nx = -uy;
+          const ny = ux;
+
+          const tipX = m.pvx + ux * m.totalNeedleLen;
+          const tipY = m.pvy + uy * m.totalNeedleLen;
+          const baseHeadX = tipX - ux * m.headLen;
+          const baseHeadY = tipY - uy * m.headLen;
+          const shaftEndX = tipX - ux * (m.headLen * 0.78);
+          const shaftEndY = tipY - uy * (m.headLen * 0.78);
+
+          ctx.save();
+          ctx.globalAlpha = m.alpha;
+          ctx.strokeStyle = m.needleColor;
+          ctx.fillStyle = m.needleColor;
+          ctx.lineWidth = m.lineW;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          ctx.beginPath();
+          ctx.moveTo(m.pvx, m.pvy);
+          ctx.lineTo(shaftEndX, shaftEndY);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(tipX, tipY);
+          ctx.lineTo(baseHeadX + nx * m.headHalfW, baseHeadY + ny * m.headHalfW);
+          ctx.lineTo(baseHeadX - nx * m.headHalfW, baseHeadY - ny * m.headHalfW);
           ctx.closePath();
-          if (bladeFillColor !== 'transparent') {
-            ctx.fillStyle = bladeFillColor;
-            ctx.fill();
-          }
-          ctx.strokeStyle = bladeBorderColor;
-          ctx.lineWidth = 1.9;
+          ctx.fill();
+          ctx.lineWidth = Math.max(1.2, m.lineW * 0.72);
           ctx.stroke();
+          ctx.restore();
         }
-
-        // Central hub
-        ctx.beginPath();
-        ctx.arc(f.cx, f.cy, rHub, 0, Math.PI * 2);
-        ctx.fillStyle = bladeFillColor !== 'transparent' ? bladeFillColor : bladeBorderColor;
-        ctx.fill();
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 2.2;
-        ctx.stroke();
-        ctx.restore();
       }
 
-      // 3b. Live Ammeter & Voltmeter Needles (Only when simulation is actively running so paused state never draws a 2nd needle over staticCanvas!)
-      for (let mIdx = 0; mIdx < (isSimulating ? simData.components.length : 0); mIdx++) {
-        const cs = simData.components[mIdx];
-        if (cs.comp.kind !== 'ammeter' && cs.comp.kind !== 'voltmeter') continue;
-        const m = cs.comp;
-        const ccx = m.circleCx ?? m.cx;
-        const ccy = m.circleCy ?? m.cy;
-        const rC =
-          m.circleR ??
-          Math.max(14, Math.min(m.maxX - m.minX, m.maxY - m.minY) * 0.36);
-
-        const meterStrokes = simStrokes.filter((s) => m.strokeIds.includes(s.id));
-        const ringStroke = meterStrokes.find(
-          (s) => s.shapeType === 'ammeter' || s.shapeType === 'voltmeter'
-        );
-        const needleStroke = meterStrokes.find(
-          (s) => s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle'
-        );
-        const needleColor = needleStroke?.color || ringStroke?.color || m.color || '#111827';
-        const lineW = Math.max(1.8, ringStroke?.width || 2.0);
-
-        // Anchor strictly ON the bottom-left perimeter of the circle (-45° chord through circle center when at rest)
-        const invSqrt2 = Math.SQRT1_2;
-        const pvx = ccx - rC * invSqrt2;
-        const pvy = ccy + rC * invSqrt2;
-        const baseAng = -Math.PI / 4;
-        const phaseSeed = mIdx * 1.37;
-        const oscAng = cs.active
-          ? Math.sin(elapsedSec * 9.4 * speedMultiplier + phaseSeed) * 0.052 +
-            Math.sin(elapsedSec * 16.3 * speedMultiplier + phaseSeed + 0.85) * 0.021
-          : 0;
-        const ang = baseAng + oscAng;
-        const ux = Math.cos(ang);
-        const uy = Math.sin(ang);
-        const nx = -uy;
-        const ny = ux;
-
-        const totalNeedleLen = rC * 2.60;
-        const headLen = Math.max(7.2, rC * 0.32);
-        const headHalfW = Math.max(4.2, headLen * 0.52);
-        const tipX = pvx + ux * totalNeedleLen;
-        const tipY = pvy + uy * totalNeedleLen;
-        const baseHeadX = tipX - ux * headLen;
-        const baseHeadY = tipY - uy * headLen;
-        const shaftEndX = tipX - ux * (headLen * 0.78);
-        const shaftEndY = tipY - uy * (headLen * 0.78);
-
-        ctx.save();
-        if (cs.comp.kind === 'voltmeter') {
-          ctx.globalAlpha =
-            ringStroke?.opacity !== undefined && ringStroke.opacity < 0.9
-              ? ringStroke.opacity
-              : 0.38;
-        } else if (ringStroke?.opacity !== undefined) {
-          ctx.globalAlpha = ringStroke.opacity;
-        }
-        ctx.strokeStyle = needleColor;
-        ctx.fillStyle = needleColor;
-        ctx.lineWidth = lineW;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        ctx.beginPath();
-        ctx.moveTo(pvx, pvy);
-        ctx.lineTo(shaftEndX, shaftEndY);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(baseHeadX + nx * headHalfW, baseHeadY + ny * headHalfW);
-        ctx.lineTo(baseHeadX - nx * headHalfW, baseHeadY - ny * headHalfW);
-        ctx.closePath();
-        ctx.fill();
-        ctx.lineWidth = Math.max(1.2, lineW * 0.72);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // 4. Moving Charge Carriers / Electrons along Continuous Circuit Chains (100% uniform period, speed & spacing!)
+      // 4. Moving Charge Carriers / Electrons via Pre-Rendered Offscreen Sprite (0 shadowBlur per frame!)
       if (isSimulating && showElectrons && particleChains.length > 0) {
         const dirSign = flowDirection === 'conventional' ? 1 : -1;
         const sw = simData.autoSwitch;
+        const carrierSprite =
+          flowDirection === 'electrons' ? glowSprites?.electronGreen : glowSprites?.electronCyan;
 
         for (let cIdx = 0; cIdx < particleChains.length; cIdx++) {
           const chain = particleChains[cIdx];
           const { subSegs, cumEffDist, count, stepDist, avgSpeed } = chain;
           const speedPxPerSec = 64 * avgSpeed * speedMultiplier * dirSign;
           const rawOffset = ((elapsedSec * speedPxPerSec) % stepDist + stepDist) % stepDist;
-
-          ctx.save();
-          if (flowDirection === 'electrons') {
-            ctx.fillStyle = '#84cc16';
-            ctx.shadowColor = '#4ade80';
-            ctx.shadowBlur = 9;
-          } else {
-            ctx.fillStyle = '#38bdf8';
-            ctx.shadowColor = '#0ea5e9';
-            ctx.shadowBlur = 9;
-          }
 
           let subIdx = 0;
           for (let k = 0; k < count; k++) {
@@ -27815,7 +29178,6 @@ export default function App() {
             const px = ss.x1 + tSub * (ss.x2 - ss.x1);
             const py = ss.y1 + tSub * (ss.y2 - ss.y1);
 
-            // If automatic switch on left vertical wire is OPEN, don't draw particles inside the open switch gap!
             if (
               sw &&
               !sw.closed &&
@@ -27826,22 +29188,23 @@ export default function App() {
               continue;
             }
 
-            ctx.beginPath();
-            ctx.arc(px, py, 4.8, 0, Math.PI * 2);
-            ctx.fill();
+            if (carrierSprite) {
+              ctx.drawImage(carrierSprite, px - 18, py - 18, 36, 36);
+            } else {
+              ctx.fillStyle = flowDirection === 'electrons' ? '#84cc16' : '#38bdf8';
+              ctx.beginPath();
+              ctx.arc(px, py, 4.8, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
-          ctx.restore();
         }
       }
 
-      // 5. Automatic Interactive Switch on the Left Vertical Conductor (starts OPEN with Red Dot 🔴, click to toggle CLOSED 🟢!)
+      // 5. Automatic Interactive Switch on the Left Vertical Conductor (Sprite-cached knob -> 0 shadowBlur!)
       if (isSimulating && simData.autoSwitch) {
         const sw = simData.autoSwitch;
         ctx.save();
-        // Cleanly mask the underlying vertical wire between yTop and yBottom with the effective paper background color,
-        // ensuring NO black wire stroke is visible behind an open or closed knife switch gap!
-        const paperBg = getEffectivePaperColor(activePage);
-        ctx.strokeStyle = paperBg;
+        ctx.strokeStyle = effectivePaperBg;
         ctx.lineWidth = 16;
         ctx.lineCap = 'butt';
         ctx.beginPath();
@@ -27849,7 +29212,6 @@ export default function App() {
         ctx.lineTo(sw.x, sw.yBottom - 2);
         ctx.stroke();
 
-        // Draw top & bottom dark circular switch contact terminals
         for (const ty of [sw.yTop, sw.yBottom]) {
           ctx.beginPath();
           ctx.arc(sw.x, ty, 4.2, 0, Math.PI * 2);
@@ -27861,7 +29223,6 @@ export default function App() {
         }
 
         if (!sw.closed) {
-          // OPEN Switch: tilted dark blade from bottom contact to top-right + Bright RED dot 🔴
           const bladeTipX = sw.x + 25;
           const bladeTipY = sw.yTop + 4;
           ctx.strokeStyle = '#334155';
@@ -27874,19 +29235,10 @@ export default function App() {
 
           const knobX = sw.x + (bladeTipX - sw.x) * 0.78;
           const knobY = sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
-          const knobPulse = 1 + 0.06 * Math.sin(elapsedSec * 6);
-          ctx.beginPath();
-          ctx.arc(knobX, knobY, 6.4 * knobPulse, 0, Math.PI * 2);
-          ctx.fillStyle = '#ef4444';
-          ctx.shadowColor = 'rgba(239, 68, 68, 0.55)';
-          ctx.shadowBlur = 6;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = '#fecaca';
-          ctx.lineWidth = 1.6;
-          ctx.stroke();
+          if (glowSprites?.switchRed) {
+            ctx.drawImage(glowSprites.switchRed, knobX - 18, knobY - 18, 36, 36);
+          }
         } else {
-          // CLOSED Switch: vertical dark blade connecting bottom contact to top contact + Bright GREEN dot 🟢
           ctx.strokeStyle = '#334155';
           ctx.lineWidth = 3.8;
           ctx.lineCap = 'round';
@@ -27897,16 +29249,9 @@ export default function App() {
 
           const knobX = sw.x + 14.5;
           const knobY = sw.yCenter;
-          ctx.beginPath();
-          ctx.arc(knobX, knobY, 6.4, 0, Math.PI * 2);
-          ctx.fillStyle = '#22c55e';
-          ctx.shadowColor = 'rgba(34, 197, 94, 0.5)';
-          ctx.shadowBlur = 6;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = '#bbf7d0';
-          ctx.lineWidth = 1.6;
-          ctx.stroke();
+          if (glowSprites?.switchGreen) {
+            ctx.drawImage(glowSprites.switchGreen, knobX - 18, knobY - 18, 36, 36);
+          }
         }
         ctx.restore();
       }
@@ -28694,7 +30039,7 @@ export default function App() {
               key: gKey,
               x: gx,
               y: axisTopY - 6,
-              width: activeTool === 'lasso' ? gW : 54,
+              width: isLassoTool ? gW : 54,
               height: axisBotY - axisTopY + 12,
               closePt: { x: -9999, y: -9999, r: -1 },
             });
@@ -29166,7 +30511,7 @@ export default function App() {
                 draggingSpringGraphRef.current?.graphKey === 'hooke' ||
                 draggingSpringGraphResizeRef.current?.graphKey === 'hooke';
               const isHookeSelectedForHandles =
-                activeTool === 'lasso' &&
+                isLassoTool &&
                 (selectedSpringGraphKey === 'hooke' || isDraggingOrResizingHookeForHandles);
 
               // Resize handles: Height (↕) near top of F_ελ axis, Width (↔) to the right of Δl axis (only when selected with Lasso/Select)
@@ -29462,7 +30807,7 @@ export default function App() {
               draggingSpringGraphRef.current?.graphKey === 'hooke' ||
               draggingSpringGraphResizeRef.current?.graphKey === 'hooke';
             const isHookeSelected =
-              activeTool === 'lasso' &&
+              isLassoTool &&
               (selectedSpringGraphKey === 'hooke' || isDraggingOrResizingHooke);
             const frameX = hx - 4;
             const frameY = hy - 4;
@@ -31157,52 +32502,6 @@ export default function App() {
                 getStepProg(3),
                 'ΣF'
               );
-            }
-          }
-        }
-
-        // Live preview of angle θ if 2 unjoined vectors' origins are brought within 8px of each other during drag
-        if (!fSim || fSim.mode !== 'synthesis') {
-          for (let i = 0; i < allPageForceVectors.length; i++) {
-            for (let j = i + 1; j < allPageForceVectors.length; j++) {
-              const va = allPageForceVectors[i];
-              const vb = allPageForceVectors[j];
-              const oxA = va.points[0].x;
-              const oyA = va.points[0].y;
-              const oxB = vb.points[0].x;
-              const oyB = vb.points[0].y;
-              if (Math.hypot(oxA - oxB, oyA - oyB) <= 8) {
-                const p1End = va.points[va.points.length - 1];
-                const p2End = vb.points[vb.points.length - 1];
-                const a1 = Math.atan2(p1End.y - oyA, p1End.x - oxA);
-                const a2 = Math.atan2(p2End.y - oyA, p2End.x - oxA);
-                let diff = a2 - a1;
-                while (diff <= -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                const degPreview = Math.round((Math.abs(diff) * 180) / Math.PI);
-                if (degPreview >= 1) {
-                  ctx.save();
-                  ctx.fillStyle = 'rgba(100, 116, 139, 0.14)';
-                  ctx.strokeStyle = '#64748b';
-                  ctx.lineWidth = 1.25;
-                  ctx.setLineDash([3, 2]);
-                  ctx.beginPath();
-                  ctx.moveTo(oxA, oyA);
-                  ctx.arc(oxA, oyA, 34, a1, a1 + diff, diff < 0);
-                  ctx.closePath();
-                  ctx.fill();
-                  ctx.stroke();
-                  ctx.restore();
-                  const midA = a1 + diff / 2;
-                  drawHaloLabel(
-                    showNums ? `θ = ${degPreview}°` : 'θ',
-                    oxA + 45 * Math.cos(midA),
-                    oyA + 45 * Math.sin(midA),
-                    '#475569',
-                    'italic bold 15px Georgia, serif'
-                  );
-                }
-              }
             }
           }
         }
@@ -33497,36 +34796,40 @@ export default function App() {
       }
 
       // 5. Heat & Thermodynamics Simulation Overlay (Active in ALL simulation modes!)
+      let isSharedHeatVisuallyActive = false;
       if (activePage.heatSims && activePage.heatSims.length > 0) {
-        const isDarkPaper = isDarkPaperColor(getEffectivePaperColor(activePage));
+        const isDarkPaper = isDarkPaperColor(effectivePaperBg);
         for (const hSim of activePage.heatSims) {
-          const liveSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : hSim;
+          const liveCand = heatApi.getLiveSim ? heatApi.getLiveSim() : null;
+          const liveSim = liveCand && liveCand.id === hSim.id ? liveCand : hSim;
+          if (liveSim.isRunning || heatApi.isDragging() || isHeatSimulationVisuallyActive(liveSim)) {
+            isSharedHeatVisuallyActive = true;
+          }
           renderHeatSimulation(ctx, liveSim || hSim, {
             isDark: isDarkPaper,
-            hoverPoint: heatSim.getHoverPoint(),
+            hoverPoint: heatApi.getHoverPoint(),
             isSelectActive:
-              activeTool === 'lasso' ||
-              activeTool === 'shape' ||
-              activeTool === 'magnetic-lasso' ||
+              isHeatSelectTool ||
               (showSimulationPanel && simActiveCategory === 'heat'),
           });
         }
 
-        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatSim.activeHeatSim?.isRunning) {
-          heatSim.pauseHeatingAndSim();
+        if ((!showHeatStopwatch || !heatStopwatchRunning) && heatApi.activeHeatSim?.isRunning) {
+          heatApi.pauseHeatingAndSim();
         }
-        if (heatSimLastFrameRef.current !== null && heatSimLastFrameRef.current !== now) {
+        if (
+          isSharedHeatVisuallyActive &&
+          heatSimLastFrameRef.current !== null &&
+          heatSimLastFrameRef.current !== now
+        ) {
           const rawHDt = Math.max(0.001, (now - heatSimLastFrameRef.current) / 1000);
-          heatSim.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
+          heatApi.stepPhysicsFrame(heatStopwatchRunning ? rawHDt * heatSimSpeed : rawHDt);
         }
-        const syncedLiveSim = (heatSim as any).getLiveSim
-          ? (heatSim as any).getLiveSim()
-          : heatSim.activeHeatSim;
+        const syncedLiveSim = heatApi.getLiveSim ? heatApi.getLiveSim() : heatApi.activeHeatSim;
         if (syncedLiveSim && typeof syncedLiveSim.elapsedSec === 'number') {
-          const simMs = Math.round(syncedLiveSim.elapsedSec * 1000);
-          setHeatStopwatchElapsedMs((prev) => (Math.abs(prev - simMs) >= 50 ? simMs : prev));
+          heatStopwatchLiveMsRef.current = Math.round(syncedLiveSim.elapsedSec * 1000);
         }
-        heatSimLastFrameRef.current = now;
+        heatSimLastFrameRef.current = isSharedHeatVisuallyActive ? now : null;
       } else {
         heatSimLastFrameRef.current = null;
       }
@@ -33759,8 +35062,7 @@ export default function App() {
 
       ctx.restore();
       if (
-        isLivePdfMode ||
-        isSimulating ||
+        anyCircuitActivelyFlowing ||
         (isSpringSimulating && !isSpringPaused) ||
         hasProposal ||
         springSettleAnim !== null ||
@@ -33768,12 +35070,12 @@ export default function App() {
         hookeLineAnim !== null ||
         forceSimAnim !== null ||
         forceSimAnimRef.current !== null ||
-        hasAtomOverlay ||
+        anyAtomRotating ||
+        draggingAtomHandleRef.current !== null ||
         atomReactionAnim !== null ||
         atomReactionAnimRef.current !== null ||
         (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
-        (activePage.heatSims && activePage.heatSims.length > 0) ||
-        (showSimulationPanel && simActiveCategory === 'heat') ||
+        isSharedHeatVisuallyActive ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -33785,6 +35087,8 @@ export default function App() {
       window.cancelAnimationFrame(rafId);
     };
   }, [
+    viewMode,
+    simCanvasWakeTick,
     isLivePdfMode,
     isSimulating,
     isSpringSimulating,
@@ -33816,7 +35120,9 @@ export default function App() {
     activePage.activeAtomSimId,
     activePage.heatSims,
     activePage.activeHeatSimId,
-    heatSim,
+    showHeatStopwatch,
+    heatStopwatchRunning,
+    heatSimSpeed,
     activePage.layers,
     activePage.template,
     simShowElectrons,
@@ -33824,7 +35130,8 @@ export default function App() {
     simFlowDirection,
     simShowDarkWireTrack,
     simSpeedMultiplier,
-    activeTool,
+    isLassoTool,
+    isHeatSelectTool,
     activeChemCorrection,
     selectedReactionSimId,
     selectedSpringGraphKey,
@@ -33849,26 +35156,48 @@ export default function App() {
     }
   }, [isCleanProjectorMode]);
 
+  const hdmiChannelRef = useRef<BroadcastChannel | null>(null);
+  const hasHdmiReceiverRef = useRef<boolean>(false);
+  const latestHdmiPayloadRef = useRef<any>(null);
+  latestHdmiPayloadRef.current = {
+    type: 'sync-state',
+    activeNotebook,
+    activeNotebookId,
+    activePageIndex,
+    isSimulating,
+    simCircuitSwitchClosed,
+    simShowElectrons,
+    simParticleStyle,
+    simFlowDirection,
+    simShowDarkWireTrack,
+    simSpeedMultiplier,
+  };
+
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
     const ch = new BroadcastChannel('bestnotes_hdmi_live_v1');
+    hdmiChannelRef.current = ch;
     if (!isCleanProjectorMode) {
-      ch.postMessage({
-        type: 'sync-state',
-        activeNotebook,
-        activeNotebookId,
-        activePageIndex,
-        isSimulating,
-        simCircuitSwitchClosed,
-        simShowElectrons,
-        simParticleStyle,
-        simFlowDirection,
-        simShowDarkWireTrack,
-        simSpeedMultiplier,
-      });
+      ch.onmessage = (ev) => {
+        const d = ev.data;
+        if (d?.type === 'hdmi-ready') {
+          hasHdmiReceiverRef.current = true;
+          if (latestHdmiPayloadRef.current) {
+            ch.postMessage(latestHdmiPayloadRef.current);
+          }
+        } else if (d?.type === 'hdmi-bye') {
+          hasHdmiReceiverRef.current = false;
+        }
+      };
+      // Discover any already-open ?hdmi=1 projector window
+      ch.postMessage({ type: 'hdmi-ping' });
     } else {
       ch.onmessage = (ev) => {
         const d = ev.data;
+        if (d?.type === 'hdmi-ping') {
+          ch.postMessage({ type: 'hdmi-ready' });
+          return;
+        }
         if (d?.type === 'sync-state') {
           if (d.activeNotebook && d.activeNotebook.id) {
             setNotebooks((prev) => {
@@ -33896,8 +35225,24 @@ export default function App() {
           setViewMode('editor');
         }
       };
+      ch.postMessage({ type: 'hdmi-ready' });
     }
-    return () => ch.close();
+    return () => {
+      if (isCleanProjectorMode) {
+        try {
+          ch.postMessage({ type: 'hdmi-bye' });
+        } catch {
+          // ignore
+        }
+      }
+      hdmiChannelRef.current = null;
+      ch.close();
+    };
+  }, [isCleanProjectorMode]);
+
+  useEffect(() => {
+    if (isCleanProjectorMode || !hasHdmiReceiverRef.current || !hdmiChannelRef.current) return;
+    hdmiChannelRef.current.postMessage(latestHdmiPayloadRef.current);
   }, [
     isCleanProjectorMode,
     activeNotebook,
@@ -33910,10 +35255,6 @@ export default function App() {
     simFlowDirection,
     simShowDarkWireTrack,
     simSpeedMultiplier,
-    activeTool,
-    activeChemCorrection,
-    selectedReactionSimId,
-    selectedSpringGraphKey,
   ]);
 
   // Track Browser Fullscreen state for 16:9 Interactive Board Mode
@@ -37086,8 +38427,7 @@ export default function App() {
       e.pointerType === 'touch' &&
       pencilOnlyMode &&
       effectiveTool !== 'lasso' &&
-      effectiveTool !== 'direct-node' &&
-      effectiveTool !== 'laser';
+      effectiveTool !== 'direct-node';
     if (!isIgnoredPencilOnlyTouch) {
       lastRawCanvasPtRef.current = pt;
     }
@@ -37838,6 +39178,7 @@ export default function App() {
     if (heatSim.activeHeatSim) {
       if (heatSim.handlePointerDown(e, pt.x, pt.y, activeTool)) {
         e.preventDefault();
+        wakeSimCanvas();
         if (heatSim.isDragging()) {
           isDrawingRef.current = true;
           activePointerIdRef.current = e.pointerId;
@@ -38442,7 +39783,8 @@ export default function App() {
         setSelectedImageId(null);
         setActiveNodeStrokeId(null);
         setTextFontSize(tappedExistingTxt.fontSize);
-        setTextBold(Boolean(tappedExistingTxt.bold));
+        setTextBold(getEffectiveTextBold(tappedExistingTxt));
+        setTextShadow(getEffectiveTextShadow(tappedExistingTxt));
         setTextFontFamily(tappedExistingTxt.fontFamily || 'sans');
         setTextAlign(tappedExistingTxt.textAlign || 'left');
         setShowToolSubBar(true);
@@ -38520,8 +39862,7 @@ export default function App() {
       e.pointerType === 'touch' &&
       pencilOnlyMode &&
       effectiveTool !== 'lasso' &&
-      effectiveTool !== 'direct-node' &&
-      effectiveTool !== 'laser'
+      effectiveTool !== 'direct-node'
     ) {
       return;
     }
@@ -38645,7 +39986,8 @@ export default function App() {
           setActiveNodeStrokeId(null);
           setSelectedTextId(candTxt.id);
           setTextFontSize(candTxt.fontSize);
-          setTextBold(Boolean(candTxt.bold));
+          setTextBold(getEffectiveTextBold(candTxt));
+          setTextShadow(getEffectiveTextShadow(candTxt));
           setTextFontFamily(candTxt.fontFamily || 'sans');
           setTextAlign(candTxt.textAlign || 'left');
           setShowToolSubBar(true);
@@ -38850,8 +40192,7 @@ export default function App() {
       e.pointerType === 'touch' &&
       pencilOnlyMode &&
       effectiveTool !== 'lasso' &&
-      effectiveTool !== 'direct-node' &&
-      effectiveTool !== 'laser'
+      effectiveTool !== 'direct-node'
     ) {
       isDrawingRef.current = false;
       activePointerIdRef.current = null;
@@ -39893,13 +41234,15 @@ export default function App() {
       return;
     }
 
-    // 5. Eraser
+    // 5. Eraser (0ms Direct Hardware Eraser — zero React re-renders during drag!)
     if (effectiveTool === 'eraser') {
       e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
-      pushUndoSnapshot(targetPage);
+      isActivelyErasingRef.current = true;
+      eraserDidModifyRef.current = false;
+      eraserUndoRecordedRef.current = false;
       isDrawingRef.current = true;
       lastEraserPtRef.current = pt;
       drawEraserCursorOverlay(pt);
@@ -40109,6 +41452,11 @@ export default function App() {
         setSelectedImageId(null);
         setActiveNodeStrokeId(null);
         setSelectedTextId(topHitTxt.id);
+        setTextFontSize(topHitTxt.fontSize);
+        setTextBold(getEffectiveTextBold(topHitTxt));
+        setTextShadow(getEffectiveTextShadow(topHitTxt));
+        setTextFontFamily(topHitTxt.fontFamily || 'sans');
+        setTextAlign(topHitTxt.textAlign || 'left');
         setShowToolSubBar(true);
         return;
       }
@@ -40735,7 +42083,10 @@ export default function App() {
 
   const eraseAtPoints = (ptsToErase: { x: number; y: number }[]) => {
     if (ptsToErase.length === 0) return;
-    const lockedLayerIds = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
+    const targetIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
+    const liveNb = activeNotebookLiveRef.current;
+    const livePage = liveNb.pages[targetIdx] || activePage;
+    const lockedLayerIds = new Set(livePage.layers.filter((l) => l.locked).map((l) => l.id));
     const eraseRadius = getEraserRadius();
     const lastPt = ptsToErase[ptsToErase.length - 1];
     const cursorPayload = {
@@ -40744,20 +42095,43 @@ export default function App() {
       r: eraseRadius,
     };
 
-    let didEraseStrokes = false;
+    // Compute batch AABB once so 99% of strokes on dense pages are skipped in O(1) via WeakMap getStrokeBounds!
+    let bMinX = Infinity,
+      bMinY = Infinity,
+      bMaxX = -Infinity,
+      bMaxY = -Infinity;
+    for (let i = 0; i < ptsToErase.length; i++) {
+      const p = ptsToErase[i];
+      if (p.x < bMinX) bMinX = p.x;
+      if (p.y < bMinY) bMinY = p.y;
+      if (p.x > bMaxX) bMaxX = p.x;
+      if (p.y > bMaxY) bMaxY = p.y;
+    }
 
-    updateActivePage((page) => {
+    const computeErasedPage = (page: NotePage): { nextPage: NotePage; modified: boolean } => {
       if (eraserSubType === 'stroke' || eraserSubType === 'highlighter-only') {
         const removedIds: string[] = [];
         const filtered = page.strokes.filter((s) => {
           if (lockedLayerIds.has(s.layerId)) return true;
           if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
-          const hit = ptsToErase.some((pt) => isPointNearStroke(pt, s, eraseRadius));
+          const pad =
+            eraseRadius +
+            (s.tool === 'highlighter' ? (s.width || 3) * 1.9 : (s.width || 2) * 0.5) +
+            6;
+          const sb = getStrokeBounds(s);
+          if (
+            sb.maxX < bMinX - pad ||
+            sb.minX > bMaxX + pad ||
+            sb.maxY < bMinY - pad ||
+            sb.minY > bMaxY + pad
+          ) {
+            return true;
+          }
+          const hit = ptsToErase.some((pt) => isPointNearStroke(pt, s, eraseRadius, false, true));
           if (hit) removedIds.push(s.id);
           return !hit;
         });
-        if (removedIds.length === 0) return page;
-        didEraseStrokes = true;
+        if (removedIds.length === 0) return { nextPage: page, modified: false };
         if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
           liveTvSenderRef.current.sendLiveErase({
             pageId: page.id,
@@ -40766,41 +42140,64 @@ export default function App() {
             cursorPt: cursorPayload,
           });
         }
-        return { ...page, strokes: filtered };
+        return { nextPage: { ...page, strokes: filtered }, modified: true };
       } else {
         // Pixel / Segment Eraser ('precision'):
-        // Splits straight lines, polygons, parametric curves, and freehand curves at the exact circle intersection!
-        let currentStrokes = page.strokes;
+        // Pre-filter each stroke once against the batch AABB before running exact circle-segment splitting!
+        const nextStrokes: StrokeObject[] = [];
         let anyModified = false;
-        const origIds = new Set(page.strokes.map((s) => s.id));
+        const origIds = new Set<string>();
 
-        for (const pt of ptsToErase) {
-          const nextStrokes: StrokeObject[] = [];
-          for (const s of currentStrokes) {
-            if (lockedLayerIds.has(s.layerId)) {
-              nextStrokes.push(s);
-              continue;
-            }
-            const res = eraseStrokeByCircle(s, pt, eraseRadius);
-            if (res.modified) {
-              anyModified = true;
-              nextStrokes.push(...res.pieces);
-            } else {
-              nextStrokes.push(s);
-            }
+        for (let sIdx = 0; sIdx < page.strokes.length; sIdx++) {
+          const s = page.strokes[sIdx];
+          origIds.add(s.id);
+          if (lockedLayerIds.has(s.layerId)) {
+            nextStrokes.push(s);
+            continue;
           }
-          currentStrokes = nextStrokes;
+          const pad =
+            eraseRadius +
+            (s.tool === 'highlighter' ? (s.width || 3) * 1.9 : (s.width || 2) * 0.5) +
+            (s.shapeType ? 48 : 8);
+          const sb = getStrokeBounds(s);
+          if (
+            sb.maxX < bMinX - pad ||
+            sb.minX > bMaxX + pad ||
+            sb.maxY < bMinY - pad ||
+            sb.minY > bMaxY + pad
+          ) {
+            nextStrokes.push(s);
+            continue;
+          }
+
+          let pieces: StrokeObject[] = [s];
+          for (let pIdx = 0; pIdx < ptsToErase.length && pieces.length > 0; pIdx++) {
+            const pt = ptsToErase[pIdx];
+            const splitPieces: StrokeObject[] = [];
+            for (let k = 0; k < pieces.length; k++) {
+              const res = eraseStrokeByCircle(pieces[k], pt, eraseRadius);
+              if (res.modified) {
+                anyModified = true;
+                splitPieces.push(...res.pieces);
+              } else {
+                splitPieces.push(pieces[k]);
+              }
+            }
+            pieces = splitPieces;
+          }
+          for (let k = 0; k < pieces.length; k++) {
+            nextStrokes.push(pieces[k]);
+          }
         }
 
-        if (!anyModified) return page;
-        didEraseStrokes = true;
+        if (!anyModified) return { nextPage: page, modified: false };
         if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
-          const finalIds = new Set(currentStrokes.map((s) => s.id));
+          const finalIds = new Set(nextStrokes.map((s) => s.id));
           const removedIds: string[] = [];
           origIds.forEach((id) => {
             if (!finalIds.has(id)) removedIds.push(id);
           });
-          const addedStrokes = currentStrokes.filter((s) => !origIds.has(s.id));
+          const addedStrokes = nextStrokes.filter((s) => !origIds.has(s.id));
           liveTvSenderRef.current.sendLiveErase({
             pageId: page.id,
             removedIds,
@@ -40808,13 +42205,54 @@ export default function App() {
             cursorPt: cursorPayload,
           });
         }
-        return { ...page, strokes: currentStrokes };
+        return { nextPage: { ...page, strokes: nextStrokes }, modified: true };
       }
+    };
+
+    if (isActivelyErasingRef.current) {
+      const { nextPage, modified } = computeErasedPage(livePage);
+      if (modified) {
+        if (!eraserUndoRecordedRef.current) {
+          eraserUndoRecordedRef.current = true;
+          pushUndoSnapshot(livePage);
+        }
+        eraserDidModifyRef.current = true;
+        const nextPages = liveNb.pages.map((p, idx) => (idx === targetIdx ? nextPage : p));
+        const nextNb: Notebook = {
+          ...liveNb,
+          updatedAt: new Date().toISOString(),
+          pages: nextPages,
+        };
+        activeNotebookLiveRef.current = nextNb;
+        notebooksRef.current = notebooksRef.current.map((nb) =>
+          nb.id === nextNb.id ? nextNb : nb
+        );
+        if (eraserRenderRafRef.current === null) {
+          eraserRenderRafRef.current = window.requestAnimationFrame(() => {
+            eraserRenderRafRef.current = null;
+            renderStaticSceneRef.current(false);
+          });
+        }
+      } else if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        liveTvSenderRef.current.sendLiveErase({
+          pageId: livePage.id,
+          removedIds: [],
+          cursorPt: cursorPayload,
+        });
+      }
+      return;
+    }
+
+    let didEraseStrokes = false;
+    updateActivePage((page) => {
+      const { nextPage, modified } = computeErasedPage(page);
+      didEraseStrokes = modified;
+      return nextPage;
     }, false);
 
     if (!didEraseStrokes && !isTvReceiverModeRef.current && liveTvSenderRef.current) {
       liveTvSenderRef.current.sendLiveErase({
-        pageId: activePage.id,
+        pageId: livePage.id,
         removedIds: [],
         cursorPt: cursorPayload,
       });
@@ -40838,6 +42276,21 @@ export default function App() {
       if (activePage.heatSims && activePage.heatSims.length > 0) {
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
         heatSim.handleHover(hoverPt.x, hoverPt.y);
+        if (
+          !heatStopwatchRunning &&
+          activePage.heatSims.some((hs) =>
+            (hs.graphs || (hs.graph ? [hs.graph] : [])).some(
+              (g) =>
+                g.visible &&
+                hoverPt.x >= g.x - 16 &&
+                hoverPt.x <= g.x + g.width + 16 &&
+                hoverPt.y >= g.y - 16 &&
+                hoverPt.y <= g.y + g.height + 16
+            )
+          )
+        ) {
+          wakeSimCanvas();
+        }
       }
       // Apple Pencil Pro Hover Barrel Roll (`twist` sensor in Safari):
       // Rotating the Apple Pencil Pro >= 46° between the fingers while hovering in place opens the Floating Squeeze Palette!
@@ -41018,7 +42471,7 @@ export default function App() {
 
     // 0-heat. Interactive Heat & Thermodynamics Simulation Move / Drag:
     if (heatSim.handlePointerMove(latestPt.x, latestPt.y)) {
-      renderStaticSceneRef.current();
+      wakeSimCanvas();
       return;
     }
 
@@ -44409,111 +45862,10 @@ export default function App() {
             'cylinder',
           ];
 
-          if (draggedSt && draggedSt.shapeType === 'spring') {
-            const info = getSpringTerminalsAndWidthVec(draggedSt);
-            const candStart = { x: info.startTerm.x + rawDx, y: info.startTerm.y + rawDy };
-            const candEnd = { x: info.endTerm.x + rawDx, y: info.endTerm.y + rawDy };
-
-            for (const other of activePage.strokes) {
-              if (
-                other.id === draggedSt.id ||
-                hiddenOrLockedLayerIds.has(other.layerId) ||
-                other.shapeType === 'spring'
-              ) {
-                continue;
-              }
-              // Check support lines (ceiling, floor, wall, incline)
-              if (
-                (other.shapeType === 'line' || other.shapeType === 'inclined-plane') &&
-                other.points.length >= 2
-              ) {
-                const alreadyAttachedToSupport =
-                  draggedSt.springSupport?.supportStrokeId === other.id ||
-                  (activePage.springSims || []).some(
-                    (sm) => sm.eqSpringStrokeId === draggedSt.id && sm.supportStrokeId === other.id
-                  );
-                const segCount = other.shapeType === 'inclined-plane' ? other.points.length - 1 : 1;
-                for (let sIdx = 0; sIdx < segCount; sIdx++) {
-                  const pA = other.points[sIdx];
-                  const pB =
-                    other.shapeType === 'inclined-plane'
-                      ? other.points[sIdx + 1]
-                      : other.points[other.points.length - 1];
-                  const abx = pB.x - pA.x;
-                  const aby = pB.y - pA.y;
-                  const lenSq = abx * abx + aby * aby;
-                  if (lenSq < 36 * 36) continue;
-                  for (const termEntry of [
-                    { side: 'start' as const, pt: candStart },
-                    { side: 'end' as const, pt: candEnd },
-                  ]) {
-                    const t = Math.max(
-                      0.01,
-                      Math.min(
-                        0.99,
-                        ((termEntry.pt.x - pA.x) * abx + (termEntry.pt.y - pA.y) * aby) / lenSq
-                      )
-                    );
-                    const projX = pA.x + t * abx;
-                    const projY = pA.y + t * aby;
-                    const d = Math.hypot(termEntry.pt.x - projX, termEntry.pt.y - projY);
-                    if (alreadyAttachedToSupport) {
-                      const fixedSide =
-                        draggedSt.springSupport?.fixedEnd ||
-                        (activePage.springSims || []).find(
-                          (sm) => sm.eqSpringStrokeId === draggedSt.id
-                        )?.fixedEnd ||
-                        'start';
-                      if (termEntry.side === fixedSide && d <= 34) {
-                        snapDx = projX - termEntry.pt.x;
-                        snapDy = projY - termEntry.pt.y;
-                      }
-                    } else if (d <= 38 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                      matchedPhysicsMagnet = {
-                        kind: 'spring-to-support',
-                        springStrokeId: draggedSt.id,
-                        supportStrokeId: other.id,
-                        fixedEnd: termEntry.side,
-                        targetX: projX,
-                        targetY: projY,
-                        snapDx: projX - termEntry.pt.x,
-                        snapDy: projY - termEntry.pt.y,
-                        dist: d,
-                      };
-                    }
-                  }
-                }
-              } else if (
-                other.isShape &&
-                massShapeTypes.includes(other.shapeType || '') &&
-                !other.attachedToWeightId &&
-                !(activePage.springSims || []).some(
-                  (sm) => sm.eqSpringStrokeId === draggedSt.id || sm.massStrokeId === other.id
-                )
-              ) {
-                const ob = getStrokeBounds(other);
-                const topHookX = (ob.minX + ob.maxX) / 2;
-                const topHookY = ob.minY;
-                const dEnd = Math.hypot(candEnd.x - topHookX, candEnd.y - topHookY);
-                const dStart = Math.hypot(candStart.x - topHookX, candStart.y - topHookY);
-                const useStart = !draggedSt.springSupport && dStart < dEnd;
-                const freeCand = useStart ? candStart : candEnd;
-                const d = Math.hypot(freeCand.x - topHookX, freeCand.y - topHookY);
-                if (d <= 68 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                  matchedPhysicsMagnet = {
-                    kind: 'mass-to-spring',
-                    springStrokeId: draggedSt.id,
-                    massStrokeId: other.id,
-                    targetX: topHookX,
-                    targetY: topHookY,
-                    snapDx: topHookX - freeCand.x,
-                    snapDy: topHookY - freeCand.y,
-                    dist: d,
-                  };
-                }
-              }
-            }
-          } else if (
+          // STRICT EXPLICIT SIMULATIONS ONLY:
+          // Never auto-create a Pendulum, Incline, Force Synthesis, or new Spring Sim while dragging static shapes!
+          // Only allow hanging/detaching extra weights or ruler pointer on an ALREADY registered SpringSimConfig!
+          if (
             draggedSt &&
             draggedSt.isShape &&
             massShapeTypes.includes(draggedSt.shapeType || '') &&
@@ -44538,84 +45890,53 @@ export default function App() {
                 continue;
               }
               if (other.shapeType === 'spring') {
-                const spInfo = getSpringTerminalsAndWidthVec(other);
-                // If this spring ALREADY has a weight chain attached, snap to the outer end of the LAST weight in that chain!
                 const existingSimOnSp = getValidSpringSims(activePage).find(
                   (sm) => sm.eqSpringStrokeId === other.id
                 );
-                if (existingSimOnSp) {
-                  const fixedPt =
-                    existingSimOnSp.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
-                  const freePt =
-                    existingSimOnSp.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-                  const ux = (freePt.x - fixedPt.x) / spInfo.length;
-                  const uy = (freePt.y - fixedPt.y) / spInfo.length;
-                  const halfSpan = (w: number, h: number) =>
-                    Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
-                  const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
-                  if (existingChain.length > 0 && !existingChain.includes(draggedSt.id)) {
-                    const tailId = existingChain[existingChain.length - 1];
-                    const tailSt = activePage.strokes.find((s) => s.id === tailId);
-                    if (tailSt) {
-                      const tb = getStrokeBounds(tailSt);
-                      const tw = Math.max(14, tb.maxX - tb.minX);
-                      const th = Math.max(14, tb.maxY - tb.minY);
-                      const tailCx = (tb.minX + tb.maxX) / 2;
-                      const tailCy = (tb.minY + tb.maxY) / 2;
-                      const tailHalf = halfSpan(tw, th);
-                      const tailAttachX = tailCx + ux * tailHalf;
-                      const tailAttachY = tailCy + uy * tailHalf;
-                      const candHalf = halfSpan(mW, mH);
-                      const candAttachX = candCx - ux * candHalf;
-                      const candAttachY = candCy - uy * candHalf;
-                      const dTail = Math.hypot(
-                        candAttachX - tailAttachX,
-                        candAttachY - tailAttachY
-                      );
-                      if (dTail <= hookSnapRadius && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
-                        matchedPhysicsMagnet = {
-                          kind: 'weight-to-weight',
-                          springStrokeId: tailSt.id,
-                          parentWeightId: tailSt.id,
-                          childWeightId: draggedSt.id,
-                          targetX: tailAttachX,
-                          targetY: tailAttachY,
-                          snapDx: tailAttachX + ux * hookOverlap - candAttachX,
-                          snapDy: tailAttachY + uy * hookOverlap - candAttachY,
-                          dist: dTail,
-                        };
-                      }
-                    }
-                  }
-                  continue;
-                }
-
-                // Determine which terminal of the spring is the free end
-                let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
-                if (!other.springSupport) {
-                  const dStart = Math.hypot(spInfo.startTerm.x - candCx, spInfo.startTerm.y - candCy);
-                  const dEnd = Math.hypot(spInfo.endTerm.x - candCx, spInfo.endTerm.y - candCy);
-                  fixedEnd = dStart >= dEnd ? 'start' : 'end';
-                }
-                const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
-                const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                if (!existingSimOnSp) continue;
+                const spInfo = getSpringTerminalsAndWidthVec(other);
+                const fixedPt =
+                  existingSimOnSp.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                const freePt =
+                  existingSimOnSp.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
                 const ux = (freePt.x - fixedPt.x) / spInfo.length;
                 const uy = (freePt.y - fixedPt.y) / spInfo.length;
-                const candHalf = Math.abs(ux) * (mW / 2) + Math.abs(uy) * (mH / 2);
-                const candAttachX = candCx - ux * candHalf;
-                const candAttachY = candCy - uy * candHalf;
-                const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
-                if (d <= hookSnapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                  matchedPhysicsMagnet = {
-                    kind: 'mass-to-spring',
-                    springStrokeId: other.id,
-                    massStrokeId: draggedSt.id,
-                    targetX: freePt.x,
-                    targetY: freePt.y,
-                    snapDx: freePt.x - candAttachX,
-                    snapDy: freePt.y - candAttachY,
-                    dist: d,
-                  };
+                const halfSpan = (w: number, h: number) =>
+                  Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
+                const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
+                if (existingChain.length > 0 && !existingChain.includes(draggedSt.id)) {
+                  const tailId = existingChain[existingChain.length - 1];
+                  const tailSt = activePage.strokes.find((s) => s.id === tailId);
+                  if (tailSt) {
+                    const tb = getStrokeBounds(tailSt);
+                    const tw = Math.max(14, tb.maxX - tb.minX);
+                    const th = Math.max(14, tb.maxY - tb.minY);
+                    const tailCx = (tb.minX + tb.maxX) / 2;
+                    const tailCy = (tb.minY + tb.maxY) / 2;
+                    const tailHalf = halfSpan(tw, th);
+                    const tailAttachX = tailCx + ux * tailHalf;
+                    const tailAttachY = tailCy + uy * tailHalf;
+                    const candHalf = halfSpan(mW, mH);
+                    const candAttachX = candCx - ux * candHalf;
+                    const candAttachY = candCy - uy * candHalf;
+                    const dTail = Math.hypot(
+                      candAttachX - tailAttachX,
+                      candAttachY - tailAttachY
+                    );
+                    if (dTail <= hookSnapRadius && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
+                      matchedPhysicsMagnet = {
+                        kind: 'weight-to-weight',
+                        springStrokeId: tailSt.id,
+                        parentWeightId: tailSt.id,
+                        childWeightId: draggedSt.id,
+                        targetX: tailAttachX,
+                        targetY: tailAttachY,
+                        snapDx: tailAttachX + ux * hookOverlap - candAttachX,
+                        snapDy: tailAttachY + uy * hookOverlap - candAttachY,
+                        dist: dTail,
+                      };
+                    }
+                  }
                 }
               } else if (
                 other.isShape &&
@@ -44626,23 +45947,22 @@ export default function App() {
                 const attachedSimOnOther = getValidSpringSims(activePage).find(
                   (sm) => sm.massStrokeId === otherRootId
                 );
+                if (!attachedSimOnOther) continue;
                 const otherChain = getWeightChainIds(activePage, otherRootId);
                 if (otherChain.includes(draggedSt.id)) continue;
                 let ux = 0;
                 let uy = 1;
-                if (attachedSimOnOther) {
-                  const eqSp = activePage.strokes.find(
-                    (s) => s.id === attachedSimOnOther.eqSpringStrokeId
-                  );
-                  if (eqSp) {
-                    const spInfo = getSpringTerminalsAndWidthVec(eqSp);
-                    const fixedPt =
-                      attachedSimOnOther.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
-                    const freePt =
-                      attachedSimOnOther.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-                    ux = (freePt.x - fixedPt.x) / spInfo.length;
-                    uy = (freePt.y - fixedPt.y) / spInfo.length;
-                  }
+                const eqSp = activePage.strokes.find(
+                  (s) => s.id === attachedSimOnOther.eqSpringStrokeId
+                );
+                if (eqSp) {
+                  const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+                  const fixedPt =
+                    attachedSimOnOther.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                  const freePt =
+                    attachedSimOnOther.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                  ux = (freePt.x - fixedPt.x) / spInfo.length;
+                  uy = (freePt.y - fixedPt.y) / spInfo.length;
                 }
                 const halfSpan = (w: number, h: number) =>
                   Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
@@ -44692,161 +46012,11 @@ export default function App() {
                     dist: d,
                   };
                 }
-              } else if (
-                (draggedSt.shapeType === 'circle' ||
-                  draggedSt.shapeType === 'ellipse' ||
-                  draggedSt.shapeType === 'sphere') &&
-                other.shapeType === 'line' &&
-                other.points.length >= 2
-              ) {
-                // Sphere/Circle Bob dragged near the bottom end of a hanging/angled string -> Pendulum!
-                const p0 = other.points[0];
-                const p1 = other.points[other.points.length - 1];
-                const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-                const fixedSide = other.rodSupport?.fixedEnd || (p0.y <= p1.y ? 'start' : 'end');
-                const topPt = fixedSide === 'start' ? p0 : p1;
-                const botPt = fixedSide === 'start' ? p1 : p0;
-                if (len >= 50 && botPt.y > topPt.y + 25) {
-                  const dBob = Math.hypot(candCx - botPt.x, candCy - botPt.y);
-                  if (dBob <= 58 && (!matchedPhysicsMagnet || dBob < matchedPhysicsMagnet.dist)) {
-                    matchedPhysicsMagnet = {
-                      kind: 'bob-to-rod',
-                      springStrokeId: other.id,
-                      massStrokeId: draggedSt.id,
-                      targetX: botPt.x,
-                      targetY: botPt.y,
-                      snapDx: botPt.x - candCx,
-                      snapDy: botPt.y - candCy,
-                      dist: dBob,
-                    };
-                  }
-                }
-              } else if (
-                (other.shapeType === 'incline-wedge' ||
-                  other.shapeType === 'inclined-plane' ||
-                  other.shapeType === 'triangle') &&
-                other.points.length >= 3
-              ) {
-                // Block dragged onto an inclined plane slope -> Inclined Plane Sim!
-                const verts = other.points.slice(0, 3);
-                const sortedByY = [...verts].sort((a, b) => a.y - b.y);
-                const pPeak = sortedByY[0];
-                const baseTwo = [sortedByY[1], sortedByY[2]];
-                const pStart =
-                  Math.abs(baseTwo[0].x - pPeak.x) > Math.abs(baseTwo[1].x - pPeak.x)
-                    ? baseTwo[0]
-                    : baseTwo[1];
-                const midSlopeX = (pStart.x + pPeak.x) / 2;
-                const midSlopeY = (pStart.y + pPeak.y) / 2;
-                const dInc = Math.hypot(candCx - midSlopeX, candCy - midSlopeY);
-                if (dInc <= 80 && (!matchedPhysicsMagnet || dInc < matchedPhysicsMagnet.dist)) {
-                  matchedPhysicsMagnet = {
-                    kind: 'block-to-incline',
-                    springStrokeId: other.id,
-                    massStrokeId: draggedSt.id,
-                    targetX: midSlopeX,
-                    targetY: midSlopeY,
-                    snapDx: midSlopeX - candCx,
-                    snapDy: midSlopeY - candCy,
-                    dist: dInc,
-                  };
-                }
               }
             }
           } else if (
             draggedSt &&
-            draggedSt.shapeType === 'line' &&
-            !draggedSt.arrowEnd &&
-            !draggedSt.arrowStart &&
-            draggedSt.points.length === 2 &&
-            !(
-              draggedSt.groupId &&
-              (draggedSt.groupId.startsWith('axes-') ||
-                draggedSt.groupId.startsWith('wave-axes-') ||
-                draggedSt.groupId.startsWith('wave-guide-'))
-            )
-          ) {
-            const p0 = draggedSt.points[0];
-            const p1 = draggedSt.points[1];
-            const cand0 = { x: p0.x + rawDx, y: p0.y + rawDy };
-            const cand1 = { x: p1.x + rawDx, y: p1.y + rawDy };
-            const lineLen = Math.hypot(cand1.x - cand0.x, cand1.y - cand0.y);
-            if (lineLen >= 50 && Math.abs(cand1.y - cand0.y) > 25) {
-              const topSide: 'start' | 'end' = cand0.y <= cand1.y ? 'start' : 'end';
-              const topPt = topSide === 'start' ? cand0 : cand1;
-              const botPt = topSide === 'start' ? cand1 : cand0;
-              for (const other of activePage.strokes) {
-                if (other.id === draggedSt.id || hiddenOrLockedLayerIds.has(other.layerId)) {
-                  continue;
-                }
-                if (
-                  other.shapeType === 'line' &&
-                  other.points.length === 2 &&
-                  classifyCircuitStrokeKind(other) === null
-                ) {
-                  const spA = other.points[0];
-                  const spB = other.points[other.points.length - 1];
-                  const abx = spB.x - spA.x;
-                  const aby = spB.y - spA.y;
-                  const lenSq = abx * abx + aby * aby;
-                  if (lenSq >= 36 * 36 && Math.abs(abx) > Math.abs(aby) * 1.35) {
-                    const t = Math.max(
-                      0.03,
-                      Math.min(
-                        0.97,
-                        ((topPt.x - spA.x) * abx + (topPt.y - spA.y) * aby) / lenSq
-                      )
-                    );
-                    const projX = spA.x + t * abx;
-                    const projY = spA.y + t * aby;
-                    const dSup = Math.hypot(topPt.x - projX, topPt.y - projY);
-                    if (
-                      dSup <= 38 &&
-                      draggedSt.rodSupport?.supportStrokeId !== other.id &&
-                      (!matchedPhysicsMagnet || dSup < matchedPhysicsMagnet.dist)
-                    ) {
-                      matchedPhysicsMagnet = {
-                        kind: 'rod-to-support',
-                        springStrokeId: draggedSt.id,
-                        supportStrokeId: other.id,
-                        fixedEnd: topSide,
-                        targetX: projX,
-                        targetY: projY,
-                        snapDx: projX - topPt.x,
-                        snapDy: projY - topPt.y,
-                        dist: dSup,
-                      };
-                    }
-                  }
-                } else if (
-                  other.shapeType === 'circle' ||
-                  other.shapeType === 'ellipse' ||
-                  other.shapeType === 'sphere'
-                ) {
-                  const ob = getStrokeBounds(other);
-                  const ocx = (ob.minX + ob.maxX) / 2;
-                  const ocy = (ob.minY + ob.maxY) / 2;
-                  const dBob = Math.hypot(botPt.x - ocx, botPt.y - ocy);
-                  if (dBob <= 52 && (!matchedPhysicsMagnet || dBob < matchedPhysicsMagnet.dist)) {
-                    matchedPhysicsMagnet = {
-                      kind: 'bob-to-rod',
-                      springStrokeId: draggedSt.id,
-                      massStrokeId: other.id,
-                      targetX: ocx,
-                      targetY: ocy,
-                      snapDx: ocx - botPt.x,
-                      snapDy: ocy - botPt.y,
-                      dist: dBob,
-                    };
-                  }
-                }
-              }
-            }
-          } else if (
-            draggedSt &&
-            (draggedSt.shapeType === 'spring-pointer' ||
-              draggedSt.shapeType === 'arrow' ||
-              Boolean(draggedSt.arrowEnd)) &&
+            draggedSt.shapeType === 'spring-pointer' &&
             draggedSt.points.length >= 2
           ) {
             const candTailX = draggedSt.points[0].x + rawDx;
@@ -44861,77 +46031,34 @@ export default function App() {
               if (
                 other.id === draggedSt.id ||
                 other.id === draggedSt.attachedToSpringId ||
-                hiddenOrLockedLayerIds.has(other.layerId)
+                hiddenOrLockedLayerIds.has(other.layerId) ||
+                other.shapeType !== 'spring'
               ) {
                 continue;
               }
-              if (other.shapeType === 'spring') {
-                const spInfo = getSpringTerminalsAndWidthVec(other);
-                const existingSimOnSp = getValidSpringSims(activePage).find(
-                  (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
-                );
-                let fixedEnd: 'start' | 'end' =
-                  existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
-                if (!existingSimOnSp && !other.springSupport) {
-                  const dStart = Math.hypot(
-                    spInfo.startTerm.x - candTailX,
-                    spInfo.startTerm.y - candTailY
-                  );
-                  const dEnd = Math.hypot(
-                    spInfo.endTerm.x - candTailX,
-                    spInfo.endTerm.y - candTailY
-                  );
-                  fixedEnd = dStart >= dEnd ? 'start' : 'end';
-                }
-                const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-                const dTail = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
-                const dHead =
-                  draggedSt.shapeType !== 'spring-pointer'
-                    ? Math.hypot(candHeadX - freePt.x, candHeadY - freePt.y)
-                    : 9999;
-                const dMid = Math.hypot(candMidX - freePt.x, candMidY - freePt.y);
-                const d = Math.min(dTail, dHead, dMid);
-                const snapRadius = wasUnhookedInThisDrag ? 48 : 84;
-                if (d <= snapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                  const useHead = draggedSt.shapeType !== 'spring-pointer' && dHead < dTail - 8;
-                  const refX = useHead ? candHeadX : candTailX;
-                  const refY = useHead ? candHeadY : candTailY;
-                  matchedPhysicsMagnet = {
-                    kind: 'pointer-to-spring',
-                    springStrokeId: other.id,
-                    pointerStrokeId: draggedSt.id,
-                    targetX: freePt.x,
-                    targetY: freePt.y,
-                    snapDx: freePt.x - refX,
-                    snapDy: freePt.y - refY,
-                    dist: d,
-                  };
-                }
-              } else if (
-                !draggedSt.attachedToSpringId &&
-                (draggedSt.shapeType === 'spring-pointer' ||
-                  other.shapeType === 'spring-pointer' ||
-                  (showSimulationPanel && simActiveCategory === 'forces')) &&
-                (other.shapeType === 'spring-pointer' ||
-                  other.shapeType === 'arrow' ||
-                  Boolean(other.arrowEnd)) &&
-                !other.attachedToSpringId &&
-                other.points.length >= 2
-              ) {
-                const otherTail = other.points[0];
-                const dVec = Math.hypot(candTailX - otherTail.x, candTailY - otherTail.y);
-                if (dVec <= 12 && (!matchedPhysicsMagnet || dVec < matchedPhysicsMagnet.dist)) {
-                  matchedPhysicsMagnet = {
-                    kind: 'vector-to-vector',
-                    springStrokeId: other.id,
-                    pointerStrokeId: draggedSt.id,
-                    targetX: otherTail.x,
-                    targetY: otherTail.y,
-                    snapDx: otherTail.x - candTailX,
-                    snapDy: otherTail.y - candTailY,
-                    dist: dVec,
-                  };
-                }
+              const existingSimOnSp = getValidSpringSims(activePage).find(
+                (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
+              );
+              if (!existingSimOnSp) continue;
+              const spInfo = getSpringTerminalsAndWidthVec(other);
+              const fixedEnd: 'start' | 'end' =
+                existingSimOnSp.fixedEnd || other.springSupport?.fixedEnd || 'start';
+              const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+              const dTail = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
+              const dMid = Math.hypot(candMidX - freePt.x, candMidY - freePt.y);
+              const d = Math.min(dTail, dMid);
+              const snapRadius = wasUnhookedInThisDrag ? 48 : 84;
+              if (d <= snapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                matchedPhysicsMagnet = {
+                  kind: 'pointer-to-spring',
+                  springStrokeId: other.id,
+                  pointerStrokeId: draggedSt.id,
+                  targetX: freePt.x,
+                  targetY: freePt.y,
+                  snapDx: freePt.x - candTailX,
+                  snapDy: freePt.y - candTailY,
+                  dist: d,
+                };
               }
             }
           }
@@ -45121,19 +46248,7 @@ export default function App() {
                 clearActiveOverlay();
                 suppressNextUndoRecordRef.current = true;
 
-                if (physObj.kind === 'spring-to-support' && physObj.supportStrokeId && physObj.fixedEnd) {
-                  snapAndAttachSpringToSupport(
-                    physObj.springStrokeId,
-                    physObj.supportStrokeId,
-                    physObj.fixedEnd,
-                    { x: physObj.targetX, y: physObj.targetY }
-                  );
-                } else if (physObj.kind === 'mass-to-spring' && physObj.massStrokeId) {
-                  attachMassToSpringAndCreateEquilibriumClone(
-                    physObj.springStrokeId,
-                    physObj.massStrokeId
-                  );
-                } else if (
+                if (
                   physObj.kind === 'weight-to-weight' &&
                   physObj.parentWeightId &&
                   physObj.childWeightId
@@ -45141,19 +46256,6 @@ export default function App() {
                   attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
                 } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
                   attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
-                } else if (physObj.kind === 'vector-to-vector' && physObj.pointerStrokeId) {
-                  attachVectorsForSynthesis(physObj.springStrokeId, physObj.pointerStrokeId);
-                } else if (physObj.kind === 'rod-to-support' && physObj.supportStrokeId && physObj.fixedEnd) {
-                  snapAndAttachRodToSupport(
-                    physObj.springStrokeId,
-                    physObj.supportStrokeId,
-                    physObj.fixedEnd,
-                    { x: physObj.targetX, y: physObj.targetY }
-                  );
-                } else if (physObj.kind === 'bob-to-rod' && physObj.massStrokeId) {
-                  attachBobToRodForPendulum(physObj.springStrokeId, physObj.massStrokeId);
-                } else if (physObj.kind === 'block-to-incline' && physObj.massStrokeId) {
-                  attachBlockToInclineForSim(physObj.springStrokeId, physObj.massStrokeId);
                 }
                 return;
               }
@@ -46709,6 +47811,7 @@ export default function App() {
         const targetSim =
           (activePage.atomSims || []).find((s) => s.id === finishedAtomDrag.simId) ||
           getActiveAtomSim(activePage);
+        suppressNextUndoRecordRef.current = true;
         handleAtomSimAction(targetSim, finishedAtomDrag.pendingButtonAction);
         return;
       }
@@ -46729,6 +47832,7 @@ export default function App() {
               ) <=
               candR + 38
             ) {
+              suppressNextUndoRecordRef.current = true;
               bondAtomsByElectronDrag(
                 finishedAtomDrag.simId,
                 finishedAtomDrag.atomId,
@@ -46759,24 +47863,33 @@ export default function App() {
         const targetStroke = activePage.strokes.find(
           (s) => s.id === finishedForceDrag.magnetTargetStrokeId
         );
-        if (draggedVecId && draggedVecId !== finishedForceDrag.magnetTargetStrokeId) {
+        const existingSimOnTargetSp =
+          targetStroke?.shapeType === 'spring'
+            ? getValidSpringSims(activePage).find(
+                (sm) =>
+                  sm.eqSpringStrokeId === targetStroke.id ||
+                  sm.naturalSpringStrokeId === targetStroke.id
+              )
+            : undefined;
+        if (
+          draggedVecId &&
+          draggedVecId !== finishedForceDrag.magnetTargetStrokeId &&
+          targetStroke?.shapeType === 'spring' &&
+          existingSimOnTargetSp
+        ) {
           suppressNextUndoRecordRef.current = true;
-          if (targetStroke?.shapeType === 'spring') {
-            if (fSim) {
-              updateActivePage(
-                (p) => ({
-                  ...p,
-                  forceSims: (p.forceSims || []).filter((f) => f.id !== fSim.id),
-                  activeForceSimId: p.activeForceSimId === fSim.id ? undefined : p.activeForceSimId,
-                }),
-                false
-              );
-            }
-            suppressNextUndoRecordRef.current = true;
-            attachPointerToSpring(targetStroke.id, draggedVecId);
-          } else {
-            attachVectorsForSynthesis(finishedForceDrag.magnetTargetStrokeId, draggedVecId);
+          if (fSim) {
+            updateActivePage(
+              (p) => ({
+                ...p,
+                forceSims: (p.forceSims || []).filter((f) => f.id !== fSim.id),
+                activeForceSimId: p.activeForceSimId === fSim.id ? undefined : p.activeForceSimId,
+              }),
+              false
+            );
           }
+          suppressNextUndoRecordRef.current = true;
+          attachPointerToSpring(targetStroke.id, draggedVecId);
           renderStaticSceneRef.current();
           return;
         }
@@ -47051,22 +48164,6 @@ export default function App() {
         isDraggingSelectionRef.current = null;
         suppressNextUndoRecordRef.current = true;
         if (
-          pendingPhys.kind === 'spring-to-support' &&
-          pendingPhys.supportStrokeId &&
-          pendingPhys.fixedEnd
-        ) {
-          snapAndAttachSpringToSupport(
-            pendingPhys.springStrokeId,
-            pendingPhys.supportStrokeId,
-            pendingPhys.fixedEnd,
-            { x: pendingPhys.targetX, y: pendingPhys.targetY }
-          );
-        } else if (pendingPhys.kind === 'mass-to-spring' && pendingPhys.massStrokeId) {
-          attachMassToSpringAndCreateEquilibriumClone(
-            pendingPhys.springStrokeId,
-            pendingPhys.massStrokeId
-          );
-        } else if (
           pendingPhys.kind === 'weight-to-weight' &&
           pendingPhys.parentWeightId &&
           pendingPhys.childWeightId
@@ -47077,27 +48174,6 @@ export default function App() {
           pendingPhys.pointerStrokeId
         ) {
           attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
-        } else if (
-          pendingPhys.kind === 'rod-to-support' &&
-          pendingPhys.supportStrokeId &&
-          pendingPhys.fixedEnd
-        ) {
-          snapAndAttachRodToSupport(
-            pendingPhys.springStrokeId,
-            pendingPhys.supportStrokeId,
-            pendingPhys.fixedEnd,
-            { x: pendingPhys.targetX, y: pendingPhys.targetY }
-          );
-        } else if (
-          pendingPhys.kind === 'bob-to-rod' &&
-          pendingPhys.massStrokeId
-        ) {
-          attachBobToRodForPendulum(pendingPhys.springStrokeId, pendingPhys.massStrokeId);
-        } else if (
-          pendingPhys.kind === 'block-to-incline' &&
-          pendingPhys.massStrokeId
-        ) {
-          attachBlockToInclineForSim(pendingPhys.springStrokeId, pendingPhys.massStrokeId);
         }
         return;
       }
@@ -47238,7 +48314,7 @@ export default function App() {
                     return otherSelected.length > 0 ? [...otherSelected, ...newSwIds] : newSwIds;
                   });
                   return { ...page, strokes: toggled.strokes };
-                }, true);
+                }, false);
               } else {
                 // If user tapped (without dragging) on empty space or an inner object inside a multi-object selection box, deselect or narrow selection!
                 const hitAtTap = findSelectableObjectAtPagePoint(ptUp, activePage);
@@ -47359,6 +48435,7 @@ export default function App() {
         Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 18
       ) {
         lastStationaryPenTapRef.current = null;
+        commitLiveEraserStateIfNeeded();
         currentStrokePtsRef.current = [];
         lastEraserPtRef.current = null;
         snappedCurrentStrokeRef.current = null;
@@ -47390,6 +48467,7 @@ export default function App() {
     }
 
     if (effectiveTool === 'eraser') {
+      commitLiveEraserStateIfNeeded();
       if (isStationaryPenMicroTap && tapTrack) {
         lastStationaryPenTapRef.current = {
           time: nowUp,
@@ -47401,16 +48479,17 @@ export default function App() {
       lastEraserPtRef.current = null;
       clearActiveOverlay();
       if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        const latestNb = activeNotebookLiveRef.current;
         liveTvSenderRef.current.sendLiveErase({
-          pageId: activePage.id,
+          pageId: (latestNb.pages[activeDrawingPageIndexRef.current ?? activePageIndex] || activePage).id,
           removedIds: [],
           cursorPt: null,
         });
         liveTvSenderRef.current.sendPages({
-          notebookId: activeNotebook.id || 'nb-tv-live',
-          notebookTitle: activeNotebook.title || 'Live Σημείωση',
-          activePageIndex,
-          pages: activeNotebook.pages,
+          notebookId: latestNb.id || 'nb-tv-live',
+          notebookTitle: latestNb.title || 'Live Σημείωση',
+          activePageIndex: activeDrawingPageIndexRef.current ?? activePageIndex,
+          pages: latestNb.pages,
         });
       }
       return;
@@ -48159,249 +49238,95 @@ export default function App() {
       setShowToolSubBar(true);
     }
 
-    // Instant Magnetic Physics Assembly when drawing with Pen/Pencil (hold-to-snap) or Shape Tool:
-    if (isShape || newStroke.arrowEnd) {
-      if (newStroke.shapeType === 'hooked-weight') {
-        const nb = getStrokeBounds(newStroke);
-        const topHookX = (nb.minX + nb.maxX) / 2;
-        const topHookY = nb.minY;
-        let matchedParentWeightId: string | null = null;
-        let matchedSpringId: string | null = null;
-        let bestDist = 72;
-        for (const other of activePage.strokes) {
-          if (other.id === newStroke.id) continue;
-          if (other.shapeType === 'spring') {
-            const existingSimOnSp = getValidSpringSims(activePage).find(
-              (sm) => sm.eqSpringStrokeId === other.id
-            );
-            if (existingSimOnSp) {
-              const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
-              const tailId = existingChain[existingChain.length - 1];
-              const tailSt = tailId ? activePage.strokes.find((s) => s.id === tailId) : undefined;
-              if (tailSt) {
-                const tb = getStrokeBounds(tailSt);
-                const dTail = Math.hypot(topHookX - (tb.minX + tb.maxX) / 2, topHookY - tb.maxY);
-                if (dTail < bestDist) {
-                  bestDist = dTail;
-                  matchedParentWeightId = tailSt.id;
-                  matchedSpringId = null;
-                }
-              }
-              continue;
-            }
-            const spInfo = getSpringTerminalsAndWidthVec(other);
-            const fixedEnd = other.springSupport?.fixedEnd || 'start';
-            const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-            const dSp = Math.hypot(topHookX - freePt.x, topHookY - freePt.y);
-            if (dSp < bestDist) {
-              bestDist = dSp;
-              matchedSpringId = other.id;
-              matchedParentWeightId = null;
-            }
-          } else if (other.shapeType === 'hooked-weight') {
-            const rootId = getWeightChainRootId(activePage, other.id);
-            const chain = getWeightChainIds(activePage, rootId);
-            const tailId = chain[chain.length - 1] || other.id;
-            const tailSt = activePage.strokes.find((s) => s.id === tailId) || other;
-            const tb = getStrokeBounds(tailSt);
-            const botHookX = (tb.minX + tb.maxX) / 2;
-            const botHookY = tb.maxY;
-            const dW = Math.hypot(topHookX - botHookX, topHookY - botHookY);
-            if (dW < bestDist) {
-              bestDist = dW;
-              matchedParentWeightId = tailSt.id;
-              matchedSpringId = null;
-            }
-          }
-        }
-        if (matchedParentWeightId) {
-          const pid = matchedParentWeightId;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            attachWeightToWeightChain(pid, newStroke.id);
-          }, 10);
-        } else if (matchedSpringId) {
-          const sid = matchedSpringId;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id);
-          }, 10);
-        }
-      } else if (
-        newStroke.shapeType === 'line' &&
-        !newStroke.arrowEnd &&
-        !newStroke.arrowStart &&
-        newStroke.points.length >= 2 &&
-        Math.abs(newStroke.points[newStroke.points.length - 1].y - newStroke.points[0].y) >= 35
-      ) {
-        // String/Rod drawn starting or ending near a horizontal ceiling support line -> snap & attach!
-        const p0 = newStroke.points[0];
-        const p1 = newStroke.points[newStroke.points.length - 1];
-        const fixedEnd: 'start' | 'end' = p0.y <= p1.y ? 'start' : 'end';
-        const topPt = fixedEnd === 'start' ? p0 : p1;
-        let bestSup: { id: string; x: number; y: number; dist: number } | null = null;
-        for (const sup of activePage.strokes) {
-          if (
-            sup.id === newStroke.id ||
-            sup.shapeType !== 'line' ||
-            sup.arrowEnd ||
-            sup.points.length < 2
-          ) {
-            continue;
-          }
-          const sp0 = sup.points[0];
-          const sp1 = sup.points[sup.points.length - 1];
-          if (Math.abs(sp1.y - sp0.y) > 20 || Math.abs(sp1.x - sp0.x) < 35) continue;
-          const sdx = sp1.x - sp0.x;
-          const sdy = sp1.y - sp0.y;
-          const lenSq = sdx * sdx + sdy * sdy;
-          if (lenSq < 1) continue;
-          const t = Math.max(0.05, Math.min(0.95, ((topPt.x - sp0.x) * sdx + (topPt.y - sp0.y) * sdy) / lenSq));
-          const projX = sp0.x + t * sdx;
-          const projY = sp0.y + t * sdy;
-          const d = Math.hypot(topPt.x - projX, topPt.y - projY);
-          if (d <= 44 && (!bestSup || d < bestSup.dist)) {
-            bestSup = { id: sup.id, x: projX, y: projY, dist: d };
-          }
-        }
-        if (bestSup) {
-          const hit = bestSup;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            snapAndAttachRodToSupport(newStroke.id, hit.id, fixedEnd, { x: hit.x, y: hit.y });
-          }, 10);
-        }
-      } else if (
-        newStroke.shapeType === 'circle' ||
-        newStroke.shapeType === 'ellipse' ||
-        newStroke.shapeType === 'sphere'
-      ) {
-        // Bob/Sphere drawn at the bottom end of a vertical/angled string -> auto-assemble Pendulum!
-        const bb = getStrokeBounds(newStroke);
-        const cx = (bb.minX + bb.maxX) / 2;
-        const cy = (bb.minY + bb.maxY) / 2;
-        const topY = bb.minY;
-        let matchedRodId: string | null = null;
-        let bestDist = 56;
-        for (const other of activePage.strokes) {
-          if (
-            other.id === newStroke.id ||
-            other.shapeType !== 'line' ||
-            other.arrowEnd ||
-            other.points.length < 2
-          ) {
-            continue;
-          }
-          const rp0 = other.points[0];
-          const rp1 = other.points[other.points.length - 1];
-          if (Math.abs(rp1.y - rp0.y) < 35) continue;
-          const botPt = rp0.y >= rp1.y ? rp0 : rp1;
-          const dCenter = Math.hypot(cx - botPt.x, cy - botPt.y);
-          const dTop = Math.hypot(cx - botPt.x, topY - botPt.y);
-          const d = Math.min(dCenter, dTop);
-          if (d < bestDist) {
-            bestDist = d;
-            matchedRodId = other.id;
-          }
-        }
-        if (matchedRodId) {
-          const rid = matchedRodId;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            attachBobToRodForPendulum(rid, newStroke.id);
-          }, 10);
-        }
-      } else if (
-        newStroke.shapeType === 'rectangle' ||
-        newStroke.shapeType === 'parallelogram' ||
-        newStroke.shapeType === 'cuboid'
-      ) {
-        // Block drawn directly on/near an Inclined Plane -> auto-assemble Inclined Plane Sim!
-        const bb = getStrokeBounds(newStroke);
-        const cx = (bb.minX + bb.maxX) / 2;
-        const cy = (bb.minY + bb.maxY) / 2;
-        let matchedInclineId: string | null = null;
-        let bestDist = 68;
-        for (const other of activePage.strokes) {
-          if (
-            other.id === newStroke.id ||
-            (other.shapeType !== 'incline-wedge' &&
-              other.shapeType !== 'inclined-plane' &&
-              other.shapeType !== 'triangle')
-          ) {
-            continue;
-          }
-          const ib = getStrokeBounds(other);
-          const ax = ib.maxX;
-          const ay = ib.minY;
-          const bx = ib.minX;
-          const by = ib.maxY;
-          const sdx = bx - ax;
-          const sdy = by - ay;
-          const lenSq = sdx * sdx + sdy * sdy;
-          if (lenSq < 100) continue;
-          const t = Math.max(0.15, Math.min(0.85, ((cx - ax) * sdx + (cy - ay) * sdy) / lenSq));
-          const projX = ax + t * sdx;
-          const projY = ay + t * sdy;
-          const d = Math.hypot(cx - projX, cy - projY);
-          if (d < bestDist) {
-            bestDist = d;
-            matchedInclineId = other.id;
-          }
-        }
-        if (matchedInclineId) {
-          const iid = matchedInclineId;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            attachBlockToInclineForSim(iid, newStroke.id);
-          }, 10);
-        }
-      } else if (
-        (newStroke.shapeType === 'spring-pointer' ||
-          newStroke.shapeType === 'arrow' ||
-          newStroke.arrowEnd) &&
-        newStroke.points.length >= 2
-      ) {
-        const tailX = newStroke.points[0].x;
-        const tailY = newStroke.points[0].y;
-        const headPt = newStroke.points[newStroke.points.length - 1];
-        const midX = (tailX + headPt.x) / 2;
-        const midY = (tailY + headPt.y) / 2;
-        let matchedSpringId: string | null = null;
-        let bestDist = 82;
-        for (const other of activePage.strokes) {
-          if (other.id === newStroke.id || other.shapeType !== 'spring') continue;
-          const spInfo = getSpringTerminalsAndWidthVec(other);
+    // STRICT EXPLICIT SIMULATIONS ONLY:
+    // Never auto-create a Pendulum, Incline, or new Spring Sim on stroke pointerUp!
+    // Only allow attaching extra hooked-weights or spring-pointer onto an ALREADY registered SpringSimConfig!
+    if (isShape && newStroke.shapeType === 'hooked-weight') {
+      const nb = getStrokeBounds(newStroke);
+      const topHookX = (nb.minX + nb.maxX) / 2;
+      const topHookY = nb.minY;
+      let matchedParentWeightId: string | null = null;
+      let bestDist = 72;
+      for (const other of activePage.strokes) {
+        if (other.id === newStroke.id) continue;
+        if (other.shapeType === 'spring') {
           const existingSimOnSp = getValidSpringSims(activePage).find(
-            (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
+            (sm) => sm.eqSpringStrokeId === other.id
           );
-          let fixedEnd: 'start' | 'end' =
-            existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
-          if (!existingSimOnSp && !other.springSupport) {
-            const dStart = Math.hypot(spInfo.startTerm.x - tailX, spInfo.startTerm.y - tailY);
-            const dEnd = Math.hypot(spInfo.endTerm.x - tailX, spInfo.endTerm.y - tailY);
-            fixedEnd = dStart >= dEnd ? 'start' : 'end';
+          if (!existingSimOnSp) continue;
+          const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
+          const tailId = existingChain[existingChain.length - 1];
+          const tailSt = tailId ? activePage.strokes.find((s) => s.id === tailId) : undefined;
+          if (tailSt) {
+            const tb = getStrokeBounds(tailSt);
+            const dTail = Math.hypot(topHookX - (tb.minX + tb.maxX) / 2, topHookY - tb.maxY);
+            if (dTail < bestDist) {
+              bestDist = dTail;
+              matchedParentWeightId = tailSt.id;
+            }
           }
-          const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-          const dTail = Math.hypot(tailX - freePt.x, tailY - freePt.y);
-          const dHead =
-            newStroke.shapeType !== 'spring-pointer'
-              ? Math.hypot(headPt.x - freePt.x, headPt.y - freePt.y)
-              : 9999;
-          const dMid = Math.hypot(midX - freePt.x, midY - freePt.y);
-          const dSp = Math.min(dTail, dHead, dMid);
-          if (dSp < bestDist) {
-            bestDist = dSp;
-            matchedSpringId = other.id;
+        } else if (other.shapeType === 'hooked-weight') {
+          const rootId = getWeightChainRootId(activePage, other.id);
+          const attachedSimOnOther = getValidSpringSims(activePage).find(
+            (sm) => sm.massStrokeId === rootId
+          );
+          if (!attachedSimOnOther) continue;
+          const chain = getWeightChainIds(activePage, rootId);
+          const tailId = chain[chain.length - 1] || other.id;
+          const tailSt = activePage.strokes.find((s) => s.id === tailId) || other;
+          const tb = getStrokeBounds(tailSt);
+          const botHookX = (tb.minX + tb.maxX) / 2;
+          const botHookY = tb.maxY;
+          const dW = Math.hypot(topHookX - botHookX, topHookY - botHookY);
+          if (dW < bestDist) {
+            bestDist = dW;
+            matchedParentWeightId = tailSt.id;
           }
         }
-        if (matchedSpringId) {
-          const sid = matchedSpringId;
-          window.setTimeout(() => {
-            suppressNextUndoRecordRef.current = true;
-            attachPointerToSpring(sid, newStroke.id);
-          }, 10);
+      }
+      if (matchedParentWeightId) {
+        const pid = matchedParentWeightId;
+        window.setTimeout(() => {
+          suppressNextUndoRecordRef.current = true;
+          attachWeightToWeightChain(pid, newStroke.id);
+        }, 10);
+      }
+    } else if (
+      isShape &&
+      newStroke.shapeType === 'spring-pointer' &&
+      newStroke.points.length >= 2
+    ) {
+      const tailX = newStroke.points[0].x;
+      const tailY = newStroke.points[0].y;
+      const headPt = newStroke.points[newStroke.points.length - 1];
+      const midX = (tailX + headPt.x) / 2;
+      const midY = (tailY + headPt.y) / 2;
+      let matchedSpringId: string | null = null;
+      let bestDist = 82;
+      for (const other of activePage.strokes) {
+        if (other.id === newStroke.id || other.shapeType !== 'spring') continue;
+        const existingSimOnSp = getValidSpringSims(activePage).find(
+          (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
+        );
+        if (!existingSimOnSp) continue;
+        const spInfo = getSpringTerminalsAndWidthVec(other);
+        const fixedEnd: 'start' | 'end' =
+          existingSimOnSp.fixedEnd || other.springSupport?.fixedEnd || 'start';
+        const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+        const dTail = Math.hypot(tailX - freePt.x, tailY - freePt.y);
+        const dMid = Math.hypot(midX - freePt.x, midY - freePt.y);
+        const dSp = Math.min(dTail, dMid);
+        if (dSp < bestDist) {
+          bestDist = dSp;
+          matchedSpringId = other.id;
         }
+      }
+      if (matchedSpringId) {
+        const sid = matchedSpringId;
+        window.setTimeout(() => {
+          suppressNextUndoRecordRef.current = true;
+          attachPointerToSpring(sid, newStroke.id);
+        }, 10);
       }
     }
 
@@ -49631,6 +50556,7 @@ export default function App() {
   );
 
   const handleCreateNewNoteTab = useCallback(() => {
+    pauseAndReleaseSimulationsRef.current({ closingTab: false });
     const newNb: Notebook = {
       id: `nb-${Date.now()}`,
       title: `Σημείωση ${notebooks.length + 1}`,
@@ -49672,6 +50598,7 @@ export default function App() {
     if (viewMode !== 'editor') return;
     const targetCloseId = activeNotebookId || activeNotebook?.id;
     if (!targetCloseId) return;
+    pauseAndReleaseSimulationsRef.current({ targetNotebookId: targetCloseId, closingTab: true });
     const rem = openNotebookIds.filter(
       (id) => id !== targetCloseId && notebooks.some((n) => n.id === id)
     );
@@ -49687,6 +50614,8 @@ export default function App() {
         setViewMode('library');
       } else {
         setActiveNotebookId(rem[rem.length - 1]);
+        setActivePageIndex(0);
+        activeDrawingPageIndexRef.current = 0;
       }
     }, 110);
   }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder]);
@@ -53906,6 +54835,7 @@ export default function App() {
           <button
             onClick={() => {
               explicitLandingNavRef.current = true;
+              pauseAndReleaseSimulations({ leavingEditor: true });
               setViewMode('landing');
             }}
             className="flex items-center justify-center p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
@@ -53920,10 +54850,7 @@ export default function App() {
           <button
             onClick={() => {
               if (viewMode === 'editor') {
-                const liveHeat = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : null;
-                if (liveHeat && activePage.heatSims && activePage.heatSims.length > 0) {
-                  heatSim.updateActiveHeatSim(() => ({ ...liveHeat, isRunning: false }));
-                }
+                pauseAndReleaseSimulations({ leavingEditor: true });
                 setIsClosingDocument(true);
                 window.setTimeout(() => {
                   setActiveLibraryFolder(null);
@@ -54037,6 +54964,7 @@ export default function App() {
                   key={nb.id}
                   onClick={() => {
                     if (isActive) return;
+                    pauseAndReleaseSimulations({ closingTab: false });
                     setActiveNotebookId(nb.id);
                     setActivePageIndex(0);
                     activeDrawingPageIndexRef.current = 0;
@@ -54115,6 +55043,7 @@ export default function App() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      pauseAndReleaseSimulations({ targetNotebookId: nb.id, closingTab: true });
                       const rem = openNotebookIds.filter(
                         (id) => id !== nb.id && notebooks.some((n) => n.id === id)
                       );
@@ -54130,6 +55059,8 @@ export default function App() {
                           setViewMode('library');
                         } else if (activeNotebook.id === nb.id || activeNotebookId === nb.id) {
                           setActiveNotebookId(rem[rem.length - 1]);
+                          setActivePageIndex(0);
+                          activeDrawingPageIndexRef.current = 0;
                         }
                       }, 110);
                     }}
@@ -55268,6 +56199,9 @@ export default function App() {
               const openNotebookDirectly = (nb: Notebook) => {
                 if (Date.now() - lastLibraryDragEndAtRef.current < 350) return;
                 clearLibraryThumbHoverPreview();
+                if (activeNotebookId && activeNotebookId !== nb.id) {
+                  pauseAndReleaseSimulations({ targetNotebookId: activeNotebookId, closingTab: false });
+                }
                 recordNotebookOpened(nb.id);
                 if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                 setActiveNotebookId(nb.id);
@@ -55698,6 +56632,7 @@ export default function App() {
                     { merge: true }
                   );
                 }
+                pauseAndReleaseSimulations({ targetNotebookId: nb.id, closingTab: true });
                 if (remaining.length === 0) {
                   setNotebooks([]);
                   setOpenNotebookIds([]);
@@ -58309,7 +59244,7 @@ export default function App() {
                         if (tool.id === 'direct-node' && selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
                           setActiveNodeStrokeId(selectedStrokeIds[0]);
                         } else if (tool.id !== 'lasso' && tool.id !== 'direct-node') {
-                          setSelectedStrokeIds([]);
+                          setSelectedStrokeIds((prev) => (prev.length === 0 ? prev : []));
                           setActiveNodeStrokeId(null);
                           setSelectedImageId(null);
                           if (
@@ -58505,71 +59440,15 @@ export default function App() {
                       setShowShapeLibraryPanel(false);
                       setShowWidthPopover(false);
                       setShowColorPopover(false);
-
-                      if (selectedStrokeIds.length > 0) {
-                        const hasSpringSelected = activePage.strokes.some(
-                          (s) => selectedStrokeIds.includes(s.id) && s.shapeType === 'spring'
-                        );
-                        if (hasSpringSelected) {
-                          registerOrActivateSpringSimFromLasso();
-                          return;
-                        }
-                        const hasCircuitCompSelected = activePage.strokes.some(
-                          (s) =>
-                            selectedStrokeIds.includes(s.id) &&
-                            (s.shapeType === 'battery' ||
-                              s.shapeType === 'voltage-source' ||
-                              s.shapeType === 'bulb' ||
-                              s.shapeType === 'bulb-symbol' ||
-                              s.shapeType === 'resistor' ||
-                              s.shapeType === 'switch' ||
-                              s.shapeType === 'fan' ||
-                              s.shapeType === 'ammeter' ||
-                              s.shapeType === 'voltmeter')
-                        );
-                        const hasDedicatedForceShapeSelected = activePage.strokes.some(
-                          (s) =>
-                            selectedStrokeIds.includes(s.id) &&
-                            (s.shapeType === 'spring-pointer' ||
-                              s.shapeType === 'incline-wedge' ||
-                              s.shapeType === 'inclined-plane')
-                        );
-                        if (
-                          !hasCircuitCompSelected &&
-                          hasDedicatedForceShapeSelected &&
-                          registerOrActivateForceSimFromLasso()
-                        ) {
-                          return;
-                        }
-                        const canAutoRegisterFromTopSim =
-                          hasCircuitCompSelected ||
-                          (showSimulationPanel && simActiveCategory === 'circuits');
-                        const ok = canAutoRegisterFromTopSim
-                          ? registerOrActivateSimFromLasso()
-                          : false;
-                        if (!ok && hasDedicatedForceShapeSelected && registerOrActivateForceSimFromLasso()) {
-                          return;
-                        }
-                        if (ok) {
-                          setSelectedStrokeIds([]);
-                          setSelectedImageId(null);
-                          setSelectedImageIds([]);
-                          setActiveNodeStrokeId(null);
-                          setSimActiveCategory('circuits');
-                        } else {
-                          setShowSimulationPanel(true);
-                        }
-                        return;
-                      }
-
-                      setSelectedStrokeIds([]);
-                      setSelectedImageId(null);
-                      setSelectedImageIds([]);
                       setActiveNodeStrokeId(null);
 
                       setShowSimulationPanel((v) => {
                         const next = !v;
                         if (next) {
+                          const existingF = getActiveForceSim(activePage);
+                          if (existingF) {
+                            setForceSimSubTab(existingF.mode);
+                          }
                           // When reopening, prioritize preserving the user's last active simulation category!
                           setSimActiveCategory((cur) => {
                             if (cur) return cur;
@@ -58586,7 +59465,7 @@ export default function App() {
                             if (getValidCircuitSims(activePage).length > 0) return 'circuits';
                             if (getValidSpringSims(activePage).length > 0) return 'springs';
                             if ((activePage.atomSims || []).length > 0) return 'atoms';
-                            return 'heat';
+                            return 'circuits';
                           });
                         } else {
                           // When closing the panel, pause active motion while keeping all simulations visible on paper
@@ -59154,6 +60033,7 @@ export default function App() {
               activeTool === 'text' ||
               (activeTool === 'lasso' && showAlignSubBar) ||
               selectedTextId !== null ||
+              editingTextId !== null ||
               (activeTool !== 'direct-node' &&
                 (selectedStrokeIds.length > 0 ||
                   selectedLassoTextIds.length > 0 ||
@@ -59166,8 +60046,20 @@ export default function App() {
                 style={{ touchAction: 'manipulation' }}
                 className="sticky top-0 z-30 flex items-center justify-center flex-wrap px-4 py-1 bg-[#f7f5f0]/95 border-b border-[#dfd8cb] text-xs gap-2 shrink-0"
               >
-                {(activeTool === 'text' || selectedTextId !== null) && (() => {
-                  const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
+                {(activeTool === 'text' ||
+                  selectedTextId !== null ||
+                  editingTextId !== null ||
+                  selectedLassoTextIds.length > 0) && (() => {
+                  const selTxt =
+                    (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId)) ||
+                    (selectedLassoTextIds.length > 0
+                      ? (activePage.texts || []).find((t) => selectedLassoTextIds.includes(t.id))
+                      : undefined);
+                  const targetTxtIdSet = new Set<string>(
+                    selectedTextId || editingTextId
+                      ? [selectedTextId || editingTextId!]
+                      : selectedLassoTextIds
+                  );
                   const subStyle =
                     selTxt &&
                     editingTextId === selTxt.id &&
@@ -59179,12 +60071,12 @@ export default function App() {
                   const currentBold = subStyle
                     ? subStyle.bold
                     : selTxt
-                    ? Boolean(selTxt.bold) || selTxt.fontFamily === 'calligraphic-bold'
+                    ? getEffectiveTextBold(selTxt)
                     : textBold;
                   const currentShadow = subStyle
                     ? subStyle.shadow
                     : selTxt
-                    ? Boolean(selTxt.shadow)
+                    ? getEffectiveTextShadow(selTxt)
                     : textShadow;
                   const currentSize = subStyle
                     ? subStyle.fontSize
@@ -59201,11 +60093,34 @@ export default function App() {
 
                   const applyBold = (nextB: boolean) => {
                     setTextBold(nextB);
-                    if (selTxt) {
+                    if (selTxt && targetTxtIdSet.size > 0) {
+                      const liveRange =
+                        editingTextId === selTxt.id && !selTxt.isMath
+                          ? getActiveRangeForText(selTxt.id, (selTxt.text || '').length)
+                          : null;
+                      if (liveRange && liveRange.end > liveRange.start) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          texts: (page.texts || []).map((t) =>
+                            t.id === selTxt.id
+                              ? {
+                                  ...t,
+                                  spans: applyStyleToTextRange(
+                                    t,
+                                    liveRange.start,
+                                    liveRange.end,
+                                    { bold: nextB }
+                                  ),
+                                }
+                              : t
+                          ),
+                        }));
+                        return;
+                      }
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) => {
-                          if (t.id !== selTxt.id) return t;
+                          if (!targetTxtIdSet.has(t.id)) return t;
                           const normFont: TextFontStyle =
                             t.fontFamily === 'calligraphic-bold'
                               ? 'calligraphic'
@@ -59218,6 +60133,7 @@ export default function App() {
                             ...t,
                             fontFamily: normFont,
                             bold: nextB,
+                            spans: (t.spans || []).map((sp) => ({ ...sp, bold: nextB })),
                             boxWidth: nextBoxW,
                             boxHeight: undefined,
                           };
@@ -59228,14 +60144,12 @@ export default function App() {
 
                   const applyShadow = (nextS: boolean) => {
                     setTextShadow(nextS);
-                    if (selTxt) {
-                      const isEditing = editingTextId === selTxt.id;
-                      if (
-                        isEditing &&
-                        !selTxt.isMath &&
-                        activeTextRange?.textId === selTxt.id &&
-                        activeTextRange.end > activeTextRange.start
-                      ) {
+                    if (selTxt && targetTxtIdSet.size > 0) {
+                      const liveRange =
+                        editingTextId === selTxt.id && !selTxt.isMath
+                          ? getActiveRangeForText(selTxt.id, (selTxt.text || '').length)
+                          : null;
+                      if (liveRange && liveRange.end > liveRange.start) {
                         updateActivePage((page) => ({
                           ...page,
                           texts: (page.texts || []).map((t) =>
@@ -59244,8 +60158,8 @@ export default function App() {
                                   ...t,
                                   spans: applyStyleToTextRange(
                                     t,
-                                    activeTextRange.start,
-                                    activeTextRange.end,
+                                    liveRange.start,
+                                    liveRange.end,
                                     { shadow: nextS }
                                   ),
                                 }
@@ -59256,7 +60170,7 @@ export default function App() {
                         updateActivePage((page) => ({
                           ...page,
                           texts: (page.texts || []).map((t) =>
-                            t.id === selTxt.id
+                            targetTxtIdSet.has(t.id)
                               ? {
                                   ...t,
                                   shadow: nextS,
@@ -59271,11 +60185,11 @@ export default function App() {
 
                   const applyFontFamily = (nextFont: TextFontStyle) => {
                     setTextFontFamily(nextFont);
-                    if (selTxt) {
+                    if (selTxt && targetTxtIdSet.size > 0) {
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) => {
-                          if (t.id !== selTxt.id) return t;
+                          if (!targetTxtIdSet.has(t.id)) return t;
                           const rawLatex = t.latex || '';
                           const hasRealMath = /\\frac|\\dfrac|\\sqrt|\\Rightarrow|\\Leftrightarrow|\\rightarrow|\\sum|\\int|[=^_]/.test(
                             rawLatex
@@ -59299,11 +60213,11 @@ export default function App() {
                   const applyFontSize = (nextSize: number) => {
                     const clamped = Math.max(8, Math.min(160, nextSize));
                     setTextFontSize(clamped);
-                    if (selTxt) {
+                    if (selTxt && targetTxtIdSet.size > 0) {
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) =>
-                          t.id === selTxt.id
+                          targetTxtIdSet.has(t.id)
                             ? { ...t, fontSize: clamped, boxWidth: undefined, boxHeight: undefined }
                             : t
                         ),
@@ -59315,7 +60229,45 @@ export default function App() {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {/* Bold (B) Toggle */}
                       <button
-                        onClick={() => applyBold(!currentBold)}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onPointerDown={(e) => {
+                          if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const now = performance.now();
+                            lastTextBarDirectTapTimeRef.current = now;
+                            textBarDirectPointerActiveRef.current = true;
+                            suppressTrustedTextBarClickUntilRef.current = now + 2500;
+                            applyBold(!currentBold);
+                          }
+                        }}
+                        onPointerUp={() => {
+                          if (textBarDirectPointerActiveRef.current) {
+                            const now = performance.now();
+                            textBarDirectPointerActiveRef.current = false;
+                            lastTextBarDirectTapTimeRef.current = now;
+                            suppressTrustedTextBarClickUntilRef.current = now + 750;
+                          }
+                        }}
+                        onPointerCancel={() => {
+                          if (textBarDirectPointerActiveRef.current) {
+                            const now = performance.now();
+                            textBarDirectPointerActiveRef.current = false;
+                            lastTextBarDirectTapTimeRef.current = now;
+                            suppressTrustedTextBarClickUntilRef.current = now + 750;
+                          }
+                        }}
+                        onClick={(e) => {
+                          if (
+                            e.nativeEvent.isTrusted &&
+                            performance.now() < suppressTrustedTextBarClickUntilRef.current
+                          ) {
+                            suppressTrustedTextBarClickUntilRef.current = 0;
+                            return;
+                          }
+                          applyBold(!currentBold);
+                        }}
                         className={`px-2.5 py-1 rounded-full font-semibold transition cursor-pointer ${
                           currentBold
                             ? 'bg-[#234978] text-white shadow-xs'
@@ -59328,7 +60280,45 @@ export default function App() {
 
                       {/* Text Shadow Toggle */}
                       <button
-                        onClick={() => applyShadow(!currentShadow)}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onPointerDown={(e) => {
+                          if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const now = performance.now();
+                            lastTextBarDirectTapTimeRef.current = now;
+                            textBarDirectPointerActiveRef.current = true;
+                            suppressTrustedTextBarClickUntilRef.current = now + 2500;
+                            applyShadow(!currentShadow);
+                          }
+                        }}
+                        onPointerUp={() => {
+                          if (textBarDirectPointerActiveRef.current) {
+                            const now = performance.now();
+                            textBarDirectPointerActiveRef.current = false;
+                            lastTextBarDirectTapTimeRef.current = now;
+                            suppressTrustedTextBarClickUntilRef.current = now + 750;
+                          }
+                        }}
+                        onPointerCancel={() => {
+                          if (textBarDirectPointerActiveRef.current) {
+                            const now = performance.now();
+                            textBarDirectPointerActiveRef.current = false;
+                            lastTextBarDirectTapTimeRef.current = now;
+                            suppressTrustedTextBarClickUntilRef.current = now + 750;
+                          }
+                        }}
+                        onClick={(e) => {
+                          if (
+                            e.nativeEvent.isTrusted &&
+                            performance.now() < suppressTrustedTextBarClickUntilRef.current
+                          ) {
+                            suppressTrustedTextBarClickUntilRef.current = 0;
+                            return;
+                          }
+                          applyShadow(!currentShadow);
+                        }}
                         className={`px-2.5 py-1 rounded-full font-semibold transition cursor-pointer flex items-center gap-1 ${
                           currentShadow
                             ? 'bg-[#234978] text-white shadow-xs'
@@ -59338,7 +60328,7 @@ export default function App() {
                       >
                         <span
                           style={{ textShadow: '1px 1px 2px rgba(71,85,105,0.6)' }}
-                          className="font-bold text-[12px]"
+                          className="font-bold text-[12px] pointer-events-none"
                         >
                           S
                         </span>{' '}
@@ -59349,30 +60339,85 @@ export default function App() {
                       <div
                         onWheel={(e) => {
                           if (e.deltaY !== 0 && !e.deltaX) {
+                            e.preventDefault();
                             e.currentTarget.scrollLeft += e.deltaY;
                           }
                         }}
+                        onTouchStart={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onTouchMove={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          // Prevent losing <textarea> focus while clicking/dragging font strip
+                          e.preventDefault();
+                        }}
                         onPointerDown={(e) => {
-                          if (e.pointerType === 'mouse') {
+                          if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
                             const el = e.currentTarget;
+                            el.dataset.dragPointerId = String(e.pointerId);
                             el.dataset.dragStartX = String(e.clientX);
                             el.dataset.dragScrollLeft = String(el.scrollLeft);
                             el.dataset.wasDragged = '0';
+                            el.dataset.isDragging = '1';
                           }
                         }}
                         onPointerMove={(e) => {
-                          if (e.pointerType === 'mouse' && e.buttons === 1) {
-                            const el = e.currentTarget;
+                          const el = e.currentTarget;
+                          if (
+                            (e.pointerType === 'mouse' || e.pointerType === 'pen') &&
+                            el.dataset.isDragging === '1' &&
+                            (e.buttons === 1 || e.pressure > 0)
+                          ) {
                             const startX = Number(el.dataset.dragStartX || 0);
                             const origScroll = Number(el.dataset.dragScrollLeft || 0);
                             const dx = e.clientX - startX;
                             if (Math.abs(dx) > 5) {
-                              el.dataset.wasDragged = '1';
+                              if (el.dataset.wasDragged !== '1') {
+                                el.dataset.wasDragged = '1';
+                                try {
+                                  el.setPointerCapture(e.pointerId);
+                                } catch {
+                                  // ignore
+                                }
+                              }
                               el.scrollLeft = origScroll - dx;
                             }
                           }
                         }}
-                        className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-[238px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain touch-pan-x select-none shrink-0"
+                        onPointerUp={(e) => {
+                          const el = e.currentTarget;
+                          el.dataset.isDragging = '0';
+                          if (el.dataset.wasDragged === '1') {
+                            try {
+                              if (el.hasPointerCapture(e.pointerId)) {
+                                el.releasePointerCapture(e.pointerId);
+                              }
+                            } catch {
+                              // ignore
+                            }
+                            window.setTimeout(() => {
+                              el.dataset.wasDragged = '0';
+                            }, 80);
+                          }
+                        }}
+                        onPointerCancel={(e) => {
+                          const el = e.currentTarget;
+                          el.dataset.isDragging = '0';
+                          try {
+                            if (el.hasPointerCapture(e.pointerId)) {
+                              el.releasePointerCapture(e.pointerId);
+                            }
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        style={{
+                          touchAction: 'pan-x',
+                          WebkitOverflowScrolling: 'touch',
+                        }}
+                        className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-[238px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden overscroll-contain touch-pan-x select-none shrink-0"
                         title="Σύρετε αριστερά/δεξιά (swipe) για περισσότερες γραμματοσειρές"
                       >
                         {(
@@ -59386,45 +60431,57 @@ export default function App() {
                             { id: 'neohellenic', label: 'Ρέουσα' },
                             { id: 'sans', label: 'Τυπωμένο' },
                           ] as { id: TextFontStyle; label: string }[]
-                        ).map((fOpt) => (
-                          <button
-                            key={fOpt.id}
-                            ref={(btnEl) => {
-                              if (btnEl && currentFontFamily === fOpt.id) {
-                                const parent = btnEl.parentElement;
-                                if (parent) {
-                                  const btnLeft = btnEl.offsetLeft;
-                                  const btnRight = btnLeft + btnEl.offsetWidth;
-                                  if (btnLeft < parent.scrollLeft) {
-                                    parent.scrollTo({ left: Math.max(0, btnLeft - 4), behavior: 'smooth' });
-                                  } else if (btnRight > parent.scrollLeft + parent.clientWidth) {
-                                    parent.scrollTo({
-                                      left: btnRight - parent.clientWidth + 4,
-                                      behavior: 'smooth',
-                                    });
+                        ).map((fOpt) => {
+                          const autoScrollKey = `${selTxt?.id || 'default'}:${currentFontFamily}`;
+                          return (
+                            <button
+                              key={fOpt.id}
+                              type="button"
+                              ref={(btnEl) => {
+                                if (btnEl && currentFontFamily === fOpt.id) {
+                                  const parent = btnEl.parentElement;
+                                  if (
+                                    parent &&
+                                    parent.dataset.lastAutoScrolledKey !== autoScrollKey &&
+                                    parent.dataset.isDragging !== '1'
+                                  ) {
+                                    parent.dataset.lastAutoScrolledKey = autoScrollKey;
+                                    const btnLeft = btnEl.offsetLeft;
+                                    const btnRight = btnLeft + btnEl.offsetWidth;
+                                    if (btnLeft < parent.scrollLeft) {
+                                      parent.scrollTo({
+                                        left: Math.max(0, btnLeft - 4),
+                                        behavior: 'smooth',
+                                      });
+                                    } else if (btnRight > parent.scrollLeft + parent.clientWidth) {
+                                      parent.scrollTo({
+                                        left: btnRight - parent.clientWidth + 4,
+                                        behavior: 'smooth',
+                                      });
+                                    }
                                   }
                                 }
-                              }
-                            }}
-                            onClick={(e) => {
-                              const parent = e.currentTarget.parentElement;
-                              if (parent && parent.dataset.wasDragged === '1') {
-                                parent.dataset.wasDragged = '0';
-                                return;
-                              }
-                              applyFontFamily(fOpt.id);
-                            }}
-                            style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 whitespace-nowrap ${
-                              currentFontFamily === fOpt.id
-                                ? 'bg-[#234978] text-white shadow-xs'
-                                : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
-                            }`}
-                            title={`Γραμματοσειρά: ${fOpt.label} (σύρετε για τις υπόλοιπες)`}
-                          >
-                            {fOpt.label}
-                          </button>
-                        ))}
+                              }}
+                              onClick={(e) => {
+                                const parent = e.currentTarget.parentElement;
+                                if (parent && parent.dataset.wasDragged === '1') {
+                                  parent.dataset.wasDragged = '0';
+                                  return;
+                                }
+                                applyFontFamily(fOpt.id);
+                              }}
+                              style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
+                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 whitespace-nowrap ${
+                                currentFontFamily === fOpt.id
+                                  ? 'bg-[#234978] text-white shadow-xs'
+                                  : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
+                              }`}
+                              title={`Γραμματοσειρά: ${fOpt.label} (σύρετε για τις υπόλοιπες)`}
+                            >
+                              {fOpt.label}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div className="h-4 w-px bg-[#dfd8cb] mx-0.5 shrink-0" />
@@ -60322,7 +61379,17 @@ export default function App() {
                         onConvertToPolygon={handleConvertSelectedStrokesToPolygon}
                         onConvertChemOcr={() => void handleConvertLassoToChemOCR()}
                         onConvert3DMoleculeOcr={() => void handleConvertLassoTo3DMoleculeOCR()}
-                        onActivateAtomSim={registerOrActivateAtomSimFromLasso}
+                        onActivateAtomSim={() => {
+                          if (!showSimulationPanel || simActiveCategory !== 'atoms') {
+                            setShowSimulationPanel(true);
+                            setSimActiveCategory('atoms');
+                            showToast(
+                              '⚛️ Ανοίχτηκε το Dashboard Ατόμου — πατήστε «+ Νέο Άτομο» για δημιουργία!'
+                            );
+                            return;
+                          }
+                          registerOrActivateAtomSimFromLasso();
+                        }}
                       />
                     )}
 
@@ -60600,27 +61667,6 @@ export default function App() {
                         const hasVs = selStrokes.some((s) => s.shapeType === 'voltage-source');
                         const hasBulb = selStrokes.some((s) => s.shapeType === 'bulb');
                         const hasRes = selStrokes.some((s) => s.shapeType === 'resistor');
-                        const previewHandRec =
-                          showSimulationPanel &&
-                          simActiveCategory === 'circuits' &&
-                          !hasBat &&
-                          !hasVs &&
-                          selStrokes.length >= 1 &&
-                          selStrokes.length <= 28
-                            ? recognizeHandDrawnCircuitSymbols(
-                                selStrokes,
-                                activePage.texts || [],
-                                {
-                                  requireCircuitContext: false,
-                                  explicitCircuitIntent: false,
-                                }
-                              )
-                            : null;
-                        const hasHandSource = Boolean(
-                          previewHandRec?.strokes.some(
-                            (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-                          )
-                        );
                         const swStroke = selStrokes.find(
                           (s) =>
                             s.shapeType === 'switch' ||
@@ -60630,18 +61676,6 @@ export default function App() {
 
                         return (
                           <>
-                            {(hasBat || hasVs || hasHandSource) && (
-                              <button
-                                onClick={() => {
-                                  registerOrActivateSimFromLasso();
-                                }}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#234978] hover:bg-[#1c3c63] text-white font-semibold text-[11px] cursor-pointer shadow-2xs transition"
-                                title="Δημιουργία/Ενεργοποίηση Προσομοίωσης από το επιλεγμένο κύκλωμα (αυτόματο κλείσιμο Λάσο)"
-                              >
-                                <Zap className="w-3.5 h-3.5" />
-                                <span>Προσομοίωση ({getNextDefaultSimName(activePage)})</span>
-                              </button>
-                            )}
                             {(hasBat || hasVs || hasBulb || hasRes) && (
                               <button
                                 onClick={() => {
@@ -62723,8 +63757,9 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setSimActiveCategory('forces');
-                      if (selectedStrokeIds.length > 0) {
-                        registerOrActivateForceSimFromLasso();
+                      const existingF = getActiveForceSim(activePage);
+                      if (existingF) {
+                        setForceSimSubTab(existingF.mode);
                       }
                     }}
                     className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
@@ -62752,9 +63787,6 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setSimActiveCategory('atoms');
-                      if (selectedStrokeIds.length > 0) {
-                        registerOrActivateAtomSimFromLasso();
-                      }
                     }}
                     className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
@@ -62784,59 +63816,61 @@ export default function App() {
                     onCommitSimName={(simPageId, simId, trimmed) => {
                       userEditedInSessionRef.current.add(activeNotebook.id);
                       saveUserEditedSessionIds(userEditedInSessionRef.current);
-                      setNotebooks((prev) => {
-                        const nextNbs = prev.map((nb) =>
-                          nb.id !== activeNotebook.id
-                            ? nb
-                            : {
-                                ...nb,
-                                pages: nb.pages.map((p) =>
-                                  p.id !== simPageId
-                                    ? p
-                                    : {
-                                        ...p,
-                                        circuitSims: (p.circuitSims || []).map((s) =>
-                                          s.id === simId ? { ...s, name: trimmed } : s
-                                        ),
-                                      }
-                                ),
-                              }
-                        );
-                        notebooksRef.current = nextNbs;
-                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
-                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                        return nextNbs;
-                      });
+                      const targetNb = notebooksRef.current.find((n) => n.id === activeNotebook.id);
+                      const targetPg = targetNb?.pages.find((p) => p.id === simPageId);
+                      if (targetPg) pushUndoSnapshot(targetPg);
+                      const nextNbs = notebooksRef.current.map((nb) =>
+                        nb.id !== activeNotebook.id
+                          ? nb
+                          : {
+                              ...nb,
+                              updatedAt: getMonotonicIsoTimestamp(),
+                              pages: nb.pages.map((p) =>
+                                p.id !== simPageId
+                                  ? p
+                                  : {
+                                      ...p,
+                                      circuitSims: (p.circuitSims || []).map((s) =>
+                                        s.id === simId ? { ...s, name: trimmed } : s
+                                      ),
+                                    }
+                              ),
+                            }
+                      );
+                      notebooksRef.current = nextNbs;
+                      const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                      if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                      setNotebooks(nextNbs);
+                      setIsDirty(true);
+                      setSyncStatus('dirty');
                       setEditingSimId(null);
                     }}
                     onSelectSim={({ sim, pageId: simPageId, pageIdx: simPageIdx }) => {
                       lastDetectedSimIdRef.current = sim.id;
-                      setNotebooks((prev) => {
-                        const nextNbs = prev.map((nb) =>
-                          nb.id !== activeNotebook.id
-                            ? nb
-                            : {
-                                ...nb,
-                                pages: nb.pages.map((p) =>
-                                  p.id !== simPageId
-                                    ? p
-                                    : {
-                                        ...p,
-                                        circuitSims: (p.circuitSims || []).map((cs) =>
-                                          cs.id === p.activeCircuitSimId
-                                            ? { ...cs, switchClosed: simCircuitSwitchClosed }
-                                            : cs
-                                        ),
-                                        activeCircuitSimId: sim.id,
-                                      }
-                                ),
-                              }
-                        );
-                        notebooksRef.current = nextNbs;
-                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
-                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                        return nextNbs;
-                      });
+                      const nextNbs = notebooksRef.current.map((nb) =>
+                        nb.id !== activeNotebook.id
+                          ? nb
+                          : {
+                              ...nb,
+                              pages: nb.pages.map((p) =>
+                                p.id !== simPageId
+                                  ? p
+                                  : {
+                                      ...p,
+                                      circuitSims: (p.circuitSims || []).map((cs) =>
+                                        cs.id === p.activeCircuitSimId
+                                          ? { ...cs, switchClosed: simCircuitSwitchClosed }
+                                          : cs
+                                      ),
+                                      activeCircuitSimId: sim.id,
+                                    }
+                              ),
+                            }
+                      );
+                      notebooksRef.current = nextNbs;
+                      const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                      if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                      setNotebooks(nextNbs);
                       setSelectedStrokeIds([]);
                       setIsSimulating(true);
                       setSimCircuitSwitchClosed(Boolean(sim.switchClosed));
@@ -62851,42 +63885,47 @@ export default function App() {
                     onRemoveSim={({ sim, pageId: simPageId }) => {
                       userEditedInSessionRef.current.add(activeNotebook.id);
                       saveUserEditedSessionIds(userEditedInSessionRef.current);
-                      setNotebooks((prev) => {
-                        const nextNbs = prev.map((nb) => {
-                          if (nb.id !== activeNotebook.id) return nb;
-                          const nextPages = nb.pages.map((p) => {
-                            if (p.id !== simPageId) return p;
-                            const remaining = (p.circuitSims || []).filter((s) => s.id !== sim.id);
-                            const nextActiveId =
-                              p.activeCircuitSimId === sim.id ? remaining[0]?.id : p.activeCircuitSimId;
-                            let nextStrokes = p.strokes;
-                            if (sim.rawStrokesBackup && sim.rawStrokesBackup.length > 0) {
-                              const simIdSet = new Set(sim.strokeIds);
-                              const kept = p.strokes.filter((s) => !simIdSet.has(s.id));
-                              nextStrokes = [...kept, ...sim.rawStrokesBackup];
-                            }
-                            return {
-                              ...p,
-                              strokes: nextStrokes,
-                              circuitSims: remaining,
-                              activeCircuitSimId: nextActiveId,
-                            };
-                          });
-                          const anyLeft = nextPages.some((p) => getValidCircuitSims(p).length > 0);
-                          if (!anyLeft) {
-                            setIsSimulating(false);
+                      const targetNb = notebooksRef.current.find((n) => n.id === activeNotebook.id);
+                      const targetPg = targetNb?.pages.find((p) => p.id === simPageId);
+                      if (targetPg) pushUndoSnapshot(targetPg);
+                      const nextNbs = notebooksRef.current.map((nb) => {
+                        if (nb.id !== activeNotebook.id) return nb;
+                        const nextPages = nb.pages.map((p) => {
+                          if (p.id !== simPageId) return p;
+                          const remaining = (p.circuitSims || []).filter((s) => s.id !== sim.id);
+                          const nextActiveId =
+                            p.activeCircuitSimId === sim.id ? remaining[0]?.id : p.activeCircuitSimId;
+                          let nextStrokes = p.strokes;
+                          if (sim.rawStrokesBackup && sim.rawStrokesBackup.length > 0) {
+                            const simIdSet = new Set(sim.strokeIds);
+                            const kept = p.strokes.filter((s) => !simIdSet.has(s.id));
+                            nextStrokes = [...kept, ...sim.rawStrokesBackup];
                           }
                           return {
-                            ...nb,
-                            updatedAt: getMonotonicIsoTimestamp(),
-                            pages: nextPages,
+                            ...p,
+                            strokes: nextStrokes,
+                            circuitSims: remaining,
+                            activeCircuitSimId: nextActiveId,
                           };
                         });
-                        notebooksRef.current = nextNbs;
-                        const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
-                        if (updatedNb) activeNotebookLiveRef.current = updatedNb;
-                        return nextNbs;
+                        const anyLeft = nextPages.some((p) => getValidCircuitSims(p).length > 0);
+                        if (!anyLeft) {
+                          setIsSimulating(false);
+                        }
+                        return {
+                          ...nb,
+                          updatedAt: getMonotonicIsoTimestamp(),
+                          pages: nextPages,
+                        };
                       });
+                      notebooksRef.current = nextNbs;
+                      const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                      if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                      setNotebooks(nextNbs);
+                      setIsDirty(true);
+                      setSyncStatus('dirty');
+                      staticPageRenderCacheRef.current.delete(simPageId);
+                      queueMicrotask(() => renderStaticSceneRef.current?.());
                       showToast(
                         `🗑️ Το κύκλωμα "${sim.name}" αφαιρέθηκε. Το σχέδιο παραμένει ως απλό σκίτσο!`
                       );
@@ -62896,13 +63935,11 @@ export default function App() {
                     }}
                     onTogglePlayPause={() => {
                       if (!isSimulating) {
-                        if (selectedStrokeIds.length > 0) {
-                          registerOrActivateSimFromLasso();
-                          return;
-                        }
                         const activeSim = getActiveCircuitSim(activePage);
                         if (!activeSim) {
-                          showToast("🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!");
+                          showToast(
+                            '🎯 Επιλέξτε με το Λάσο το κύκλωμα στο χαρτί και πατήστε «+ Νέο Κύκλωμα»!'
+                          );
                           return;
                         }
                         setSimCircuitSwitchClosed(Boolean(activeSim.switchClosed));
@@ -63174,21 +64211,23 @@ export default function App() {
 
                     return (
                       <div className="space-y-2.5">
-                        {/* 1. Named Spring Simulations Selector (ελ01, ελ02, ...) */}
+                        {/* 1. Named Spring Simulations Selector (ελατήριο1, ελατήριο2, ...) */}
                         <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-1.5">
-                          {hasSelectedSpring && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                registerOrActivateSpringSimFromLasso();
-                              }}
-                              className="w-full py-1.5 px-2.5 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                              title="Δημιουργεί σύστημα ελατηρίου-μάζας με θέση ισορροπίας από το επιλεγμένο ελατήριο"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Προσθήκη από Λάσο ({nextSpringLabel})</span>
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              registerOrActivateSpringSimFromLasso();
+                            }}
+                            className={`w-full py-1.5 px-2.5 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                              hasSelectedSpring
+                                ? 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+                                : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#234978] border border-[#dfd8cb]'
+                            }`}
+                            title="Επιλέξτε στο χαρτί όλα τα αντικείμενα του ελατηρίου (στήριγμα, ελατήριο, σώμα) και πατήστε για δημιουργία νέας προσομοίωσης"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Νέο Ελατήριο ({nextSpringLabel})</span>
+                          </button>
 
                           {allSpringSims.length > 0 ? (
                             <>
@@ -63205,25 +64244,33 @@ export default function App() {
                                   const isEditingThis = editingSpringSimId === sim.id;
                                   const commitSpringName = () => {
                                     const trimmed = editingSpringSimName.trim() || sim.name;
-                                    setNotebooks((prev) =>
-                                      prev.map((nb) =>
-                                        nb.id !== activeNotebook.id
-                                          ? nb
-                                          : {
-                                              ...nb,
-                                              pages: nb.pages.map((p) =>
-                                                p.id !== spPageId
-                                                  ? p
-                                                  : {
-                                                      ...p,
-                                                      springSims: (p.springSims || []).map((s) =>
-                                                        s.id === sim.id ? { ...s, name: trimmed } : s
-                                                      ),
-                                                    }
-                                              ),
-                                            }
-                                      )
+                                    const targetNb = notebooksRef.current.find((n) => n.id === activeNotebook.id);
+                                    const targetPg = targetNb?.pages.find((p) => p.id === spPageId);
+                                    if (targetPg && trimmed !== sim.name) pushUndoSnapshot(targetPg);
+                                    const nextNbs = notebooksRef.current.map((nb) =>
+                                      nb.id !== activeNotebook.id
+                                        ? nb
+                                        : {
+                                            ...nb,
+                                            updatedAt: getMonotonicIsoTimestamp(),
+                                            pages: nb.pages.map((p) =>
+                                              p.id !== spPageId
+                                                ? p
+                                                : {
+                                                    ...p,
+                                                    springSims: (p.springSims || []).map((s) =>
+                                                      s.id === sim.id ? { ...s, name: trimmed } : s
+                                                    ),
+                                                  }
+                                            ),
+                                          }
                                     );
+                                    notebooksRef.current = nextNbs;
+                                    const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                                    if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                                    setNotebooks(nextNbs);
+                                    setIsDirty(true);
+                                    setSyncStatus('dirty');
                                     setEditingSpringSimId(null);
                                   };
                                   return (
@@ -63301,33 +64348,46 @@ export default function App() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          setNotebooks((prev) =>
-                                            prev.map((nb) => {
-                                              if (nb.id !== activeNotebook.id) return nb;
-                                              const nextPages = nb.pages.map((p) => {
-                                                if (p.id !== spPageId) return p;
-                                                const remaining = (p.springSims || []).filter(
-                                                  (s) => s.id !== sim.id
-                                                );
-                                                const nextActiveId =
-                                                  p.activeSpringSimId === sim.id
-                                                    ? remaining[0]?.id
-                                                    : p.activeSpringSimId;
-                                                return {
-                                                  ...p,
-                                                  springSims: remaining,
-                                                  activeSpringSimId: nextActiveId,
-                                                };
-                                              });
-                                              const anyLeft = nextPages.some(
-                                                (p) => getValidSpringSims(p).length > 0
+                                          const targetNb = notebooksRef.current.find((n) => n.id === activeNotebook.id);
+                                          const targetPg = targetNb?.pages.find((p) => p.id === spPageId);
+                                          if (targetPg) pushUndoSnapshot(targetPg);
+                                          const nextNbs = notebooksRef.current.map((nb) => {
+                                            if (nb.id !== activeNotebook.id) return nb;
+                                            const nextPages = nb.pages.map((p) => {
+                                              if (p.id !== spPageId) return p;
+                                              const remaining = (p.springSims || []).filter(
+                                                (s) => s.id !== sim.id
                                               );
-                                              if (!anyLeft) {
-                                                setIsSpringSimulating(false);
-                                              }
-                                              return { ...nb, pages: nextPages };
-                                            })
-                                          );
+                                              const nextActiveId =
+                                                p.activeSpringSimId === sim.id
+                                                  ? remaining[0]?.id
+                                                  : p.activeSpringSimId;
+                                              return {
+                                                ...p,
+                                                springSims: remaining,
+                                                activeSpringSimId: nextActiveId,
+                                              };
+                                            });
+                                            const anyLeft = nextPages.some(
+                                              (p) => getValidSpringSims(p).length > 0
+                                            );
+                                            if (!anyLeft) {
+                                              setIsSpringSimulating(false);
+                                            }
+                                            return {
+                                              ...nb,
+                                              updatedAt: getMonotonicIsoTimestamp(),
+                                              pages: nextPages,
+                                            };
+                                          });
+                                          notebooksRef.current = nextNbs;
+                                          const updatedNb = nextNbs.find((n) => n.id === activeNotebook.id);
+                                          if (updatedNb) activeNotebookLiveRef.current = updatedNb;
+                                          setNotebooks(nextNbs);
+                                          setIsDirty(true);
+                                          setSyncStatus('dirty');
+                                          staticPageRenderCacheRef.current.delete(spPageId);
+                                          queueMicrotask(() => renderStaticSceneRef.current?.());
                                         }}
                                         className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                           isCurrent
@@ -63345,7 +64405,7 @@ export default function App() {
                             </>
                           ) : (
                             <div className="text-[10.5px] font-medium text-[#64748b] bg-[#f7f5f0] border border-[#e8e2d6] rounded-lg p-2 leading-snug text-center">
-                              Πλησιάστε ένα <b>Ελατήριο</b> σε ταβάνι/πάτωμα και έπειτα ένα <b>Σώμα</b> στο ελεύθερο άκρο του για να δημιουργηθεί η <b>Θέση Ισορροπίας ({nextSpringLabel})</b>.
+                              Επιλέξτε με το <b>Λάσο</b> στο χαρτί όλα τα αντικείμενα του συστήματος (ταβάνι/πάτωμα, ελατήριο, σώμα) και πατήστε <b>+ Νέο Ελατήριο ({nextSpringLabel})</b>.
                             </div>
                           )}
                         </div>
@@ -63847,9 +64907,31 @@ export default function App() {
                 ) : simActiveCategory === 'forces' ? (
                   (() => {
                     const validForceSims = getValidForceSims(activePage);
-                    const activeForce = getActiveForceSim(activePage);
-                    const curMode = activeForce?.mode || forceSimSubTab;
+                    const curMode = forceSimSubTab;
+                    const activeForce =
+                      validForceSims.find(
+                        (s) => s.id === activePage.activeForceSimId && s.mode === curMode
+                      ) ||
+                      validForceSims.find((s) => s.mode === curMode) ||
+                      null;
                     const curStep = activeForce?.step || 0;
+                    const nextForceLabel = getNextDefaultForceSimName(activePage, curMode);
+                    const newForceBtnLabel =
+                      curMode === 'pendulum'
+                        ? `Νέο Εκκρεμές (${nextForceLabel})`
+                        : curMode === 'incline'
+                        ? `Νέο Κεκλιμένο (${nextForceLabel})`
+                        : curMode === 'synthesis'
+                        ? `Νέες Δυνάμεις (${nextForceLabel})`
+                        : `Νέα Δύναμη (${nextForceLabel})`;
+                    const emptyForceHint =
+                      curMode === 'pendulum'
+                        ? 'Επιλέξτε με το Λάσο στο χαρτί το ταβάνι, το νήμα και το σφαιρίδιο και πατήστε «+ Νέο Εκκρεμές».'
+                        : curMode === 'incline'
+                        ? 'Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο και το σώμα και πατήστε «+ Νέο Κεκλιμένο».'
+                        : curMode === 'synthesis'
+                        ? 'Επιλέξτε με το Λάσο στο χαρτί τα 2 διανύσματα δυνάμεων και πατήστε «+ Νέες Δυνάμεις».'
+                        : 'Επιλέξτε με το Λάσο στο χαρτί το διάνυσμα δύναμης και πατήστε «+ Νέα Δύναμη».';
 
                     return (
                       <div className="space-y-2">
@@ -63878,35 +64960,31 @@ export default function App() {
                           ))}
                         </div>
 
-                        {/* 2. Active Force Simulations List (δυν01, δυν02, ...) */}
+                        {/* 2. Active Force Simulations List (εκκρεμές1, κεκλιμένο1, δυνάμεις1, δύναμη1, ...) */}
                         <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
-                          {selectedStrokeIds.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                registerOrActivateForceSimFromLasso();
-                              }}
-                              className="w-full py-1.5 px-2.5 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                              title="Δηλώνει τα επιλεγμένα με Λάσο σχήματα (διάνυσμα, 2 διανύσματα, εκκρεμές ή κεκλιμένο) ως προσομοίωση"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Προσθήκη από Λάσο ({getNextDefaultForceSimName(activePage)})</span>
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              registerOrActivateForceSimFromLasso(curMode);
+                            }}
+                            className={`w-full py-1.5 px-2.5 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                              selectedStrokeIds.length > 0
+                                ? 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+                                : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#234978] border border-[#dfd8cb]'
+                            }`}
+                            title="Επιλέξτε όλα τα σχετικά αντικείμενα/γραμμές στο χαρτί με το Λάσο και πατήστε για δημιουργία προσομοίωσης"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{newForceBtnLabel}</span>
+                          </button>
 
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-                              Ενεργή Προσομοίωση:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => createOrActivateForceSim(curMode, true)}
-                              className="px-2 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#234978] text-[10px] font-bold cursor-pointer transition"
-                              title="Δημιουργία νέου έτοιμου προτύπου προσομοίωσης στη σελίδα"
-                            >
-                              + Νέο
-                            </button>
-                          </div>
+                          {validForceSims.length > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                                Ενεργή Προσομοίωση:
+                              </span>
+                            </div>
+                          )}
 
                           {validForceSims.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -63967,7 +65045,7 @@ export default function App() {
                             </div>
                           ) : (
                             <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
-                              Σχεδίασε με μολύβι/σχήματα (1 διάνυσμα, 2 διανύσματα, ταβάνι+νήμα+σφαιρίδιο ή κεκλιμένο+σώμα) και πάτα <b>Sim</b>!
+                              {emptyForceHint}
                             </p>
                           )}
                         </div>
@@ -64485,30 +65563,44 @@ export default function App() {
 
                         {/* 2. Ενεργή Προσομοίωση Ατόμου & Λίστα Ατόμων στη σκηνή */}
                         <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              registerOrActivateAtomSimFromLasso();
+                            }}
+                            className={`w-full py-1.5 px-2.5 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                              selectedStrokeIds.length > 0
+                                ? 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+                                : 'bg-[#efebe3] hover:bg-[#e4ded2] text-[#234978] border border-[#dfd8cb]'
+                            }`}
+                            title="Επιλέξτε με το Λάσο το σχέδιο ατόμου (πυρήνα & τροχιές) στο χαρτί και πατήστε για δημιουργία νέας προσομοίωσης"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Νέο Άτομο ({getNextDefaultAtomSimName(activePage)})</span>
+                          </button>
+
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                               Προσομοιώσεις Ατόμου:
                             </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (selectedStrokeIds.length > 0) {
-                                    registerOrActivateAtomSimFromLasso();
-                                  } else {
+                            {activeAtomSim && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     assignPeriodicElementToAtomSim(
                                       selectedAtomNode?.z || 2,
                                       true
                                     );
                                     setShowPeriodicTableModal(true);
-                                  }
-                                }}
-                                className="px-2 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#234978] text-[10px] font-bold cursor-pointer transition"
-                                title="Προσθήκη νέου ατόμου δίπλα στο υπάρχον (ή από την επιλογή Lasso)"
-                              >
-                                + Άτομο Δίπλα
-                              </button>
-                            </div>
+                                  }}
+                                  className="px-2 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#234978] text-[10px] font-bold cursor-pointer transition"
+                                  title="Προσθήκη νέου ατόμου δίπλα στο υπάρχον για χημικό δεσμό"
+                                >
+                                  + Άτομο Δίπλα
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           {validAtomSims.length > 0 ? (
@@ -64587,7 +65679,7 @@ export default function App() {
                             </div>
                           ) : (
                             <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
-                              Ζωγράφισε πυρήνα & τροχιές, επίλεξέ τα με το <b>Λάσο</b> και πάτα <b>Άτομο</b>, ή επίλεξε στοιχείο από τον Περιοδικό Πίνακα!
+                              Ζωγράφισε πυρήνα & τροχιές, επίλεξέ τα με το <b>Λάσο</b> και πάτα <b>+ Νέο Άτομο</b>, ή επίλεξε στοιχείο από τον Περιοδικό Πίνακα!
                             </p>
                           )}
 
@@ -64921,6 +66013,7 @@ export default function App() {
                 width={pendulumStopwatchWidth}
                 running={pendulumStopwatchRunning}
                 elapsedMs={pendulumStopwatchElapsedMs}
+                getLiveElapsedMs={() => pendulumStopwatchAccumMsRef.current}
                 onPosChange={setPendulumStopwatchPos}
                 onWidthChange={setPendulumStopwatchWidth}
                 onClose={() => setShowPendulumStopwatch(false)}
@@ -64929,6 +66022,9 @@ export default function App() {
                 storagePrefix="pendulum"
                 onTogglePlayPause={() => {
                   const nextRunning = !pendulumStopwatchRunning;
+                  if (!nextRunning) {
+                    setPendulumStopwatchElapsedMs(pendulumStopwatchAccumMsRef.current);
+                  }
                   setPendulumStopwatchRunning(nextRunning);
                   const activeSim = getActiveForceSim(activePage);
                   if (activeSim && activeSim.mode === 'pendulum') {
@@ -64937,6 +66033,7 @@ export default function App() {
                 }}
                 onReset={() => {
                   setPendulumStopwatchRunning(false);
+                  pendulumStopwatchAccumMsRef.current = 0;
                   setPendulumStopwatchElapsedMs(0);
                   const activeSim = getActiveForceSim(activePage);
                   if (activeSim && activeSim.mode === 'pendulum') {
@@ -64954,11 +66051,13 @@ export default function App() {
                 width={heatStopwatchWidth}
                 running={heatStopwatchRunning}
                 elapsedMs={heatStopwatchElapsedMs}
+                getLiveElapsedMs={() => heatStopwatchLiveMsRef.current}
                 onPosChange={setHeatStopwatchPos}
                 onWidthChange={setHeatStopwatchWidth}
                 onClose={() => {
                   setShowHeatStopwatch(false);
                   setHeatStopwatchRunning(false);
+                  setHeatStopwatchElapsedMs(heatStopwatchLiveMsRef.current);
                   heatSim.pauseHeatingAndSim();
                 }}
                 storagePrefix="heat"
@@ -64968,6 +66067,9 @@ export default function App() {
                 }
                 onTogglePlayPause={() => {
                   const nextRunning = !heatStopwatchRunning;
+                  if (!nextRunning) {
+                    setHeatStopwatchElapsedMs(heatStopwatchLiveMsRef.current);
+                  }
                   setHeatStopwatchRunning(nextRunning);
                   if (nextRunning) {
                     heatSim.startHeatingAndSim();
@@ -64977,6 +66079,7 @@ export default function App() {
                 }}
                 onReset={() => {
                   setHeatStopwatchRunning(false);
+                  heatStopwatchLiveMsRef.current = 0;
                   setHeatStopwatchElapsedMs(0);
                   heatSim.resetSim();
                 }}
@@ -66219,7 +67322,13 @@ export default function App() {
                             scheduleCoalescedStaticRender();
                           }
                         } else {
+                          const old = staticCanvasMapRef.current.get(pageObj.id);
+                          if (old) {
+                            old.width = 0;
+                            old.height = 0;
+                          }
                           staticCanvasMapRef.current.delete(pageObj.id);
+                          staticPageRenderCacheRef.current.delete(pageObj.id);
                         }
                       }}
                       width={pW * CANVAS_DPR}
@@ -66271,7 +67380,7 @@ export default function App() {
                       ref={(el) => {
                         if (el) {
                           activeCanvasMapRef.current.set(pageObj.id, el);
-                          if (isCurrentActive) {
+                          if (isCurrentActive && (activeCanvasRef.current !== el || !activeCtxRef.current)) {
                             activeCanvasRef.current = el;
                             const ctx =
                               (el.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) ||
@@ -66284,6 +67393,11 @@ export default function App() {
                             }
                           }
                         } else {
+                          const old = activeCanvasMapRef.current.get(pageObj.id);
+                          if (old) {
+                            old.width = 0;
+                            old.height = 0;
+                          }
                           activeCanvasMapRef.current.delete(pageObj.id);
                         }
                       }}
@@ -66337,6 +67451,9 @@ export default function App() {
                       }}
                       onPointerLeave={(e) => {
                         heatSim.clearHover();
+                        if (activePage.heatSims && activePage.heatSims.length > 0 && !heatStopwatchRunning) {
+                          wakeSimCanvas();
+                        }
                         if (hoverAddNodePreviewRef.current) {
                           hoverAddNodePreviewRef.current = null;
                           e.currentTarget.style.cursor = '';
@@ -66461,7 +67578,6 @@ export default function App() {
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
                             ...fontCss,
-                            textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                             lineHeight: effLineHeight,
                             touchAction: 'none',
                             pointerEvents:
@@ -66695,7 +67811,8 @@ export default function App() {
                             setSelectedLassoTextIds([]);
                             setSelectedTextId(txt.id);
                             setTextFontSize(txt.fontSize);
-                            setTextBold(Boolean(txt.bold));
+                            setTextBold(getEffectiveTextBold(txt));
+                            setTextShadow(getEffectiveTextShadow(txt));
                             setTextFontFamily(txt.fontFamily || 'sans');
                             setTextAlign(txt.textAlign || 'left');
                             setSelectedStrokeIds([]);
@@ -66896,7 +68013,8 @@ export default function App() {
 
                             setSelectedTextId(txt.id);
                             setTextFontSize(txt.fontSize);
-                            setTextBold(Boolean(txt.bold));
+                            setTextBold(getEffectiveTextBold(txt));
+                            setTextShadow(getEffectiveTextShadow(txt));
                             setTextFontFamily(txt.fontFamily || 'sans');
                             setSelectedLassoTextIds([]);
                             setSelectedStrokeIds([]);
@@ -67160,10 +68278,10 @@ export default function App() {
                                 : txt.fontFamily;
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
-                                : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
+                                : getEffectiveTextBold(txt);
                               const displayedShadow = effectiveSubStyle
                                 ? effectiveSubStyle.shadow
-                                : Boolean(txt.shadow);
+                                : getEffectiveTextShadow(txt);
                               const displayedFontSize = effectiveSubStyle
                                 ? effectiveSubStyle.fontSize
                                 : (txt.fontSize || textFontSize);
@@ -67197,15 +68315,35 @@ export default function App() {
                                     if (btn && (ev.pointerType === 'pen' || ev.pointerType === 'touch')) {
                                       ev.stopPropagation();
                                       ev.preventDefault();
-                                      lastTextBarDirectTapTimeRef.current = performance.now();
+                                      const now = performance.now();
+                                      lastTextBarDirectTapTimeRef.current = now;
+                                      textBarDirectPointerActiveRef.current = true;
+                                      suppressTrustedTextBarClickUntilRef.current = now + 2500;
                                       btn.click();
+                                    }
+                                  }}
+                                  onPointerUpCapture={() => {
+                                    if (textBarDirectPointerActiveRef.current) {
+                                      const now = performance.now();
+                                      textBarDirectPointerActiveRef.current = false;
+                                      lastTextBarDirectTapTimeRef.current = now;
+                                      suppressTrustedTextBarClickUntilRef.current = now + 750;
+                                    }
+                                  }}
+                                  onPointerCancelCapture={() => {
+                                    if (textBarDirectPointerActiveRef.current) {
+                                      const now = performance.now();
+                                      textBarDirectPointerActiveRef.current = false;
+                                      lastTextBarDirectTapTimeRef.current = now;
+                                      suppressTrustedTextBarClickUntilRef.current = now + 750;
                                     }
                                   }}
                                   onClickCapture={(ev) => {
                                     if (
-                                      ev.detail > 0 &&
-                                      performance.now() - lastTextBarDirectTapTimeRef.current < 450
+                                      ev.nativeEvent.isTrusted &&
+                                      performance.now() < suppressTrustedTextBarClickUntilRef.current
                                     ) {
+                                      suppressTrustedTextBarClickUntilRef.current = 0;
                                       ev.stopPropagation();
                                       ev.preventDefault();
                                     }
@@ -67393,8 +68531,7 @@ export default function App() {
                                           }));
                                           return;
                                         }
-                                        const curBold =
-                                          Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+                                        const curBold = getEffectiveTextBold(txt);
                                         const nextB = !curBold;
                                         setTextBold(nextB);
                                         updateActivePage((page) => ({
@@ -67474,7 +68611,7 @@ export default function App() {
                                           }));
                                           return;
                                         }
-                                        const nextS = !txt.shadow;
+                                        const nextS = !getEffectiveTextShadow(txt);
                                         setTextShadow(nextS);
                                         updateActivePage((page) => ({
                                           ...page,
@@ -67488,14 +68625,19 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className={`w-[24px] min-w-[24px] max-w-[24px] py-1 rounded-md font-bold border transition cursor-pointer text-center flex items-center justify-center shrink-0 ${
+                                      className={`w-[26px] min-w-[26px] max-w-[26px] py-1 rounded-md font-bold border transition cursor-pointer text-center flex items-center justify-center shrink-0 ${
                                         displayedShadow
                                           ? 'bg-[#234978] text-white border-[#1c3c63]'
                                           : 'bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border-stone-300/80'
                                       }`}
                                       title="Σκιά (Διακριτική απαλή σκιά γραμμάτων)"
                                     >
-                                      <span style={{ textShadow: '1px 1px 1.5px rgba(71,85,105,0.6)' }}>S</span>
+                                      <span
+                                        style={{ textShadow: '1px 1px 1.5px rgba(71,85,105,0.6)' }}
+                                        className="pointer-events-none"
+                                      >
+                                        S
+                                      </span>
                                     </button>
                                   )}
                                   <button
@@ -67961,7 +69103,6 @@ export default function App() {
                                         fontWeight: txt.bold ? 700 : 500,
                                         textAlign: txt.textAlign || 'left',
                                         ...fontCss,
-                                        textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                                         lineHeight: effLineHeight,
                                         pointerEvents: 'none',
                                         userSelect: 'none',
@@ -68000,7 +69141,9 @@ export default function App() {
                                                   style={{
                                                     fontWeight: segStyle.bold ? 700 : 500,
                                                     ...segCss,
-                                                    textShadow: getTextShadowCss(segStyle.shadow, segStyle.fontSize),
+                                                    textShadow:
+                                                      getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
+                                                      'none',
                                                     fontSize: `${segStyle.fontSize}px`,
                                                     color: segStyle.color,
                                                     backgroundColor: isSelectedSeg
@@ -68289,7 +69432,9 @@ export default function App() {
                                 onBlur={(ev) => {
                                   if (
                                     draggingTextRef.current?.id === txt.id ||
-                                    selectedTextId === txt.id
+                                    selectedTextId === txt.id ||
+                                    textBarDirectPointerActiveRef.current ||
+                                    performance.now() - lastTextBarDirectTapTimeRef.current < 700
                                   ) {
                                     return;
                                   }
@@ -68351,7 +69496,7 @@ export default function App() {
                                 color: txt.color,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,
-                                textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
+                                textShadow: getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
                               }}
                               className={`flex flex-col ${
                                 txt.textAlign === 'center'
@@ -68403,14 +69548,12 @@ export default function App() {
                                 width: 'fit-content',
                                 maxWidth: txt.boxWidth ? '100%' : undefined,
                                 height: 'auto',
-                                overflowX: txt.boxWidth ? 'clip' : undefined,
-                                overflowY: 'visible',
+                                overflow: 'visible',
                                 overflowWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
                                 fontWeight: txt.bold ? 700 : 500,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,
-                                textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                                 lineHeight: effLineHeight,
                               }}
                             >
@@ -68425,7 +69568,13 @@ export default function App() {
                                       : null;
                                   return (
                                     <div className="inline-flex flex-col gap-1">
-                                      <span className="inline-flex items-baseline flex-wrap gap-0.5">
+                                      <span
+                                        className="inline-flex items-baseline flex-wrap gap-0.5"
+                                        style={{
+                                          textShadow:
+                                            getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
+                                        }}
+                                      >
                                         {chemVal.segments.map((sg, sIdx) => (
                                           <React.Fragment key={sIdx}>
                                             {sg.wrongText && (
@@ -68547,7 +69696,12 @@ export default function App() {
                                   if (multiGrp && txt.text.includes('\n')) {
                                     const lines = txt.text.split('\n');
                                     return (
-                                      <span>
+                                      <span
+                                        style={{
+                                          textShadow:
+                                            getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
+                                        }}
+                                      >
                                         {lines.map((ln, lIdx) => {
                                           const lnColor = pageObj.strokes.find(
                                             (s) =>
@@ -68630,7 +69784,11 @@ export default function App() {
                                               style={{
                                                 fontWeight: segStyle.bold ? 700 : 500,
                                                 ...segCss,
-                                                textShadow: getTextShadowCss(segStyle.shadow, segStyle.fontSize),
+                                                textShadow:
+                                                  getTextShadowCss(
+                                                    segStyle.shadow,
+                                                    segStyle.fontSize
+                                                  ) || 'none',
                                                 fontSize: `${segStyle.fontSize}px`,
                                                 color: segStyle.color,
                                                 backgroundColor: isSubHighlighted
@@ -68650,13 +69808,23 @@ export default function App() {
                                     );
                                   }
                                   return (
-                                    <span style={{ textShadow: getTextShadowCss(txt.shadow, txt.fontSize) }}>
+                                    <span
+                                      style={{
+                                        textShadow:
+                                          getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
+                                      }}
+                                    >
                                       {renderLineTokens(txt.text)}
                                     </span>
                                   );
                                 })()
                               ) : (
-                                <span style={{ textShadow: getTextShadowCss(txt.shadow, txt.fontSize) }}>
+                                <span
+                                  style={{
+                                    textShadow:
+                                      getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
+                                  }}
+                                >
                                   {txt.text || ''}
                                 </span>
                               )}
@@ -68670,11 +69838,22 @@ export default function App() {
                     <canvas
                       ref={(el) => {
                         if (el) {
+                          const isNewlyMounted = overTextCanvasMapRef.current.get(pageObj.id) !== el;
                           overTextCanvasMapRef.current.set(pageObj.id, el);
                           if (isCurrentActive) overTextCanvasRef.current = el;
-                          scheduleCoalescedStaticRender();
+                          if (isNewlyMounted) {
+                            overCanvasDirtyMapRef.current.delete(pageObj.id);
+                            scheduleCoalescedStaticRender();
+                          }
                         } else {
+                          const old = overTextCanvasMapRef.current.get(pageObj.id);
+                          if (old) {
+                            old.width = 0;
+                            old.height = 0;
+                          }
                           overTextCanvasMapRef.current.delete(pageObj.id);
+                          overCanvasDirtyMapRef.current.delete(pageObj.id);
+                          staticPageRenderCacheRef.current.delete(pageObj.id);
                         }
                       }}
                       width={pW * CANVAS_DPR}

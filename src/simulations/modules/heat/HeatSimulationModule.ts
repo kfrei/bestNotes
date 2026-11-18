@@ -62,7 +62,7 @@ export const HEAT_SIMULATION_OBJECTS: readonly SimulationObjectItem[] = [
 export function createDefaultHeatSim(originX: number = 240, originY: number = 320): HeatSimConfig {
   return {
     id: `heat-sim-${Date.now()}`,
-    name: 'θερμ01',
+    name: 'θερμότητα1',
     objects: [],
     selectedObjectId: null,
     selectedObjectIds: [],

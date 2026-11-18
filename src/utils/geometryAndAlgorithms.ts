@@ -4011,6 +4011,35 @@ export function eraseStrokeByCircle(
   const strokeHalfW = s.tool === 'highlighter' ? (s.width || 3) * 1.9 : Math.min(4, (s.width || 2) * 0.5);
   const effRadius = Math.max(2, radius + strokeHalfW);
 
+  // Ultra-fast raw control-point AABB pre-rejection BEFORE 3D sub-path generation or parametric curve tessellation!
+  // Parametric shapes (springs, resistors, sine waves, 3D extrusions) stay within ~48px of their defining points.
+  const fastMargin = effRadius + (s.shapeType ? 56 : 6);
+  let rawMinX = Infinity,
+    rawMinY = Infinity,
+    rawMaxX = -Infinity,
+    rawMaxY = -Infinity;
+  for (let i = 0; i < s.points.length; i++) {
+    const p = s.points[i];
+    if (p.x < rawMinX) rawMinX = p.x;
+    if (p.y < rawMinY) rawMinY = p.y;
+    if (p.x > rawMaxX) rawMaxX = p.x;
+    if (p.y > rawMaxY) rawMaxY = p.y;
+    if (p.cx !== undefined && p.cy !== undefined) {
+      if (p.cx < rawMinX) rawMinX = p.cx;
+      if (p.cy < rawMinY) rawMinY = p.cy;
+      if (p.cx > rawMaxX) rawMaxX = p.cx;
+      if (p.cy > rawMaxY) rawMaxY = p.cy;
+    }
+  }
+  if (
+    center.x < rawMinX - fastMargin ||
+    center.x > rawMaxX + fastMargin ||
+    center.y < rawMinY - fastMargin ||
+    center.y > rawMaxY + fastMargin
+  ) {
+    return { modified: false, pieces: [s] };
+  }
+
   // If 3D shape ('cuboid', 'cylinder', 'sphere', 'pyramid'), test against its true drawn 3D sub-paths (never the invisible 4-corner bounding box!)
   const subPaths3D = get3DShapeSubPaths(s);
   if (subPaths3D.length > 0) {

@@ -181,11 +181,27 @@ export function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
     }
 
     // 2. Full collection check for localStorage (if whole collection fits under 1.5MB)
+    // Accurately estimate stroke, image, text, and simulation payload sizes so multi-MB closed notebooks never trigger wasted JSON.stringify!
     let estimatedChars = 0;
     for (let i = 0; i < nbs.length; i++) {
       const pages = nbs[i].pages || [];
       for (let j = 0; j < pages.length; j++) {
-        estimatedChars += (pages[j].backgroundDataUrl?.length || 0) + 256;
+        const pg = pages[j];
+        estimatedChars += (pg.backgroundDataUrl?.length || 0) + 256;
+        estimatedChars += (pg.strokes?.length || 0) * 180;
+        if (pg.images) {
+          for (let k = 0; k < pg.images.length; k++) {
+            estimatedChars += (pg.images[k].dataUrl?.length || 0) + 128;
+          }
+        }
+        if (pg.texts) {
+          estimatedChars += pg.texts.length * 140;
+        }
+        if (pg.heatSims) {
+          for (let k = 0; k < pg.heatSims.length; k++) {
+            estimatedChars += 1024 + (pg.heatSims[k].history?.length || 0) * 160;
+          }
+        }
         if (estimatedChars > 1_500_000) break;
       }
       if (estimatedChars > 1_500_000) break;

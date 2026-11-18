@@ -131,11 +131,35 @@ export function cleanNotebookForStorage(nb: Notebook): Notebook {
         return Boolean(t.text && t.text.trim().length > 0);
       });
       const textsChanged = cleanTexts.length !== texts.length;
-      if (!anyStrokeChanged && !anyImgChanged && !textsChanged) return p;
+
+      const heatSims = p.heatSims;
+      let anyHeatChanged = false;
+      const cleanHeatSims = heatSims
+        ? heatSims.map((hs) => {
+            const hist = hs.history || [];
+            const needsHistCompact = hist.length > 400;
+            const needsPause = Boolean(hs.isRunning);
+            if (!needsHistCompact && !needsPause) return hs;
+            anyHeatChanged = true;
+            const stride = needsHistCompact ? Math.ceil(hist.length / 400) : 1;
+            return {
+              ...hs,
+              isRunning: false,
+              history: needsHistCompact
+                ? hist.filter(
+                    (_, hIdx) => hIdx === 0 || hIdx === hist.length - 1 || hIdx % stride === 0
+                  )
+                : hist,
+            };
+          })
+        : undefined;
+
+      if (!anyStrokeChanged && !anyImgChanged && !textsChanged && !anyHeatChanged) return p;
       return {
         ...p,
         strokes: anyStrokeChanged ? cleanStrokes : p.strokes,
         texts: textsChanged ? cleanTexts : p.texts,
+        heatSims: anyHeatChanged ? cleanHeatSims : p.heatSims,
         images: anyImgChanged
           ? imgs.map((im) => ({
               ...im,
@@ -180,9 +204,13 @@ export function serializeNotebookForFirestore(nb: Notebook): string {
   return json;
 }
 
+const cleanedLibraryNotebookCache = new WeakMap<Notebook, Notebook>();
+
 export function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
+  const cached = cleanedLibraryNotebookCache.get(nb);
+  if (cached) return cached;
   const cleaned = cleanNotebookForStorage(nb);
-  return {
+  const res: Notebook = {
     ...cleaned,
     pages: (cleaned.pages || []).map((p, idx) => {
       if (idx === 0) {
@@ -198,6 +226,7 @@ export function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
           heatSims: p.heatSims
             ? p.heatSims.map((hs) => ({
                 ...hs,
+                isRunning: false,
                 history:
                   hs.history && hs.history.length > 120
                     ? hs.history.filter(
@@ -223,4 +252,6 @@ export function cleanNotebookForLibraryCache(nb: Notebook): Notebook {
       };
     }),
   };
+  cleanedLibraryNotebookCache.set(nb, res);
+  return res;
 }

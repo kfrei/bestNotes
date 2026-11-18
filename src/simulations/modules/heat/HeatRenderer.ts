@@ -315,6 +315,16 @@ interface OffscreenBlurCacheEntry {
 
 const offscreenBlurCache = new Map<string, OffscreenBlurCacheEntry>();
 
+export function evictHeatSimCaches(): void {
+  for (const entry of offscreenBlurCache.values()) {
+    entry.canvas.width = 0;
+    entry.canvas.height = 0;
+  }
+  offscreenBlurCache.clear();
+  containerSloshMap.clear();
+  containerFillFeedbackMap.clear();
+}
+
 function renderWithOffscreenBlurCache(
   ctx: CanvasRenderingContext2D,
   cacheId: string,
@@ -358,9 +368,16 @@ function renderWithOffscreenBlurCache(
     offCtx.restore();
 
     entry = { canvas, key: cacheKey };
-    if (offscreenBlurCache.size > 64 && !offscreenBlurCache.has(cacheId)) {
+    if (offscreenBlurCache.size > 48 && !offscreenBlurCache.has(cacheId)) {
       const oldestKey = offscreenBlurCache.keys().next().value;
-      if (oldestKey) offscreenBlurCache.delete(oldestKey);
+      if (oldestKey) {
+        const old = offscreenBlurCache.get(oldestKey);
+        if (old) {
+          old.canvas.width = 0;
+          old.canvas.height = 0;
+        }
+        offscreenBlurCache.delete(oldestKey);
+      }
     }
     offscreenBlurCache.set(cacheId, entry);
   }
@@ -2094,96 +2111,111 @@ function renderTripod(
     // PASS 1: BACK HALF (Rendered BEHIND burner flame)
     // -------------------------------------------------------------------------
     if (part === 'all' || part === 'back') {
-      // 1. Recessed Back Leg (Starts on bottom edge of outer collar, underneath wire gauze)
-      const backRatio = 0.26;
-      const backStartX = cx - collarRx * backRatio;
-      const backStartY = collarCy + collarRy * Math.sqrt(1 - backRatio * backRatio);
-      const backEndX = cx - collarW * 0.24;
-      const backEndY = legBotY - 6;
+      const drawTripodBackBody = (tCtx: CanvasRenderingContext2D) => {
+        // 1. Recessed Back Leg (Starts on bottom edge of outer collar, underneath wire gauze)
+        const backRatio = 0.26;
+        const backStartX = cx - collarRx * backRatio;
+        const backStartY = collarCy + collarRy * Math.sqrt(1 - backRatio * backRatio);
+        const backEndX = cx - collarW * 0.24;
+        const backEndY = legBotY - 6;
 
-      ctx.save();
+        tCtx.save();
+        if (hasContainerOnTop) {
+          tCtx.filter = 'blur(1.2px)';
+        }
+        tCtx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.28)' : 'rgba(100, 116, 139, 0.24)';
+        tCtx.lineWidth = 1.5;
+        tCtx.beginPath();
+        tCtx.moveTo(backStartX, backStartY);
+        tCtx.lineTo(backEndX, backEndY);
+        tCtx.stroke();
+        tCtx.restore();
+
+        tCtx.save();
+        if (hasContainerOnTop) {
+          tCtx.globalAlpha = 0.22;
+          tCtx.filter = 'blur(2.6px)';
+        }
+        const coveredRingStroke = hasContainerOnTop
+          ? isDark
+            ? 'rgba(203, 213, 225, 0.65)'
+            : 'rgba(71, 85, 105, 0.60)'
+          : strokeColor;
+
+        // 2. Wire Gauze mesh crosshatch (batched into 1 single stroke!)
+        tCtx.save();
+        if (part === 'back') {
+          tCtx.beginPath();
+          tCtx.rect(-w, -h, w * 3, collarCy + h + 0.5);
+          tCtx.clip();
+        }
+
+        tCtx.beginPath();
+        tCtx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+        tCtx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+        tCtx.clip('evenodd');
+
+        tCtx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
+        tCtx.lineWidth = 0.8;
+        const step = 4;
+        tCtx.beginPath();
+        for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+          tCtx.moveTo(x, topY);
+          tCtx.lineTo(x, topY + collarH);
+        }
+        for (let y = topY; y <= topY + collarH; y += step) {
+          tCtx.moveTo(cx - gauzeW / 2, y);
+          tCtx.lineTo(cx + gauzeW / 2, y);
+        }
+        tCtx.stroke();
+        tCtx.restore();
+
+        // 3. Central Opening Inner Ring
+        tCtx.save();
+        tCtx.beginPath();
+        if (part === 'back') {
+          tCtx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, Math.PI, Math.PI * 2);
+        } else {
+          tCtx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+        }
+        tCtx.strokeStyle = coveredRingStroke;
+        tCtx.lineWidth = 1.2;
+        tCtx.stroke();
+        tCtx.restore();
+
+        // 4. Back Arc of Circular Top Collar Ring
+        tCtx.save();
+        tCtx.strokeStyle = coveredRingStroke;
+        tCtx.lineWidth = 2.2;
+        tCtx.lineCap = 'round';
+        tCtx.lineJoin = 'round';
+        tCtx.beginPath();
+        if (part === 'back') {
+          tCtx.ellipse(cx, collarCy, collarRx, collarRy, 0, Math.PI, Math.PI * 2);
+        } else {
+          tCtx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI * 2);
+        }
+        tCtx.stroke();
+        tCtx.restore();
+
+        tCtx.restore();
+      };
+
       if (hasContainerOnTop) {
-        ctx.filter = 'blur(1.2px)';
-      }
-      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.28)' : 'rgba(100, 116, 139, 0.24)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(backStartX, backStartY);
-      ctx.lineTo(backEndX, backEndY);
-      ctx.stroke();
-      ctx.restore();
-
-      // When a container sits on top of the tripod, its glass base & liquid cover the wire gauze,
-      // inner ring, and back collar arc: soften with glass blur & reduced opacity ("σαν να βάλαμε μπροστά γυαλί")!
-      ctx.save();
-      if (hasContainerOnTop) {
-        ctx.globalAlpha = 0.22;
-        ctx.filter = 'blur(2.6px)';
-      }
-      const coveredRingStroke = hasContainerOnTop
-        ? (isDark ? 'rgba(203, 213, 225, 0.65)' : 'rgba(71, 85, 105, 0.60)')
-        : strokeColor;
-
-      // 2. Wire Gauze mesh crosshatch (Top/Back half: y <= collarCy + 0.5)
-      // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
-      ctx.save();
-      if (part === 'back') {
-        ctx.beginPath();
-        ctx.rect(-w, -h, w * 3, collarCy + h + 0.5);
-        ctx.clip();
-      }
-
-      ctx.beginPath();
-      ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
-      ctx.clip('evenodd');
-
-      ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
-      ctx.lineWidth = 0.8;
-      const step = 4;
-      for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
-        ctx.beginPath();
-        ctx.moveTo(x, topY);
-        ctx.lineTo(x, topY + collarH);
-        ctx.stroke();
-      }
-      for (let y = topY; y <= topY + collarH; y += step) {
-        ctx.beginPath();
-        ctx.moveTo(cx - gauzeW / 2, y);
-        ctx.lineTo(cx + gauzeW / 2, y);
-        ctx.stroke();
-      }
-      ctx.restore(); // restore from gauze donut clip and back clip
-
-      // 3. Central Opening Inner Ring (Back Arc: Math.PI to Math.PI * 2) - NO FILL (100% transparent)
-      ctx.save();
-      ctx.beginPath();
-      if (part === 'back') {
-        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, Math.PI, Math.PI * 2);
+        const tripodBackKey = `${w}|${h}|${isDark ? 1 : 0}|${strokeColor}|${part}|1`;
+        renderWithOffscreenBlurCache(
+          ctx,
+          `tripod-back-${w}-${h}-${part}-${layer}`,
+          tripodBackKey,
+          w,
+          h,
+          12,
+          12,
+          drawTripodBackBody
+        );
       } else {
-        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+        drawTripodBackBody(ctx);
       }
-      ctx.strokeStyle = coveredRingStroke;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.restore();
-
-      // 4. Back Arc of Circular Top Collar Ring
-      ctx.save();
-      ctx.strokeStyle = coveredRingStroke;
-      ctx.lineWidth = 2.2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      if (part === 'back') {
-        ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, Math.PI, Math.PI * 2);
-      } else {
-        ctx.ellipse(cx, collarCy, collarRx, collarRy, 0, 0, Math.PI * 2);
-      }
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.restore(); // restore from hasContainerOnTop blur/alpha
     }
 
     // -------------------------------------------------------------------------
@@ -2191,54 +2223,69 @@ function renderTripod(
     // -------------------------------------------------------------------------
     if (part === 'all' || part === 'front') {
       if (part === 'front') {
-        ctx.save();
+        const drawTripodFrontGauze = (tCtx: CanvasRenderingContext2D) => {
+          tCtx.save();
+          if (hasContainerOnTop) {
+            tCtx.globalAlpha = 0.22;
+            tCtx.filter = 'blur(2.6px)';
+          }
+          const coveredFrontRingStroke = hasContainerOnTop
+            ? isDark
+              ? 'rgba(203, 213, 225, 0.65)'
+              : 'rgba(71, 85, 105, 0.60)'
+            : strokeColor;
+
+          tCtx.save();
+          tCtx.beginPath();
+          tCtx.rect(-w, collarCy - 0.5, w * 3, h * 2);
+          tCtx.clip();
+
+          tCtx.beginPath();
+          tCtx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
+          tCtx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
+          tCtx.clip('evenodd');
+
+          tCtx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
+          tCtx.lineWidth = 0.8;
+          const step = 4;
+          tCtx.beginPath();
+          for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
+            tCtx.moveTo(x, topY);
+            tCtx.lineTo(x, topY + collarH);
+          }
+          for (let y = topY; y <= topY + collarH; y += step) {
+            tCtx.moveTo(cx - gauzeW / 2, y);
+            tCtx.lineTo(cx + gauzeW / 2, y);
+          }
+          tCtx.stroke();
+          tCtx.restore();
+
+          tCtx.save();
+          tCtx.beginPath();
+          tCtx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI);
+          tCtx.strokeStyle = coveredFrontRingStroke;
+          tCtx.lineWidth = 1.2;
+          tCtx.stroke();
+          tCtx.restore();
+
+          tCtx.restore();
+        };
+
         if (hasContainerOnTop) {
-          ctx.globalAlpha = 0.22;
-          ctx.filter = 'blur(2.6px)';
+          const tripodFrontKey = `${w}|${h}|${isDark ? 1 : 0}|${strokeColor}|front|1`;
+          renderWithOffscreenBlurCache(
+            ctx,
+            `tripod-front-${w}-${h}-${layer}`,
+            tripodFrontKey,
+            w,
+            h,
+            12,
+            12,
+            drawTripodFrontGauze
+          );
+        } else {
+          drawTripodFrontGauze(ctx);
         }
-        const coveredFrontRingStroke = hasContainerOnTop
-          ? (isDark ? 'rgba(203, 213, 225, 0.65)' : 'rgba(71, 85, 105, 0.60)')
-          : strokeColor;
-
-        // Wire Gauze mesh crosshatch (Bottom/Front half: y >= collarCy - 0.5)
-        // Clipped with evenodd donut: mesh exists ONLY on the ring, central opening is completely transparent!
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(-w, collarCy - 0.5, w * 3, h * 2);
-        ctx.clip();
-
-        ctx.beginPath();
-        ctx.ellipse(cx, collarCy, gauzeW / 2, gauzeH / 2, 0, 0, Math.PI * 2);
-        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI * 2);
-        ctx.clip('evenodd');
-
-        ctx.strokeStyle = isDark ? 'rgba(203, 213, 225, 0.50)' : 'rgba(71, 85, 105, 0.48)';
-        ctx.lineWidth = 0.8;
-        const step = 4;
-        for (let x = cx - gauzeW / 2; x <= cx + gauzeW / 2; x += step) {
-          ctx.beginPath();
-          ctx.moveTo(x, topY);
-          ctx.lineTo(x, topY + collarH);
-          ctx.stroke();
-        }
-        for (let y = topY; y <= topY + collarH; y += step) {
-          ctx.beginPath();
-          ctx.moveTo(cx - gauzeW / 2, y);
-          ctx.lineTo(cx + gauzeW / 2, y);
-          ctx.stroke();
-        }
-        ctx.restore(); // restore from front gauze donut clip
-
-        // Central Opening Inner Ring (Front Arc: 0 to Math.PI) - NO FILL (100% transparent)
-        ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(cx, collarCy, ceramicRx, ceramicRy, 0, 0, Math.PI);
-        ctx.strokeStyle = coveredFrontRingStroke;
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.restore(); // restore from hasContainerOnTop blur/alpha
 
         // Front Arc of Circular Top Collar Ring (from 0 to PI) - remains 100% sharp as the foreground lip!
         ctx.save();
@@ -2826,13 +2873,9 @@ function drawDropletIcon(
   ctx.fill();
 
   ctx.strokeStyle = strokeCol;
-  ctx.lineWidth = isIntense ? 1.4 : 1.25;
+  ctx.lineWidth = isIntense ? 1.5 : 1.25;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (isIntense && shadowCol !== 'transparent') {
-    ctx.shadowColor = shadowCol;
-    ctx.shadowBlur = 3;
-  }
   ctx.stroke();
 
   ctx.restore();
@@ -2895,14 +2938,15 @@ function drawFlameIcon(
   ctx.fillStyle = fillCol;
   ctx.fill();
 
+  if (isOn && shadowCol !== 'transparent') {
+    ctx.strokeStyle = shadowCol;
+    ctx.lineWidth = 3.2;
+    ctx.stroke();
+  }
   ctx.strokeStyle = strokeCol;
   ctx.lineWidth = isOn ? 1.5 : 1.3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  if (isOn && shadowCol !== 'transparent') {
-    ctx.shadowColor = shadowCol;
-    ctx.shadowBlur = 4;
-  }
   ctx.stroke();
 
   ctx.restore();
@@ -3350,16 +3394,13 @@ function renderBeaker(
       const bcs = parentBasin?.containerState;
       const mySlosh = objId ? containerSloshMap.get(objId) : undefined;
       const pSlosh = parentBasin?.id ? containerSloshMap.get(parentBasin.id) : undefined;
-      const isAnim =
-        (state?.temperature ?? 20) > 35 ||
-        Boolean(state?.isBoiling) ||
-        (bcs?.temperature ?? 20) > 35 ||
-        Boolean(bcs?.isBoiling) ||
-        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.001 || Math.abs(mySlosh.sloshAngularVel) > 0.003)) ||
-        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.001 || Math.abs(pSlosh.sloshAngularVel) > 0.003));
-      const animTick = isAnim ? Math.floor(performance.now() / 75) : 0;
+      const isActivelySloshing =
+        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.002 || Math.abs(mySlosh.sloshAngularVel) > 0.005)) ||
+        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.002 || Math.abs(pSlosh.sloshAngularVel) > 0.005));
+      const sloshTick = isActivelySloshing ? Math.floor(performance.now() / 90) : 0;
+      const tempBucket = Math.round((state?.temperature ?? 20) / 3);
       const cacheId = `beaker-${objId || 'anon'}-${layer}`;
-      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${animTick}`;
+      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${tempBucket}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${sloshTick}`;
 
       renderWithOffscreenBlurCache(ctx, cacheId, cacheKey, w, h, 30, 35, (offCtx) => {
         if (basinWaterLocalY === null) {
@@ -4113,16 +4154,13 @@ function renderFlask(
       const bcs = parentBasin?.containerState;
       const mySlosh = objId ? containerSloshMap.get(objId) : undefined;
       const pSlosh = parentBasin?.id ? containerSloshMap.get(parentBasin.id) : undefined;
-      const isAnim =
-        (state?.temperature ?? 20) > 35 ||
-        Boolean(state?.isBoiling) ||
-        (bcs?.temperature ?? 20) > 35 ||
-        Boolean(bcs?.isBoiling) ||
-        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.001 || Math.abs(mySlosh.sloshAngularVel) > 0.003)) ||
-        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.001 || Math.abs(pSlosh.sloshAngularVel) > 0.003));
-      const animTick = isAnim ? Math.floor(performance.now() / 75) : 0;
+      const isActivelySloshing =
+        Boolean(mySlosh && (Math.abs(mySlosh.sloshAngle) > 0.002 || Math.abs(mySlosh.sloshAngularVel) > 0.005)) ||
+        Boolean(pSlosh && (Math.abs(pSlosh.sloshAngle) > 0.002 || Math.abs(pSlosh.sloshAngularVel) > 0.005));
+      const sloshTick = isActivelySloshing ? Math.floor(performance.now() / 90) : 0;
+      const tempBucket = Math.round((state?.temperature ?? 20) / 3);
       const cacheId = `flask-${objId || 'anon'}-${layer}`;
-      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${animTick}`;
+      const cacheKey = `${w}|${h}|${Math.round(objX ?? 0)}|${Math.round(objY ?? 0)}|${Math.round(vol)}|${liquidType}|${tempBucket}|${strokeColor}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${parentBasin?.id || ''}|${Math.round(parentBasin?.x ?? 0)}|${Math.round(parentBasin?.y ?? 0)}|${parentBasin?.width ?? 0}|${parentBasin?.height ?? 0}|${Math.round(bcs?.volumeMl ?? 0)}|${bcs?.liquidType || ''}|${sloshTick}`;
 
       renderWithOffscreenBlurCache(ctx, cacheId, cacheKey, w, h, 30, 35, (offCtx) => {
         if (basinWaterLocalY === null) {
@@ -4505,7 +4543,7 @@ function renderThermometer(
       const rimY = glassRimLocalY !== null ? Math.max(topY, glassRimLocalY) : topY;
       const surfaceY = isDippedInLiquid ? Math.max(rimY, submergedLocalY!) : h + 10;
       const thermCacheId = `therm-${dippedContainer?.id || 'anon'}-${Math.round(_thermX ?? 0)}-${layer}`;
-      const thermCacheKey = `${w}|${h}|${Math.round(temp * 5)}|${strokeColor}|${isDark ? 1 : 0}|${Math.round(rimY)}|${Math.round(surfaceY)}|${dippedLiquidType}|${isNestedThermometer ? 1 : 0}|${isDoubleNestedThermometer ? 1 : 0}|${Math.round(outerRimLocalY ?? -1)}|${Math.round(outerSubmergedLocalY ?? -1)}|${outerLiquidType}`;
+      const thermCacheKey = `${w}|${h}|${Math.round(temp)}|${strokeColor}|${isDark ? 1 : 0}|${Math.round(rimY)}|${Math.round(surfaceY)}|${dippedLiquidType}|${isNestedThermometer ? 1 : 0}|${isDoubleNestedThermometer ? 1 : 0}|${Math.round(outerRimLocalY ?? -1)}|${Math.round(outerSubmergedLocalY ?? -1)}|${outerLiquidType}`;
 
       renderWithOffscreenBlurCache(ctx, thermCacheId, thermCacheKey, w, h, 16, 16, (offCtx) => {
         // PASS 1: Emergent Part above the container rim (in open air: from 0 down to rimY)
@@ -4708,11 +4746,12 @@ function renderThermometer(
     ctx.stroke();
     ctx.restore();
 
-    // Badge card with subtle drop shadow
+    // Badge card with zero-shadowBlur fast offset shadow
     ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY + 1.5, badgeW, badgeH, 6.5);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.10)';
+    ctx.fill();
 
     ctx.beginPath();
     ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6.5);
@@ -4868,53 +4907,85 @@ function renderBoilingBubbles(
     bubbleSizeScale = 0.45 + tSimmer * 0.35; // 0.45 at 80°C ("πολυ πολυ μικρες") to 0.80 at 90°C
   }
 
+  // Batched bubble geometry (3 draw calls per container instead of ~110!)
+  const bodyPts: Array<{ bx: number; by: number; r: number; phase: number }> = [];
+  ctx.beginPath();
   for (let i = 0; i < numBubbles; i++) {
     const seed = (i * 37.7) % 1;
     const colSeed = (i * 61.3) % Math.max(10, lw - 16);
     const speedVariation = 0.8 + ((i * 17) % 5) * 0.1;
     const phase = (time * riseSpeed * speedVariation + seed) % 1;
-
-    // Organic horizontal wobble as bubbles navigate liquid currents
     const wobble = Math.sin(time * 5.2 + i * 1.7) * (1.2 + phase * 2.2);
     const bx = lx + 8 + colSeed + wobble;
-    // Rises from bottom base up to liquid surface
     const by = ly + lh - 4 - phase * (lh - 6);
-
-    // Gas expansion: starts small, expands slightly near the surface
     const baseR = (1.0 + (i % 4) * 0.45) * bubbleSizeScale;
     const r = Math.max(0.65, baseR * (0.8 + phase * 0.45));
-
-    // Glowing translucent bubble body
-    ctx.beginPath();
+    bodyPts.push({ bx, by, r, phase });
+    ctx.moveTo(bx + r, by);
     ctx.arc(bx, by, r, 0, Math.PI * 2);
-    ctx.fillStyle = isSimmer ? 'rgba(255, 255, 255, 0.42)' : 'rgba(255, 255, 255, 0.58)';
-    ctx.fill();
+  }
+  ctx.fillStyle = isSimmer ? 'rgba(255, 255, 255, 0.42)' : 'rgba(255, 255, 255, 0.58)';
+  ctx.fill();
+  ctx.strokeStyle = isSimmer ? 'rgba(255, 255, 255, 0.65)' : 'rgba(255, 255, 255, 0.88)';
+  ctx.lineWidth = isSimmer ? 0.6 : 0.8;
+  ctx.stroke();
 
-    // Luminous glass-like bubble rim
-    ctx.strokeStyle = isSimmer ? 'rgba(255, 255, 255, 0.65)' : 'rgba(255, 255, 255, 0.88)';
-    ctx.lineWidth = Math.max(0.5, r * 0.18);
-    ctx.stroke();
-
-    // Specular highlight gleam on top-left of bubble (for visible bubbles r >= 1.2)
+  ctx.beginPath();
+  for (let i = 0; i < bodyPts.length; i++) {
+    const { bx, by, r } = bodyPts[i];
     if (r >= 1.2) {
-      ctx.beginPath();
-      ctx.arc(bx - r * 0.32, by - r * 0.32, Math.max(0.4, r * 0.25), 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
-      ctx.fill();
+      const hr = Math.max(0.4, r * 0.25);
+      const hx = bx - r * 0.32;
+      const hy = by - r * 0.32;
+      ctx.moveTo(hx + hr, hy);
+      ctx.arc(hx, hy, hr, 0, Math.PI * 2);
     }
+  }
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
+  ctx.fill();
 
-    // Micro-splash burst when bubble reaches top surface (phase > 0.94, after 90°C)
-    if (!isSimmer && phase > 0.94) {
-      const popFrac = (phase - 0.94) / 0.06;
-      ctx.beginPath();
-      ctx.arc(bx, ly, r * (1.1 + popFrac * 1.2), 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * (1 - popFrac)})`;
+  if (!isSimmer) {
+    ctx.beginPath();
+    let anyPop = false;
+    for (let i = 0; i < bodyPts.length; i++) {
+      const { bx, r, phase } = bodyPts[i];
+      if (phase > 0.94) {
+        anyPop = true;
+        const popFrac = (phase - 0.94) / 0.06;
+        const pr = r * (1.1 + popFrac * 1.2);
+        ctx.moveTo(bx + pr, ly);
+        ctx.arc(bx, ly, pr, 0, Math.PI * 2);
+      }
+    }
+    if (anyPop) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.48)';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
   }
 
   ctx.restore();
+}
+
+let cachedSteamPuffSprite: HTMLCanvasElement | null = null;
+function getSteamPuffSprite(): HTMLCanvasElement | null {
+  if (cachedSteamPuffSprite) return cachedSteamPuffSprite;
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const sCtx = c.getContext('2d');
+  if (!sCtx) return null;
+  const grad = sCtx.createRadialGradient(32, 32, 3, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  grad.addColorStop(0.55, 'rgba(255, 255, 255, 0.58)');
+  grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  sCtx.fillStyle = grad;
+  sCtx.beginPath();
+  sCtx.arc(32, 32, 32, 0, Math.PI * 2);
+  sCtx.fill();
+  cachedSteamPuffSprite = c;
+  return c;
 }
 
 /**
@@ -4927,18 +4998,15 @@ function renderSteam(
   sw: number,
   temperature: number,
   isBoiling: boolean,
-  boilingIntensity: number,
+  _boilingIntensity: number,
   nowMs: number
 ): void {
   if (temperature < 58 && !isBoiling) return;
 
   ctx.save();
   const time = nowMs / 1000;
+  const puffSprite = getSteamPuffSprite();
 
-  // Staged steam puffs:
-  // 60-80°C: 5 gentle vapor puffs
-  // 80-95°C: 9 active steam plumes
-  // 95-100°C+: 14 billowing steam clouds
   let numPuffs = 5;
   let riseH = 45;
   let maxAlpha = 0.22;
@@ -4962,28 +5030,29 @@ function renderSteam(
     const speed = 0.7 + ((i * 13) % 5) * 0.12;
     const phase = (time * speed + seed) % 1;
 
-    // Organic billowing expansion and lateral drift in ambient air
     const spreadX = ((i - (numPuffs - 1) / 2) / (numPuffs / 2)) * (sw * 0.38);
     const sway = Math.sin(time * 2.2 + i * 1.6) * 14;
     const px = sx + spreadX + sway;
     const py = sy - phase * riseH;
 
-    // Puffs expand as they rise into the air
     const radius = 6 + phase * (16 + (i % 3) * 6);
-    // Smooth bell-curve opacity: starts soft, reaches apex, then gracefully disperses
     const fadeIn = Math.min(1.0, phase * 3.5);
     const fadeOut = Math.max(0, 1.0 - phase);
-    const opacity = fadeIn * fadeOut * maxAlpha;
+    const opacity = Math.min(1, fadeIn * fadeOut * maxAlpha * 1.2);
 
-    const grad = ctx.createRadialGradient(px, py, 2, px, py, radius);
-    grad.addColorStop(0, `rgba(255, 255, 255, ${opacity * 1.2})`);
-    grad.addColorStop(0.55, `rgba(255, 255, 255, ${opacity * 0.7})`);
-    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-    ctx.beginPath();
-    ctx.arc(px, py, radius, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    if (puffSprite) {
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(puffSprite, px - radius, py - radius, radius * 2, radius * 2);
+    } else {
+      const grad = ctx.createRadialGradient(px, py, 2, px, py, radius);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${opacity})`);
+      grad.addColorStop(0.55, `rgba(255, 255, 255, ${opacity * 0.58})`);
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
   }
 
   ctx.restore();
@@ -5092,7 +5161,10 @@ function renderThermalGraph(
       maxRecordedTemp = Math.max(maxRecordedTemp, cObj.containerState.temperature);
     }
   }
-  for (const pt of sim.history) {
+  const maxStride = sim.history.length > 200 ? Math.ceil(sim.history.length / 200) : 1;
+  for (let hIdx = 0; hIdx < sim.history.length; hIdx++) {
+    if (hIdx !== 0 && hIdx !== sim.history.length - 1 && hIdx % maxStride !== 0) continue;
+    const pt = sim.history[hIdx];
     if (pt.tempEquilibrium !== undefined) {
       maxRecordedTemp = Math.max(maxRecordedTemp, pt.tempEquilibrium);
     }
@@ -5316,16 +5388,21 @@ function renderThermalGraph(
     );
 
     let hoverClosestPt: (typeof sim.history)[0] | null = null;
-    if (isHoveringPlot && hoverPoint) {
+    if (isHoveringPlot && hoverPoint && sim.history.length > 0) {
       const hoverT = Math.max(0, Math.min(tMax, ((hoverPoint.x - plotX) / plotW) * tMax));
-      hoverClosestPt = sim.history[0];
-      let minDiff = Math.abs(hoverClosestPt.timeSec - hoverT);
-      for (let i = 1; i < sim.history.length; i++) {
-        const diff = Math.abs(sim.history[i].timeSec - hoverT);
-        if (diff < minDiff) {
-          minDiff = diff;
-          hoverClosestPt = sim.history[i];
+      let lo = 0;
+      let hi = sim.history.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sim.history[mid].timeSec < hoverT) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
         }
+      }
+      hoverClosestPt = sim.history[lo];
+      if (lo > 0 && Math.abs(sim.history[lo - 1].timeSec - hoverT) < Math.abs(hoverClosestPt.timeSec - hoverT)) {
+        hoverClosestPt = sim.history[lo - 1];
       }
     }
 
@@ -5477,11 +5554,7 @@ export function isHeatSimulationVisuallyActive(sim: HeatSimConfig | null | undef
   if (sim.isRunning) return true;
   const now = performance.now();
   for (const obj of sim.objects) {
-    if (obj.type === 'burner' && obj.burnerState?.isOn) return true;
     if (obj.containerState && (obj.containerState.volumeMl ?? 0) > 0) {
-      if ((obj.containerState.temperature ?? 20) > 50 || obj.containerState.isBoiling) {
-        return true;
-      }
       const slosh = containerSloshMap.get(obj.id);
       if (
         slosh &&

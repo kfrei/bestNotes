@@ -436,8 +436,11 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   }
 
   // 4. Update Thermometer readings (smooth probe response, prioritizing inner nested vessels)
+  let anyObjectChanged = Boolean(sim.isRunning);
   for (const therm of thermometers) {
     if (!therm.thermometerState) continue;
+    const prevTemp = therm.thermometerState.temperature;
+    const prevDipped = therm.thermometerState.dippedVesselId;
     const ts = { ...therm.thermometerState };
 
     const vesselDipped = findDippedVesselForThermometer(therm, containers, true);
@@ -451,16 +454,28 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     }
 
     // Smooth response curve for realistic mercury/alcohol movement
-    const alpha = 1.0 - Math.exp(-timeStep * (vesselDipped ? 3.5 : 0.8));
-    ts.temperature += (targetTemp - ts.temperature) * alpha;
+    if (Math.abs(targetTemp - ts.temperature) <= 0.02) {
+      ts.temperature = targetTemp;
+    } else {
+      const alpha = 1.0 - Math.exp(-timeStep * (vesselDipped ? 3.5 : 0.8));
+      ts.temperature += (targetTemp - ts.temperature) * alpha;
+    }
 
+    if (Math.abs(ts.temperature - prevTemp) > 0.005 || ts.dippedVesselId !== prevDipped) {
+      anyObjectChanged = true;
+    }
     therm.thermometerState = ts;
   }
 
-  // 5. Burner flame animation phase
-  for (const burner of burners) {
-    if (burner.burnerState?.isOn) {
-      burner.burnerState.flameCycle = ((burner.burnerState.flameCycle || 0) + timeStep * 8) % 1;
+  // 5. Burner flame animation phase (only advance while simulation is actively running)
+  if (sim.isRunning) {
+    for (const burner of burners) {
+      if (burner.burnerState?.isOn) {
+        burner.burnerState = {
+          ...burner.burnerState,
+          flameCycle: ((burner.burnerState.flameCycle || 0) + timeStep * 8) % 1,
+        };
+      }
     }
   }
 
@@ -469,99 +484,103 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
   // "όμως σε διάγραμμα μετρά μόνο με έναρξη από το χρονόμετρο"
   if (sim.isRunning) {
     const nextElapsed = sim.elapsedSec + timeStep;
-    let nextHistory = sim.history ? [...sim.history] : [];
+    const prevHistory = sim.history || [];
+    let nextHistory = prevHistory;
 
     if (containers.length > 0) {
-      // Record temperatures of ALL containers by ID
-      const tempsMap: Record<string, number> = {};
-      for (const c of containers) {
-        if (c.containerState) {
-          tempsMap[c.id] = Math.round(c.containerState.temperature * 10) / 10;
-        }
-      }
+      const lastExistingPt = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
+      const shouldSampleHistory =
+        prevHistory.length === 0 || !lastExistingPt || nextElapsed - lastExistingPt.timeSec >= 0.25;
 
-      // Prefer a container that is part of an active nested water-bath pair so tempEquilibrium is recorded accurately
-      const nestedVesselInGraph =
-        (sim.graph.boundContainerIds &&
-          containers.find(
-            (c) =>
-              sim.graph.boundContainerIds!.includes(c.id) &&
-              (c.containerState?.parentBasinId || c.containerState?.nestedVesselId)
-          )) ||
-        containers.find((c) => c.containerState?.parentBasinId || c.containerState?.nestedVesselId);
-
-      const primaryVessel =
-        nestedVesselInGraph ||
-        (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
-        containers.find((c) => c.id === sim.selectedObjectId) ||
-        containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
-        containers[0];
-
-      if (primaryVessel?.containerState) {
-        const temp1 = primaryVessel.containerState.temperature;
-        let temp2: number | undefined;
-        let tempEquilibrium: number | undefined;
-
-        // If in a water bath, record both curves!
-        if (primaryVessel.containerState.parentBasinId) {
-          const basin = containers.find((c) => c.id === primaryVessel.containerState?.parentBasinId);
-          if (basin?.containerState) {
-            temp2 = basin.containerState.temperature;
-            tempEquilibrium = calculateEquilibriumTemperature(
-              primaryVessel.containerState,
-              basin.containerState
-            );
+      if (shouldSampleHistory) {
+        nextHistory = [...prevHistory];
+        // Record temperatures of ALL containers by ID
+        const tempsMap: Record<string, number> = {};
+        for (const c of containers) {
+          if (c.containerState) {
+            tempsMap[c.id] = Math.round(c.containerState.temperature * 10) / 10;
           }
-        } else if (primaryVessel.containerState.nestedVesselId) {
-          const nested = containers.find((c) => c.id === primaryVessel.containerState?.nestedVesselId);
-          if (nested?.containerState) {
-            temp2 = nested.containerState.temperature;
-            tempEquilibrium = calculateEquilibriumTemperature(
-              primaryVessel.containerState,
-              nested.containerState
-            );
-          }
-        } else {
-          // Single vessel interacting with the ambient environment
-          tempEquilibrium = ambientTemp;
         }
 
-        // If history is empty at the start of stopwatch run, insert the t = 0 starting point!
-        if (nextHistory.length === 0) {
-          nextHistory.push({
-            timeSec: 0,
-            temp1: Math.round(temp1 * 10) / 10,
-            temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
-            tempsByContainerId: { ...tempsMap },
-            tempEquilibrium:
-              tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
-          });
-        }
+        // Prefer a container that is part of an active nested water-bath pair so tempEquilibrium is recorded accurately
+        const nestedVesselInGraph =
+          (sim.graph.boundContainerIds &&
+            containers.find(
+              (c) =>
+                sim.graph.boundContainerIds!.includes(c.id) &&
+                (c.containerState?.parentBasinId || c.containerState?.nestedVesselId)
+            )) ||
+          containers.find((c) => c.containerState?.parentBasinId || c.containerState?.nestedVesselId);
 
-        // Sample every 0.25s to record smooth, high-fidelity temperature curves
-        const lastPoint = nextHistory[nextHistory.length - 1];
-        if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.25) {
-          const point = {
-            timeSec: Math.round(nextElapsed * 10) / 10,
-            temp1: Math.round(temp1 * 10) / 10,
-            temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
-            tempsByContainerId: tempsMap,
-            tempEquilibrium:
-              tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
-          };
-          nextHistory.push(point);
+        const primaryVessel =
+          nestedVesselInGraph ||
+          (sim.graph.boundContainerIds && containers.find((c) => c.id === sim.graph.boundContainerIds![0])) ||
+          containers.find((c) => c.id === sim.selectedObjectId) ||
+          containers.find((c) => c.type === 'beaker' || c.type === 'flask') ||
+          containers[0];
 
-          // Bound memory gracefully while strictly PRESERVING complete history from t = 0 onwards!
-          // Never slice off the beginning of the experiment: if history exceeds 8,000 points
-          // (~33 minutes of continuous 0.25s samples), decimate by keeping every 2nd point,
-          // strictly maintaining the t = 0 origin point and the latest point.
-          if (nextHistory.length > 8000) {
-            const first = nextHistory[0];
-            const downsampled = nextHistory.filter((_, idx) => idx % 2 === 0);
-            if (downsampled.length === 0 || downsampled[0].timeSec !== first.timeSec) {
-              downsampled.unshift(first);
+        if (primaryVessel?.containerState) {
+          const temp1 = primaryVessel.containerState.temperature;
+          let temp2: number | undefined;
+          let tempEquilibrium: number | undefined;
+
+          // If in a water bath, record both curves!
+          if (primaryVessel.containerState.parentBasinId) {
+            const basin = containers.find((c) => c.id === primaryVessel.containerState?.parentBasinId);
+            if (basin?.containerState) {
+              temp2 = basin.containerState.temperature;
+              tempEquilibrium = calculateEquilibriumTemperature(
+                primaryVessel.containerState,
+                basin.containerState
+              );
             }
-            nextHistory = downsampled;
+          } else if (primaryVessel.containerState.nestedVesselId) {
+            const nested = containers.find((c) => c.id === primaryVessel.containerState?.nestedVesselId);
+            if (nested?.containerState) {
+              temp2 = nested.containerState.temperature;
+              tempEquilibrium = calculateEquilibriumTemperature(
+                primaryVessel.containerState,
+                nested.containerState
+              );
+            }
+          } else {
+            // Single vessel interacting with the ambient environment
+            tempEquilibrium = ambientTemp;
+          }
+
+          // If history is empty at the start of stopwatch run, insert the t = 0 starting point!
+          if (nextHistory.length === 0) {
+            nextHistory.push({
+              timeSec: 0,
+              temp1: Math.round(temp1 * 10) / 10,
+              temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
+              tempsByContainerId: { ...tempsMap },
+              tempEquilibrium:
+                tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
+            });
+          }
+
+          const lastPoint = nextHistory[nextHistory.length - 1];
+          if (!lastPoint || nextElapsed - lastPoint.timeSec >= 0.25) {
+            const point = {
+              timeSec: Math.round(nextElapsed * 10) / 10,
+              temp1: Math.round(temp1 * 10) / 10,
+              temp2: temp2 !== undefined ? Math.round(temp2 * 10) / 10 : undefined,
+              tempsByContainerId: tempsMap,
+              tempEquilibrium:
+                tempEquilibrium !== undefined ? Math.round(tempEquilibrium * 10) / 10 : undefined,
+            };
+            nextHistory.push(point);
+
+            // Bound memory & JSON size gracefully (< 150 KB) while strictly PRESERVING t = 0 onwards!
+            if (nextHistory.length > 1200) {
+              const first = nextHistory[0];
+              const downsampled = nextHistory.filter((_, idx) => idx % 2 === 0);
+              if (downsampled.length === 0 || downsampled[0].timeSec !== first.timeSec) {
+                downsampled.unshift(first);
+              }
+              nextHistory = downsampled;
+            }
           }
         }
       }
@@ -575,9 +594,26 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     };
   }
 
-  // When stopwatch / sim timer is NOT running:
-  // Live physics (temperature changes, flame, thermometer) update in real-time on canvas,
-  // but graph time (elapsedSec) and history remain paused waiting for stopwatch start!
+  // Check if nested container pairing changed while paused
+  if (!anyObjectChanged) {
+    for (let i = 0; i < sim.objects.length; i++) {
+      const origCs = sim.objects[i].containerState;
+      const nextCs = objects[i].containerState;
+      if (
+        origCs?.parentBasinId !== nextCs?.parentBasinId ||
+        origCs?.nestedVesselId !== nextCs?.nestedVesselId
+      ) {
+        anyObjectChanged = true;
+        break;
+      }
+    }
+  }
+
+  // Zero-allocation idle return when paused and nothing settled/changed!
+  if (!anyObjectChanged) {
+    return sim;
+  }
+
   return {
     ...sim,
     objects,

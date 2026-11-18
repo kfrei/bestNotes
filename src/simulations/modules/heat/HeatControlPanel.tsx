@@ -43,6 +43,16 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
 
   return (
     <div className={`space-y-3 select-none text-[#2c3e50] ${className}`}>
+      {sim && (
+        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white/55 border border-[#dfd8cb] text-[11px]">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+            Ενεργή Προσομοίωση:
+          </span>
+          <span className="px-2 py-0.5 rounded-md bg-[#efebe3] border border-[#234978]/35 text-[#234978] font-bold">
+            {sim.name || 'θερμότητα1'}
+          </span>
+        </div>
+      )}
       {/* 1. Quick Controls Grid (Play / Pause / Reset & Stopwatch) */}
       <div className="grid grid-cols-2 gap-2">
         {/* Play / Pause & Reset */}
@@ -141,11 +151,11 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
         <button
           type="button"
           onClick={onConvertLassoSketch}
-          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#234978] to-[#1c3c63] hover:from-[#1c3c63] hover:to-[#152e4d] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
-          title="Αναγνωρίζει το σκίτσο (καμινέτο, τρίποδας, ποτήρι, θερμόμετρο) και το αντικαθιστά με διαδραστικό εργαστηριακό αντικείμενο"
+          className="w-full py-2 px-3 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
+          title="Αναγνωρίζει το επιλεγμένο σκίτσο (καμινέτο, τρίποδας, ποτήρι, θερμόμετρο) και το μετατρέπει σε διαδραστικό αντικείμενο θερμότητας"
         >
-          <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>Αναγνώριση & Μετατροπή Σκίτσου ({selectedStrokeIdsCount})</span>
+          <Sparkles className="w-4 h-4" />
+          <span>+ Νέα Θερμότητα από Επιλογή ({selectedStrokeIdsCount})</span>
         </button>
       )}
 

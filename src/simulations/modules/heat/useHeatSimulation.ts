@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type { NotePage, StrokeObject } from '../../../types/note';
 import {
   HeatSimConfig,
@@ -27,7 +27,10 @@ export interface UseHeatSimulationReturn {
   editingContainer: HeatObject | null;
   setEditingContainer: (c: HeatObject | null) => void;
   ensureActiveHeatSim: (page: NotePage) => HeatSimConfig;
-  updateActiveHeatSim: (updater: (prev: HeatSimConfig) => HeatSimConfig) => void;
+  updateActiveHeatSim: (
+    updater: (prev: HeatSimConfig) => HeatSimConfig,
+    recordUndo?: boolean
+  ) => void;
   handleAddObject: (type: HeatObjectType, clientX?: number, clientY?: number) => void;
   handleAddObjectWithBounds: (
     type: HeatObjectType,
@@ -50,6 +53,7 @@ export interface UseHeatSimulationReturn {
   toggleRun: () => void;
   startHeatingAndSim: () => void;
   pauseHeatingAndSim: () => void;
+  flushAndPauseLiveSim: () => HeatSimConfig | null;
   toggleBurner: (burnerId?: string) => void;
   resetSim: () => void;
   setAmbientTemperature: (temp: number) => void;
@@ -81,10 +85,17 @@ export const HEAT_SIM_BY_ID_PREFIX = 'bestnotes_heat_sim_';
 
 export function persistHeatSimLive(sim: HeatSimConfig): void {
   try {
-    const safeSim = { ...sim, isRunning: false };
+    const hist = sim.history || [];
+    const stride = hist.length > 300 ? Math.ceil(hist.length / 300) : 1;
+    const compactHist =
+      hist.length > 300
+        ? hist.filter((_, idx) => idx === 0 || idx === hist.length - 1 || idx % stride === 0)
+        : hist;
+    const safeSim = { ...sim, isRunning: false, history: compactHist };
     const serialized = JSON.stringify(safeSim);
-    localStorage.setItem(HEAT_SIM_BACKUP_KEY, serialized);
-    localStorage.setItem(`${HEAT_SIM_BY_ID_PREFIX}${safeSim.id}`, serialized);
+    if (serialized.length <= 280_000) {
+      localStorage.setItem(HEAT_SIM_BACKUP_KEY, serialized);
+    }
   } catch {
     // ignore quota errors
   }
@@ -111,7 +122,7 @@ export function restoreHeatSimFromStorage(simFromPage: HeatSimConfig): HeatSimCo
 
 export function useHeatSimulation(
   activePage: NotePage | null,
-  updatePage: (updater: (p: NotePage) => NotePage) => void
+  updatePage: (updater: (p: NotePage) => NotePage, recordUndo?: boolean) => void
 ): UseHeatSimulationReturn {
   const [editingContainer, setEditingContainer] = useState<HeatObject | null>(null);
   const [graphChoicePrompt, setGraphChoicePrompt] = useState<{
@@ -146,7 +157,7 @@ export function useHeatSimulation(
       const live = liveSimRef.current;
       if (live) {
         persistHeatSimLive(live);
-        updateActiveHeatSim(() => ({ ...live, isRunning: false }));
+        updateActiveHeatSim(() => ({ ...live, isRunning: false }), false);
       }
     };
     window.addEventListener('beforeunload', flushOnUnload);
@@ -157,23 +168,16 @@ export function useHeatSimulation(
     };
   }, []);
 
-  // Keep liveSimRef synced when activeHeatSim changes from page or user actions
+  // Keep liveSimRef synced when activeHeatSim changes from page or user actions (including Undo / Redo)
   useEffect(() => {
     if (activeHeatSim) {
       if (!liveSimRef.current || liveSimRef.current.id !== activeHeatSim.id) {
-        const candidate = restoreHeatSimFromStorage(activeHeatSim);
-        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(candidate));
+        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(activeHeatSim));
         cloned.isRunning = false;
         liveSimRef.current = cloned;
+        persistHeatSimLive(cloned);
         if (activeHeatSim.isRunning) {
-          updateActiveHeatSim((prev) => ({ ...prev, isRunning: false }));
-        }
-        // If restored candidate has user progress beyond default, sync back to page immediately
-        if (
-          candidate.elapsedSec !== activeHeatSim.elapsedSec ||
-          JSON.stringify(candidate.objects) !== JSON.stringify(activeHeatSim.objects)
-        ) {
-          updateActiveHeatSim(() => cloned);
+          updateActiveHeatSim((prev) => ({ ...prev, isRunning: false }), false);
         }
       } else {
         liveSimRef.current.name = activeHeatSim.name;
@@ -208,6 +212,9 @@ export function useHeatSimulation(
         liveSimRef.current.objects = liveSimRef.current.objects.filter((lo) =>
           activeHeatSim.objects.some((o) => o.id === lo.id)
         );
+        if (!liveSimRef.current.isRunning) {
+          persistHeatSimLive(liveSimRef.current);
+        }
       }
     } else {
       liveSimRef.current = null;
@@ -245,7 +252,7 @@ export function useHeatSimulation(
   const dragMotionHistoryRef = useRef<{ time: number; x: number } | null>(null);
 
   const updateActiveHeatSim = useCallback(
-    (updater: (prev: HeatSimConfig) => HeatSimConfig) => {
+    (updater: (prev: HeatSimConfig) => HeatSimConfig, recordUndo = true) => {
       updatePage((page: NotePage) => {
         const curSims = page.heatSims || [];
         const activeId = page.activeHeatSimId || curSims[0]?.id;
@@ -264,7 +271,7 @@ export function useHeatSimulation(
           ...page,
           heatSims: nextSims,
         };
-      });
+      }, recordUndo);
     },
     [updatePage]
   );
@@ -400,7 +407,7 @@ export function useHeatSimulation(
       };
       liveSimRef.current = next;
       return next;
-    });
+    }, false);
   }, [updateActiveHeatSim]);
 
   const pauseHeatingAndSim = useCallback(() => {
@@ -412,8 +419,20 @@ export function useHeatSimulation(
       };
       liveSimRef.current = next;
       return next;
-    });
+    }, false);
   }, [updateActiveHeatSim]);
+
+  const flushAndPauseLiveSim = useCallback((): HeatSimConfig | null => {
+    const cur = liveSimRef.current;
+    if (!cur) return null;
+    const paused: HeatSimConfig = {
+      ...cur,
+      isRunning: false,
+    };
+    liveSimRef.current = paused;
+    persistHeatSimLive(paused);
+    return paused;
+  }, []);
 
   const toggleRun = useCallback(() => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
@@ -425,7 +444,7 @@ export function useHeatSimulation(
       };
       liveSimRef.current = next;
       return next;
-    });
+    }, false);
   }, [updateActiveHeatSim]);
 
   const toggleBurner = useCallback((burnerId?: string) => {
@@ -768,7 +787,7 @@ export function useHeatSimulation(
         };
         liveSimRef.current = next;
         return next;
-      });
+      }, false);
     },
     [activeHeatSim, updateActiveHeatSim]
   );
@@ -1807,12 +1826,36 @@ export function useHeatSimulation(
       }
     }
 
-    // Persist final position and dimensions to note page
+    // Persist final position and dimensions to note page (only record Undo if an object or graph actually moved/resized)
     if (liveSimRef.current) {
-      updateActiveHeatSim(() => liveSimRef.current!);
+      const liveNow = liveSimRef.current;
+      const prevObjects = activeHeatSim?.objects || [];
+      const didGeometryChange =
+        liveNow.objects.some((lo) => {
+          const po = prevObjects.find((x) => x.id === lo.id);
+          if (!po) return true;
+          return (
+            Math.abs(lo.x - po.x) > 0.5 ||
+            Math.abs(lo.y - po.y) > 0.5 ||
+            Math.abs(lo.width - po.width) > 0.5 ||
+            Math.abs(lo.height - po.height) > 0.5
+          );
+        }) ||
+        Boolean(
+          drag.isGraph &&
+            drag.origObjX !== undefined &&
+            drag.origObjY !== undefined &&
+            (Math.abs((drag.targetGraph?.x ?? drag.origObjX) - drag.origObjX) > 0.5 ||
+              Math.abs((drag.targetGraph?.y ?? drag.origObjY) - drag.origObjY) > 0.5 ||
+              (drag.origGraphW !== undefined &&
+                Math.abs((drag.targetGraph?.width ?? drag.origGraphW) - drag.origGraphW) > 0.5) ||
+              (drag.origGraphH !== undefined &&
+                Math.abs((drag.targetGraph?.height ?? drag.origGraphH) - drag.origGraphH) > 0.5))
+        );
+      updateActiveHeatSim(() => liveNow, didGeometryChange);
     }
     return true;
-  }, [updateActiveHeatSim]);
+  }, [activeHeatSim, updateActiveHeatSim]);
 
   const isDragging = useCallback((): boolean => {
     return dragRef.current !== null;
@@ -1865,74 +1908,118 @@ export function useHeatSimulation(
     [updatePage]
   );
 
-  // Advances physics frame at 60fps in memory, throttling page state sync & localStorage backup.
-  // When running, sub-steps larger real-time deltas (e.g. slow frames or tab switches) in 0.08s increments
-  // so simulation elapsed time (`elapsedSec`) and graph history stay 100% locked to real wall-clock stopwatch time!
+  // Advances physics frame at 60fps strictly in memory (`liveSimRef.current`) with ZERO React re-renders!
+  // State is flushed to `activePage` only on Pause, Reset, PointerUp, Tab/Page switch, or Unload.
   const stepPhysicsFrame = useCallback(
     (dt: number) => {
       const cur = liveSimRef.current || activeHeatSim;
       if (!cur) return;
       let next = cur;
       if (cur.isRunning && dt > 0.08) {
-        let remaining = Math.min(dt, 600);
+        let remaining = Math.min(dt, 180);
+        const stepSize = Math.max(0.08, remaining / 120);
         while (remaining > 0.0005) {
-          const step = Math.min(0.08, remaining);
+          const step = Math.min(stepSize, remaining);
           next = stepHeatSimulation(next, step);
           remaining -= step;
         }
       } else {
         next = stepHeatSimulation(cur, Math.min(0.08, dt));
       }
+      if (next === cur) return;
       liveSimRef.current = next;
 
-      // Throttle persistent sync to activePage & localStorage backup (every 800ms)
-      const now = performance.now();
-      if (now - lastStateSyncTimeRef.current > 800) {
-        lastStateSyncTimeRef.current = now;
-        persistHeatSimLive(next);
-        updateActiveHeatSim(() => next);
+      // Lightweight crash-recovery backup every 4s ONLY while actively running (zero React re-renders!)
+      if (next.isRunning) {
+        const now = performance.now();
+        if (now - lastStateSyncTimeRef.current > 4000) {
+          lastStateSyncTimeRef.current = now;
+          persistHeatSimLive(next);
+        }
       }
     },
-    [activeHeatSim, updateActiveHeatSim]
+    [activeHeatSim]
   );
 
-  return {
-    activeHeatSim,
-    getLiveSim,
-    editingContainer,
-    setEditingContainer,
-    ensureActiveHeatSim,
-    updateActiveHeatSim,
-    handleAddObject,
-    handleAddObjectWithBounds,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    isDragging,
-    handleConvertLassoSketch,
-    stepPhysicsFrame,
-    toggleRun,
-    startHeatingAndSim,
-    pauseHeatingAndSim,
-    toggleBurner,
-    resetSim,
-    setAmbientTemperature: handleSetAmbientTemperature,
-    toggleGraph,
-    handleFillContainer,
-    handleDeleteSelectedObject,
-    setSelectedObjectIds,
-    graphChoicePrompt,
-    handleGraphChoice,
-    cancelGraphChoice,
-    handleToggleContainerGraph,
-    handleHover,
-    clearHover,
-    getHoverPoint,
-    getSelectedObjects,
-    handleCopy,
-    handlePasteObjects,
-    handleDuplicateSelected,
-    handleCut,
-    handleZOrderSelected,
-  };
+  return useMemo(
+    () => ({
+      activeHeatSim,
+      getLiveSim,
+      editingContainer,
+      setEditingContainer,
+      ensureActiveHeatSim,
+      updateActiveHeatSim,
+      handleAddObject,
+      handleAddObjectWithBounds,
+      handlePointerDown,
+      handlePointerMove,
+      handlePointerUp,
+      isDragging,
+      handleConvertLassoSketch,
+      stepPhysicsFrame,
+      toggleRun,
+      startHeatingAndSim,
+      pauseHeatingAndSim,
+      flushAndPauseLiveSim,
+      toggleBurner,
+      resetSim,
+      setAmbientTemperature: handleSetAmbientTemperature,
+      toggleGraph,
+      handleFillContainer,
+      handleDeleteSelectedObject,
+      setSelectedObjectIds,
+      graphChoicePrompt,
+      handleGraphChoice,
+      cancelGraphChoice,
+      handleToggleContainerGraph,
+      handleHover,
+      clearHover,
+      getHoverPoint,
+      getSelectedObjects,
+      handleCopy,
+      handlePasteObjects,
+      handleDuplicateSelected,
+      handleCut,
+      handleZOrderSelected,
+    }),
+    [
+      activeHeatSim,
+      getLiveSim,
+      editingContainer,
+      ensureActiveHeatSim,
+      updateActiveHeatSim,
+      handleAddObject,
+      handleAddObjectWithBounds,
+      handlePointerDown,
+      handlePointerMove,
+      handlePointerUp,
+      isDragging,
+      handleConvertLassoSketch,
+      stepPhysicsFrame,
+      toggleRun,
+      startHeatingAndSim,
+      pauseHeatingAndSim,
+      flushAndPauseLiveSim,
+      toggleBurner,
+      resetSim,
+      handleSetAmbientTemperature,
+      toggleGraph,
+      handleFillContainer,
+      handleDeleteSelectedObject,
+      setSelectedObjectIds,
+      graphChoicePrompt,
+      handleGraphChoice,
+      cancelGraphChoice,
+      handleToggleContainerGraph,
+      handleHover,
+      clearHover,
+      getHoverPoint,
+      getSelectedObjects,
+      handleCopy,
+      handlePasteObjects,
+      handleDuplicateSelected,
+      handleCut,
+      handleZOrderSelected,
+    ]
+  );
 }

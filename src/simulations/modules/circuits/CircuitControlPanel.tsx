@@ -74,10 +74,28 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
   onChangeDarkWireTrack,
   onChangeSpeedMultiplier,
 }) => {
-  const allNotebookSims = getAllNotebookCircuitSims(activeNotebook);
-  const validPageSims = getValidCircuitSims(activePage);
-  const activeSim = getActiveCircuitSim(activePage);
-  const nextSimLabel = getNextDefaultCircuitSimName(activeNotebook, activePage);
+  const allNotebookSims = React.useMemo(
+    () => getAllNotebookCircuitSims(activeNotebook),
+    [activeNotebook]
+  );
+  const validPageSims = React.useMemo(
+    () => getValidCircuitSims(activePage),
+    [activePage]
+  );
+  const activeSim = React.useMemo(
+    () => getActiveCircuitSim(activePage),
+    [activePage]
+  );
+  const nextSimLabel = React.useMemo(
+    () => getNextDefaultCircuitSimName(activeNotebook, activePage),
+    [activeNotebook, activePage]
+  );
+  const simPreviewEval = React.useMemo(() => {
+    if (!isSimulating || !activeSim) return null;
+    const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+    const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
+    return analyzeCircuitForSimulation(simStrokes, true);
+  }, [isSimulating, activeSim, activePage]);
   const isSelectionAlreadyRegisteredSim =
     selectedStrokeIds.length > 0 &&
     validPageSims.some((sim) => {
@@ -109,19 +127,21 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
 
   return (
     <>
-      {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time across the Notebook) */}
+      {/* Named Lasso Circuit Simulations Selector (κύκλωμα1, κύκλωμα2, ... — 1 Active at a Time across the Notebook) */}
       <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
-        {selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim && (
-          <button
-            type="button"
-            onClick={onRegisterFromLasso}
-            className="w-full py-1.5 px-2.5 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-            title="Προσθέτει το επιλεγμένο με Λάσο κύκλωμα ως προσομοίωση και κλείνει αυτόματα το πλαίσιο επιλογής"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Προσθήκη από Λάσο ({nextSimLabel})</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onRegisterFromLasso}
+          className={`w-full py-1.5 px-2.5 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
+            selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim
+              ? 'bg-[#234978] hover:bg-[#1c3c63] text-white'
+              : 'bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#234978]'
+          }`}
+          title="Επιλέξτε στο χαρτί τα στοιχεία και τις γραμμές του κυκλώματος και πατήστε εδώ για δημιουργία νέου κυκλώματος"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Νέο Κύκλωμα ({nextSimLabel})</span>
+        </button>
 
         {allNotebookSims.length > 0 ? (
           <>
@@ -229,7 +249,7 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
           </>
         ) : (
           <div className="text-[10.5px] font-medium text-[#64748b] bg-[#f7f5f0] border border-[#e8e2d6] rounded-lg p-2 leading-snug text-center">
-            Επιλέξτε με το <b>Λάσο</b> ένα κλειστό κύκλωμα (με Μπαταρία/Πηγή) και πατήστε <b>Sim</b> για να δημιουργηθεί το <b>{nextSimLabel}</b>.
+            Επιλέξτε στο χαρτί με το <b>Λάσο</b> όλα τα στοιχεία & τις γραμμές του κυκλώματος και πατήστε <b>+ Νέο Κύκλωμα ({nextSimLabel})</b>.
           </div>
         )}
       </div>
@@ -283,10 +303,8 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
       <div className="grid grid-cols-1 gap-1.5">
         {isSimulating &&
           activeSim &&
+          simPreviewEval &&
           (() => {
-            const simSet = getSimExpandedStrokeSet(activePage, activeSim);
-            const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
-            const simPreviewEval = analyzeCircuitForSimulation(simStrokes, true);
             const hasCompleteLoop = simPreviewEval.isCircuitClosed;
             if (!hasCompleteLoop) {
               const hasOpenSourceVoltmeter = simPreviewEval.components.some(

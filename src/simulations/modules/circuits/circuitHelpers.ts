@@ -40,10 +40,10 @@ export function getNextDefaultCircuitSimName(nb: Notebook, page?: NotePage): str
     }
   }
   for (let i = 1; i <= 99; i++) {
-    const candidate = `sim${String(i).padStart(2, '0')}`;
+    const candidate = `κύκλωμα${i}`;
     if (!usedNames.has(candidate)) return candidate;
   }
-  return `sim${usedNames.size + 1}`;
+  return `κύκλωμα${usedNames.size + 1}`;
 }
 
 export function isCircuitEligibleStroke(s: StrokeObject): boolean {
@@ -79,7 +79,85 @@ export function isCircuitEligibleStroke(s: StrokeObject): boolean {
   );
 }
 
+/**
+ * Strict eligibility for strokes that belong to an active/registered circuit simulation
+ * or can be transitively attached to one on the fly.
+ * Intentionally excludes raw freehand handwriting (`!s.isShape`) so Greek words/notes
+ * written next to a circuit (`< 40px`) are NEVER absorbed into the circuit stroke graph!
+ */
+export function isCircuitSimConnectedStroke(s: StrokeObject): boolean {
+  if (s.tool === 'highlighter') return false;
+  if (s.arrowStart || s.arrowEnd) return false;
+  if (s.points[0]?.twist === 999) return false;
+  if (s.fillStyle && s.fillStyle !== 'none') return false;
+  if (!s.isShape) return false;
+  if (s.shapeType === 'line') {
+    return s.points.length >= 2;
+  }
+  return (
+    s.shapeType === 'battery' ||
+    s.shapeType === 'voltage-source' ||
+    s.shapeType === 'bulb' ||
+    s.shapeType === 'bulb-symbol' ||
+    s.shapeType === 'resistor' ||
+    s.shapeType === 'switch' ||
+    s.shapeType === 'switch-blade' ||
+    s.shapeType === 'switch-knob' ||
+    s.shapeType === 'fan' ||
+    s.shapeType === 'fan-blade' ||
+    s.shapeType === 'fan-hub' ||
+    s.shapeType === 'ammeter' ||
+    s.shapeType === 'ammeter-needle' ||
+    s.shapeType === 'ammeter-label' ||
+    s.shapeType === 'voltmeter' ||
+    s.shapeType === 'voltmeter-needle' ||
+    s.shapeType === 'voltmeter-label'
+  );
+}
+
+const strokeFastBBoxCache = new WeakMap<
+  StrokeObject,
+  { minX: number; minY: number; maxX: number; maxY: number }
+>();
+
+function getFastStrokeBBox(s: StrokeObject): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  const cached = strokeFastBBoxCache.get(s);
+  if (cached) return cached;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < s.points.length; i++) {
+    const p = s.points[i];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const res = Number.isFinite(minX)
+    ? { minX, minY, maxX, maxY }
+    : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  strokeFastBBoxCache.set(s, res);
+  return res;
+}
+
 export function areStrokesWithinCircuitTol(a: StrokeObject, b: StrokeObject, tol = 40): boolean {
+  if (a.points.length === 0 || b.points.length === 0) return false;
+  const ba = getFastStrokeBBox(a);
+  const bb = getFastStrokeBBox(b);
+  if (
+    ba.maxX + tol < bb.minX ||
+    bb.maxX + tol < ba.minX ||
+    ba.maxY + tol < bb.minY ||
+    bb.maxY + tol < ba.minY
+  ) {
+    return false;
+  }
   for (const pt of a.points) {
     if (b.points.length === 1) {
       if (Math.hypot(pt.x - b.points[0].x, pt.y - b.points[0].y) <= tol) return true;
@@ -109,12 +187,40 @@ export function areStrokesWithinCircuitTol(a: StrokeObject, b: StrokeObject, tol
   return false;
 }
 
+const simExpandedSetCache = new WeakMap<StrokeObject[], Map<string, Set<string>>>();
+
 export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | null): Set<string> {
   if (!sim) return new Set();
-  const baseSet = new Set(sim.strokeIds);
+  const otherSimsSig = (page.circuitSims || [])
+    .filter((other) => other.id !== sim.id)
+    .map((other) => `${other.id}:${other.strokeIds.length}`)
+    .join('|');
+  const cacheKey = `${sim.id}:${sim.strokeIds.join(',')}::${otherSimsSig}`;
+  let byStrokesMap = simExpandedSetCache.get(page.strokes);
+  if (byStrokesMap) {
+    const hit = byStrokesMap.get(cacheKey);
+    if (hit) return hit;
+  } else {
+    byStrokesMap = new Map();
+    simExpandedSetCache.set(page.strokes, byStrokesMap);
+  }
+
+  const rawBaseSet = new Set(sim.strokeIds);
+  // Self-heal any previously bloated sim.strokeIds that accidentally captured nearby freehand handwriting:
+  // if the simulation contains real circuit shapes/wires, exclude raw non-shape handwriting strokes!
+  const hasStrictCircuitMembers = page.strokes.some(
+    (s) => rawBaseSet.has(s.id) && isCircuitSimConnectedStroke(s)
+  );
+  const baseSet = new Set<string>();
+  for (const s of page.strokes) {
+    if (!rawBaseSet.has(s.id)) continue;
+    if (hasStrictCircuitMembers && !isCircuitSimConnectedStroke(s)) continue;
+    baseSet.add(s.id);
+  }
+
   const groupIds = new Set(
     page.strokes
-      .filter((s) => baseSet.has(s.id) && isCircuitEligibleStroke(s) && s.groupId)
+      .filter((s) => baseSet.has(s.id) && isCircuitSimConnectedStroke(s) && s.groupId)
       .map((s) => s.groupId!)
   );
   const out = new Set<string>();
@@ -122,7 +228,7 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
     if (baseSet.has(s.id)) {
       out.add(s.id);
     } else if (
-      isCircuitEligibleStroke(s) &&
+      isCircuitSimConnectedStroke(s) &&
       s.groupId &&
       groupIds.has(s.groupId)
     ) {
@@ -139,7 +245,7 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
 
   // Transitively include any newly drawn wire branch or circuit component physically connected (<= 40px) to this circuit
   const eligible = page.strokes.filter(
-    (s) => !otherSimIds.has(s.id) && (out.has(s.id) || isCircuitEligibleStroke(s))
+    (s) => !otherSimIds.has(s.id) && (out.has(s.id) || isCircuitSimConnectedStroke(s))
   );
   let changed = true;
   while (changed) {
@@ -152,7 +258,7 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
         changed = true;
         if (cand.groupId) {
           for (const g of page.strokes) {
-            if (g.groupId === cand.groupId && !out.has(g.id)) {
+            if (g.groupId === cand.groupId && isCircuitSimConnectedStroke(g) && !out.has(g.id)) {
               out.add(g.id);
             }
           }
@@ -160,6 +266,11 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
       }
     }
   }
+
+  if (byStrokesMap.size >= 32) {
+    byStrokesMap.clear();
+  }
+  byStrokesMap.set(cacheKey, out);
   return out;
 }
 
@@ -169,6 +280,15 @@ function isPointNearStrokeSimple(
   tol = 26
 ): boolean {
   if (s.points.length === 0) return false;
+  const b = getFastStrokeBBox(s);
+  if (
+    pt.x < b.minX - tol ||
+    pt.x > b.maxX + tol ||
+    pt.y < b.minY - tol ||
+    pt.y > b.maxY + tol
+  ) {
+    return false;
+  }
   if (s.points.length === 1) {
     return Math.hypot(pt.x - s.points[0].x, pt.y - s.points[0].y) <= tol;
   }
@@ -217,7 +337,10 @@ export function expandWholeCircuitStrokeIds(page: NotePage, strokeIds: string[])
   }
 
   // 2. General connected-circuit & parallel-voltmeter wire expansion
-  const unlockedStrokes = page.strokes.filter((s) => !lockedLayerIds.has(s.layerId));
+  const unlockedStrokes =
+    lockedLayerIds.size === 0
+      ? page.strokes
+      : page.strokes.filter((s) => !lockedLayerIds.has(s.layerId));
   const allComps = getCircuitComponentsWithTerminals(unlockedStrokes);
   const selComps = allComps.filter((c) => c.strokeIds.some((id) => outSet.has(id)));
   for (const c of selComps) {
@@ -231,8 +354,8 @@ export function expandWholeCircuitStrokeIds(page: NotePage, strokeIds: string[])
     const wireCandidates = unlockedStrokes.filter(
       (s) =>
         !compStrokeSet.has(s.id) &&
-        isCircuitEligibleStroke(s) &&
-        (!s.shapeType || s.shapeType === 'line') &&
+        isCircuitSimConnectedStroke(s) &&
+        s.shapeType === 'line' &&
         !s.arrowStart &&
         !s.arrowEnd &&
         s.points.length >= 2

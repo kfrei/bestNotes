@@ -1,10 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export interface StopwatchWidgetProps {
   pos: { x: number; y: number };
   width: number;
   running: boolean;
   elapsedMs: number;
+  getLiveElapsedMs?: () => number;
   onPosChange: (pos: { x: number; y: number }) => void;
   onWidthChange: (width: number) => void;
   onClose: () => void;
@@ -34,6 +35,7 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
   width,
   running,
   elapsedMs,
+  getLiveElapsedMs,
   onPosChange,
   onWidthChange,
   onClose,
@@ -63,6 +65,25 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
     origW: number;
     origX: number;
   } | null>(null);
+
+  const displaySpanRef = useRef<HTMLSpanElement | null>(null);
+  const getLiveRef = useRef(getLiveElapsedMs);
+  getLiveRef.current = getLiveElapsedMs;
+
+  useEffect(() => {
+    if (!running || !getLiveRef.current) return;
+    const syncText = () => {
+      if (displaySpanRef.current && getLiveRef.current) {
+        const nextText = formatStopwatchDisplay(getLiveRef.current());
+        if (displaySpanRef.current.textContent !== nextText) {
+          displaySpanRef.current.textContent = nextText;
+        }
+      }
+    };
+    syncText();
+    const iv = window.setInterval(syncText, 80);
+    return () => window.clearInterval(iv);
+  }, [running]);
 
   const swScale = Math.max(0.75, Math.min(1.85, width / 260));
   const padPx = Math.max(6, Math.min(18, Math.round(10 * swScale)));
@@ -252,10 +273,11 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
         className="border shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)] text-center"
       >
         <span
+          ref={displaySpanRef}
           style={{ fontSize: `${Math.round(24 * swScale)}px` }}
           className="font-mono font-black tracking-widest text-white drop-shadow-xs"
         >
-          {formatStopwatchDisplay(elapsedMs)}
+          {formatStopwatchDisplay(getLiveElapsedMs ? getLiveElapsedMs() : elapsedMs)}
         </span>
         <div
           style={{ fontSize: `${Math.max(7.5, Math.round(8.5 * swScale))}px` }}
