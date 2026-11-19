@@ -4245,6 +4245,7 @@ export default function App() {
   const holdAnchorPtRef = useRef<{ x: number; y: number } | null>(null);
   const lastHoldMoveTimeRef = useRef<number>(0);
   const laserStrokesRef = useRef<BezierPoint[][]>([]);
+  const laserPageIdRef = useRef<string>('');
   const laserClearTimerRef = useRef<number | null>(null);
   const laserFadeRafRef = useRef<number | null>(null);
   const globalLaserCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -19499,42 +19500,42 @@ export default function App() {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Outer red laser glow
-    ctx.strokeStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 14 * alpha;
-    ctx.lineWidth = 5.0;
-    for (const path of allLaserPaths) {
-      if (path.length === 0) continue;
+    const traceSmoothLaserPaths = () => {
       ctx.beginPath();
-      ctx.moveTo(path[0].x, path[0].y);
-      if (path.length === 1) {
-        ctx.lineTo(path[0].x + 0.1, path[0].y + 0.1);
-      } else {
-        for (let i = 1; i < path.length; i++) {
-          ctx.lineTo(path[i].x, path[i].y);
+      for (const path of allLaserPaths) {
+        if (path.length === 0) continue;
+        ctx.moveTo(path[0].x, path[0].y);
+        if (path.length === 1) {
+          ctx.lineTo(path[0].x + 0.1, path[0].y + 0.1);
+        } else if (path.length === 2) {
+          ctx.lineTo(path[1].x, path[1].y);
+        } else {
+          for (let i = 1; i < path.length - 1; i++) {
+            const mx = (path[i].x + path[i + 1].x) * 0.5;
+            const my = (path[i].y + path[i + 1].y) * 0.5;
+            ctx.quadraticCurveTo(path[i].x, path[i].y, mx, my);
+          }
+          const last = path[path.length - 1];
+          ctx.lineTo(last.x, last.y);
         }
       }
       ctx.stroke();
-    }
+    };
 
-    // Inner bright laser core
-    ctx.shadowBlur = 0;
+    // 1. Soft outer red halo (0-shadowBlur layered strokes for locked 120Hz responsiveness)
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.24)';
+    ctx.lineWidth = 13.0;
+    traceSmoothLaserPaths();
+
+    // 2. Mid red laser beam
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 5.0;
+    traceSmoothLaserPaths();
+
+    // 3. Inner bright laser core
     ctx.strokeStyle = '#fecaca';
     ctx.lineWidth = 1.8;
-    for (const path of allLaserPaths) {
-      if (path.length === 0) continue;
-      ctx.beginPath();
-      ctx.moveTo(path[0].x, path[0].y);
-      if (path.length === 1) {
-        ctx.lineTo(path[0].x + 0.1, path[0].y + 0.1);
-      } else {
-        for (let i = 1; i < path.length; i++) {
-          ctx.lineTo(path[i].x, path[i].y);
-        }
-      }
-      ctx.stroke();
-    }
+    traceSmoothLaserPaths();
 
     ctx.restore();
     if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
@@ -38341,9 +38342,9 @@ export default function App() {
 
       const hadActiveTextOnTouch = Boolean(selectedTextId || editingTextId);
 
-      // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box/text selects & transforms it; 1 finger on empty paper scrolls the page
-      // Exception: When Laser ('laser') is active, 1 finger ALSO draws the red laser beam without selecting objects!
-      if (pencilOnlyMode && activeTool !== 'laser') {
+      // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box/text selects & transforms it;
+      // 1 finger on empty paper (including when Laser is active!) scrolls the page smoothly!
+      if (pencilOnlyMode) {
         if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)) {
           outsidePanDragRef.current = null;
           fingerEmptyTapTrackRef.current = null;
@@ -41255,6 +41256,10 @@ export default function App() {
     holdAnchorPtRef.current = { x: pt.x, y: pt.y };
     lastHoldMoveTimeRef.current = performance.now();
     if (effectiveTool === 'laser') {
+      if (laserPageIdRef.current !== targetPage.id) {
+        laserStrokesRef.current = [];
+        laserPageIdRef.current = targetPage.id;
+      }
       cancelLaserTimers();
       renderLaserOverlay(1);
     } else if (['pen', 'pencil'].includes(effectiveTool)) {
@@ -47297,11 +47302,13 @@ export default function App() {
       return;
     }
 
-    // 5. Laser Pointer on overlay canvas
+    // 5. Laser Pointer on active page overlay canvas (exact 1:1 page coordinates!)
     if (activeTool === 'laser') {
       cancelLaserTimers();
       for (const ce of coalesced) {
-        const rawPt = { x: ce.clientX, y: ce.clientY };
+        if (ce.clientX === 0 && ce.clientY === 0) continue;
+        if (e.pointerType === 'pen' && ce.pressure === 0 && e.buttons === 0) continue;
+        const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
         const pts = currentStrokePtsRef.current;
         if (pts.length === 0 || distance(pts[pts.length - 1], rawPt) >= 1.0) {
           pts.push(rawPt);
