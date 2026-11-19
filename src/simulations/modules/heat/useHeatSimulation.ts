@@ -94,7 +94,7 @@ export function persistHeatSimLive(sim: HeatSimConfig): void {
     const safeSim = { ...sim, isRunning: false, history: compactHist };
     const serialized = JSON.stringify(safeSim);
     if (serialized.length <= 280_000) {
-      localStorage.setItem(HEAT_SIM_BACKUP_KEY, serialized);
+      localStorage.setItem(`${HEAT_SIM_BY_ID_PREFIX}${sim.id}`, serialized);
     }
   } catch {
     // ignore quota errors
@@ -118,6 +118,23 @@ export function restoreHeatSimFromStorage(simFromPage: HeatSimConfig): HeatSimCo
     // ignore
   }
   return simFromPage;
+}
+
+function cloneHeatSimFast(src: HeatSimConfig, forcePaused = false): HeatSimConfig {
+  return {
+    ...src,
+    isRunning: forcePaused ? false : src.isRunning,
+    objects: src.objects.map((o) => ({
+      ...o,
+      burnerState: o.burnerState ? { ...o.burnerState } : undefined,
+      containerState: o.containerState ? { ...o.containerState } : undefined,
+      thermometerState: o.thermometerState ? { ...o.thermometerState } : undefined,
+      tripodState: o.tripodState ? { ...o.tripodState } : undefined,
+    })),
+    graph: { ...src.graph },
+    graphs: src.graphs ? src.graphs.map((g) => ({ ...g })) : undefined,
+    history: (src.history || []).slice(),
+  };
 }
 
 export function useHeatSimulation(
@@ -169,13 +186,25 @@ export function useHeatSimulation(
   }, []);
 
   // Keep liveSimRef synced when activeHeatSim changes from page or user actions (including Undo / Redo)
+  // Zero synchronous JSON.stringify / localStorage writes on page scroll!
   useEffect(() => {
     if (activeHeatSim) {
       if (!liveSimRef.current || liveSimRef.current.id !== activeHeatSim.id) {
-        const cloned: HeatSimConfig = JSON.parse(JSON.stringify(activeHeatSim));
-        cloned.isRunning = false;
+        const cloned: HeatSimConfig = {
+          ...activeHeatSim,
+          isRunning: false,
+          objects: activeHeatSim.objects.map((o) => ({
+            ...o,
+            burnerState: o.burnerState ? { ...o.burnerState } : undefined,
+            containerState: o.containerState ? { ...o.containerState } : undefined,
+            thermometerState: o.thermometerState ? { ...o.thermometerState } : undefined,
+            tripodState: o.tripodState ? { ...o.tripodState } : undefined,
+          })),
+          graph: { ...activeHeatSim.graph },
+          graphs: activeHeatSim.graphs ? activeHeatSim.graphs.map((g) => ({ ...g })) : undefined,
+          history: (activeHeatSim.history || []).slice(),
+        };
         liveSimRef.current = cloned;
-        persistHeatSimLive(cloned);
         if (activeHeatSim.isRunning) {
           updateActiveHeatSim((prev) => ({ ...prev, isRunning: false }), false);
         }
@@ -206,15 +235,18 @@ export function useHeatSimulation(
               if (o.tripodState) live.tripodState = o.tripodState;
             }
           } else {
-            liveSimRef.current.objects.push(JSON.parse(JSON.stringify(o)));
+            liveSimRef.current.objects.push({
+              ...o,
+              burnerState: o.burnerState ? { ...o.burnerState } : undefined,
+              containerState: o.containerState ? { ...o.containerState } : undefined,
+              thermometerState: o.thermometerState ? { ...o.thermometerState } : undefined,
+              tripodState: o.tripodState ? { ...o.tripodState } : undefined,
+            });
           }
         }
         liveSimRef.current.objects = liveSimRef.current.objects.filter((lo) =>
           activeHeatSim.objects.some((o) => o.id === lo.id)
         );
-        if (!liveSimRef.current.isRunning) {
-          persistHeatSimLive(liveSimRef.current);
-        }
       }
     } else {
       liveSimRef.current = null;
@@ -264,7 +296,7 @@ export function useHeatSimulation(
         const nextSims = curSims.map((s: HeatSimConfig) => (s.id === activeId ? updater(s) : s));
         const matched = nextSims.find((s) => s.id === activeId);
         if (matched) {
-          liveSimRef.current = JSON.parse(JSON.stringify(matched));
+          liveSimRef.current = cloneHeatSimFast(matched);
           persistHeatSimLive(matched);
         }
         return {
@@ -281,7 +313,7 @@ export function useHeatSimulation(
       if (page.heatSims && page.heatSims.length > 0) {
         const found = page.heatSims.find((s: HeatSimConfig) => s.id === page.activeHeatSimId) || page.heatSims[0];
         const restored = restoreHeatSimFromStorage(found);
-        liveSimRef.current = JSON.parse(JSON.stringify(restored));
+        liveSimRef.current = cloneHeatSimFast(restored);
         return restored;
       }
       const newSim = createDefaultHeatSim(280, 360);
@@ -1059,6 +1091,10 @@ export function useHeatSimulation(
     (_e: React.PointerEvent | PointerEvent, lx: number, ly: number, currentTool?: string): boolean => {
       const sim = liveSimRef.current || activeHeatSim;
       if (!sim) return false;
+      // Never intercept Eraser or Laser strokes — let Eraser erase strokes freely over/near Heat apparatus!
+      if (currentTool === 'eraser' || currentTool === 'laser') return false;
+      const isInkTool =
+        currentTool === 'pen' || currentTool === 'pencil' || currentTool === 'highlighter';
 
       const selectedIds =
         sim.selectedObjectIds && sim.selectedObjectIds.length > 0
@@ -1144,6 +1180,7 @@ export function useHeatSimulation(
 
         // B. Resize handle at bottom-right
         if (
+          !isInkTool &&
           lx >= g.x + g.width - 24 &&
           lx <= g.x + g.width + 4 &&
           ly >= g.y + g.height - 24 &&
@@ -1164,8 +1201,8 @@ export function useHeatSimulation(
           return true;
         }
 
-        // C. Inside Graph Card: Header drag or card click absorption
-        if (lx >= g.x && lx <= g.x + g.width && ly >= g.y && ly <= g.y + g.height) {
+        // C. Inside Graph Card: Header drag or card click absorption (only when not drawing ink!)
+        if (!isInkTool && lx >= g.x && lx <= g.x + g.width && ly >= g.y && ly <= g.y + g.height) {
           if (ly <= g.y + 36) {
             dragRef.current = {
               objectId: g.id || 'graph',

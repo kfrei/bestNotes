@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import katex from 'katex';
 import {
   Pen,
@@ -8393,12 +8393,7 @@ export default function App() {
                 boundContainerIds: g.boundContainerIds ? [...g.boundContainerIds] : undefined,
               }))
             : undefined,
-          history: hs.history
-            ? hs.history.map((h) => ({
-                ...h,
-                tempsByContainerId: h.tempsByContainerId ? { ...h.tempsByContainerId } : undefined,
-              }))
-            : [],
+          history: hs.history ? hs.history.slice() : [],
           elapsedSec: hs.elapsedSec ?? 0,
           ambientTemperature: hs.ambientTemperature ?? 20,
         }))
@@ -8410,7 +8405,7 @@ export default function App() {
     activeAtomSimId: p.activeAtomSimId,
   }), []);
 
-  const MAX_UNDO_STACK_SIZE = 250;
+  const MAX_UNDO_STACK_SIZE = 80;
   const suppressNextUndoRecordRef = useRef<boolean>(false);
   const textEditUndoRecordedForIdRef = useRef<string | null>(null);
   const undoStackRef = useRef<NotePage[]>(undoStack);
@@ -8708,14 +8703,25 @@ export default function App() {
     queueMicrotask(() => renderStaticSceneRef.current?.());
   }, []);
 
+  const simDragCommitRafRef = useRef<number | null>(null);
+  const flushPendingSimDragCommit = useCallback(() => {
+    if (simDragCommitRafRef.current !== null) {
+      window.cancelAnimationFrame(simDragCommitRafRef.current);
+      simDragCommitRafRef.current = null;
+      setNotebooks(notebooksRef.current);
+    }
+  }, []);
+
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       const liveNbId = activeNotebookLiveRef.current.id;
       const targetIdx = isDrawingRef.current
         ? (activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current)
         : activePageIndexLiveRef.current;
-      userEditedInSessionRef.current.add(liveNbId);
-      saveUserEditedSessionIds(userEditedInSessionRef.current);
+      if (!userEditedInSessionRef.current.has(liveNbId)) {
+        userEditedInSessionRef.current.add(liveNbId);
+        saveUserEditedSessionIds(userEditedInSessionRef.current);
+      }
       const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
       suppressNextUndoRecordRef.current = false;
 
@@ -8745,9 +8751,35 @@ export default function App() {
       notebooksRef.current = nextNotebooks;
       const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
       if (liveNb) activeNotebookLiveRef.current = liveNb;
-      setNotebooks(nextNotebooks);
-      setIsDirty(true);
-      setSyncStatus('dirty');
+
+      const isHighFreqSimDrag =
+        !shouldRecordUndo &&
+        isDrawingRef.current &&
+        (draggingAtomHandleRef.current !== null ||
+          draggingForceHandleRef.current !== null ||
+          draggingSpringAmpHandleRef.current !== null ||
+          draggingSpringGraphResizeRef.current !== null ||
+          draggingSpringGraphRef.current !== null ||
+          draggingSpringMassRef.current !== null);
+
+      if (isHighFreqSimDrag) {
+        if (simDragCommitRafRef.current === null) {
+          simDragCommitRafRef.current = window.requestAnimationFrame(() => {
+            simDragCommitRafRef.current = null;
+            setNotebooks(notebooksRef.current);
+            setIsDirty(true);
+            setSyncStatus('dirty');
+          });
+        }
+      } else {
+        if (simDragCommitRafRef.current !== null) {
+          window.cancelAnimationFrame(simDragCommitRafRef.current);
+          simDragCommitRafRef.current = null;
+        }
+        setNotebooks(nextNotebooks);
+        setIsDirty(true);
+        setSyncStatus('dirty');
+      }
     },
     [activeNotebook.id, activePageIndex, clonePageFast, isSamePageStateForUndo, pushUndoSnapshot]
   );
@@ -8757,9 +8789,11 @@ export default function App() {
   const heatSimLiveRef = useRef(heatSim);
   heatSimLiveRef.current = heatSim;
   const heatSimLastFrameRef = useRef<number | null>(null);
-  const [simCanvasWakeTick, setSimCanvasWakeTick] = useState<number>(0);
+  const lastHeatIdleSigRef = useRef<string>('');
+  const wakeSimCanvasImplRef = useRef<(() => void) | null>(null);
   const wakeSimCanvas = useCallback(() => {
-    setSimCanvasWakeTick((t) => (t + 1) % 1000000);
+    lastHeatIdleSigRef.current = '';
+    wakeSimCanvasImplRef.current?.();
   }, []);
 
   /**
@@ -8837,7 +8871,7 @@ export default function App() {
               });
             }
             let nextAtomSims = p.atomSims;
-            if (opts?.closingTab && p.atomSims && p.atomSims.some((as) => as.isRotating !== false)) {
+            if (p.atomSims && p.atomSims.some((as) => as.isRotating !== false)) {
               pChanged = true;
               nextAtomSims = p.atomSims.map((as) =>
                 as.isRotating !== false ? { ...as, isRotating: false } : as
@@ -14569,6 +14603,7 @@ export default function App() {
   const checkScrollSpyActiveCircuitRef = useRef<
     ((panY: number, zoom: number, wsH: number) => void) | null
   >(null);
+  const syncActivePageFromPanYRef = useRef<((panY: number) => void) | null>(null);
   const applyPaperTransformDirect = useCallback(
     (
       nextZoom: number,
@@ -14765,6 +14800,9 @@ export default function App() {
           debouncedTransformCommitRef.current = null;
           setZoom(zoomRef.current);
           setPan({ ...panRef.current });
+          if (!keepActivePage) {
+            syncActivePageFromPanYRef.current?.(panRef.current.y);
+          }
         }, 120);
       }
     },
@@ -15000,6 +15038,7 @@ export default function App() {
     },
     [activeNotebook.pages, activePageIndex, getMultiPageSpreadCols]
   );
+  syncActivePageFromPanYRef.current = syncActivePageFromPanY;
 
   const insertPageAtIndex = useCallback(
     (insertIdx: number) => {
@@ -19519,7 +19558,6 @@ export default function App() {
         }
         const nextPanY = panRef.current.y - e.deltaY;
         applyPaperTransformDirect(zoomRef.current, panRef.current.x - e.deltaX, nextPanY, false);
-        syncActivePageFromPanY(nextPanY);
       }
     };
 
@@ -19809,6 +19847,7 @@ export default function App() {
 
   // Auto-deduplicate any identical default sim names (e.g. two pages both having 'sim01') across the active notebook
   useEffect(() => {
+    if (!activeNotebook.pages.some((p) => p.circuitSims && p.circuitSims.length > 0)) return;
     const seen = new Set<string>();
     let hasDuplicate = false;
     for (const p of activeNotebook.pages) {
@@ -20034,9 +20073,11 @@ export default function App() {
   // ============================================================================
   // SPRING & HARMONIC OSCILLATION SIMULATION ENGINE (ελ01, ελ02, ...)
   // ============================================================================
+  const EMPTY_SPRING_SIMS: SpringSimConfig[] = [];
   const getValidSpringSims = (page: NotePage): SpringSimConfig[] => {
+    if (!page.springSims || page.springSims.length === 0) return EMPTY_SPRING_SIMS;
     const strokeIdSet = new Set(page.strokes.map((s) => s.id));
-    return (page.springSims || []).filter(
+    return page.springSims.filter(
       (sim) => strokeIdSet.has(sim.eqSpringStrokeId) && strokeIdSet.has(sim.massStrokeId)
     );
   };
@@ -22547,7 +22588,7 @@ export default function App() {
         selectedAtomId: newAtomId,
         bonds: [],
         shellDisplayMode: 'auto',
-        isRotating: true,
+        isRotating: false,
         showReactionEquation: false,
         showAtomsBelowReaction: true,
       };
@@ -22657,7 +22698,7 @@ export default function App() {
               selectedAtomId: newAtomId,
               bonds: [],
               shellDisplayMode: 'auto',
-              isRotating: true,
+              isRotating: false,
               showReactionEquation: false,
               showAtomsBelowReaction: true,
             };
@@ -22698,7 +22739,7 @@ export default function App() {
             selectedAtomId: newAtomId,
             bonds: [],
             shellDisplayMode: 'auto',
-            isRotating: true,
+            isRotating: false,
             showReactionEquation: false,
             showAtomsBelowReaction: true,
           };
@@ -24332,6 +24373,12 @@ export default function App() {
   useEffect(() => {
     if (isSpringSimulating || springSettleAnim || isDrawingRef.current) return;
     const sims = getValidSpringSims(activePage);
+    if (
+      sims.length === 0 &&
+      !activePage.strokes.some((s) => s.shapeType === 'hooked-weight')
+    ) {
+      return;
+    }
     const hasOversizedHookedWeight = activePage.strokes.some((s) => {
       if (s.shapeType !== 'hooked-weight') return false;
       const b = getStrokeBounds(s);
@@ -28116,13 +28163,147 @@ export default function App() {
     return circuitGlowSpritesRef.current;
   };
 
+  const activePageLiveForSimRef = useRef<NotePage>(activePage);
+  activePageLiveForSimRef.current = activePage;
+  const lastHeatIdlePageIdRef = useRef<string>('');
+
+  const hasAnySimOverlayOnActivePage = Boolean(
+    (activePage.circuitSims && activePage.circuitSims.length > 0) ||
+      (activePage.heatSims && activePage.heatSims.length > 0) ||
+      (activePage.springSims && activePage.springSims.length > 0) ||
+      (activePage.forceSims && activePage.forceSims.length > 0) ||
+      (activePage.atomSims && activePage.atomSims.length > 0) ||
+      showSimulationPanel ||
+      isSimulating ||
+      isSpringSimulating ||
+      circuitProposal !== null ||
+      circuitAlignFlashStart !== null ||
+      springSettleAnim !== null ||
+      springPhaseShiftAnim !== null ||
+      hookeLineAnim !== null ||
+      forceSimAnim !== null ||
+      atomReactionAnim !== null ||
+      isLivePdfMode
+  );
+
+  // Hash ONLY strokes that belong to Circuits, Springs, or Forces!
+  // Freehand note-taking (even 2,000+ handwritten words) produces ZERO signature changes and 0.00 ms simCanvas overhead!
+  const simRelevantStrokesSig = useMemo(() => {
+    const hasCircuits = Boolean(activePage.circuitSims && activePage.circuitSims.length > 0);
+    const hasSprings = Boolean(activePage.springSims && activePage.springSims.length > 0);
+    const hasForces = Boolean(activePage.forceSims && activePage.forceSims.length > 0);
+    if (!hasCircuits && !hasSprings && !hasForces && !springSettleAnim?.springStrokeId) {
+      return '';
+    }
+    const trackedIds = new Set<string>();
+    if (hasCircuits) {
+      for (const cs of activePage.circuitSims!) {
+        for (const id of cs.strokeIds || []) trackedIds.add(id);
+      }
+    }
+    if (hasSprings) {
+      for (const sm of activePage.springSims!) {
+        if (sm.eqSpringStrokeId) trackedIds.add(sm.eqSpringStrokeId);
+        if (sm.massStrokeId) trackedIds.add(sm.massStrokeId);
+        if (sm.naturalSpringStrokeId) trackedIds.add(sm.naturalSpringStrokeId);
+      }
+    }
+    if (springSettleAnim?.springStrokeId) {
+      trackedIds.add(springSettleAnim.springStrokeId);
+    }
+    if (hasForces) {
+      for (const fs of activePage.forceSims!) {
+        if (fs.primaryStrokeId) trackedIds.add(fs.primaryStrokeId);
+        if (fs.secondaryStrokeId) trackedIds.add(fs.secondaryStrokeId);
+        if (fs.supportStrokeId) trackedIds.add(fs.supportStrokeId);
+      }
+    }
+    let h1 = 0x811c9dc5;
+    let h2 = 5381;
+    let count = 0;
+    const mix = (v: number) => {
+      const iv = v | 0;
+      h1 ^= iv;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 = (Math.imul(h2, 33) ^ iv) | 0;
+    };
+    const mixStr = (str: string | undefined) => {
+      if (!str) {
+        mix(0);
+        return;
+      }
+      mix(str.length);
+      for (let i = 0; i < str.length; i++) mix(str.charCodeAt(i));
+    };
+    for (let i = 0; i < activePage.strokes.length; i++) {
+      const s = activePage.strokes[i];
+      const isRelevant =
+        trackedIds.has(s.id) ||
+        (hasCircuits && isCircuitSimConnectedStroke(s)) ||
+        (hasSprings &&
+          (s.shapeType === 'spring' ||
+            s.shapeType === 'hooked-weight' ||
+            s.shapeType === 'spring-pointer' ||
+            Boolean(s.attachedToSpringId) ||
+            Boolean(s.attachedToWeightId) ||
+            Boolean(s.springSupport)));
+      if (!isRelevant) continue;
+      count++;
+      mixStr(s.id);
+      mixStr(s.shapeType);
+      mixStr(s.color);
+      mixStr(s.fillColor);
+      mixStr(s.fillStyle);
+      mixStr(s.layerId);
+      mixStr(s.attachedToSpringId);
+      mixStr(s.attachedToWeightId);
+      mix(Math.round((s.width || 0) * 10));
+      mix(Math.round((s.opacity ?? 1) * 100));
+      const pts = s.points;
+      mix(pts.length);
+      if (pts.length > 0) {
+        const p0 = pts[0];
+        const pm = pts[pts.length >> 1];
+        const pN = pts[pts.length - 1];
+        mix(Math.round(p0.x * 4));
+        mix(Math.round(p0.y * 4));
+        mix(Math.round(pm.x * 4));
+        mix(Math.round(pm.y * 4));
+        mix(Math.round(pN.x * 4));
+        mix(Math.round(pN.y * 4));
+      }
+    }
+    return `${count}:${h1 >>> 0}:${h2 >>> 0}`;
+  }, [
+    activePage.strokes,
+    activePage.circuitSims,
+    activePage.springSims,
+    activePage.forceSims,
+    springSettleAnim?.springStrokeId,
+  ]);
+
   useEffect(() => {
+    const activePage = activePageLiveForSimRef.current;
     const canvas = simCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      wakeSimCanvasImplRef.current = null;
+      autoSwitchHitRef.current = null;
+      proposalOverlayHitRef.current = null;
+      springOverlayHitRef.current = null;
+      forceOverlayHitRef.current = null;
+      atomOverlayHitRef.current = null;
+      livePdfSimButtonsRef.current = [];
+      return;
+    }
+    if (lastHeatIdlePageIdRef.current !== activePage.id) {
+      lastHeatIdlePageIdRef.current = activePage.id;
+      lastHeatIdleSigRef.current = '';
+    }
     if (simCanvasLastElRef.current !== canvas) {
       simCanvasLastElRef.current = canvas;
       simCanvasDirtyRef.current = false;
       prevSimDirtyRectRef.current = null;
+      lastHeatIdleSigRef.current = '';
     }
 
     // Strict active-view gate: NEVER run simulation RAF loops while in Library or Landing view!
@@ -28593,9 +28774,23 @@ export default function App() {
     const effectivePaperBg = getEffectivePaperColor(activePage);
 
     let rafId = 0;
-    let lastHeatIdleSig = '';
+    let wakeQueued = false;
+
+    const isPageYRangeVisible = (minY: number, maxY: number): boolean => {
+      if (!Number.isFinite(minY) || !Number.isFinite(maxY)) return true;
+      const curZoom = Math.max(0.05, zoomRef.current);
+      const pageTopY = getPageTopOffset(activePageIndexLiveRef.current, curZoom);
+      const screenTop = panRef.current.y + (pageTopY + minY) * curZoom;
+      const screenBottom = panRef.current.y + (pageTopY + maxY) * curZoom;
+      const wsH =
+        workspaceRef.current?.clientHeight ||
+        (typeof window !== 'undefined' ? window.innerHeight : 900);
+      return screenBottom >= -90 && screenTop <= wsH + 90;
+    };
 
     const renderSimFrame = (now: number) => {
+      wakeQueued = false;
+      const activePage = activePageLiveForSimRef.current;
       const heatApi = heatSimLiveRef.current;
       const hasHeatSims = Boolean(activePage.heatSims && activePage.heatSims.length > 0);
       const isOtherSimPresent =
@@ -28639,42 +28834,24 @@ export default function App() {
         }
         heatSimLastFrameRef.current = isHeatActive ? now : null;
 
-        const wCheck = canvas.width / CANVAS_DPR;
-        const hCheck = canvas.height / CANVAS_DPR;
-
-        // Viewport visibility check: skip GPU/Canvas work when the Heat Simulation is scrolled out of view
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0 && typeof window !== 'undefined') {
-          const scaleX = rect.width / Math.max(1, wCheck);
-          const scaleY = rect.height / Math.max(1, hCheck);
-          let anyVisible = false;
-          for (const hSim of activePage.heatSims!) {
-            const liveSim =
-              (heatApi.getLiveSim && heatApi.getLiveSim()?.id === hSim.id
-                ? heatApi.getLiveSim()
-                : hSim) || hSim;
-            const bounds = getHeatSimulationWorldBounds(liveSim);
-            if (!bounds) continue;
-            const screenTop = rect.top + bounds.minY * scaleY;
-            const screenBottom = rect.top + bounds.maxY * scaleY;
-            const screenLeft = rect.left + bounds.minX * scaleX;
-            const screenRight = rect.left + bounds.maxX * scaleX;
-            if (
-              screenBottom >= -60 &&
-              screenTop <= window.innerHeight + 60 &&
-              screenRight >= -60 &&
-              screenLeft <= window.innerWidth + 60
-            ) {
-              anyVisible = true;
-              break;
-            }
+        // Zero-reflow viewport visibility check: skip GPU/Canvas work when Heat Simulation is scrolled out of view
+        let anyVisible = false;
+        for (const hSim of activePage.heatSims!) {
+          const liveSim =
+            (heatApi.getLiveSim && heatApi.getLiveSim()?.id === hSim.id
+              ? heatApi.getLiveSim()
+              : hSim) || hSim;
+          const bounds = getHeatSimulationWorldBounds(liveSim);
+          if (!bounds || isPageYRangeVisible(bounds.minY, bounds.maxY)) {
+            anyVisible = true;
+            break;
           }
-          if (!anyVisible) {
-            if (isHeatActive) {
-              rafId = window.requestAnimationFrame(renderSimFrame);
-            }
-            return;
+        }
+        if (!anyVisible) {
+          if (isHeatActive) {
+            rafId = window.requestAnimationFrame(renderSimFrame);
           }
+          return;
         }
 
         if (!isHeatActive) {
@@ -28710,13 +28887,13 @@ export default function App() {
             )
             .join(';')}`;
 
-          if (sig === lastHeatIdleSig) {
+          if (sig === lastHeatIdleSigRef.current) {
             // Truly paused & unchanged -> STOP RAF (0 FPS / 0% CPU)! Woken on demand by wakeSimCanvas().
             return;
           }
-          lastHeatIdleSig = sig;
+          lastHeatIdleSigRef.current = sig;
         } else {
-          lastHeatIdleSig = '';
+          lastHeatIdleSigRef.current = '';
         }
       }
 
@@ -28975,12 +29152,13 @@ export default function App() {
         const btnAlpha = 0.72 + 0.28 * btnBlink;
         const btnGlow = 6 + 9 * btnBlink;
 
-        // Green Accept Pill ("✓ Αποδοχή")
+        // Green Accept Pill ("✓ Αποδοχή") — 0 shadowBlur for 60fps Retina speed
         ctx.save();
         ctx.globalAlpha = btnAlpha;
-        ctx.shadowColor = 'rgba(22, 163, 74, 0.55)';
-        ctx.shadowBlur = btnGlow;
-        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = 'rgba(22, 163, 74, 0.24)';
+        ctx.beginPath();
+        ctx.roundRect(pillX - 3, pillY - 2, pillW + 6, pillH + 6, 20);
+        ctx.fill();
         ctx.fillStyle = '#16a34a';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.2;
@@ -28989,7 +29167,6 @@ export default function App() {
         ctx.fill();
         ctx.stroke();
 
-        ctx.shadowColor = 'transparent';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
@@ -28997,12 +29174,13 @@ export default function App() {
         ctx.fillText('✓ Αποδοχή', pillX + pillW / 2, pillY + pillH / 2 + 0.5);
         ctx.restore();
 
-        // Red Cancel Pill ("✕ Ακύρωση")
+        // Red Cancel Pill ("✕ Ακύρωση") — 0 shadowBlur for 60fps Retina speed
         ctx.save();
         ctx.globalAlpha = btnAlpha;
-        ctx.shadowColor = 'rgba(220, 38, 38, 0.55)';
-        ctx.shadowBlur = btnGlow;
-        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.24)';
+        ctx.beginPath();
+        ctx.roundRect(cancelPillX - 3, pillY - 2, cancelPillW + 6, pillH + 6, 20);
+        ctx.fill();
         ctx.fillStyle = '#dc2626';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.2;
@@ -29011,7 +29189,6 @@ export default function App() {
         ctx.fill();
         ctx.stroke();
 
-        ctx.shadowColor = 'transparent';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
@@ -29026,6 +29203,9 @@ export default function App() {
 
       if ((isSimulating || showSimulationPanel) && preparedCircuitSims.length > 0) {
         for (const pcs of preparedCircuitSims) {
+          if (pcs.bounds && !isPageYRangeVisible(pcs.bounds.minY, pcs.bounds.maxY)) {
+            continue;
+          }
           const {
             simData,
             particleChains,
@@ -30373,11 +30553,14 @@ export default function App() {
               }
               ctx.stroke();
 
-              // Glowing leading phase dot at current instant t
+              // Glowing leading phase dot at current instant t (zero-blur concentric halo)
               ctx.save();
+              ctx.globalAlpha = 0.25;
               ctx.fillStyle = meta.curveColor;
-              ctx.shadowColor = meta.curveColor;
-              ctx.shadowBlur = 8;
+              ctx.beginPath();
+              ctx.arc(tipX, tipY, 8.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
               ctx.beginPath();
               ctx.arc(tipX, tipY, 5.2, 0, Math.PI * 2);
               ctx.fill();
@@ -32299,9 +32482,12 @@ export default function App() {
           ctx.lineTo(bx, by);
           ctx.stroke();
 
-          ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
-          ctx.shadowBlur = 8;
-          ctx.shadowOffsetY = 3;
+          // Crisp zero-blur drop shadow behind bob
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+          ctx.beginPath();
+          ctx.arc(bx, by + 3, 20, 0, Math.PI * 2);
+          ctx.fill();
+
           ctx.fillStyle = '#1e293b';
           ctx.strokeStyle = isDraggingBob ? '#38bdf8' : '#0f172a';
           ctx.lineWidth = isDraggingBob ? 2.4 : 1.8;
@@ -32802,6 +32988,19 @@ export default function App() {
               : Number.isFinite(minSimY)
               ? Math.max(22, minSimY - 54)
               : 120;
+          const estAtomMinY = Math.min(
+            topBarY - 65,
+            Number.isFinite(minSimY) ? minSimY - 40 : topBarY - 65,
+            aSim.mol3DBoxY !== undefined ? aSim.mol3DBoxY - 20 : Infinity
+          );
+          const estAtomMaxY = Math.max(
+            topBarY + 290,
+            Number.isFinite(maxSimY) ? maxSimY + 280 : topBarY + 290,
+            aSim.mol3DBoxY !== undefined ? aSim.mol3DBoxY + 248 : -Infinity
+          );
+          if (!isPageYRangeVisible(estAtomMinY, estAtomMaxY)) {
+            continue;
+          }
 
           // 1. Reaction Header Bar (Κλικ σε κάθε Αντιδρών/Προϊόν + Επιλογή με Λάσο για Resize & Drag)
           if (aSim.showReactionEquation) {
@@ -34163,11 +34362,12 @@ export default function App() {
               origPitch: aSim.rot3DPitch ?? 0.24,
             });
 
-            // Πλαίσιο 3D Μορίου (Draggable) — Απαλό μπεζ-πράσινο οργανικό/τυχαίο dégradé με ελαφριά διαφάνεια
+              // Πλαίσιο 3D Μορίου (Draggable) — Απαλό μπεζ-πράσινο οργανικό/τυχαίο dégradé χωρίς ακριβό GPU shadowBlur
             ctx.save();
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.10)';
-            ctx.shadowBlur = 14;
-            ctx.shadowOffsetY = 4;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.06)';
+            ctx.beginPath();
+            ctx.roundRect(boxX + 1, boxY + 4, boxW, boxH, 16);
+            ctx.fill();
 
             // ντετερμινιστικό ψευδο-τυχαίο seed ανά κάρτα/μόριο ώστε το dégradé να είναι οργανικό χωρίς τρεμόπαιγμα
             const seedStr = `${aSim.id}_${mol3D.id}`;
@@ -34736,15 +34936,15 @@ export default function App() {
                 const pa = item.atom;
                 ctx.save();
 
-                // 1. 3D Drop Shadow / Ambient Occlusion πίσω και κάτω από τη σφαίρα
+                // 1. 3D Drop Shadow / Ambient Occlusion πίσω και κάτω από τη σφαίρα (zero-blur concentric AO)
                 ctx.save();
-                ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
-                ctx.shadowBlur = pa.rPx * 0.50;
-                ctx.shadowOffsetX = pa.rPx * 0.12;
-                ctx.shadowOffsetY = pa.rPx * 0.20;
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.16)';
                 ctx.beginPath();
-                ctx.arc(pa.px, pa.py, pa.rPx * 0.96, 0, Math.PI * 2);
+                ctx.arc(pa.px + pa.rPx * 0.14, pa.py + pa.rPx * 0.22, pa.rPx * 1.04, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.26)';
+                ctx.beginPath();
+                ctx.arc(pa.px + pa.rPx * 0.10, pa.py + pa.rPx * 0.16, pa.rPx * 0.94, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
 
@@ -34830,16 +35030,14 @@ export default function App() {
 
                 ctx.restore();
 
-                // 5. Σύμβολο Στοιχείου πάνω στην 3D σφαίρα με 3D σκιά βάθους
+                // 5. Σύμβολο Στοιχείου πάνω στην 3D σφαίρα με crisp σκιά βάθους (zero shadowBlur)
                 ctx.save();
                 ctx.font = `bold ${Math.round(Math.max(11, pa.rPx * 0.60))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-                ctx.shadowColor = 'rgba(2, 6, 23, 0.82)';
-                ctx.shadowBlur = 4;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 1.5;
-                ctx.fillStyle = '#ffffff';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'rgba(2, 6, 23, 0.65)';
+                ctx.fillText(pa.symbol, pa.px, pa.py + 1.2);
+                ctx.fillStyle = '#ffffff';
                 ctx.fillText(pa.symbol, pa.px, pa.py - 0.5);
                 ctx.restore();
 
@@ -34922,13 +35120,16 @@ export default function App() {
           if (liveSim.isRunning || heatApi.isDragging() || isHeatSimulationVisuallyActive(liveSim)) {
             isSharedHeatVisuallyActive = true;
           }
-          renderHeatSimulation(ctx, liveSim || hSim, {
-            isDark: isDarkPaper,
-            hoverPoint: heatApi.getHoverPoint(),
-            isSelectActive:
-              isHeatSelectTool ||
-              (showSimulationPanel && simActiveCategory === 'heat'),
-          });
+          const bounds = getHeatSimulationWorldBounds(liveSim);
+          if (!bounds || isPageYRangeVisible(bounds.minY, bounds.maxY)) {
+            renderHeatSimulation(ctx, liveSim || hSim, {
+              isDark: isDarkPaper,
+              hoverPoint: heatApi.getHoverPoint(),
+              isSelectActive:
+                isHeatSelectTool ||
+                (showSimulationPanel && simActiveCategory === 'heat'),
+            });
+          }
         }
 
         if ((!showHeatStopwatch || !heatStopwatchRunning) && heatApi.activeHeatSim?.isRunning) {
@@ -35199,13 +35400,22 @@ export default function App() {
       }
     };
 
+    wakeSimCanvasImplRef.current = () => {
+      if (!wakeQueued) {
+        wakeQueued = true;
+        window.cancelAnimationFrame(rafId);
+        rafId = window.requestAnimationFrame(renderSimFrame);
+      }
+    };
     rafId = window.requestAnimationFrame(renderSimFrame);
     return () => {
+      wakeSimCanvasImplRef.current = null;
       window.cancelAnimationFrame(rafId);
     };
   }, [
     viewMode,
-    simCanvasWakeTick,
+    hasAnySimOverlayOnActivePage,
+    simRelevantStrokesSig,
     isLivePdfMode,
     isSimulating,
     isSpringSimulating,
@@ -35218,8 +35428,6 @@ export default function App() {
     atomReactionAnim,
     forceSimSubTab,
     selectedHookeSpringId,
-    selectedStrokeIds,
-    rulerState,
     showSimulationPanel,
     simActiveCategory,
     circuitAlignFlashStart,
@@ -35228,7 +35436,6 @@ export default function App() {
     activePage.circuitSims,
     activePage.activeCircuitSimId,
     activePage.id,
-    activePage.strokes,
     activePage.springSims,
     activePage.activeSpringSimId,
     activePage.forceSims,
@@ -38680,7 +38887,7 @@ export default function App() {
     // 0a-forces. Interactive Forces Simulation Canvas Buttons & Handles:
     //            - On-Canvas Pill Buttons (Ανάλυση, Σύνθεση, Δυνάμεις, Παύση, Τροχιά, Συνισταμένη, ◀, ▶, Υπολογισμοί)
     //            - Draggable Vector Tips (F, F1, F2, or Free Vector Tip >), Origin Dot, Green Incline Peak Handle, Paused Pendulum Bob & Calc Card
-    if (forceOverlayHitRef.current) {
+    if (forceOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
       const fHit = forceOverlayHitRef.current;
       const curForceSim = getActiveForceSim(targetPage);
       if (!fHit.simId || (curForceSim && curForceSim.id === fHit.simId)) {
@@ -38813,7 +39020,7 @@ export default function App() {
     }
 
     // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Reaction Card Selection/Resize/Drag, Valence Electrons & Nuclei:
-    if (atomOverlayHitRef.current) {
+    if (atomOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
       const aHit = atomOverlayHitRef.current;
 
       // 0-btn) Priority 1: Explicit 3D Window Controls (☁️ Νέφος ON/OFF, ✕ Close, 3D Molecule Tabs) & Reaction View Toggle (2D/3D, ➔, Bond Label)
@@ -39106,7 +39313,7 @@ export default function App() {
       setActiveChemCorrection(null);
     }
 
-    if (atomOverlayHitRef.current) {
+    if (atomOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
       const aHit = atomOverlayHitRef.current;
 
       // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit (or central atom for proportional molecule scaling)
@@ -39320,7 +39527,7 @@ export default function App() {
     //            1) Blue Square Handles (□) on the +A / -A blue dashed lines (symmetric amplitude sliding)
     //            2) Draggable Live Graph Cards (x(t), υ(t), α(t)) & their "✕" close buttons
     //            3) Direct Mass Block pulling along the oscillation axis to release into SHM!
-    if (springOverlayHitRef.current) {
+    if (springOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
       const spHit = springOverlayHitRef.current;
       // 0) Check On-Canvas "⏸ Παύση / ▶ Συνέχεια", "🧹 Καθαρισμός" & "⏹" Pill Buttons
       if (
@@ -40730,7 +40937,7 @@ export default function App() {
     }
 
     // Highlight the corresponding row in light-blue (σιέλ) in the Hooke Table of Values when clicking any spring on the canvas
-    {
+    if (effectiveTool === 'lasso' && targetPage.springSims && targetPage.springSims.length > 0) {
       for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
         const s = targetPage.strokes[i];
         if (s.shapeType !== 'spring') continue;
@@ -40743,6 +40950,11 @@ export default function App() {
 
     // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
     if (effectiveTool === 'lasso') {
+      const parentWeightIdsOnPage = new Set<string>();
+      for (let i = 0; i < targetPage.strokes.length; i++) {
+        const aw = targetPage.strokes[i].attachedToWeightId;
+        if (aw) parentWeightIdsOnPage.add(aw);
+      }
       // Direct 1-Step Touch/Click & Drag on any Chained/Hanging Weight, Pointer Arrow, or Spring:
       // If the user touches a specific weight, pointer, or spring directly on its drawn line/body, grab THAT exact object immediately!
       if (!isAdditiveSelect) {
@@ -40774,7 +40986,7 @@ export default function App() {
               s.shapeType === 'hooked-weight' ||
               Boolean(s.attachedToWeightId) ||
               (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
-              targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
+              parentWeightIdsOnPage.has(s.id);
             if (!isChainOrHookedWeight) continue;
             if (isPointNearStroke(pt, s, 9, s.shapeType === 'hooked-weight')) {
               directWeightHit = s;
@@ -41285,7 +41497,7 @@ export default function App() {
             Boolean(s.attachedToSpringId) ||
             Boolean(s.attachedToWeightId) ||
             (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
-            targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
+            parentWeightIdsOnPage.has(s.id);
           if (!isAttachedOrHookedWeight) continue;
           if (isPointNearStroke(pt, s, 9, s.shapeType === 'hooked-weight')) {
             hitWeightStroke = s;
@@ -42380,6 +42592,8 @@ export default function App() {
     }
   };
 
+  const wasHoveringHeatGraphRef = useRef<boolean>(false);
+
   // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (addNodeLongPressRef.current) {
@@ -42397,9 +42611,8 @@ export default function App() {
       if (activePage.heatSims && activePage.heatSims.length > 0) {
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
         heatSim.handleHover(hoverPt.x, hoverPt.y);
-        if (
-          !heatStopwatchRunning &&
-          activePage.heatSims.some((hs) =>
+        if (!heatStopwatchRunning) {
+          const isOverVisibleGraph = activePage.heatSims.some((hs) =>
             (hs.graphs || (hs.graph ? [hs.graph] : [])).some(
               (g) =>
                 g.visible &&
@@ -42408,9 +42621,11 @@ export default function App() {
                 hoverPt.y >= g.y - 16 &&
                 hoverPt.y <= g.y + g.height + 16
             )
-          )
-        ) {
-          wakeSimCanvas();
+          );
+          if (isOverVisibleGraph || wasHoveringHeatGraphRef.current) {
+            wasHoveringHeatGraphRef.current = isOverVisibleGraph;
+            wakeSimCanvas();
+          }
         }
       }
       // Apple Pencil Pro Hover Barrel Roll (`twist` sensor in Safari):
@@ -47914,6 +48129,7 @@ export default function App() {
     cancelAddNodeLongPress();
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+    flushPendingSimDragCommit();
 
     if (heatSim.handlePointerUp()) {
       renderStaticSceneRef.current();
@@ -47955,7 +48171,6 @@ export default function App() {
               ) <=
               candR + 38
             ) {
-              suppressNextUndoRecordRef.current = true;
               bondAtomsByElectronDrag(
                 finishedAtomDrag.simId,
                 finishedAtomDrag.atomId,
@@ -49341,6 +49556,43 @@ export default function App() {
       const combined = [...page.strokes, { ...newStroke, zOrder: strokeZ }];
       if (newStroke.shapeType === 'resistor') {
         return splitWiresAndSyncPageSims(page, combined, [newStroke.id]);
+      }
+      // Fast O(1) incremental staticCanvas cache promotion:
+      // Plain non-highlighter freehand strokes on the top layer were ALREADY drawn onto staticCanvasRef at 2x Retina above!
+      // When they don't overlap text boxes, tape strips, or ruler overlays, promote cachedEntry.strokes so useLayoutEffect skips the 20.13 MB full-page replay!
+      if (
+        !isHighlighter &&
+        !isShape &&
+        !rulerState.visible &&
+        (page.tapes?.length || 0) === 0 &&
+        activeLayerId === (page.layers?.[0]?.id ?? activeLayerId)
+      ) {
+        const cachedEntry = staticPageRenderCacheRef.current.get(page.id);
+        if (
+          cachedEntry &&
+          cachedEntry.wasActive &&
+          cachedEntry.canvas === staticCanvasRef.current &&
+          cachedEntry.strokes === page.strokes
+        ) {
+          const overlapsAnyText =
+            Boolean(page.texts && page.texts.length > 0) &&
+            (() => {
+              const sb = getStrokeBounds(newStroke);
+              return page.texts!.some((t) => {
+                const tw = t.boxWidth || 200;
+                const th = t.boxHeight || (t.fontSize || 20) * 1.5;
+                return (
+                  sb.minX <= t.x + tw &&
+                  sb.maxX >= t.x &&
+                  sb.minY <= t.y + th &&
+                  sb.maxY >= t.y
+                );
+              });
+            })();
+          if (!overlapsAnyText) {
+            cachedEntry.strokes = combined;
+          }
+        }
       }
       return {
         ...page,
@@ -52355,7 +52607,7 @@ export default function App() {
         selectedAtomId: builtProduct.atoms[0]?.id,
         bonds: builtProduct.bonds,
         shellDisplayMode: 'auto',
-        isRotating: true,
+        isRotating: false,
         showReactionEquation: true,
         reactionEquationText: finalEq,
         userRawReactionText: rawReaction,
@@ -52442,7 +52694,7 @@ export default function App() {
         selectedAtomId: builtProduct.atoms[0]?.id,
         bonds: builtProduct.bonds,
         shellDisplayMode: 'auto',
-        isRotating: true,
+        isRotating: false,
         showReactionEquation: true,
         reactionEquationText: finalEq,
         userRawReactionText: rawUserStr,
@@ -52618,7 +52870,7 @@ export default function App() {
         selectedAtomId: undefined,
         bonds: builtCompound.bonds,
         shellDisplayMode: 'auto',
-        isRotating: true,
+        isRotating: false,
         showReactionEquation: false,
         reactionEquationText: mol3D.formula,
         userRawReactionText: cleanFormula,
@@ -52687,7 +52939,7 @@ export default function App() {
         selectedAtomId: undefined,
         bonds: builtCompound.bonds,
         shellDisplayMode: 'auto',
-        isRotating: true,
+        isRotating: false,
         showReactionEquation: false,
         reactionEquationText: mol3D.formula,
         userRawReactionText: rawUserStr,
@@ -52731,6 +52983,7 @@ export default function App() {
   // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
   const mathGraphAnimRafRef = useRef<number | null>(null);
   const mathGraphAnimCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isMathGraphAnimating, setIsMathGraphAnimating] = useState<boolean>(false);
   const animateAndCommitMathGraph = useCallback(
     (
       graphBuilt: {
@@ -52761,6 +53014,7 @@ export default function App() {
         updateActivePage((page) => extraUpdater(page), true);
       }
 
+      setIsMathGraphAnimating(true);
       const startTime = performance.now();
       const step = (now: number) => {
         const elapsed = now - startTime;
@@ -52787,6 +53041,7 @@ export default function App() {
                 ctx.clearRect(0, 0, animCanvas.width, animCanvas.height);
               }
             }
+            setIsMathGraphAnimating(false);
           });
           return;
         }
@@ -67195,9 +67450,9 @@ export default function App() {
                     ? Math.floor(pageIdx / multiPageSpreadCols)
                     : pageIdx;
                 const rowDist = Math.abs(pageRow - activeRow);
-                // Keep 2x Retina GPU canvases strictly to <= 5 pages around activePageIndex to avoid VRAM exhaustion!
+                // Keep 2x Retina GPU canvases strictly to activePageIndex ± 1 (max 3 pages in single-column, or ± 1 row in spread) to cut iPad VRAM by ~75%!
                 const isCanvasMounted =
-                  activeNotebook.pages.length <= 8 || pageDist <= 2;
+                  multiPageSpreadCols > 1 ? rowDist <= 1 : pageDist <= 1;
                 // Mount lightweight preview <img> across 6 full rows above & below in Multi-Page Spread mode (or 8 pages in single column)
                 const isPreviewImgMounted =
                   activeNotebook.pages.length <= 24 ||
@@ -67459,8 +67714,8 @@ export default function App() {
                       className="absolute inset-0 pointer-events-none"
                     />
 
-                    {/* Layer 1.5: 60fps/120fps Interactive Physics & Circuit Simulation Overlay Canvas */}
-                    {isCurrentActive && (
+                    {/* Layer 1.5: 60fps/120fps Interactive Physics & Circuit Simulation Overlay Canvas — mounted ONLY when page has simulations or Sim panel is open (saves 20.13 MB VRAM on plain pages!) */}
+                    {isCurrentActive && hasAnySimOverlayOnActivePage && (
                       <canvas
                         ref={(el) => {
                           simCanvasRef.current = el;
@@ -69955,31 +70210,34 @@ export default function App() {
                       );
                     })}
 
-                    {/* Layer 2.2: 2x Retina Static Canvas for Strokes & Shapes positioned in front of Text Boxes */}
-                    <canvas
-                      ref={(el) => {
-                        if (el) {
-                          const targetW = Math.round(pW * CANVAS_DPR);
-                          const targetH = Math.round(pH * CANVAS_DPR);
-                          if (el.width !== targetW) el.width = targetW;
-                          if (el.height !== targetH) el.height = targetH;
-                          overTextCanvasMapRef.current.set(pageObj.id, el);
-                          if (isCurrentActive) overTextCanvasRef.current = el;
-                          if (!mountedCanvasNodesRef.current.has(el)) {
-                            mountedCanvasNodesRef.current.add(el);
-                            overCanvasDirtyMapRef.current.delete(pageObj.id);
-                            staticPageRenderCacheRef.current.delete(pageObj.id);
-                            scheduleCoalescedStaticRender();
+                    {/* Layer 2.2: 2x Retina Static Canvas for Strokes & Shapes positioned in front of Text Boxes — mounted ONLY on pages that actually have Text Boxes (saves 20.13 MB VRAM/page!) */}
+                    {Boolean(pageObj.texts && pageObj.texts.length > 0) && (
+                      <canvas
+                        ref={(el) => {
+                          if (el) {
+                            const targetW = Math.round(pW * CANVAS_DPR);
+                            const targetH = Math.round(pH * CANVAS_DPR);
+                            if (el.width !== targetW) el.width = targetW;
+                            if (el.height !== targetH) el.height = targetH;
+                            overTextCanvasMapRef.current.set(pageObj.id, el);
+                            if (isCurrentActive) overTextCanvasRef.current = el;
+                            if (!mountedCanvasNodesRef.current.has(el)) {
+                              mountedCanvasNodesRef.current.add(el);
+                              overCanvasDirtyMapRef.current.delete(pageObj.id);
+                              staticPageRenderCacheRef.current.delete(pageObj.id);
+                              scheduleCoalescedStaticRender();
+                            }
+                          } else {
+                            overTextCanvasMapRef.current.delete(pageObj.id);
+                            if (isCurrentActive) overTextCanvasRef.current = null;
                           }
-                        } else {
-                          overTextCanvasMapRef.current.delete(pageObj.id);
-                        }
-                      }}
-                      width={pW * CANVAS_DPR}
-                      height={pH * CANVAS_DPR}
-                      style={{ width: pW, height: pH }}
-                      className="absolute inset-0 pointer-events-none z-20"
-                    />
+                        }}
+                        width={pW * CANVAS_DPR}
+                        height={pH * CANVAS_DPR}
+                        style={{ width: pW, height: pH }}
+                        className="absolute inset-0 pointer-events-none z-20"
+                      />
+                    )}
 
                     {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when 3-10 discrete straight lines/edges are selected */}
                     {isCurrentActive &&
@@ -70022,8 +70280,8 @@ export default function App() {
                         );
                       })()}
 
-                    {/* Double-Buffered 2x Retina 60/120fps Canvas for Math Diagram + Pencil Hand Animation (Zero React Re-Renders / Zero Flicker) */}
-                    {isCurrentActive && (
+                    {/* Double-Buffered 2x Retina 60/120fps Canvas for Math Diagram + Pencil Hand Animation — mounted ONLY during active animation (saves 20.13 MB VRAM!) */}
+                    {isCurrentActive && isMathGraphAnimating && (
                       <canvas
                         ref={(el) => {
                           mathGraphAnimCanvasRef.current = el;

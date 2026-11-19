@@ -69,15 +69,22 @@ const circuitCompsByArrayCache = new WeakMap<StrokeObject[], CircuitComponentInf
 const circuitCompsBySigCache = new Map<string, CircuitComponentInfo[]>();
 
 function buildCircuitStrokesFastSig(strokes: StrokeObject[]): string | null {
-  if (strokes.length > 96) return null;
-  let sig = `${strokes.length}:`;
+  // Hash ONLY circuit components and straight wire lines — completely ignoring freehand handwriting strokes!
+  // Pages with 2,000+ handwritten strokes + a circuit remain 100% O(1) cached with no 96-stroke bailout.
+  let count = 0;
+  let sig = '';
   for (let i = 0; i < strokes.length; i++) {
     const s = strokes[i];
+    const kind = classifyCircuitStrokeKind(s);
+    const isWireCandidate = kind === null && s.isShape && s.shapeType === 'line';
+    if (kind === null && !isWireCandidate) continue;
+    count++;
+    if (count > 240) return null;
     const p0 = s.points[0];
     const pN = s.points[s.points.length - 1];
-    sig += `${s.id},${s.points.length},${p0 ? Math.round(p0.x * 2) : 0},${p0 ? Math.round(p0.y * 2) : 0},${pN ? Math.round(pN.x * 2) : 0},${pN ? Math.round(pN.y * 2) : 0};`;
+    sig += `${s.id},${kind || 'L'},${s.points.length},${p0 ? Math.round(p0.x * 2) : 0},${p0 ? Math.round(p0.y * 2) : 0},${pN ? Math.round(pN.x * 2) : 0},${pN ? Math.round(pN.y * 2) : 0};`;
   }
-  return sig;
+  return `${count}:${sig}`;
 }
 
 export function getCircuitComponentsWithTerminals(
@@ -1415,6 +1422,17 @@ export function getCircuitWireRailSnapDelta(
   candDy: number,
   snapRadius = 6.5
 ): { snapDx: number; snapDy: number } {
+  if (movingStrokeIds.size === 0) return { snapDx: 0, snapDy: 0 };
+  let hasAnyMovingCircuitOrLine = false;
+  for (let i = 0; i < strokes.length; i++) {
+    const s = strokes[i];
+    if (!movingStrokeIds.has(s.id)) continue;
+    if ((s.isShape && s.shapeType === 'line') || classifyCircuitStrokeKind(s) !== null) {
+      hasAnyMovingCircuitOrLine = true;
+      break;
+    }
+  }
+  if (!hasAnyMovingCircuitOrLine) return { snapDx: 0, snapDy: 0 };
   const comps = getCircuitComponentsWithTerminals(strokes);
   const movedComps = comps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
   if (movedComps.length === 0) {
@@ -2236,10 +2254,20 @@ export function adaptCircuitWiresOnScaleTransform(
   scaleMode: 'scale-x' | 'scale-y'
 ): StrokeObject[] {
   if (movingStrokeIds.size === 0) return nextStrokes;
+  let hasMovingWireLine = false;
+  let hasMovingComp = false;
+  for (let i = 0; i < prevStrokes.length; i++) {
+    const s = prevStrokes[i];
+    if (!movingStrokeIds.has(s.id)) continue;
+    if (s.isShape && s.shapeType === 'line') hasMovingWireLine = true;
+    else if (classifyCircuitStrokeKind(s) !== null) hasMovingComp = true;
+    if (hasMovingWireLine && hasMovingComp) break;
+  }
+  if (!hasMovingWireLine && !hasMovingComp) return nextStrokes;
   const prevComps = getCircuitComponentsWithTerminals(prevStrokes);
   if (prevComps.length === 0) return nextStrokes;
   const movedComps = prevComps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
-  if (movedComps.length > 0) return nextStrokes;
+  if (movedComps.length > 0 || !hasMovingWireLine) return nextStrokes;
 
   return adaptCircuitLoopFromSegments(
     prevStrokes,
@@ -2267,11 +2295,22 @@ export function adaptCircuitWiresOnComponentMove(
   if ((Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) || movingStrokeIds.size === 0) {
     return nextStrokes;
   }
+  let hasMovingWireLine = false;
+  let hasMovingComp = false;
+  for (let i = 0; i < prevStrokes.length; i++) {
+    const s = prevStrokes[i];
+    if (!movingStrokeIds.has(s.id)) continue;
+    if (s.isShape && s.shapeType === 'line') hasMovingWireLine = true;
+    else if (classifyCircuitStrokeKind(s) !== null) hasMovingComp = true;
+    if (hasMovingWireLine && hasMovingComp) break;
+  }
+  if (!hasMovingWireLine && !hasMovingComp) return nextStrokes;
 
   const prevComps = getCircuitComponentsWithTerminals(prevStrokes);
   if (prevComps.length === 0) return nextStrokes;
   const movedComps = prevComps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
   if (movedComps.length === 0) {
+    if (!hasMovingWireLine) return nextStrokes;
     return adaptCircuitLoopFromSegments(
       prevStrokes,
       nextStrokes,

@@ -461,7 +461,7 @@ function renderContainerLetterBadge(
 
   ctx.save();
   ctx.translate(badgeX - 10, badgeY - 10);
-  const badgeCacheId = `badge-${letter}`;
+  const badgeCacheId = `badge-${letter}-${color}-${isDark ? 1 : 0}`;
   const badgeCacheKey = `${letter}|${color}|${isDark ? 1 : 0}|${isDoubleNested ? 1 : 0}|${isSubmergedInOuterLiquid ? 1 : 0}|${outerLiquidType || ''}`;
   renderWithOffscreenBlurCache(ctx, badgeCacheId, badgeCacheKey, 20, 20, 8, 8, (offCtx) => {
     drawBadge(offCtx, 10, 10);
@@ -4543,7 +4543,8 @@ function renderThermometer(
       const rimY = glassRimLocalY !== null ? Math.max(topY, glassRimLocalY) : topY;
       const surfaceY = isDippedInLiquid ? Math.max(rimY, submergedLocalY!) : h + 10;
       const thermCacheId = `therm-${dippedContainer?.id || 'anon'}-${Math.round(_thermX ?? 0)}-${layer}`;
-      const thermCacheKey = `${w}|${h}|${Math.round(temp)}|${strokeColor}|${isDark ? 1 : 0}|${Math.round(rimY)}|${Math.round(surfaceY)}|${dippedLiquidType}|${isNestedThermometer ? 1 : 0}|${isDoubleNestedThermometer ? 1 : 0}|${Math.round(outerRimLocalY ?? -1)}|${Math.round(outerSubmergedLocalY ?? -1)}|${outerLiquidType}`;
+      const quantizedTemp = Math.round(temp / 2) * 2;
+      const thermCacheKey = `${w}|${h}|${quantizedTemp}|${strokeColor}|${isDark ? 1 : 0}|${Math.round(rimY)}|${Math.round(surfaceY)}|${dippedLiquidType}|${isNestedThermometer ? 1 : 0}|${isDoubleNestedThermometer ? 1 : 0}|${Math.round(outerRimLocalY ?? -1)}|${Math.round(outerSubmergedLocalY ?? -1)}|${outerLiquidType}`;
 
       renderWithOffscreenBlurCache(ctx, thermCacheId, thermCacheKey, w, h, 16, 16, (offCtx) => {
         // PASS 1: Emergent Part above the container rim (in open air: from 0 down to rimY)
@@ -5553,7 +5554,11 @@ export function isHeatSimulationVisuallyActive(sim: HeatSimConfig | null | undef
   if (!sim) return false;
   if (sim.isRunning) return true;
   const now = performance.now();
+  const wallNow = Date.now();
   for (const obj of sim.objects) {
+    if (obj.burnerState?.noticeUntil && obj.burnerState.noticeUntil > wallNow) {
+      return true;
+    }
     if (obj.containerState && (obj.containerState.volumeMl ?? 0) > 0) {
       const slosh = containerSloshMap.get(obj.id);
       if (

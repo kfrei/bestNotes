@@ -5,9 +5,12 @@ import {
   pointToSegmentDist,
 } from './circuitEngine';
 
+const EMPTY_CIRCUIT_SIMS: CircuitSimConfig[] = [];
+
 export function getValidCircuitSims(page: NotePage): CircuitSimConfig[] {
+  if (!page.circuitSims || page.circuitSims.length === 0) return EMPTY_CIRCUIT_SIMS;
   const strokeIdSet = new Set(page.strokes.map((s) => s.id));
-  return (page.circuitSims || []).filter((sim) =>
+  return page.circuitSims.filter((sim) =>
     sim.strokeIds.some((id) => strokeIdSet.has(id))
   );
 }
@@ -188,6 +191,7 @@ export function areStrokesWithinCircuitTol(a: StrokeObject, b: StrokeObject, tol
 }
 
 const simExpandedSetCache = new WeakMap<StrokeObject[], Map<string, Set<string>>>();
+const simExpandedBySigCache = new Map<string, Set<string>>();
 
 export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | null): Set<string> {
   if (!sim) return new Set();
@@ -206,6 +210,21 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
   }
 
   const rawBaseSet = new Set(sim.strokeIds);
+  // Build a fast geometry signature strictly over circuit-eligible strokes (ignoring all freehand handwriting!)
+  // so writing 2,000 handwritten words on the same page hits this O(1) cache 100% of the time!
+  let connectedGeomSig = `${cacheKey}@@`;
+  for (let i = 0; i < page.strokes.length; i++) {
+    const s = page.strokes[i];
+    if (!rawBaseSet.has(s.id) && !isCircuitSimConnectedStroke(s)) continue;
+    const p0 = s.points[0];
+    const pN = s.points[s.points.length - 1];
+    connectedGeomSig += `${s.id},${s.groupId || ''},${s.points.length},${p0 ? Math.round(p0.x) : 0},${p0 ? Math.round(p0.y) : 0},${pN ? Math.round(pN.x) : 0},${pN ? Math.round(pN.y) : 0};`;
+  }
+  const sigHit = simExpandedBySigCache.get(connectedGeomSig);
+  if (sigHit) {
+    byStrokesMap.set(cacheKey, sigHit);
+    return sigHit;
+  }
   // Self-heal any previously bloated sim.strokeIds that accidentally captured nearby freehand handwriting:
   // if the simulation contains real circuit shapes/wires, exclude raw non-shape handwriting strokes!
   const hasStrictCircuitMembers = page.strokes.some(
@@ -271,6 +290,11 @@ export function getSimExpandedStrokeSet(page: NotePage, sim: CircuitSimConfig | 
     byStrokesMap.clear();
   }
   byStrokesMap.set(cacheKey, out);
+  if (simExpandedBySigCache.size >= 64) {
+    const oldestKey = simExpandedBySigCache.keys().next().value;
+    if (oldestKey) simExpandedBySigCache.delete(oldestKey);
+  }
+  simExpandedBySigCache.set(connectedGeomSig, out);
   return out;
 }
 

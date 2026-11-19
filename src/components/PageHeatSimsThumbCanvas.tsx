@@ -14,6 +14,7 @@ export const PageHeatSimsThumbCanvas: React.FC<PageHeatSimsThumbCanvasProps> = R
   ({ page, width, height, scale = 0.45, className = '' }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const heatSims = page?.heatSims;
+    const effectivePaperColor = getEffectivePaperColor(page);
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -30,7 +31,7 @@ export const PageHeatSimsThumbCanvas: React.FC<PageHeatSimsThumbCanvasProps> = R
       ctx.clearRect(0, 0, cw, ch);
       ctx.scale(scale, scale);
 
-      const isDark = isDarkPaperColor(getEffectivePaperColor(page));
+      const isDark = isDarkPaperColor(effectivePaperColor);
       for (const hSim of heatSims) {
         if (!hSim) continue;
         renderHeatSimulation(
@@ -44,7 +45,7 @@ export const PageHeatSimsThumbCanvas: React.FC<PageHeatSimsThumbCanvasProps> = R
         );
       }
       ctx.restore();
-    }, [page, heatSims, width, height, scale]);
+    }, [heatSims, effectivePaperColor, width, height, scale]);
 
     if (!heatSims || heatSims.length === 0) return null;
 
@@ -54,5 +55,12 @@ export const PageHeatSimsThumbCanvas: React.FC<PageHeatSimsThumbCanvasProps> = R
         className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${className}`}
       />
     );
-  }
+  },
+  (prev, next) =>
+    prev.page?.heatSims === next.page?.heatSims &&
+    getEffectivePaperColor(prev.page) === getEffectivePaperColor(next.page) &&
+    prev.width === next.width &&
+    prev.height === next.height &&
+    prev.scale === next.scale &&
+    prev.className === next.className
 );
