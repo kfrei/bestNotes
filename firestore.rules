@@ -32,9 +32,17 @@ rules_version = '2';
 //   - deviceId: string (optional, 0..256 chars) - originating client device identifier
 //   - geminiApiKey: string (optional, 0..512 chars) - user-configured Gemini API key
 //   - driveEmail: string (optional, 0..320 chars) - linked Google Drive account email
-//   - driveAccessTokenV2: string (optional, 0..4096 chars) - Google Drive OAuth access token
-//   - driveTokenIssuedAt: number (optional, >= 0) - epoch timestamp when Drive token was issued
+//   - driveAccessTokenV2: string (optional, 0..4096 chars) - legacy V2 Google Drive OAuth access token
+//   - driveTokenIssuedAt: number (optional, >= 0) - epoch timestamp when V2 Drive token was issued
+//   - driveAccessTokenV3: string (optional, 0..4096 chars) - V3 Google Drive OAuth access token
+//   - driveTokenIssuedAtV3: number (optional, >= 0) - epoch timestamp when V3 Drive token was issued
+//   - driveOfflineLinked: bool (optional) - whether server-side offline refresh token is linked
 //   - driveBasePath: string (optional, 0..512 chars) - configured Google Drive sync folder path
+//
+// Collection: drivePrivateTokens
+// Document ID: {userId} (server-only, managed exclusively via Firebase Admin SDK in Cloud Functions)
+// Fields:
+//   - Server-managed Google Drive OAuth2 offline refresh token metadata (no client read/write access)
 //
 // Subcollection: users/{userId}/notebooks
 // Document ID: {notebookId} (must match data.id, immutable)
@@ -221,6 +229,9 @@ service cloud.firestore {
           'driveEmail',
           'driveAccessTokenV2',
           'driveTokenIssuedAt',
+          'driveAccessTokenV3',
+          'driveTokenIssuedAtV3',
+          'driveOfflineLinked',
           'driveBasePath'
         ]) &&
         hasRequiredFields(['updatedAt']) &&
@@ -233,6 +244,9 @@ service cloud.firestore {
         isValidOptionalString('driveEmail', 0, 320) &&
         isValidOptionalString('driveAccessTokenV2', 0, 4096) &&
         isValidOptionalNumber('driveTokenIssuedAt') &&
+        isValidOptionalString('driveAccessTokenV3', 0, 4096) &&
+        isValidOptionalNumber('driveTokenIssuedAtV3') &&
+        isValidOptionalBool('driveOfflineLinked') &&
         isValidOptionalString('driveBasePath', 0, 512);
     }
 
@@ -378,6 +392,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create, update: if isValidDailyTrafficDoc(request.resource.data, dateId);
       allow delete: if isAdmin();
+    }
+
+    // Server-only Google Drive OAuth2 offline refresh tokens (managed exclusively via Firebase Admin SDK in Cloud Functions)
+    match /drivePrivateTokens/{userId} {
+      allow read, write: if false;
     }
 
     // Default deny all other paths
