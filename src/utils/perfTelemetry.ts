@@ -226,7 +226,8 @@ export function getPerfSnapshot(pushHistory = false): PerfSnapshot {
       heapMB: jsHeapUsedMB,
       activeSims: effectiveLabels.length,
     });
-    if (state.history.length > 60) {
+    // Keep 5 full minutes of history (200 samples @ 1.5s = 300s)
+    if (state.history.length > 200) {
       state.history.shift();
     }
   }

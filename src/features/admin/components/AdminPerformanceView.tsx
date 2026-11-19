@@ -153,7 +153,7 @@ export const AdminPerformanceView: React.FC = () => {
         <div className="ipados-liquid-glass bg-[#fdfbf7]/90 backdrop-blur-2xl border border-white/85 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-extrabold text-[#1b2a4a] uppercase tracking-wider">
-              Ιστορικό Κόστους Frame (Τελευταία 90 δευτ.)
+              Ιστορικό Κόστους Frame (Τελευταία 5 λεπτά)
             </h4>
             <span className="text-[11px] font-bold text-slate-500">Κλίμακα: 0 – {maxHistMs.toFixed(1)} ms</span>
           </div>
