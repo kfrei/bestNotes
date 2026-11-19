@@ -327,13 +327,15 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
       rateLabel: 'Χρέωση υπέρβασης: ~0,14 € / GB',
     },
     {
-      title: 'Gemini AI (OCR, Μαθηματικά, Χημεία)',
+      title: 'Google Gemini OCR API (generativelanguage)',
       icon: <Sparkles className="w-4 h-4 text-purple-700" />,
-      used: todayRow?.geminiCalls || 0,
+      used: todayRow?.geminiApiCalls ?? todayRow?.geminiCalls ?? 0,
       limit: quotas.freeGeminiPerDay,
-      periodLabel: 'Σήμερα / 1.500 δωρεάν ανά ημέρα (Free Tier)',
-      subLabel: `Σύνολο μήνα: ${(currentMonthRow?.geminiCalls || 0).toLocaleString('el-GR')} κλήσεις AI`,
-      rateLabel: 'Δωρεάν όριο Google AI Studio',
+      periodLabel: `Σήμερα (${todayRow?.geminiApiErrors ? `${todayRow.geminiApiErrors} σφάλμ.` : 'επίσημο Cloud Monitoring'}) / 1.500 όριο`,
+      subLabel: `Μήνας: ${(currentMonthRow?.geminiApiCalls ?? currentMonthRow?.geminiCalls ?? 0).toLocaleString('el-GR')} επιτυχείς OCR/AI κλήσεις`,
+      rateLabel: `Εκτίμηση Blaze OCR (~0,0005 €/κλήση): Σήμερα ${formatEur(
+        todayRow?.geminiEstCostEur || 0
+      )} • Μήνας ${formatEur(currentMonthRow?.geminiEstCostEur || 0)}`,
     },
   ];
 
@@ -405,25 +407,50 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
         {/* 4 Main Financial KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-white border border-[#dfd8cb] shadow-2xs">
-            <div className="text-xs font-bold text-slate-500">Σημερινό Ακριβές Κόστος</div>
+            <div className="text-xs font-bold text-slate-500">Σημερινό Κόστος (Firebase + OCR)</div>
             <div className="text-2xl font-black text-emerald-700 mt-1">
-              {formatEur(todayRow?.exactCostEur || 0)}
+              {formatEur(todayRow?.totalWithGeminiEstEur ?? todayRow?.exactCostEur ?? 0)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Ημερομηνία: <span className="font-bold text-[#1b2a4a]">{todayRow?.date || '—'}</span>
+              Firebase: <span className="font-bold text-[#1b2a4a]">{formatEur(todayRow?.exactCostEur || 0)}</span> • OCR:{' '}
+              <span className="font-bold text-purple-700">{formatEur(todayRow?.geminiEstCostEur || 0)}</span>
             </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-white border border-[#dfd8cb] shadow-2xs">
             <div className="text-xs font-bold text-slate-500">
-              Μηνιαίο Ακριβές Κόστος ({currentMonthRow ? formatGreekMonth(currentMonthRow.month) : 'Μήνας'})
+              Μηνιαίο Budget ({currentMonthRow ? formatGreekMonth(currentMonthRow.month) : 'Μήνας'})
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-1">
-              {formatEur(currentMonthRow?.exactCostEur || 0)}
+              {formatEur(currentMonthRow?.totalWithGeminiEstEur ?? currentMonthRow?.exactCostEur ?? 0)}{' '}
+              <span className="text-sm font-bold text-slate-400">/ {quotas.budgetAlertEur},00 €</span>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Όριο ειδοποίησης (Budget Alert):{' '}
-              <span className="font-bold text-[#1b2a4a]">{quotas.budgetAlertEur},00 €</span>
+            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden mt-2">
+              <div
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (((currentMonthRow?.totalWithGeminiEstEur ?? currentMonthRow?.exactCostEur ?? 0) /
+                      Math.max(1, quotas.budgetAlertEur)) *
+                      100)
+                  )}%`,
+                }}
+                className="h-full bg-emerald-600 transition-all duration-500"
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+              <span>
+                Firebase: <b>{formatEur(currentMonthRow?.exactCostEur || 0)}</b> • Gemini OCR:{' '}
+                <b>{formatEur(currentMonthRow?.geminiEstCostEur || 0)}</b>
+              </span>
+              <a
+                href="https://console.cloud.google.com/billing/01624B-7B5413-AF0F44/budgets"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-[#1b2a4a] hover:underline"
+              >
+                Budgets ↗
+              </a>
             </div>
           </div>
 

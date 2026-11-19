@@ -271,6 +271,9 @@ export interface FirebaseDailyUsageRow {
   driveLinks: number;
   hostingBytes: number;
   geminiCalls: number;
+  geminiApiCalls?: number;
+  geminiApiErrors?: number;
+  geminiEstCostEur?: number;
   visits: number;
   billableReads: number;
   billableWrites: number;
@@ -278,6 +281,7 @@ export interface FirebaseDailyUsageRow {
   billableHostingBytes: number;
   billableFnToday: number;
   exactCostEur: number;
+  totalWithGeminiEstEur?: number;
   savedByFreeTierEur: number;
 }
 
@@ -292,7 +296,11 @@ export interface FirebaseMonthlyUsageRow {
   driveCacheHits: number;
   hostingBytes: number;
   geminiCalls: number;
+  geminiApiCalls?: number;
+  geminiApiErrors?: number;
+  geminiEstCostEur?: number;
   exactCostEur: number;
+  totalWithGeminiEstEur?: number;
   savedByFreeTierEur: number;
 }
 

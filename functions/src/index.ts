@@ -351,20 +351,28 @@ interface MonitoringPoint {
 }
 
 interface MonitoringResponse {
-  timeSeries?: Array<{ points?: MonitoringPoint[] }>;
+  timeSeries?: Array<{
+    metric?: { labels?: Record<string, string> };
+    resource?: { labels?: Record<string, string> };
+    points?: MonitoringPoint[];
+  }>;
 }
 
 async function queryDailyMonitoringSeries(
   accessToken: string,
   metricType: string,
   startIso: string,
-  endIso: string
+  endIso: string,
+  extraFilter?: string
 ): Promise<Record<string, number>> {
   const byDate: Record<string, number> = {};
   try {
+    const filterExpr = extraFilter
+      ? `metric.type="${metricType}" AND ${extraFilter}`
+      : `metric.type="${metricType}"`;
     const url =
       `https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/timeSeries` +
-      `?filter=${encodeURIComponent(`metric.type="${metricType}"`)}` +
+      `?filter=${encodeURIComponent(filterExpr)}` +
       `&interval.startTime=${encodeURIComponent(startIso)}` +
       `&interval.endTime=${encodeURIComponent(endIso)}` +
       `&aggregation.alignmentPeriod=86400s` +
@@ -388,6 +396,50 @@ async function queryDailyMonitoringSeries(
     // ignore individual metric fetch failure
   }
   return byDate;
+}
+
+async function queryDailyGeminiApiSeries(
+  accessToken: string,
+  startIso: string,
+  endIso: string
+): Promise<{ okByDate: Record<string, number>; errByDate: Record<string, number> }> {
+  const okByDate: Record<string, number> = {};
+  const errByDate: Record<string, number> = {};
+  try {
+    const filterExpr =
+      'metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.labels.service="generativelanguage.googleapis.com"';
+    const url =
+      `https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/timeSeries` +
+      `?filter=${encodeURIComponent(filterExpr)}` +
+      `&interval.startTime=${encodeURIComponent(startIso)}` +
+      `&interval.endTime=${encodeURIComponent(endIso)}` +
+      `&aggregation.alignmentPeriod=86400s` +
+      `&aggregation.perSeriesAligner=ALIGN_SUM`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return { okByDate, errByDate };
+    const data = (await res.json()) as MonitoringResponse;
+    for (const ts of data.timeSeries || []) {
+      const method = ts.resource?.labels?.method || '';
+      if (!method.includes('GenerateContent') && !method.includes('Generate')) continue;
+      const codeClass = ts.metric?.labels?.response_code_class || '';
+      for (const pt of ts.points || []) {
+        const day = pt.interval?.startTime?.slice(0, 10);
+        if (!day) continue;
+        const val = Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0) || 0;
+        if (codeClass === '2xx') {
+          okByDate[day] = (okByDate[day] || 0) + val;
+        } else {
+          errByDate[day] = (errByDate[day] || 0) + val;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { okByDate, errByDate };
 }
 
 let cachedAdminUsagePayload: { expiresAt: number; data: unknown } | null = null;
@@ -444,9 +496,11 @@ export const getAdminFirebaseUsageStats = onCall(
     let runReqByDate: Record<string, number> = {};
     let cfExecByDate: Record<string, number> = {};
     let hostingBytesByDate: Record<string, number> = {};
+    let geminiApiOkByDate: Record<string, number> = {};
+    let geminiApiErrByDate: Record<string, number> = {};
 
     if (saToken) {
-      const [reads, writes, deletes, runReqs, cfExecs, hostBytes] = await Promise.all([
+      const [reads, writes, deletes, runReqs, cfExecs, hostBytes, geminiApi] = await Promise.all([
         queryDailyMonitoringSeries(
           saToken,
           'firestore.googleapis.com/document/read_count',
@@ -483,6 +537,7 @@ export const getAdminFirebaseUsageStats = onCall(
           startIso,
           endIso
         ),
+        queryDailyGeminiApiSeries(saToken, startIso, endIso),
       ]);
       readsByDate = reads;
       writesByDate = writes;
@@ -490,11 +545,14 @@ export const getAdminFirebaseUsageStats = onCall(
       runReqByDate = runReqs;
       cfExecByDate = cfExecs;
       hostingBytesByDate = hostBytes;
+      geminiApiOkByDate = geminiApi.okByDate;
+      geminiApiErrByDate = geminiApi.errByDate;
       monitoringAvailable =
         Object.keys(reads).length > 0 ||
         Object.keys(writes).length > 0 ||
         Object.keys(hostBytes).length > 0 ||
-        Object.keys(runReqs).length > 0;
+        Object.keys(runReqs).length > 0 ||
+        Object.keys(geminiApi.okByDate).length > 0;
     }
 
     const fnCustomByDate: Record<
@@ -547,6 +605,7 @@ export const getAdminFirebaseUsageStats = onCall(
       ...Object.keys(runReqByDate),
       ...Object.keys(cfExecByDate),
       ...Object.keys(hostingBytesByDate),
+      ...Object.keys(geminiApiOkByDate),
       ...Object.keys(fnCustomByDate),
       ...Object.keys(aiByDate),
     ]);
@@ -567,7 +626,11 @@ export const getAdminFirebaseUsageStats = onCall(
       const customFn = fnCustomByDate[date]?.fnTotalCalls || 0;
       const fnCalls = Math.max(monFn, customFn);
       const hostingBytes = Math.round(hostingBytesByDate[date] || 0);
-      const geminiCalls = aiByDate[date]?.ocrTotal || 0;
+      const geminiApiCalls = Math.round(geminiApiOkByDate[date] || 0);
+      const geminiApiErrors = Math.round(geminiApiErrByDate[date] || 0);
+      const geminiCalls = Math.max(geminiApiCalls, aiByDate[date]?.ocrTotal || 0);
+      // Estimated Gemini Flash OCR cost on Blaze Paid Tier 1 (~800 input + ~150 output tokens ≈ $0.0005 / call ≈ 0.000465 EUR)
+      const geminiEstCostEur = geminiApiCalls * 0.0005 * USD_TO_EUR;
       const visits = aiByDate[date]?.visits || 0;
       const driveRefreshes = fnCustomByDate[date]?.fnDriveRefreshCalls || 0;
       const driveCacheHits = fnCustomByDate[date]?.fnDriveCacheHits || 0;
@@ -618,6 +681,9 @@ export const getAdminFirebaseUsageStats = onCall(
         driveLinks,
         hostingBytes,
         geminiCalls,
+        geminiApiCalls,
+        geminiApiErrors,
+        geminiEstCostEur: Number(geminiEstCostEur.toFixed(6)),
         visits,
         billableReads,
         billableWrites,
@@ -625,6 +691,7 @@ export const getAdminFirebaseUsageStats = onCall(
         billableHostingBytes,
         billableFnToday,
         exactCostEur: Number(exactBillableCostEur.toFixed(6)),
+        totalWithGeminiEstEur: Number((exactBillableCostEur + geminiEstCostEur).toFixed(6)),
         savedByFreeTierEur: Number(
           Math.max(0, rawValueWithoutFreeTierEur - exactBillableCostEur).toFixed(6)
         ),
@@ -647,7 +714,11 @@ export const getAdminFirebaseUsageStats = onCall(
         driveCacheHits: number;
         hostingBytes: number;
         geminiCalls: number;
+        geminiApiCalls: number;
+        geminiApiErrors: number;
+        geminiEstCostEur: number;
         exactCostEur: number;
+        totalWithGeminiEstEur: number;
         savedByFreeTierEur: number;
       }
     > = {};
@@ -665,7 +736,11 @@ export const getAdminFirebaseUsageStats = onCall(
           driveCacheHits: 0,
           hostingBytes: 0,
           geminiCalls: 0,
+          geminiApiCalls: 0,
+          geminiApiErrors: 0,
+          geminiEstCostEur: 0,
           exactCostEur: 0,
+          totalWithGeminiEstEur: 0,
           savedByFreeTierEur: 0,
         };
       }
@@ -679,7 +754,11 @@ export const getAdminFirebaseUsageStats = onCall(
       m.driveCacheHits += r.driveCacheHits;
       m.hostingBytes += r.hostingBytes;
       m.geminiCalls += r.geminiCalls;
+      m.geminiApiCalls += r.geminiApiCalls;
+      m.geminiApiErrors += r.geminiApiErrors;
+      m.geminiEstCostEur = Number((m.geminiEstCostEur + r.geminiEstCostEur).toFixed(6));
       m.exactCostEur = Number((m.exactCostEur + r.exactCostEur).toFixed(6));
+      m.totalWithGeminiEstEur = Number((m.totalWithGeminiEstEur + r.totalWithGeminiEstEur).toFixed(6));
       m.savedByFreeTierEur = Number((m.savedByFreeTierEur + r.savedByFreeTierEur).toFixed(6));
     }
 
