@@ -1,8 +1,21 @@
-# 📝 BestNotes / ExplainBoards — `v1.00 (codeRestructured)`
+# 📝 BestNotes / ExplainBoards — `v1.05 (mainFixes)`
 
 > **Live Web App (Primary):** [**https://explainboards.web.app**](https://explainboards.web.app) & [**https://mybestnotes.web.app**](https://mybestnotes.web.app)  
 > **Mirror Hosting:** [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app)  
-> **Τρέχουσα Έκδοση:** **`v1.00 — codeRestructured`** (14 Νοεμβρίου 2026)
+> **Πολιτική Απορρήτου & Όροι Χρήσης:** [`/privacy`](https://explainboards.web.app/privacy) • [`/terms`](https://explainboards.web.app/terms)  
+> **Τρέχουσα Έκδοση:** **`v1.05 — mainFixes`** (19 Νοεμβρίου 2026)
+
+### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `v1.05 — mainFixes`
+* **Zero-Slowdown Simulation Engine & Live Performance Telemetry (`perfTelemetry.ts`, `AdminPerfPill.tsx`, `AdminPerformanceView.tsx`):**
+  * 5-Πυλώνες βελτιστοποίησης κινητήρα (`0.00 ms / 0 RAF/sec` σε παγωμένες προσομοιώσεις, `O(1)` circuit cache χωρίς κόφτη 96 strokes, viewport culling, `-75% VRAM` στο iPad με lazy `simCanvas`, zero-re-render drag).
+  * Ζωντανός **Admin Μετρητής Απόδοσης** πάνω-δεξιά (ms/frame, ενεργές live προσομοιώσεις με κουμπί **⏸ Παύση Όλων**, Long Tasks `>50ms`, RAM & Canvas VRAM, ανοιχτά tabs) + ειδική καρτέλα **«Απόδοση & Προσομοιώσεις»** στο Admin Dashboard.
+  * Θεσμοθέτηση του **Zero-Slowdown Performance Charter** στο [`docs/SIMULATION_GUIDELINES.md`](./docs/SIMULATION_GUIDELINES.md) ώστε καμία μελλοντική προσομοίωση να μην επιβραδύνει την εφαρμογή ούτε στο ελάχιστο.
+* **Αθόρυβος Συγχρονισμός Google Drive (`Blaze` Cloud Functions `europe-west1`) & Έξυπνο Πρόγραμμα Sync:**
+  * Μόνιμη σύνδεση με Google Drive χωρίς αναδυόμενα λευκά παράθυρα (`exchangeDriveAuthCode`, `getFreshDriveAccessToken`) + έξυπνο πρόγραμμα `08:00–14:00` (κάθε 1 ώρα) & `14:00–20:00` (κάθε 2 ώρες).
+  * Νέα σελίδα **«Κλήσεις & Κόστος Firebase»** στο Admin Panel με ζωντανές επίσημες μετρήσεις Google Cloud Monitoring (Firestore, Hosting, Cloud Functions & Gemini OCR API) και μπάρα budget `€5,00`.
+* **Συμμόρφωση Google OAuth 2.0 & Βελτιώσεις OCR Ψευδογλώσσας Γ' Λυκείου (ΑΕΠΠ):**
+  * Επίσημες δίγλωσσες σελίδες [`/privacy`](./public/privacy.html) (με Google API Limited Use Policy) και [`/terms`](./public/terms.html) με συνδέσμους στο footer της αρχικής σελίδας.
+  * Unicode-safe ελληνικό word-boundary RegExp για σωστή στοίχιση εσοχών ψευδογλώσσας (`Για`, `Αν`, `Τέλος_αν`, `Τέλος_επανάληψης`) χωρίς λανθασμένους δείκτες (`Τέλος_αν`).
 
 Το **BestNotes / ExplainBoards** είναι μια προηγμένη εφαρμογή χειρόγραφων σημειώσεων, διδασκαλίας Μαθηματικών/Φυσικής/Χημείας και διανυσματικής σχεδίασης για **iPad (με Apple Pencil Pro)**, **Android Tablets** και **Web**, που συνδυάζει:
 1. Το οικείο, ταχύτατο περιβάλλον και την αίσθηση γραφής $120\text{Hz}$ του **Goodnotes 6** με **Premium Minimalist Monochrome UI**, **Ιεραρχικούς Φακέλους/Υποφακέλους (`customFolders`)** με δίχρωμες κάρτες, 10 χρώματα, 20 εικονίδια, Αγαπημένα (`⭐`) & **1-Click Δελταϊκό Συγχρονισμό Φακέλου με Google Drive**, **Native Reader & Highlighter Mode** για μεγάλα βιβλία PDF (`13 MB` / `170+` σελίδες) και **Ζωντανή Μετάδοση `Live TV` (`16:9`)** από το iPad στον Διαδραστικό Πίνακα της τάξης,

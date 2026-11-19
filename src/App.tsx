@@ -113,6 +113,8 @@ import {
   type User,
 } from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
+import { AdminPerfPill } from './components/AdminPerfPill';
+import { recordSimFrameSample, markSimLoopStopped } from './utils/perfTelemetry';
 import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
   syncNotebookPdfToGoogleDrive,
@@ -1538,6 +1540,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   // Dedicated Admin routing & telemetry encapsulated in isolated domain hooks
   const { isAdminOpen, openAdmin, closeAdmin } = useAdminRoute();
+  const [adminInitialTab, setAdminInitialTab] = useState<'overview' | 'perf' | undefined>(undefined);
   useAppTelemetry(currentUser, notebooks, isAuthResolved);
 
   const explicitLandingNavRef = useRef<boolean>(false);
@@ -28937,6 +28940,7 @@ export default function App() {
     };
 
     const renderSimFrame = (now: number) => {
+      const simFrameStartMs = performance.now();
       wakeQueued = false;
       const activePage = activePageLiveForSimRef.current;
       const heatApi = heatSimLiveRef.current;
@@ -29037,6 +29041,7 @@ export default function App() {
 
           if (sig === lastHeatIdleSigRef.current) {
             // Truly paused & unchanged -> STOP RAF (0 FPS / 0% CPU)! Woken on demand by wakeSimCanvas().
+            markSimLoopStopped();
             return;
           }
           lastHeatIdleSigRef.current = sig;
@@ -35527,7 +35532,7 @@ export default function App() {
       }
 
       ctx.restore();
-      if (
+      const willContinueSimRaf = Boolean(
         anyCircuitActivelyFlowing ||
         (isSpringSimulating && !isSpringPaused) ||
         hasProposal ||
@@ -35543,8 +35548,19 @@ export default function App() {
         (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
         isSharedHeatVisuallyActive ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
-      ) {
+      );
+      if (willContinueSimRaf) {
+        const activeLabels: string[] = [];
+        if (anyCircuitActivelyFlowing) activeLabels.push('⚡ Κύκλωμα');
+        if (isSpringSimulating && !isSpringPaused) activeLabels.push('🌀 Ελατήριο');
+        if (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) activeLabels.push('🕰️ Εκκρεμές');
+        if (anyAtomRotating) activeLabels.push('⚛️ 3D Μόριο');
+        if (isSharedHeatVisuallyActive) activeLabels.push('🔥 Θερμότητα');
+        if (activeLabels.length === 0) activeLabels.push('✨ Μετάβαση');
+        recordSimFrameSample(performance.now() - simFrameStartMs, true, activeLabels);
         rafId = window.requestAnimationFrame(renderSimFrame);
+      } else {
+        recordSimFrameSample(performance.now() - simFrameStartMs, false, []);
       }
     };
 
@@ -35559,6 +35575,7 @@ export default function App() {
     return () => {
       wakeSimCanvasImplRef.current = null;
       window.cancelAnimationFrame(rafId);
+      markSimLoopStopped();
     };
   }, [
     viewMode,
@@ -55253,7 +55270,11 @@ export default function App() {
       <AdminPortal
         currentUser={currentUser}
         notebooks={notebooks}
-        onClose={closeAdmin}
+        initialTab={adminInitialTab}
+        onClose={() => {
+          setAdminInitialTab(undefined);
+          closeAdmin();
+        }}
       />
     );
   }
@@ -56058,17 +56079,43 @@ export default function App() {
             </>
           )}
 
-          {/* Admin Portal Quick-Launch Button (Visible only to authorized Admin: freiderikoskostas@gmail.com) */}
+          {/* Admin Live Performance Monitor Pill & Portal Quick-Launch (Visible only to Admin) */}
           {currentUser?.email === ADMIN_EMAIL && (
-            <button
-              type="button"
-              onClick={openAdmin}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
-              title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-white" />
-              <span>Admin</span>
-            </button>
+            <>
+              <AdminPerfPill
+                openTabsCount={openNotebookIds.length}
+                activePageCount={activeNotebook?.pages?.length || 0}
+                activePageStrokeCount={activePage?.strokes?.length || 0}
+                onPauseAllSimulations={() => {
+                  setIsSimulating(false);
+                  setIsSpringPaused(true);
+                  heatSimLiveRef.current?.pauseHeatingAndSim?.();
+                  updateActivePage((p) => ({
+                    ...p,
+                    forceSims: (p.forceSims || []).map((fs) => ({ ...fs, isPaused: true })),
+                    atomSims: (p.atomSims || []).map((as) => ({ ...as, isRotating: false })),
+                  }));
+                  markSimLoopStopped();
+                  showToast('⏸ Όλες οι ενεργές προσομοιώσεις μπήκαν σε παύση (0% CPU)');
+                }}
+                onOpenAdminPerfTab={() => {
+                  setAdminInitialTab('perf');
+                  openAdmin();
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminInitialTab('overview');
+                  openAdmin();
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+                title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                <span>Admin</span>
+              </button>
+            </>
           )}
 
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}

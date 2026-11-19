@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ShieldCheck,
   Coins,
+  Gauge,
 } from 'lucide-react';
 import type { AdminTab } from '../types';
 
@@ -35,6 +36,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'billing',
       label: 'Κλήσεις & Κόστος Firebase',
       icon: <Coins className="w-5 h-5" />,
+    },
+    {
+      id: 'perf',
+      label: 'Απόδοση & Προσομοιώσεις',
+      icon: <Gauge className="w-5 h-5" />,
     },
     {
       id: 'traffic',

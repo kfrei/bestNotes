@@ -4,6 +4,8 @@ import type { Notebook } from '../../types/note';
 import { AuthModal } from '../../components/LandingPage';
 import { Sparkles, Loader2 } from 'lucide-react';
 
+import type { AdminTab } from './types';
+
 // Code-split: AdminDashboard is only downloaded over the network when AdminPortal is opened!
 const LazyAdminDashboard = lazy(() =>
   import('./AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
@@ -12,6 +14,7 @@ const LazyAdminDashboard = lazy(() =>
 export interface AdminPortalProps {
   currentUser: User | null;
   notebooks?: Notebook[];
+  initialTab?: AdminTab;
   onClose: () => void;
 }
 
@@ -38,6 +41,7 @@ const AdminLoadingFallback: React.FC = () => (
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   currentUser,
   notebooks = [],
+  initialTab,
   onClose,
 }) => {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
@@ -49,6 +53,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         <LazyAdminDashboard
           currentUser={currentUser}
           notebooks={notebooks}
+          initialTab={initialTab}
           onBackToNotes={onClose}
           onSignInGoogle={() => {
             setAuthMode('signin');

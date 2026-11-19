@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Sparkles,
   Coins,
+  Gauge,
 } from 'lucide-react';
 import type { AdminTab, UserProfileStats, DailyTrafficStats } from './types';
 import type { Notebook } from '../../types/note';
@@ -36,10 +37,12 @@ import { AdminUsersTable } from './components/AdminUsersTable';
 import { AdminTrafficView } from './components/AdminTrafficView';
 import { AdminOcrAnalyticsView } from './components/AdminOcrAnalyticsView';
 import { AdminFirebaseBillingView } from './components/AdminFirebaseBillingView';
+import { AdminPerformanceView } from './components/AdminPerformanceView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
   notebooks?: Notebook[];
+  initialTab?: AdminTab;
   onBackToNotes: () => void;
   onSignInGoogle: () => void;
 }
@@ -47,10 +50,11 @@ export interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
   notebooks = [],
+  initialTab,
   onBackToNotes,
   onSignInGoogle,
 }) => {
-  const [currentTab, setCurrentTab] = useState<AdminTab>('overview');
+  const [currentTab, setCurrentTab] = useState<AdminTab>(initialTab || 'overview');
   const [users, setUsers] = useState<UserProfileStats[]>(() => {
     if (currentUser) {
       return [buildUserProfileFromUser(currentUser, notebooks)];
@@ -284,6 +288,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Κλήσεις & Ακριβές Κόστος Firebase (Ημερήσιο & Μηνιαίο)</span>
                 </>
               )}
+              {currentTab === 'perf' && (
+                <>
+                  <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
+                    <Gauge className="w-5 h-5 text-[#1b2a4a]" />
+                  </div>
+                  <span>Απόδοση Συσκευής, Προσομοιώσεις &amp; Rendering (Live)</span>
+                </>
+              )}
               {currentTab === 'traffic' && (
                 <>
                   <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
@@ -431,6 +443,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onRefresh={loadFirebaseUsage}
           />
         )}
+
+        {/* Tab 1C: Live Device Performance & Zero-Slowdown Simulation Telemetry */}
+        {currentTab === 'perf' && <AdminPerformanceView />}
 
         {/* Tab 2: Traffic & Visitor Analytics */}
         {currentTab === 'traffic' && (
