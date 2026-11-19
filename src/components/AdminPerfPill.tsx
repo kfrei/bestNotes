@@ -215,9 +215,9 @@ export const AdminPerfPill: React.FC<AdminPerfPillProps> = ({
             <div className="p-3.5 space-y-3">
               {/* 5-Minute Live Multi-Metric Chart (CPU ms, Frames FPS, RAM MB) */}
               <div className="p-2.5 rounded-xl bg-white border border-[#dfd8cb] space-y-1.5">
-                <div className="flex items-center justify-between text-[10px] font-extrabold text-[#1b2a4a]">
-                  <span>Τελευταία 5 Λεπτά (Live)</span>
-                  <div className="flex items-center gap-2.5 tabular-nums">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-extrabold text-[#1b2a4a]">Τελευταία 5 Λεπτά (Live)</div>
+                  <div className="flex items-center gap-3 text-[10px] font-extrabold tabular-nums">
                     <span className="inline-flex items-center gap-1 text-sky-700">
                       <span className="w-2 h-2 rounded-full bg-sky-500" />
                       CPU {cpuBudgetPct}%

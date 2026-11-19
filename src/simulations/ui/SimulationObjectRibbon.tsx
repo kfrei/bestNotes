@@ -116,14 +116,7 @@ export const SimulationObjectRibbon: React.FC<SimulationObjectRibbonProps> = ({
 
   return (
     <div className={`select-none ${className}`}>
-      <div
-        onWheel={(e) => {
-          if (e.deltaY !== 0 && !e.deltaX) {
-            e.currentTarget.scrollLeft += e.deltaY;
-          }
-        }}
-        className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-1 px-0.5 scroll-smooth select-none touch-pan-x"
-      >
+      <div className="grid grid-cols-3 gap-2 py-1 px-0.5 select-none">
         {objects.map((obj) => {
           const isSelected = selectedObjectId === obj.id;
           const icon = getSimulationObjectIcon(obj.id);
@@ -132,10 +125,10 @@ export const SimulationObjectRibbon: React.FC<SimulationObjectRibbonProps> = ({
               key={obj.id}
               type="button"
               onClick={() => onSelectObject(obj)}
-              className={`shrink-0 w-13 h-13 flex items-center justify-center rounded-xl border transition-all cursor-pointer ${
+              className={`w-full h-12 flex items-center justify-center rounded-xl border transition-all cursor-pointer ${
                 isSelected
-                  ? 'bg-[#234978]/15 border-[#234978] ring-2 ring-[#234978]/30 shadow-xs scale-105'
-                  : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb] hover:border-[#234978]/40 hover:scale-104 shadow-2xs'
+                  ? 'bg-[#234978]/15 border-[#234978] ring-2 ring-[#234978]/30 shadow-xs scale-[1.03]'
+                  : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb] hover:border-[#234978]/40 hover:scale-[1.02] shadow-2xs'
               }`}
               title={obj.nameEl}
             >

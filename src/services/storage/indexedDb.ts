@@ -8,9 +8,13 @@ import type { CustomFolderMeta } from '../../features/library/types';
 import { IDB_NAME, IDB_STORE } from './storageKeys';
 import { cleanNotebookForStorage } from './storageCleaners';
 
+let cachedIdbPromise: Promise<IDBDatabase> | null = null;
+
 export function openBestNotesIdb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (cachedIdbPromise) return cachedIdbPromise;
+  cachedIdbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
+      cachedIdbPromise = null;
       reject(new Error('IndexedDB unavailable'));
       return;
     }
@@ -21,9 +25,23 @@ export function openBestNotesIdb(): Promise<IDBDatabase> {
         dbInstance.createObjectStore(IDB_STORE);
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onclose = () => {
+        cachedIdbPromise = null;
+      };
+      db.onversionchange = () => {
+        db.close();
+        cachedIdbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      cachedIdbPromise = null;
+      reject(req.error);
+    };
   });
+  return cachedIdbPromise;
 }
 
 export async function saveNotebooksToIndexedDB(uid: string, nbs: Notebook[]): Promise<void> {
@@ -35,6 +53,7 @@ export async function saveNotebooksToIndexedDB(uid: string, nbs: Notebook[]): Pr
       tx.objectStore(IDB_STORE).put(cleaned, uid);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
     });
   } catch {
     // ignore

@@ -170,36 +170,21 @@ import {
   createBestnotesFileBlob,
 } from './utils/goodnotesParser';
 import {
-  buildVolcanoCreationNotebook,
   VOLCANO_NOTEBOOK_ID,
-  upgradeWaterCycleNotebookPageToNativeTexts,
-  buildPhotosynthesisNotebook,
-  buildAcidsNotebook,
-  buildBasesNotebook,
   PHOTOSYNTHESIS_NOTEBOOK_ID,
   ACIDS_NOTEBOOK_ID,
   BASES_NOTEBOOK_ID,
-  buildWeightMeasurementNotebook,
-  buildWaterPhasesNotebook,
   WEIGHT_NOTEBOOK_ID,
   WATER_PHASES_NOTEBOOK_ID,
-  buildDaVinciNotebook,
   DAVINCI_NOTEBOOK_ID,
-  buildEinsteinNotebook,
   EINSTEIN_NOTEBOOK_ID,
-  buildWaterChemistryNotebook,
   WATER_CHEMISTRY_NOTEBOOK_ID,
-  buildWaterPhaseChangesNotebook,
   WATER_PHASE_CHANGES_NOTEBOOK_ID,
-  buildCellBiologyNotebook,
   CELL_BIOLOGY_NOTEBOOK_ID,
-  buildElectricalResistanceNotebook,
   ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
-  buildElectricCircuitNotebook,
   ELECTRIC_CIRCUIT_NOTEBOOK_ID,
-  buildConductorsAndCurrentNotebook,
   CONDUCTORS_CURRENT_NOTEBOOK_ID,
-} from './data/seeds';
+} from './data/seedIds';
 import {
   renderPdfFileToPages,
   renderImageFileToPage,
@@ -1323,18 +1308,8 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       : p;
   });
 
-  // Self-healing guard for "Κύκλος Νερού" (nb-1792959661594):
-  // If an older cached Oct 25 snapshot (with 12 cropped images and 0 editable TextObjects) is loaded,
-  // automatically upgrade it in-place to the Nov 4 native-text version (7 transparent images + 14 editable TextObjects + 9 StrokeObjects).
-  if (
-    (nb.id === 'nb-1792959661594' || nb.title === 'Κύκλος Νερού' || nb.title === 'Ο Κύκλος του Νερού') &&
-    nextPages.length > 0 &&
-    (nextPages[0].texts || []).length === 0 &&
-    (nextPages[0].images || []).length >= 10
-  ) {
-    nextPages[0] = upgradeWaterCycleNotebookPageToNativeTexts(nextPages[0]);
-    repaired = true;
-  }
+  // Self-healing guard for legacy Oct 25 "Κύκλος Νερού" snapshots is no longer eagerly bundled
+  // with the 1.2MB data-seeds chunk; current accounts already have native-text pages.
 
   const isMultiPagePdfDoc =
     nb.pages.length > 10 && nb.pages.some((p) => Boolean(p.backgroundDataUrl || p.pdfPageNumber));
@@ -1369,8 +1344,8 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
 }
 
 export default function App() {
-  // Purge legacy v1 preloaded test notebooks/folders from localStorage once on startup
-  const initialAuthUid = (() => {
+  // Purge legacy v1 preloaded test notebooks/folders from localStorage ONCE on mount (never on re-renders!)
+  const initialAuthUid = useMemo(() => {
     try {
       localStorage.removeItem('bestnotes_notebooks_v1');
       localStorage.removeItem('bestnotes_custom_folders_v1');
@@ -1383,9 +1358,9 @@ export default function App() {
       // ignore
     }
     return null;
-  })();
+  }, []);
 
-  const initialSession = (() => {
+  const initialSession = useMemo(() => {
     try {
       const raw =
         (initialAuthUid ? localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`) : null) ||
@@ -1451,7 +1426,7 @@ export default function App() {
       // ignore
     }
     return null;
-  })();
+  }, [initialAuthUid]);
 
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
     try {
@@ -4328,7 +4303,8 @@ export default function App() {
           .map((s) => s.getAttribute('src') || '')
           .find((src) => src.includes('/assets/index-'));
         if (!currentScript) return;
-        const res = await fetch(`/index.html?_vcheck=${Date.now()}`, { cache: 'no-store' });
+        // Use '/' instead of '/index.html' because Firebase Hosting cleanUrls redirects /index.html -> /
+        const res = await fetch(`/?_vcheck=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) return;
         const html = await res.text();
         const match = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/);
@@ -7972,7 +7948,7 @@ export default function App() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = window.setTimeout(async () => {
       if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
         return;
       }
@@ -7997,6 +7973,7 @@ export default function App() {
         const norm = normalizeGreekSearchText(n.title || '');
         return norm.includes('κυκλ') && norm.includes('νερ');
       });
+      const { buildVolcanoCreationNotebook } = await import('./data/seeds');
       const volcanoNb = buildVolcanoCreationNotebook(wc?.folder || '');
       try {
         localStorage.setItem(seedKey, 'present');
@@ -8029,71 +8006,19 @@ export default function App() {
       return;
     }
     const seedSpecs = [
-      {
-        id: PHOTOSYNTHESIS_NOTEBOOK_ID,
-        seedKey: 'bestnotes_photosynthesis_seeded_v1',
-        build: buildPhotosynthesisNotebook,
-      },
-      {
-        id: ACIDS_NOTEBOOK_ID,
-        seedKey: 'bestnotes_acids_seeded_v1',
-        build: buildAcidsNotebook,
-      },
-      {
-        id: BASES_NOTEBOOK_ID,
-        seedKey: 'bestnotes_bases_seeded_v1',
-        build: buildBasesNotebook,
-      },
-      {
-        id: WEIGHT_NOTEBOOK_ID,
-        seedKey: 'bestnotes_weight_seeded_v1',
-        build: buildWeightMeasurementNotebook,
-      },
-      {
-        id: WATER_PHASES_NOTEBOOK_ID,
-        seedKey: 'bestnotes_water_phases_seeded_v1',
-        build: buildWaterPhasesNotebook,
-      },
-      {
-        id: DAVINCI_NOTEBOOK_ID,
-        seedKey: 'bestnotes_davinci_seeded_v1',
-        build: () => buildDaVinciNotebook('Γενικά'),
-      },
-      {
-        id: EINSTEIN_NOTEBOOK_ID,
-        seedKey: 'bestnotes_einstein_seeded_v1',
-        build: () => buildEinsteinNotebook('Γενικά'),
-      },
-      {
-        id: WATER_CHEMISTRY_NOTEBOOK_ID,
-        seedKey: 'bestnotes_water_chemistry_seeded_v1',
-        build: buildWaterChemistryNotebook,
-      },
-      {
-        id: WATER_PHASE_CHANGES_NOTEBOOK_ID,
-        seedKey: 'bestnotes_water_phase_changes_seeded_v1',
-        build: buildWaterPhaseChangesNotebook,
-      },
-      {
-        id: CELL_BIOLOGY_NOTEBOOK_ID,
-        seedKey: 'bestnotes_cell_biology_seeded_v1',
-        build: buildCellBiologyNotebook,
-      },
-      {
-        id: ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
-        seedKey: 'bestnotes_electrical_resistance_seeded_v1',
-        build: buildElectricalResistanceNotebook,
-      },
-      {
-        id: ELECTRIC_CIRCUIT_NOTEBOOK_ID,
-        seedKey: 'bestnotes_electric_circuit_seeded_v1',
-        build: buildElectricCircuitNotebook,
-      },
-      {
-        id: CONDUCTORS_CURRENT_NOTEBOOK_ID,
-        seedKey: 'bestnotes_conductors_current_seeded_v1',
-        build: buildConductorsAndCurrentNotebook,
-      },
+      { id: PHOTOSYNTHESIS_NOTEBOOK_ID, seedKey: 'bestnotes_photosynthesis_seeded_v1' },
+      { id: ACIDS_NOTEBOOK_ID, seedKey: 'bestnotes_acids_seeded_v1' },
+      { id: BASES_NOTEBOOK_ID, seedKey: 'bestnotes_bases_seeded_v1' },
+      { id: WEIGHT_NOTEBOOK_ID, seedKey: 'bestnotes_weight_seeded_v1' },
+      { id: WATER_PHASES_NOTEBOOK_ID, seedKey: 'bestnotes_water_phases_seeded_v1' },
+      { id: DAVINCI_NOTEBOOK_ID, seedKey: 'bestnotes_davinci_seeded_v1' },
+      { id: EINSTEIN_NOTEBOOK_ID, seedKey: 'bestnotes_einstein_seeded_v1' },
+      { id: WATER_CHEMISTRY_NOTEBOOK_ID, seedKey: 'bestnotes_water_chemistry_seeded_v1' },
+      { id: WATER_PHASE_CHANGES_NOTEBOOK_ID, seedKey: 'bestnotes_water_phase_changes_seeded_v1' },
+      { id: CELL_BIOLOGY_NOTEBOOK_ID, seedKey: 'bestnotes_cell_biology_seeded_v1' },
+      { id: ELECTRICAL_RESISTANCE_NOTEBOOK_ID, seedKey: 'bestnotes_electrical_resistance_seeded_v1' },
+      { id: ELECTRIC_CIRCUIT_NOTEBOOK_ID, seedKey: 'bestnotes_electric_circuit_seeded_v1' },
+      { id: CONDUCTORS_CURRENT_NOTEBOOK_ID, seedKey: 'bestnotes_conductors_current_seeded_v1' },
     ];
 
     const missingSpecs = seedSpecs.filter((spec) => {
@@ -8118,7 +8043,7 @@ export default function App() {
 
     if (missingSpecs.length === 0) return;
 
-    const timer = window.setTimeout(() => {
+    const timer = window.setTimeout(async () => {
       if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
         return;
       }
@@ -8128,6 +8053,22 @@ export default function App() {
         return norm.includes('κυκλ') && norm.includes('νερ');
       });
       const defaultFolder = wc?.folder || '';
+      const seedsMod = await import('./data/seeds');
+      const buildersById: Record<string, (folder: string) => Notebook> = {
+        [PHOTOSYNTHESIS_NOTEBOOK_ID]: seedsMod.buildPhotosynthesisNotebook,
+        [ACIDS_NOTEBOOK_ID]: seedsMod.buildAcidsNotebook,
+        [BASES_NOTEBOOK_ID]: seedsMod.buildBasesNotebook,
+        [WEIGHT_NOTEBOOK_ID]: seedsMod.buildWeightMeasurementNotebook,
+        [WATER_PHASES_NOTEBOOK_ID]: seedsMod.buildWaterPhasesNotebook,
+        [DAVINCI_NOTEBOOK_ID]: () => seedsMod.buildDaVinciNotebook('Γενικά'),
+        [EINSTEIN_NOTEBOOK_ID]: () => seedsMod.buildEinsteinNotebook('Γενικά'),
+        [WATER_CHEMISTRY_NOTEBOOK_ID]: seedsMod.buildWaterChemistryNotebook,
+        [WATER_PHASE_CHANGES_NOTEBOOK_ID]: seedsMod.buildWaterPhaseChangesNotebook,
+        [CELL_BIOLOGY_NOTEBOOK_ID]: seedsMod.buildCellBiologyNotebook,
+        [ELECTRICAL_RESISTANCE_NOTEBOOK_ID]: seedsMod.buildElectricalResistanceNotebook,
+        [ELECTRIC_CIRCUIT_NOTEBOOK_ID]: seedsMod.buildElectricCircuitNotebook,
+        [CONDUCTORS_CURRENT_NOTEBOOK_ID]: seedsMod.buildConductorsAndCurrentNotebook,
+      };
       const created: Notebook[] = [];
 
       for (const spec of missingSpecs) {
@@ -8139,7 +8080,9 @@ export default function App() {
           // ignore
         }
         if (curList.some((n) => n.id === spec.id)) continue;
-        const nb = spec.build(defaultFolder);
+        const builder = buildersById[spec.id];
+        if (!builder) continue;
+        const nb = builder(defaultFolder);
         try {
           localStorage.setItem(spec.seedKey, 'present');
         } catch {
@@ -8946,7 +8889,11 @@ export default function App() {
         didChangeAny = true;
         const newPages = [...nb.pages];
         newPages[safeIdx] = updatedPage;
-        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
+        return {
+          ...nb,
+          updatedAt: getMonotonicIsoTimestamp(nb.updatedAt, remoteUpdatedAtMapRef.current.get(nb.id)),
+          pages: newPages,
+        };
       });
 
       if (!didChangeAny) return;
@@ -9685,7 +9632,11 @@ export default function App() {
       const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
       const newPages = [...nb.pages];
       newPages[safeIdx] = restoredPage;
-      return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
+      return {
+        ...nb,
+        updatedAt: getMonotonicIsoTimestamp(nb.updatedAt, remoteUpdatedAtMapRef.current.get(nb.id)),
+        pages: newPages,
+      };
     });
     notebooksRef.current = nextNotebooks;
     const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
@@ -9787,7 +9738,11 @@ export default function App() {
       const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
       const newPages = [...nb.pages];
       newPages[safeIdx] = restoredPage;
-      return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
+      return {
+        ...nb,
+        updatedAt: getMonotonicIsoTimestamp(nb.updatedAt, remoteUpdatedAtMapRef.current.get(nb.id)),
+        pages: newPages,
+      };
     });
     notebooksRef.current = nextNotebooks;
     const liveNb = nextNotebooks.find((n) => n.id === liveNbId);
@@ -15358,6 +15313,14 @@ export default function App() {
 
   const deletePageAtIndex = useCallback(
     (targetIdx: number) => {
+      const deletedPage = activeNotebook.pages[targetIdx];
+      const deletedPageId = deletedPage?.id;
+
+      // Always pause any running simulations before clearing/deleting a page
+      setIsSimulating(false);
+      setIsSpringPaused(true);
+      heatSimLiveRef.current?.pauseHeatingAndSim?.();
+
       if (activeNotebook.pages.length <= 1) {
         updateActivePage((page) => ({
           ...page,
@@ -15368,9 +15331,25 @@ export default function App() {
           texts: [],
           images: [],
           tapes: [],
+          heatSims: [],
+          springSims: [],
+          circuitSims: [],
+          forceSims: [],
+          atomSims: [],
+          activeHeatSimId: undefined,
+          activeSpringSimId: undefined,
+          activeCircuitSimId: undefined,
+          activeForceSimId: undefined,
+          activeAtomSimId: undefined,
         }));
         showToast('🧹 Το έγγραφο έχει μόνο 1 σελίδα — καθαρίστηκε το περιεχόμενό της!');
         return;
+      }
+
+      // Prune Undo/Redo snapshots belonging to the deleted page so Undo never overwrites a surviving page!
+      if (deletedPageId) {
+        undoStackRef.current = undoStackRef.current.filter((p) => p.id !== deletedPageId);
+        redoStackRef.current = redoStackRef.current.filter((p) => p.id !== deletedPageId);
       }
 
       const nextIdx = Math.max(0, Math.min(targetIdx, activeNotebook.pages.length - 2));
@@ -15391,7 +15370,7 @@ export default function App() {
           if (nb.id !== activeNotebook.id) return nb;
           return {
             ...nb,
-            updatedAt: new Date().toISOString(),
+            updatedAt: getMonotonicIsoTimestamp(nb.updatedAt, remoteUpdatedAtMapRef.current.get(nb.id)),
             pages: nb.pages.filter((_, idx) => idx !== targetIdx),
           };
         })
@@ -64418,7 +64397,7 @@ export default function App() {
                       e.currentTarget.scrollLeft += e.deltaY;
                     }
                   }}
-                  className="flex items-center gap-1 p-0.5 rounded-lg bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth overscroll-contain select-none touch-pan-x"
+                  className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner select-none"
                 >
                   <button
                     type="button"

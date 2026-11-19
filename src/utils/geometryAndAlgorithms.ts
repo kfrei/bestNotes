@@ -6638,18 +6638,19 @@ export function convertPlainTextToMathLatex(rawText: string): string {
 
     s = s
       // Auto-normalize Greek Physics subscripts from our Physics Equations Library even if typed without `_`:
-      // e.g. Kmax -> K_max, umax^2 -> u_max^2, Wεξ -> W_εξ, tαφ -> t_αφ, f0 -> f_0, u0 -> u_0, uy -> u_y, ay -> a_y
-      .replace(/\b([KUEuυvVaαFxXyYIBPΦτA])\s*_?\s*(max|min|μαχ|μιν)\b/gi, (_, sym, sub) => {
+      // Use Unicode-safe Greek+Latin lookaround instead of ASCII `\b` (which fails on Greek characters!)
+      // e.g. Kmax -> K_max, umax^2 -> u_max^2, Wεξ -> W_εξ, tαφ -> t_αφ, Fελ -> F_ελ, Eμηχ -> E_μηχ, υ0 -> υ_0, ω0 -> ω_0
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])([KUEuυvVaαFxXyYIBPΦτA])\s*_?\s*(max|min|μαχ|μιν)(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/gi, (_, sym, sub) => {
         const cleanSub = /^μ[αa][xχ]$/i.test(sub) ? 'max' : /^μ[iι][nν]$/i.test(sub) ? 'min' : sub.toLowerCase();
         return `${sym}_${cleanSub}`;
       })
-      .replace(/\bW\s*_?\s*(εξ|ολ|επ)\b/g, 'W_$1')
-      .replace(/\bt\s*_?\s*(αφ|ολ)\b/g, 't_$1')
-      .replace(/\b([FU])\s*_?\s*(ελ|ηλ|κ|δ|μηχ)\b/g, '$1_$2')
-      .replace(/\bE\s*_?\s*(μηχ|ολ|κ|δ)\b/g, 'E_$1')
-      .replace(/\b([uυvVfxXyYtTλφωEABImrqP])\s*([0123])\b/g, '$1_$2')
-      .replace(/\b([uυvaαF])\s*([xy])\b/g, '$1_$2')
-      .replace(/\b([fu])\s*([AS])\b/g, '$1_$2');
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])W\s*_?\s*(εξ|ολ|επ)(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, 'W_$1')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])t\s*_?\s*(αφ|ολ)(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, 't_$1')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])([FU])\s*_?\s*(ελ|ηλ|κ|δ|μηχ)(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, '$1_$2')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])E\s*_?\s*(μηχ|ολ|κ|δ)(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, 'E_$1')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])([uυvVfxXyYtTλφωEABImrqP])\s*([0123])(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, '$1_$2')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])([uυvaαF])\s*([xy])(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, '$1_$2')
+      .replace(/(?<![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])([fu])\s*([AS])(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9])/g, '$1_$2');
 
     // 1. Convert sqrt(...) or √(...)
     let sqrtSafety = 0;

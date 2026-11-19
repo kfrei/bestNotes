@@ -8,10 +8,6 @@ export * from './services/userStatsService';
 export * from './services/trafficService';
 export * from './hooks/useAdminRoute';
 export * from './hooks/useAppTelemetry';
-export * from './components/AdminSidebar';
-export * from './components/AdminKpiCards';
-export * from './components/AdminUsersTable';
-export * from './components/AdminTrafficView';
-export * from './components/AdminOcrAnalyticsView';
-export * from './AdminDashboard';
+// Note: AdminDashboard & Admin sub-views are intentionally NOT re-exported here
+// so AdminPortal's React.lazy(() => import('./AdminDashboard')) code-splits the entire Admin chunk!
 export * from './AdminPortal';

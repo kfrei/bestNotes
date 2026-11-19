@@ -112,7 +112,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
               </span>
             </div>
           </div>
-          <span className="py-1 px-2.5 rounded-lg font-black text-xs bg-blue-50 text-[#234978] border border-blue-200 shadow-2xs">
+          <span className="py-1 px-2.5 rounded-lg font-black text-xs bg-blue-50 text-[#234978] border border-blue-200 shadow-2xs whitespace-nowrap shrink-0">
             {currentAmbient} °C
           </span>
         </div>

@@ -119,7 +119,9 @@ service cloud.firestore {
 
     // Check if the user is the bootstrapped administrator
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email == 'freiderikoskostas@gmail.com';
+      return isAuthenticated() &&
+        request.auth.token.email == 'freiderikoskostas@gmail.com' &&
+        request.auth.token.email_verified == true;
     }
 
     // Validate required fields exist on the resulting document
@@ -262,6 +264,13 @@ service cloud.firestore {
         isValidOptionalString('deviceId', 0, 256);
     }
 
+    function isValidAppConfigGemini(data) {
+      return data.keys().hasOnly(['geminiApiKey', 'updatedAt']) &&
+        data.keys().hasAll(['geminiApiKey', 'updatedAt']) &&
+        validStringLength('geminiApiKey', 0, 512) &&
+        validStringLength('updatedAt', 1, 100);
+    }
+
     function isValidLiveRoomDoc(data, roomId) {
       return hasOnlyAllowedFields([
           'roomId',
@@ -374,18 +383,15 @@ service cloud.firestore {
 
     match /app_config/gemini {
       allow get: if true;
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.keys().hasOnly(['geminiApiKey', 'updatedAt']) &&
-        validStringLength('geminiApiKey', 0, 512) &&
-        validStringLength('updatedAt', 1, 100);
+      allow create, update: if isAdmin() && isValidAppConfigGemini(request.resource.data);
     }
 
     match /live_rooms/{roomId} {
-      allow read: if true;
+      allow get: if true;
       allow create: if isValidLiveRoomDoc(request.resource.data, roomId);
       allow update: if isValidLiveRoomDoc(request.resource.data, roomId) &&
         areImmutableFieldsUnchanged(['roomId']);
-      allow delete: if true;
+      allow delete: if isAuthenticated();
     }
 
     match /daily_traffic/{dateId} {
