@@ -48082,10 +48082,7 @@ export default function App() {
               return;
             }
           }
-          if (
-            ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
-            tryMatchManualArrowheadOnLine(ptsForSnap, activePage.strokes, activeLayerId)
-          ) {
+          if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
             const manualArrow = tryMatchManualArrowheadOnLine(
               ptsForSnap,
               activePage.strokes,
@@ -48176,7 +48173,7 @@ export default function App() {
     const minDiag = isAutoLineOrArrow ? 7 : 10;
     const minTotalLen = isAutoLineOrArrow ? 10 : 14;
     const minDirect = isAutoLineOrArrow ? Math.max(5.5, diag * 0.3) : Math.max(8, diag * 0.34);
-    const maxDirectRatio = isAutoLineOrArrow ? 0.88 : 0.82;
+    const maxDirectRatio = isAutoLineOrArrow ? 0.94 : 0.82;
     if (diag < minDiag || diag > 78 || totalLen < minTotalLen || totalLen > 140) return null;
     // Reject closed loops (like ρ, ο, 0, α) and straight lines
     if (directDist <= minDirect || directDist / Math.max(1, totalLen) > maxDirectRatio) {
@@ -48242,13 +48239,13 @@ export default function App() {
       const apexLy = lyArr[apexIdx];
       const perpSpan = maxLy - minLy;
 
-      // Apex must sit directly on/at the tip of the line endpoint E
-      if (distance(apexPt, ep.E) > (isAutoLineOrArrow ? 18 : 14)) continue;
-      if (maxLx < (isAutoLineOrArrow ? -7 : -5) || maxLx > (isAutoLineOrArrow ? 18 : 16)) continue;
-      if (minLx < -40 || minLx > (isAutoLineOrArrow ? -2.5 : -4)) continue;
-      if (maxLx - minLx < (isAutoLineOrArrow ? 3.5 : 6)) continue;
+      // Apex must sit directly on/at (or slightly inset from) the tip of the line endpoint E
+      if (distance(apexPt, ep.E) > (isAutoLineOrArrow ? 22 : 14)) continue;
+      if (maxLx < (isAutoLineOrArrow ? -16 : -5) || maxLx > (isAutoLineOrArrow ? 20 : 16)) continue;
+      if (minLx < -42 || minLx > (isAutoLineOrArrow ? -2 : -4)) continue;
+      if (maxLx - minLx < (isAutoLineOrArrow ? 2.5 : 6)) continue;
       if (perpSpan < (isAutoLineOrArrow ? 7 : 9) || perpSpan > 56) continue;
-      if (Math.abs(apexLy) > (isAutoLineOrArrow ? 10 : 8)) continue;
+      if (Math.abs(apexLy) > (isAutoLineOrArrow ? 11 : 8)) continue;
 
       const firstLx = lxArr[0];
       const lastLx = lxArr[rawPts.length - 1];
@@ -48279,8 +48276,8 @@ export default function App() {
           leg1Chord / Math.max(1, leg1PathLen) >= 0.72 &&
           leg2Chord / Math.max(1, leg2PathLen) >= 0.72 &&
           leg1Chord + leg2Chord >= totalLen * 0.75 &&
-          maxLx - firstLx >= Math.max(2.5, leg1Chord * 0.28) &&
-          maxLx - lastLx >= Math.max(2.5, leg2Chord * 0.28) &&
+          maxLx - firstLx >= Math.max(2, leg1Chord * 0.22) &&
+          maxLx - lastLx >= Math.max(2, leg2Chord * 0.22) &&
           firstLy * lastLy < 0 &&
           Math.min(Math.abs(firstLy), Math.abs(lastLy)) >= 2.5 &&
           Math.abs(firstLy - lastLy) >= 7
