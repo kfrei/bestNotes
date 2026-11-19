@@ -5456,46 +5456,48 @@ export function formatGreekPseudocodeIfDetected(rawText: string): {
   // Normalize assignment arrows (<-, <--, ⟵, ⇐) into canonical ' ← '
   working = working.replace(/\s*(?:<--+|<-[>-]?|\u2190|\u27F5)\s*/g, ' ← ');
 
-  // Normalize multi-word Greek pseudocode underscore keywords (handling spaces/hyphens/underscores, missing accents, and Latin homoglyphs)
+  // Normalize multi-word Greek pseudocode underscore keywords (handling spaces/dots/hyphens/underscores, missing accents, and Latin homoglyphs)
+  // NOTE: Never use ASCII `\b` after Greek letters in JS RegExp — Greek letters are `\W`, so `\b` NEVER matches!
+  // Always use `(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])` for Greek word endings.
   working = working
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
       'Τέλος_επανάληψης'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΑαA]ρχ[ηή][_\s-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΑαA]ρχ[ηή][\s_.-]+επαν[αάa]ληψη[ςsς](?=$|[\s\n.,;)])/gi,
       'Αρχή_επανάληψης'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΜμM][εέe]χρι[ςsς]?[\s_-]+[οόo]του(?=$|[\s\n.,;(])/gi,
+      /(?:^|(?<=[\s\n]))[ΜμM][εέe]χρι[ςsς]?[\s_.-]+[οόo]του(?=$|[\s\n.,;(])/gi,
       'Μέχρις_ότου'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+[αάaA][νv](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+[αάaA][νv](?=$|[\s\n.,;)])/gi,
       'Τέλος_αν'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΑαA]λλι[ωώo][ςsς][\s_-]+[αάaA][νv](?=$|[\s\n.,;(])/gi,
+      /(?:^|(?<=[\s\n]))[ΑαA]λλι[ωώo][ςsς][\s_.-]+[αάaA][νv](?=$|[\s\n.,;(])/gi,
       'Αλλιώς_αν'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))μ[εe][\s_-]+β[ηή]μα(?=$|[\s\n.,;+-])/gi,
+      /(?:^|(?<=[\s\n]))μ[εe][\s_.-]+β[ηή]μα(?=$|[\s\n.,;+-])/gi,
       'με_βήμα'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+επιλογ[ωώo]ν(?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+επιλογ[ωώo]ν(?=$|[\s\n.,;)])/gi,
       'Τέλος_επιλογών'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+προγρ[αάa]μματο[ςsς](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+προγρ[αάa]μματο[ςsς](?=$|[\s\n.,;)])/gi,
       'Τέλος_προγράμματος'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+συν[αάa]ρτηση[ςsς](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+συν[αάa]ρτηση[ςsς](?=$|[\s\n.,;)])/gi,
       'Τέλος_συνάρτησης'
     )
     .replace(
-      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_-]+διαδικασ[ιίi]α[ςsς](?=$|[\s\n.,;)])/gi,
+      /(?:^|(?<=[\s\n]))[ΤτT][εέe]λ[οόo][ςsς][\s_.-]+διαδικασ[ιίi]α[ςsς](?=$|[\s\n.,;)])/gi,
       'Τέλος_διαδικασίας'
     );
 
@@ -5505,13 +5507,13 @@ export function formatGreekPseudocodeIfDetected(rawText: string): {
       working
     );
   const hasForLoop =
-    /(?:^|[\s\n])[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*\s+[αa]π[οόo]\s+.+?\s+μ[εέe]χρι\b/i.test(
+    /(?:^|[\s\n])[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_][A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9_]*\s+[αa]π[οόo]\s+.+?\s+μ[εέe]χρι(?=$|[\s\n])/i.test(
       working
     );
   const hasWhileLoop =
-    /(?:^|[\s\n])[ΟΌοόO]σ[οόo]\s+.+?\s+επαν[αάa]λαβε\b/i.test(working);
+    /(?:^|[\s\n])[ΟΌοόO]σ[οόo]\s+.+?\s+επαν[αάa]λαβε(?=$|[\s\n])/i.test(working);
   const hasIfThen =
-    /(?:^|[\s\n])[ΑαA][νv]\s+.+?\s+τ[οόo]τε\b/i.test(working);
+    /(?:^|[\s\n])[ΑαA][νv]\s+.+?\s+τ[οόo]τε(?=$|[\s\n])/i.test(working);
   const hasAlgoHeader =
     /(?:^|[\s\n])(?:[ΑαA]λγ[οόo]ριθμο[ςsς]|ΠΡΟΓΡΑΜΜΑ|Πρόγραμμα|ΣΥΝΑΡΤΗΣΗ|Συνάρτηση|ΔΙΑΔΙΚΑΣΙΑ|Διαδικασία)\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]/i.test(
       working
@@ -5538,24 +5540,24 @@ export function formatGreekPseudocodeIfDetected(rawText: string): {
   working = working
     // After block-opening or standalone keywords that never take trailing inline arguments
     .replace(
-      /\b(τ[οόo]τε|επαν[αάa]λαβε|Αρχή_επανάληψης|Τέλος_επανάληψης|Τέλος_αν|Τέλος_επιλογών|Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας)[ \t]+(?=\S)/gi,
+      /(?:^|(?<=[\s\n]))(τ[οόo]τε|επαν[αάa]λαβε|Αρχή_επανάληψης|Τέλος_επανάληψης|Τέλος_αν|Τέλος_επιλογών|Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας)[ \t]+(?=\S)/gi,
       '$1\n'
     )
     // After standalone Αλλιώς (not Αλλιώς_αν)
-    .replace(/(?:^|(?<=[\s\n]))([ΑαA]λλι[ωώo][ςsς])(?![_\w])[ \t]+(?=\S)/g, '$1\n')
+    .replace(/(?:^|(?<=[\s\n]))([ΑαA]λλι[ωώo][ςsς])(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])[ \t]+(?=\S)/g, '$1\n')
     // Before major statement starters when preceded by something on the same line
     .replace(
-      /([^\n])[ \t]+(?=(?:[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*\s+[αa]π[οόo]\b|[ΟΌοόO]σ[οόo]\s+[^\n]+?\s+επαν[αάa]λαβε\b|Αρχή_επανάληψης\b|Τέλος_επανάληψης\b|Μέχρις_ότου\b|Αλλιώς_αν\b|Τέλος_αν\b|Τέλος_επιλογών\b|Τέλος_προγράμματος\b|Τέλος_συνάρτησης\b|Τέλος_διαδικασίας\b|[ΕεE]π[ιίi]λεξε\b|[ΠπP]ερ[ιίi]πτωση\b|[Δδ]ι[αάa]βασε\b|[ΕεE]μφ[αάa]νισε\b|[ΕεE]κτ[υύ]πωσε\b))(?!_)/g,
+      /([^\n])[ \t]+(?=(?:[Γγ]ι[αάa]\s+[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_][A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9_]*\s+[αa]π[οόo](?=\s)|[ΟΌοόO]σ[οόo]\s+[^\n]+?\s+επαν[αάa]λαβε(?=$|\s)|Αρχή_επανάληψης(?=$|\s)|Τέλος_επανάληψης(?=$|\s)|Μέχρις_ότου(?=$|\s)|Αλλιώς_αν(?=$|\s)|Τέλος_αν(?=$|\s)|Τέλος_επιλογών(?=$|\s)|Τέλος_προγράμματος(?=$|\s)|Τέλος_συνάρτησης(?=$|\s)|Τέλος_διαδικασίας(?=$|\s)|[ΕεE]π[ιίi]λεξε(?=\s)|[ΠπP]ερ[ιίi]πτωση(?=\s)|[Δδ]ι[αάa]βασε(?=\s)|[ΕεE]μφ[αάa]νισε(?=\s)|[ΕεE]κτ[υύ]πωσε(?=\s)))(?!_)/g,
       '$1\n'
     )
     // Before Αν ... τότε (when not preceded by Αλλιώς_)
     .replace(
-      /([^\n_])[ \t]+(?=[ΑαA][νv]\s+[^\n]+?\s+τ[οόo]τε\b)/g,
+      /([^\n_])[ \t]+(?=[ΑαA][νv]\s+[^\n]+?\s+τ[οόo]τε(?=$|\s))/g,
       '$1\n'
     )
     // After Για ... από ... μέχρι <expr> [με_βήμα <expr>] if followed by an assignment on the same line
     .replace(
-      /([Γγ]ι[αάa]\s+\S+\s+[αa]π[οόo]\s+\S+\s+μ[εέe]χρι\s+\S+(?:\s+με_βήμα\s+\S+)?)[ \t]+(?=[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_]\w*(?:\s*\[[^\]]*\])?\s*←)/g,
+      /([Γγ]ι[αάa]\s+\S+\s+[αa]π[οόo]\s+\S+\s+μ[εέe]χρι\s+\S+(?:\s+με_βήμα\s+\S+)?)[ \t]+(?=[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_][A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ0-9_]*(?:\s*\[[^\]]*\])?\s*←)/g,
       '$1\n'
     );
 
@@ -5605,23 +5607,23 @@ export function formatGreekPseudocodeIfDetected(rawText: string): {
       line = line.replace(/^[ΑαA]λγ[οόo]ριθμο[ςsς]\s+/i, 'Αλγόριθμος ');
     }
 
-    // Determine indentation before and after this line
-    const isEndLoopOrUntil = /^(?:Τέλος_επανάληψης|Μέχρις_ότου)\b/.test(line);
-    const isEndIf = /^Τέλος_αν\b/.test(line);
-    const isEndSelect = /^Τέλος_επιλογών\b/.test(line);
+    // Determine indentation before and after this line (using Unicode-safe Greek word boundaries!)
+    const isEndLoopOrUntil = /^(?:Τέλος_επανάληψης|Μέχρις_ότου)(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/.test(line);
+    const isEndIf = /^Τέλος_αν(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/.test(line);
+    const isEndSelect = /^Τέλος_επιλογών(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/.test(line);
     const isEndUnit =
-      /^(?:Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας|Τέλος\s+\S+)\b/i.test(line) &&
+      /^(?:Τέλος_προγράμματος|Τέλος_συνάρτησης|Τέλος_διαδικασίας|Τέλος\s+\S+)(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/i.test(line) &&
       !isEndLoopOrUntil &&
       !isEndIf &&
       !isEndSelect;
-    const isElseOrElseIf = /^(?:Αλλιώς_αν|Αλλιώς)\b/.test(line);
-    const isCase = /^Περίπτωση\b/.test(line);
+    const isElseOrElseIf = /^(?:Αλλιώς_αν|Αλλιώς)(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/.test(line);
+    const isCase = /^Περίπτωση(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ_])/.test(line);
 
-    const isForOpener = /^Για\s+.+?\s+από\s+.+?\s+μέχρι\b/.test(line);
-    const isWhileOpener = /^Όσο\s+.+?\s+επανάλαβε\b/.test(line);
-    const isRepeatOpener = /^Αρχή_επανάληψης\b/.test(line);
-    const isIfOpener = /^Αν\s+.+?\s+τότε\b/.test(line);
-    const isSelectOpener = /^Επίλεξε\b/.test(line);
+    const isForOpener = /^Για\s+.+?\s+από\s+.+?\s+μέχρι(?=$|\s)/.test(line);
+    const isWhileOpener = /^Όσο\s+.+?\s+επανάλαβε(?=$|\s)/.test(line);
+    const isRepeatOpener = /^Αρχή_επανάληψης(?=$|\s)/.test(line);
+    const isIfOpener = /^Αν\s+.+?\s+τότε(?=$|\s)/.test(line);
+    const isSelectOpener = /^Επίλεξε(?=$|\s)/.test(line);
 
     let lineIndent = indent;
 
@@ -5732,9 +5734,9 @@ export async function transcribeHandwrittenStrokesWithGemini(
       const parsed = safeParseVisionJson(rawText);
       const transcribed =
         typeof parsed?.text === 'string'
-          ? parsed.text.trim()
+          ? parsed.text.replace(/^\n+|\n+$/g, '').trimEnd()
           : Array.isArray(parsed)
-          ? parsed.join(' ').trim()
+          ? parsed.join('\n').replace(/^\n+|\n+$/g, '').trimEnd()
           : '';
       if (transcribed.length > 0) {
         cachedWorkingVisionModel = cleanName;

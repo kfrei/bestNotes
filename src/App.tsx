@@ -17456,7 +17456,7 @@ export default function App() {
     }
     const ctx = textMeasureCtxRef.current;
     const tokenRegex =
-      /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)\b)[+-]?(?:[0-9.,+-]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
+      /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|Αν|ΑΝ|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))[+-]?(?:[0-9.,+-]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
 
     const stripSubSupSyntax = (s: string) =>
       s.replace(tokenRegex, (m) => {
@@ -52301,7 +52301,7 @@ export default function App() {
         return;
       }
 
-      const rawCleanText = transcribed.trim();
+      const rawCleanText = transcribed.replace(/^\n+|\n+$/g, '').trimEnd();
       const { text: formattedCode, isPseudocode } = formatGreekPseudocodeIfDetected(rawCleanText);
       const finalOcrText = isPseudocode ? formattedCode : rawCleanText;
       const dominantColor = selStrokes[0]?.color || '#1e293b';
@@ -70225,7 +70225,7 @@ export default function App() {
                                   const multiM = txt.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
                                   const multiGrp = multiM ? multiM[1] : null;
                                   const tokenRegex =
-                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)\b)[+-]?(?:[0-9.,]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
+                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|(?!(?:αν|Αν|ΑΝ|επανάληψης|επαναληψης|ότου|οτου|βήμα|βημα|επιλογών|επιλογων|προγράμματος|προγραμματος|συνάρτησης|συναρτησης|διαδικασίας|διαδικασιας)(?=$|[^A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))[+-]?(?:[0-9.,]+|[A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]{1,2}(?![A-Za-zΑ-Ωα-ωάέήίόύώϊϋΐΰ]))))/g;
                                   const renderLineTokens = (lineStr: string) =>
                                     lineStr.split(tokenRegex).map((part, pIdx) => {
                                       if (!part) return null;
