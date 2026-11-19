@@ -362,7 +362,7 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
             <p className="text-xs text-slate-500">
               Όλες οι μετρήσεις τραβιούνται απευθείας από το Google Cloud Monitoring API του{' '}
               <span className="font-bold text-[#1b2a4a]">{usage?.projectId || 'bestnotes-2026'}</span>.
-              Οι χρεώσεις υπολογίζονται **μόνο** πάνω από τα δωρεάν ημερήσια/μηνιαία όρια.
+              Οι χρεώσεις υπολογίζονται <strong>μόνο</strong> πάνω από τα δωρεάν ημερήσια/μηνιαία όρια.
             </p>
           </div>
 
@@ -514,6 +514,22 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
           </div>
           <div className="text-[11px] font-semibold text-slate-600">
             Προγραμματισμένα slots: <span className="font-extrabold text-[#1b2a4a]">10/ημέρα</span> (~<span className="font-extrabold text-[#1b2a4a]">300/μήνα</span> έναντι 2.000.000 δωρεάν Cloud Functions = <span className="font-extrabold text-emerald-700">0,015% • 0,00 €</span>)
+          </div>
+        </div>
+
+        {/* Free-Tier Gemini OCR Tip */}
+        <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/80 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+          <div className="text-purple-950">
+            <span className="font-extrabold">💡 Δωρεάν OCR (0,00 €):</span> Επειδή το <span className="font-bold">bestnotes-2026</span> είναι σε Blaze, ένα Gemini API key του ίδιου project χρεώνεται Paid Tier 1 (~0,0005 €/OCR). Αν βάλεις στα Settings ένα νέο key από{' '}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-extrabold underline text-purple-800 hover:text-purple-950"
+            >
+              Google AI Studio (Create API key in new project, χωρίς κάρτα) ↗
+            </a>
+            , το OCR παραμένει <strong>100% δωρεάν (0,00 €)</strong>!
           </div>
         </div>
       </div>

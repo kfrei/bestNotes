@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Πολιτική Απορρήτου &amp; Privacy Policy — ExplainBoards / BestNotes</title>
+  <meta name="description" content="Privacy Policy and Google API Services User Data Policy compliance for ExplainBoards / BestNotes." />
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --accent: #0066ff;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.65;
+    }
+    header {
+      background: #1b2a4a;
+      color: #ffffff;
+      padding: 28px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .brand {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+      text-decoration: none;
+    }
+    .nav-links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 14px;
+    }
+    .nav-links a {
+      color: #cbd5e1;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .nav-links a:hover { color: #ffffff; text-decoration: underline; }
+    h1 { margin: 6px 0 4px; font-size: 28px; line-height: 1.25; }
+    .subtitle { margin: 0; color: #cbd5e1; font-size: 14px; }
+    main {
+      max-width: 880px;
+      margin: 28px auto 60px;
+      padding: 0 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-size: 20px;
+      margin: 24px 0 10px;
+      color: #1b2a4a;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    h2:first-child { margin-top: 0; }
+    h3 { font-size: 16px; margin: 16px 0 6px; color: #1e293b; }
+    p, li { color: var(--muted); font-size: 15px; }
+    ul { padding-left: 20px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .callout {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin: 16px 0;
+    }
+    .callout strong { color: #166534; }
+    footer {
+      text-align: center;
+      padding: 24px 20px 44px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="top-nav">
+        <a class="brand" href="/">ExplainBoards / BestNotes</a>
+        <div class="nav-links">
+          <a href="/">Αρχική / Home</a>
+          <a href="/privacy">Πολιτική Απορρήτου / Privacy</a>
+          <a href="/terms">Όροι Χρήσης / Terms</a>
+        </div>
+      </div>
+      <h1>Πολιτική Απορρήτου &amp; Privacy Policy</h1>
+      <p class="subtitle">Τελευταία ενημέρωση / Last updated: 19 Νοεμβρίου 2026 • explainboards.web.app / mybestnotes.web.app</p>
+    </div>
+  </header>
+
+  <main>
+    <!-- ENGLISH SECTION FIRST FOR AUTOMATED & HUMAN GOOGLE OAUTH REVIEWERS -->
+    <section class="card" lang="en">
+      <span class="badge">English Version</span>
+      <h2>1. Overview</h2>
+      <p>
+        <strong>ExplainBoards / BestNotes</strong> (accessible at <code>https://explainboards.web.app</code>,
+        <code>https://mybestnotes.web.app</code>, and <code>https://bestnotes-2026.web.app</code>) is a digital
+        handwriting, interactive whiteboard, and educational note-taking web application operated by
+        <strong>Kostas Freiderikos</strong> (<a href="mailto:freiderikoskostas@gmail.com">freiderikoskostas@gmail.com</a>).
+        This Privacy Policy explains what information we collect, how we use it, how we protect Google user data, and
+        your rights.
+      </p>
+
+      <h2>2. Information We Collect</h2>
+      <ul>
+        <li><strong>Account Information (Google Sign-In / Firebase Authentication):</strong> When you sign in with Google, we receive your name, email address, and profile photo solely to identify your account and isolate your private workspace.</li>
+        <li><strong>User Content (Notebooks &amp; Annotations):</strong> Notes, drawings, pages, folders, and uploaded PDF/image materials that you create inside the app are stored securely in your private Google Cloud Firestore / Firebase workspace.</li>
+        <li><strong>Optional Google Drive Integration:</strong> If you explicitly enable Google Drive backup/sync, the app requests Google Drive API access strictly to export your notebooks as PDF files into the Google Drive folder you select and to keep those exported PDFs updated.</li>
+      </ul>
+
+      <h2>3. Google API Services User Data Policy &amp; Limited Use</h2>
+      <div class="callout">
+        <strong>Google API Limited Use Disclosure:</strong> ExplainBoards / BestNotes' use and transfer to any other app
+        of information received from Google APIs will adhere to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+        including the Limited Use requirements.
+      </div>
+      <ul>
+        <li>We <strong>only</strong> access Google Drive to create, list, or update the notebook PDFs and folders you explicitly choose to synchronize from ExplainBoards / BestNotes.</li>
+        <li>We <strong>never</strong> sell, rent, or transfer Google user data to third parties, data brokers, or advertising networks.</li>
+        <li>We <strong>never</strong> use Google Drive data or Google Account data to serve advertisements.</li>
+        <li>We <strong>never</strong> use Google Workspace APIs or Google user data to develop, improve, or train generalized AI and/or machine learning models.</li>
+        <li>OAuth refresh tokens (when optional scheduled background PDF sync is enabled by the user) are stored encrypted in private server-side Firebase Firestore collections accessible only by authenticated backend Cloud Functions, never exposed to other users.</li>
+      </ul>
+
+      <h2>4. Data Storage, Security &amp; Retention</h2>
+      <p>
+        All data is transmitted over HTTPS/TLS and stored on Google Cloud / Firebase infrastructure with strict
+        per-user Firestore Security Rules so each user can only access their own documents. We retain your data only
+        for as long as your account remains active or until you delete your notebooks or request account deletion.
+      </p>
+
+      <h2>5. Revoking Access &amp; Deleting Your Data</h2>
+      <ul>
+        <li>You may revoke ExplainBoards / BestNotes' access to your Google Account and Google Drive at any time via <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google Account Permissions</a>.</li>
+        <li>You may delete any notebook inside the app at any time, or request complete deletion of your account and all stored data by emailing <a href="mailto:freiderikoskostas@gmail.com">freiderikoskostas@gmail.com</a>. Requests are completed within 7 days.</li>
+      </ul>
+
+      <h2>6. Contact</h2>
+      <p>
+        For any privacy questions or data deletion requests, please contact:<br />
+        <strong>Kostas Freiderikos</strong> — <a href="mailto:freiderikoskostas@gmail.com">freiderikoskostas@gmail.com</a>
+      </p>
+    </section>
+
+    <!-- GREEK SECTION -->
+    <section class="card" lang="el">
+      <span class="badge">Ελληνική Έκδοση</span>
+      <h2>1. Εισαγωγή</h2>
+      <p>
+        Η εφαρμογή <strong>ExplainBoards / BestNotes</strong> (<code>https://explainboards.web.app</code>,
+        <code>https://mybestnotes.web.app</code>, <code>https://bestnotes-2026.web.app</code>) είναι μια διαδικτυακή
+        εφαρμογή ψηφιακών σημειώσεων, χειρόγραφου πίνακα και εκπαιδευτικών προσομοιώσεων που διαχειρίζεται ο
+        <strong>Κώστας Φρειδερίκος</strong> (<a href="mailto:freiderikoskostas@gmail.com">freiderikoskostas@gmail.com</a>).
+      </p>
+
+      <h2>2. Ποια Δεδομένα Συλλέγουμε</h2>
+      <ul>
+        <li><strong>Στοιχεία Λογαριασμού (Σύνδεση με Google):</strong> Όνομα, διεύθυνση email και φωτογραφία προφίλ αποκλειστικά για την ταυτοποίηση και την απομόνωση των προσωπικών σας σημειώσεων.</li>
+        <li><strong>Περιεχόμενο Χρήστη:</strong> Τα τετράδια, οι σημειώσεις, οι εικόνες και τα PDF που δημιουργείτε αποθηκεύονται με ασφάλεια στον ιδιωτικό σας χώρο στο Google Firebase / Firestore.</li>
+        <li><strong>Προαιρετικός Συγχρονισμός με Google Drive:</strong> Μόνο εφόσον τον ενεργοποιήσετε εσείς, η εφαρμογή χρησιμοποιεί το Google Drive API αποκλειστικά για την εξαγωγή και ενημέρωση των τετραδίων σας σε μορφή PDF στον φάκελο Drive της επιλογής σας.</li>
+      </ul>
+
+      <h2>3. Πολιτική Δεδομένων Google APIs (Limited Use)</h2>
+      <p>
+        Η χρήση πληροφοριών που λαμβάνονται από τα Google APIs συμμορφώνεται πλήρως με την
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Πολιτική Δεδομένων Χρήστη των Υπηρεσιών Google API (Google API Services User Data Policy)</a>,
+        συμπεριλαμβανομένων των απαιτήσεων Περιορισμένης Χρήσης (Limited Use):
+      </p>
+      <ul>
+        <li>Δεν πωλούμε, δεν ενοικιάζουμε και δεν κοινοποιούμε τα δεδομένα σας σε τρίτους ή διαφημιστικά δίκτυα.</li>
+        <li>Δεν χρησιμοποιούμε δεδομένα από το Google Drive ή τον λογαριασμό σας Google για εκπαίδευση μοντέλων τεχνητής νοημοσύνης (AI/ML).</li>
+        <li>Τυχόν διακριτικά ανανέωσης (refresh tokens) για προγραμματισμένο συγχρονισμό PDF αποθηκεύονται με αυστηρή πρόσβαση μόνο στον διακομιστή (Firebase Cloud Functions).</li>
+      </ul>
+
+      <h2>4. Ανάκληση Πρόσβασης &amp; Διαγραφή Δεδομένων</h2>
+      <p>
+        Μπορείτε να ανακαλέσετε ανά πάσα στιγμή την πρόσβαση της εφαρμογής στον λογαριασμό σας Google από τις
+        <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Ρυθμίσεις Αδειών Google</a>,
+        καθώς και να ζητήσετε πλήρη διαγραφή του λογαριασμού και των σημειώσεών σας στέλνοντας email στο
+        <a href="mailto:freiderikoskostas@gmail.com">freiderikoskostas@gmail.com</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    © 2026 ExplainBoards / BestNotes •
+    <a href="/">Αρχική</a> •
+    <a href="/privacy">Πολιτική Απορρήτου</a> •
+    <a href="/terms">Όροι Χρήσης</a>
+  </footer>
+</body>
+</html>

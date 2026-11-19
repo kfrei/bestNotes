@@ -2361,6 +2361,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </section>
       </main>
 
+      <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-sm py-8 px-4 sm:px-6 lg:px-8 mt-12">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm text-slate-600">
+          <div className="font-semibold text-slate-700">
+            © 2026 {isExplainBoardsBrand ? 'ExplainBoards' : 'BestNotes'} — Ψηφιακός Πίνακας &amp; Σημειώσεις STEM
+          </div>
+          <nav aria-label="Νομικές πληροφορίες" className="flex items-center gap-5 flex-wrap">
+            <a
+              href="/privacy"
+              className="font-bold text-slate-700 hover:text-[#0066ff] underline-offset-4 hover:underline transition"
+            >
+              Πολιτική Απορρήτου (Privacy Policy)
+            </a>
+            <a
+              href="/terms"
+              className="font-bold text-slate-700 hover:text-[#0066ff] underline-offset-4 hover:underline transition"
+            >
+              Όροι Χρήσης (Terms of Service)
+            </a>
+          </nav>
+        </div>
+      </footer>
+
       {/* =====================================================================
           6. FULLSCREEN ZOOM LIGHTBOX MODAL (When clicking Zoom on any of the 5 Notes)
          ===================================================================== */}
