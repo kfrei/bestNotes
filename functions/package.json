@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Cloud Functions for BestNotes / ExplainBoards silent Google Drive OAuth2 offline token refresh",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {

@@ -152,6 +152,7 @@ async function requestOfflineAuthCodeViaGis(
       scope:
         'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file openid email profile',
       ux_mode: 'popup',
+      prompt: 'consent',
       select_account: forceAccountSelect || !hintEmail,
       ...(hintEmail && hintEmail.includes('@') && !forceAccountSelect
         ? { hint: hintEmail.trim(), login_hint: hintEmail.trim() }
@@ -188,6 +189,7 @@ export async function signInToGoogleDrive(
   accessToken: string;
   email: string;
   displayName: string;
+  offlineLinked?: boolean;
 }> {
   // 1. Try 100% silent server-side refresh_token exchange FIRST (0 popups!)
   if (!forceAccountSelect) {
@@ -197,6 +199,7 @@ export async function signInToGoogleDrive(
         accessToken: silent.accessToken,
         email: silent.email || hintEmail || '',
         displayName: silent.email || hintEmail || 'Google Drive',
+        offlineLinked: true,
       };
     }
   }
@@ -208,7 +211,7 @@ export async function signInToGoogleDrive(
       try {
         const exchangeFn = httpsCallable<
           { code: string; redirectUri: string },
-          { accessToken?: string; email?: string }
+          { accessToken?: string; email?: string; offlineLinked?: boolean }
         >(cloudFunctions, 'exchangeDriveAuthCode');
         const res = await exchangeFn({ code: authCode, redirectUri: 'postmessage' });
         if (res.data?.accessToken) {
@@ -217,10 +220,11 @@ export async function signInToGoogleDrive(
             accessToken: res.data.accessToken,
             email: resolvedEmail,
             displayName: resolvedEmail || 'Google Drive',
+            offlineLinked: true,
           };
         }
       } catch {
-        // Fallback to standard popup below if Cloud Functions are not deployed yet (e.g. before Blaze upgrade)
+        // Fallback to standard popup below if Cloud Functions are not deployed yet
       }
     }
   }
@@ -251,7 +255,81 @@ export async function signInToGoogleDrive(
     accessToken,
     email: result.user.email || '',
     displayName: result.user.displayName || result.user.email || 'Google Drive',
+    offlineLinked: false,
   };
+}
+
+export interface FirebaseDailyUsageRow {
+  date: string;
+  month: string;
+  fsReads: number;
+  fsWrites: number;
+  fsDeletes: number;
+  fnCalls: number;
+  driveRefreshes: number;
+  driveCacheHits: number;
+  driveLinks: number;
+  hostingBytes: number;
+  geminiCalls: number;
+  visits: number;
+  billableReads: number;
+  billableWrites: number;
+  billableDeletes: number;
+  billableHostingBytes: number;
+  billableFnToday: number;
+  exactCostEur: number;
+  savedByFreeTierEur: number;
+}
+
+export interface FirebaseMonthlyUsageRow {
+  month: string;
+  daysCount: number;
+  fsReads: number;
+  fsWrites: number;
+  fsDeletes: number;
+  fnCalls: number;
+  driveRefreshes: number;
+  driveCacheHits: number;
+  hostingBytes: number;
+  geminiCalls: number;
+  exactCostEur: number;
+  savedByFreeTierEur: number;
+}
+
+export interface AdminFirebaseUsageResponse {
+  projectId: string;
+  fetchedAt: string;
+  monitoringAvailable: boolean;
+  quotas: {
+    freeReadsPerDay: number;
+    freeWritesPerDay: number;
+    freeDeletesPerDay: number;
+    freeHostingBytesPerDay: number;
+    freeFunctionsPerMonth: number;
+    freeGeminiPerDay: number;
+    budgetAlertEur: number;
+  };
+  driveOfflineStatus: {
+    linked: boolean;
+    email: string;
+    updatedAt: string;
+    tokenExpiresAtMs: number;
+  };
+  todayDate: string;
+  currentMonth: string;
+  daily: FirebaseDailyUsageRow[];
+  monthly: FirebaseMonthlyUsageRow[];
+}
+
+export async function fetchAdminFirebaseUsageStats(
+  forceRefresh = false
+): Promise<AdminFirebaseUsageResponse> {
+  const fn = httpsCallable<{ forceRefresh?: boolean }, AdminFirebaseUsageResponse>(
+    cloudFunctions,
+    'getAdminFirebaseUsageStats'
+  );
+  const res = await fn({ forceRefresh });
+  return res.data;
 }
 
 export {

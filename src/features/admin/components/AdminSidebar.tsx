@@ -8,6 +8,7 @@ import {
   Clock,
   ArrowLeft,
   ShieldCheck,
+  Coins,
 } from 'lucide-react';
 import type { AdminTab } from '../types';
 
@@ -29,6 +30,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'overview',
       label: 'Επισκόπηση',
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: 'billing',
+      label: 'Κλήσεις & Κόστος Firebase',
+      icon: <Coins className="w-5 h-5" />,
     },
     {
       id: 'traffic',

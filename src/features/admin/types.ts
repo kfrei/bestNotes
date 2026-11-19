@@ -18,7 +18,7 @@ export interface UserProfileStats {
   updatedAt: string;       // ISO timestamp
 }
 
-export type AdminTab = 'overview' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
+export type AdminTab = 'overview' | 'billing' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
 
 export type AiActionKind = 'text' | 'math' | 'chem' | 'anim';
 

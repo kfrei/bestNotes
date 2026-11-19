@@ -13,9 +13,14 @@ import {
   LayoutDashboard,
   TrendingUp,
   Sparkles,
+  Coins,
 } from 'lucide-react';
 import type { AdminTab, UserProfileStats, DailyTrafficStats } from './types';
 import type { Notebook } from '../../types/note';
+import {
+  fetchAdminFirebaseUsageStats,
+  type AdminFirebaseUsageResponse,
+} from '../../firebase';
 import {
   ADMIN_EMAIL,
   fetchAdminUsersList,
@@ -30,6 +35,7 @@ import { AdminKpiCards } from './components/AdminKpiCards';
 import { AdminUsersTable } from './components/AdminUsersTable';
 import { AdminTrafficView } from './components/AdminTrafficView';
 import { AdminOcrAnalyticsView } from './components/AdminOcrAnalyticsView';
+import { AdminFirebaseBillingView } from './components/AdminFirebaseBillingView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
@@ -52,11 +58,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return [];
   });
   const [trafficHistory, setTrafficHistory] = useState<DailyTrafficStats[]>([]);
+  const [firebaseUsage, setFirebaseUsage] = useState<AdminFirebaseUsageResponse | null>(null);
+  const [isFirebaseUsageLoading, setIsFirebaseUsageLoading] = useState<boolean>(true);
+  const [firebaseUsageError, setFirebaseUsageError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isTrafficLoading, setIsTrafficLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isAdmin = currentUser?.email === ADMIN_EMAIL;
+
+  const loadFirebaseUsage = async (forceRefresh = false) => {
+    if (!isAdmin) return;
+    setIsFirebaseUsageLoading(true);
+    setFirebaseUsageError(null);
+    try {
+      const stats = await fetchAdminFirebaseUsageStats(forceRefresh);
+      setFirebaseUsage(stats);
+    } catch (err: any) {
+      setFirebaseUsageError(
+        err?.message || 'Αδυναμία ανάκτησης ζωντανών μετρήσεων Firebase Cloud Monitoring.'
+      );
+    } finally {
+      setIsFirebaseUsageLoading(false);
+    }
+  };
 
   const loadData = async () => {
     if (!isAdmin) return;
@@ -142,6 +167,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (isAdmin) {
       void loadData();
+      void loadFirebaseUsage(false);
     }
   }, [isAdmin]);
 
@@ -250,6 +276,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Επισκόπηση Πλατφόρμας</span>
                 </>
               )}
+              {currentTab === 'billing' && (
+                <>
+                  <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
+                    <Coins className="w-5 h-5 text-[#1b2a4a]" />
+                  </div>
+                  <span>Κλήσεις & Ακριβές Κόστος Firebase (Ημερήσιο & Μηνιαίο)</span>
+                </>
+              )}
               {currentTab === 'traffic' && (
                 <>
                   <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
@@ -354,9 +388,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Tab 1: Overview (Combined Traffic, AI OCR & Users) */}
+        {/* Tab 1: Overview (Combined Firebase Cost, Traffic, AI OCR & Users) */}
         {currentTab === 'overview' && (
           <div className="space-y-8">
+            <AdminFirebaseBillingView
+              usage={firebaseUsage}
+              isLoading={isFirebaseUsageLoading}
+              errorMsg={firebaseUsageError}
+              onRefresh={loadFirebaseUsage}
+              compactOverview
+              onOpenFullBillingTab={() => setCurrentTab('billing')}
+            />
             <AdminTrafficView
               traffic={trafficHistory}
               isLoading={isTrafficLoading}
@@ -378,6 +420,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             </div>
           </div>
+        )}
+
+        {/* Tab 1B: Dedicated Firebase Daily & Monthly Calls & Exact Cost Page */}
+        {currentTab === 'billing' && (
+          <AdminFirebaseBillingView
+            usage={firebaseUsage}
+            isLoading={isFirebaseUsageLoading}
+            errorMsg={firebaseUsageError}
+            onRefresh={loadFirebaseUsage}
+          />
         )}
 
         {/* Tab 2: Traffic & Visitor Analytics */}

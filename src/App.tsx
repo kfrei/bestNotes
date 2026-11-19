@@ -3293,6 +3293,13 @@ export default function App() {
       return null;
     }
   });
+  const [driveOfflineLinked, setDriveOfflineLinked] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bestnotes_drive_offline_linked_v1') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [driveBasePath, setDriveBasePath] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('bestnotes_drive_base_path_v1');
@@ -3564,15 +3571,52 @@ export default function App() {
     [driveBasePath, markFolderDriveSynced, pushDriveSyncMetaToCloud]
   );
   const driveNeedsFullScopeConsentRef = useRef<boolean>(false);
+  // Smart Daily Sync Schedule: 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00 (hourly), then 16:00, 18:00, 20:00 (every 2h)
+  const SMART_DRIVE_SYNC_HOURS = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20];
+  const getCurrentSmartDriveSyncSlotKey = (now: Date): string | null => {
+    const h = now.getHours();
+    let activeHour: number | null = null;
+    for (const slotH of SMART_DRIVE_SYNC_HOURS) {
+      if (h >= slotH) activeHour = slotH;
+    }
+    if (activeHour === null || h >= 21) return null;
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}@${String(activeHour).padStart(2, '0')}:00`;
+  };
+  const getNextSmartDriveSyncLabel = (now: Date): string => {
+    const h = now.getHours();
+    const m = now.getMinutes();
+    for (const slotH of SMART_DRIVE_SYNC_HOURS) {
+      if (slotH > h || (slotH === h && m === 0)) {
+        return `${String(slotH).padStart(2, '0')}:00`;
+      }
+    }
+    return '08:00 (αύριο)';
+  };
+
   const [driveAutoSyncIntervalMin, setDriveAutoSyncIntervalMin] = useState<number>(() => {
     try {
-      const saved = Number(localStorage.getItem('bestnotes_drive_autosync_min_v1') || '120');
-      if ([30, 60, 120, 240].includes(saved)) return saved;
+      const savedV2 = localStorage.getItem('bestnotes_drive_autosync_min_v2');
+      if (savedV2 !== null) {
+        const parsed = Number(savedV2);
+        if ([-1, 30, 60, 120, 240].includes(parsed)) return parsed;
+      }
     } catch {
       // ignore
     }
-    return 120; // Default: every 2 hours (120 minutes)
+    return -1; // Default: Smart Schedule (08:00–14:00 every 1h, 14:00–20:00 every 2h)
   });
+  const lastDriveScheduledSlotRef = useRef<string>(
+    (() => {
+      try {
+        return localStorage.getItem('bestnotes_drive_last_slot_v1') || '';
+      } catch {
+        return '';
+      }
+    })()
+  );
   const [lastDriveAutoSyncAt, setLastDriveAutoSyncAt] = useState<number>(() => {
     try {
       return Number(localStorage.getItem('bestnotes_drive_last_autosync_at_v1') || '0');
@@ -3737,6 +3781,12 @@ export default function App() {
 
     const maybeRefreshDriveSilently = async () => {
       if (cancelled || document.visibilityState === 'hidden') return;
+      const nowDate = new Date();
+      const nowMins = nowDate.getHours() * 60 + nowDate.getMinutes();
+      // During smart schedule, avoid waking Cloud Functions overnight (20:30..07:45) unless user actively triggers sync
+      if (driveAutoSyncIntervalMin === -1 && (nowMins < 7 * 60 + 45 || nowMins > 20 * 60 + 30)) {
+        return;
+      }
       let issuedAtMs = 0;
       try {
         issuedAtMs = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
@@ -3744,12 +3794,19 @@ export default function App() {
         // ignore
       }
       const ageMs = Date.now() - issuedAtMs;
-      const needsRefresh = !driveAccessToken || !issuedAtMs || ageMs >= 45 * 60 * 1000;
+      // Proactively refresh every 30 minutes in background so the 60-min token never expires mid-session!
+      const needsRefresh = !driveAccessToken || !issuedAtMs || ageMs >= 30 * 60 * 1000;
       if (!needsRefresh) return;
 
-      const silent = await refreshGoogleDriveTokenSilently(ageMs >= 50 * 60 * 1000);
+      const silent = await refreshGoogleDriveTokenSilently(ageMs >= 45 * 60 * 1000);
       if (!cancelled && silent?.accessToken) {
         driveNeedsFullScopeConsentRef.current = false;
+        setDriveOfflineLinked(true);
+        try {
+          localStorage.setItem('bestnotes_drive_offline_linked_v1', '1');
+        } catch {
+          // ignore
+        }
         saveDriveCredentials(silent.accessToken, silent.email || driveEmail || currentUser.email || null);
       }
     };
@@ -6140,6 +6197,17 @@ export default function App() {
           return data.driveEmail;
         });
       }
+      if (typeof data.driveOfflineLinked === 'boolean') {
+        setDriveOfflineLinked(data.driveOfflineLinked);
+        try {
+          localStorage.setItem(
+            'bestnotes_drive_offline_linked_v1',
+            data.driveOfflineLinked ? '1' : '0'
+          );
+        } catch {
+          // ignore
+        }
+      }
       if (
         typeof data.driveAccessTokenV3 === 'string' &&
         data.driveAccessTokenV3.length > 0 &&
@@ -7137,6 +7205,15 @@ export default function App() {
       }
       const hintEmail = driveEmail || currentUser?.email || null;
 
+      if (!token && !driveNeedsFullScopeConsentRef.current) {
+        const silent = await refreshGoogleDriveTokenSilently(false);
+        if (silent?.accessToken) {
+          token = silent.accessToken;
+          setDriveOfflineLinked(true);
+          saveDriveCredentials(silent.accessToken, silent.email || hintEmail);
+        }
+      }
+
       if (!token) {
         if (isAutoResume) {
           try {
@@ -7154,6 +7231,7 @@ export default function App() {
             driveNeedsFullScopeConsentRef.current
           );
           driveNeedsFullScopeConsentRef.current = false;
+          if (refreshed.offlineLinked) setDriveOfflineLinked(true);
           token = refreshed.accessToken;
           saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
         } catch (authErr: any) {
@@ -7314,18 +7392,36 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              try {
-                const refreshed = await signInToGoogleDrive(
-                  hintEmail,
-                  innerErr?.message === 'DRIVE_SCOPE_MISSING'
-                );
-                driveNeedsFullScopeConsentRef.current = false;
-                token = refreshed.accessToken;
-                saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-                folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
-              } catch {
-                showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
-                break;
+              let recoveredSilently = false;
+              if (innerErr?.message === 'DRIVE_TOKEN_EXPIRED') {
+                const silent = await refreshGoogleDriveTokenSilently(true);
+                if (silent?.accessToken) {
+                  token = silent.accessToken;
+                  setDriveOfflineLinked(true);
+                  saveDriveCredentials(silent.accessToken, silent.email || hintEmail);
+                  try {
+                    folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+                    recoveredSilently = true;
+                  } catch {
+                    recoveredSilently = false;
+                  }
+                }
+              }
+              if (!recoveredSilently) {
+                try {
+                  const refreshed = await signInToGoogleDrive(
+                    hintEmail,
+                    innerErr?.message === 'DRIVE_SCOPE_MISSING'
+                  );
+                  driveNeedsFullScopeConsentRef.current = false;
+                  if (refreshed.offlineLinked) setDriveOfflineLinked(true);
+                  token = refreshed.accessToken;
+                  saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+                  folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+                } catch {
+                  showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+                  break;
+                }
               }
             } else {
               throw innerErr;
@@ -7391,31 +7487,62 @@ export default function App() {
                 driveNeedsFullScopeConsentRef.current = true;
               }
               invalidateDriveToken(token);
-              try {
-                const refreshed = await signInToGoogleDrive(
-                  hintEmail,
-                  innerErr?.message === 'DRIVE_SCOPE_MISSING'
-                );
-                driveNeedsFullScopeConsentRef.current = false;
-                token = refreshed.accessToken;
-                saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-                const retryRes = await syncNotebookPdfToGoogleDrive(
-                  token,
-                  nb,
-                  nb.id === activeNotebook.id ? batchPdfOpts : { ...batchPdfOpts, liveSimCanvas: null },
-                  driveBasePath
-                );
-                if (!rootDriveFolderLink && retryRes?.folderWebViewLink) {
-                  rootDriveFolderLink = retryRes.folderWebViewLink;
-                  rootTargetPathDisplay = retryRes.targetPathDisplay;
+              let recoveredNoteSilently = false;
+              if (innerErr?.message === 'DRIVE_TOKEN_EXPIRED') {
+                const silent = await refreshGoogleDriveTokenSilently(true);
+                if (silent?.accessToken) {
+                  token = silent.accessToken;
+                  setDriveOfflineLinked(true);
+                  saveDriveCredentials(silent.accessToken, silent.email || hintEmail);
+                  try {
+                    const retryRes = await syncNotebookPdfToGoogleDrive(
+                      token,
+                      nb,
+                      nb.id === activeNotebook.id ? batchPdfOpts : { ...batchPdfOpts, liveSimCanvas: null },
+                      driveBasePath
+                    );
+                    if (!rootDriveFolderLink && retryRes?.folderWebViewLink) {
+                      rootDriveFolderLink = retryRes.folderWebViewLink;
+                      rootTargetPathDisplay = retryRes.targetPathDisplay;
+                    }
+                    markNotebookDriveSynced(nb, driveBasePath);
+                    completedNotebookIdsSet.add(nb.id);
+                    persistCheckpoint();
+                    syncedNotesCount++;
+                    recoveredNoteSilently = true;
+                  } catch {
+                    recoveredNoteSilently = false;
+                  }
                 }
-                markNotebookDriveSynced(nb, driveBasePath);
-                completedNotebookIdsSet.add(nb.id);
-                persistCheckpoint();
-                syncedNotesCount++;
-              } catch {
-                showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
-                break;
+              }
+              if (!recoveredNoteSilently) {
+                try {
+                  const refreshed = await signInToGoogleDrive(
+                    hintEmail,
+                    innerErr?.message === 'DRIVE_SCOPE_MISSING'
+                  );
+                  driveNeedsFullScopeConsentRef.current = false;
+                  if (refreshed.offlineLinked) setDriveOfflineLinked(true);
+                  token = refreshed.accessToken;
+                  saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+                  const retryRes = await syncNotebookPdfToGoogleDrive(
+                    token,
+                    nb,
+                    nb.id === activeNotebook.id ? batchPdfOpts : { ...batchPdfOpts, liveSimCanvas: null },
+                    driveBasePath
+                  );
+                  if (!rootDriveFolderLink && retryRes?.folderWebViewLink) {
+                    rootDriveFolderLink = retryRes.folderWebViewLink;
+                    rootTargetPathDisplay = retryRes.targetPathDisplay;
+                  }
+                  markNotebookDriveSynced(nb, driveBasePath);
+                  completedNotebookIdsSet.add(nb.id);
+                  persistCheckpoint();
+                  syncedNotesCount++;
+                } catch {
+                  showToast('⚠️ Google Drive: Η άδεια PDF έληξε');
+                  break;
+                }
               }
             } else {
               console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
@@ -8099,18 +8226,39 @@ export default function App() {
 
       // 2) Google Drive PDF Sync (/BestNotes):
       //    a) Incremental sync 2 minutes after editing the active note
-      //    b) Scheduled automatic full sync every `driveAutoSyncIntervalMin` minutes (default: 120 min = 2 hours)
+      //    b) Scheduled automatic full sync:
+      //       - Smart Schedule (-1): 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00 (1h), then 16:00, 18:00, 20:00 (2h)
+      //       - Fixed Interval (30/60/120/240 min)
       if (secondsToNextDrivePdfSyncRef.current <= 1) {
-        secondsToNextDrivePdfSyncRef.current = 120;
-        const intervalMs = Math.max(15, driveAutoSyncIntervalMin) * 60 * 1000;
-        const isTwoHourScheduledDue =
-          driveAutoSyncIntervalMin > 0 &&
-          notebooks.length > 0 &&
-          Date.now() - lastDriveAutoSyncAt >= intervalMs;
+        secondsToNextDrivePdfSyncRef.current = 60;
+        let isScheduledDue = false;
+        let pendingSlotKey: string | null = null;
 
-        if (driveAccessToken && (hasPendingDrivePdfSyncRef.current || isTwoHourScheduledDue)) {
+        if (driveAutoSyncIntervalMin === -1 && notebooks.length > 0) {
+          const curSlot = getCurrentSmartDriveSyncSlotKey(new Date());
+          if (curSlot && curSlot !== lastDriveScheduledSlotRef.current) {
+            isScheduledDue = true;
+            pendingSlotKey = curSlot;
+          }
+        } else if (driveAutoSyncIntervalMin > 0 && notebooks.length > 0) {
+          const intervalMs = Math.max(15, driveAutoSyncIntervalMin) * 60 * 1000;
+          isScheduledDue = Date.now() - lastDriveAutoSyncAt >= intervalMs;
+        }
+
+        if (
+          (driveAccessToken || driveOfflineLinked) &&
+          (hasPendingDrivePdfSyncRef.current || isScheduledDue)
+        ) {
           hasPendingDrivePdfSyncRef.current = false;
-          if (isTwoHourScheduledDue) {
+          if (isScheduledDue) {
+            if (pendingSlotKey) {
+              lastDriveScheduledSlotRef.current = pendingSlotKey;
+              try {
+                localStorage.setItem('bestnotes_drive_last_slot_v1', pendingSlotKey);
+              } catch {
+                // ignore
+              }
+            }
             void performAllNotebooksDrivePdfSync(undefined, true);
           } else {
             void performDrivePdfSync(false);
@@ -56051,8 +56199,14 @@ export default function App() {
                       <span>Google Drive Sync (PDF)</span>
                     </span>
                     {(driveAccessToken || driveEmail) && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-[#efebe3] border border-[#dfd8cb] text-[#234978] text-[9px] font-bold">
-                        Συνδεδεμένο
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${
+                          driveOfflineLinked
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            : 'bg-[#efebe3] border-[#dfd8cb] text-[#234978]'
+                        }`}
+                      >
+                        {driveOfflineLinked ? '🟢 Αθόρυβο Sync' : 'Συνδεδεμένο'}
                       </span>
                     )}
                   </div>
@@ -56115,30 +56269,41 @@ export default function App() {
                               const nextMin = Number(e.target.value);
                               setDriveAutoSyncIntervalMin(nextMin);
                               try {
-                                localStorage.setItem('bestnotes_drive_autosync_min_v1', String(nextMin));
+                                localStorage.setItem('bestnotes_drive_autosync_min_v2', String(nextMin));
                               } catch {
                                 // ignore
                               }
                               showToast(
-                                `⏱️ Αυτόματος συγχρονισμός Google Drive: κάθε ${
-                                  nextMin === 30
-                                    ? '30 λεπτά'
-                                    : nextMin === 60
-                                    ? '1 ώρα'
-                                    : nextMin === 120
-                                    ? '2 ώρες'
-                                    : '4 ώρες'
-                                }!`
+                                nextMin === -1
+                                  ? '⏱️ Αυτόματο Sync: 08:00–14:00 (κάθε 1 ώρα) & 14:00–20:00 (κάθε 2 ώρες)!'
+                                  : `⏱️ Αυτόματος συγχρονισμός Google Drive: κάθε ${
+                                      nextMin === 30
+                                        ? '30 λεπτά'
+                                        : nextMin === 60
+                                        ? '1 ώρα'
+                                        : nextMin === 120
+                                        ? '2 ώρες'
+                                        : '4 ώρες'
+                                    }!`
                               );
                             }}
-                            className="px-1.5 py-0.5 rounded-md bg-[#fdfbf7] border border-[#dfd8cb] text-[10.5px] font-bold text-[#234978] cursor-pointer focus:outline-none"
+                            className="px-1.5 py-0.5 rounded-md bg-[#fdfbf7] border border-[#dfd8cb] text-[10px] font-bold text-[#234978] cursor-pointer focus:outline-none max-w-[160px]"
                           >
+                            <option value={-1}>08–14 (1ω) & 14–20 (2ω)</option>
                             <option value={30}>Κάθε 30 λεπτά</option>
                             <option value={60}>Κάθε 1 ώρα</option>
                             <option value={120}>Κάθε 2 ώρες</option>
                             <option value={240}>Κάθε 4 ώρες</option>
                           </select>
                         </div>
+                        {driveAutoSyncIntervalMin === -1 && (
+                          <div className="text-[9.5px] text-[#234978] font-semibold">
+                            Πρόγραμμα: 08:00–14:00 (ανά 1ω), 16:00, 18:00, 20:00 • Επόμενο:{' '}
+                            <span className="font-extrabold">
+                              {getNextSmartDriveSyncLabel(new Date())}
+                            </span>
+                          </div>
+                        )}
                         {lastDriveAutoSyncAt > 0 && (
                           <div className="text-[9.5px] text-[#64748b]">
                             Τελευταίος συγχρονισμός:{' '}
@@ -56151,6 +56316,37 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {!driveOfflineLinked && currentUser && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await signInToGoogleDrive(
+                                driveEmail || currentUser.email || null,
+                                false
+                              );
+                              saveDriveCredentials(res.accessToken, res.email || res.displayName);
+                              if (res.offlineLinked) {
+                                setDriveOfflineLinked(true);
+                                try {
+                                  localStorage.setItem('bestnotes_drive_offline_linked_v1', '1');
+                                } catch {
+                                  // ignore
+                                }
+                                showToast(
+                                  '✅ Ενεργοποιήθηκε μόνιμα το Αθόρυβο Sync (όπως στο GoodNotes)! Τέλος στα αναδυόμενα παράθυρα σε Mac & iPad.'
+                                );
+                              }
+                            } catch (err: any) {
+                              showToast(`⚠️ ${err?.message || 'Ακυρώθηκε η σύνδεση'}`);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10.5px] font-extrabold transition cursor-pointer"
+                        >
+                          <span>⚡ Μόνιμη Αθόρυβη Σύνδεση (1 φορά — χωρίς παράθυρα)</span>
+                        </button>
+                      )}
 
                       <button
                         onClick={() => {
