@@ -28943,12 +28943,13 @@ export default function App() {
       isSimulating &&
       preparedCircuitSims.some(
         (ps) =>
-          ps.simData.isCircuitClosed &&
-          (!ps.simData.autoSwitch || ps.simData.autoSwitch.closed) &&
-          (ps.particleChains.length > 0 ||
-            ps.simData.components.some(
-              (cs) => (cs.comp.kind === 'bulb' || cs.comp.kind === 'fan') && cs.active && cs.powerFactor > 0.01
-            ))
+          ps.meters.some((m) => m.active) ||
+          (ps.simData.isCircuitClosed &&
+            (!ps.simData.autoSwitch || ps.simData.autoSwitch.closed) &&
+            (ps.particleChains.length > 0 ||
+              ps.simData.components.some(
+                (cs) => (cs.comp.kind === 'bulb' || cs.comp.kind === 'fan') && cs.active && cs.powerFactor > 0.01
+              )))
       );
     const anyAtomRotating = pageAtomSims.some((s) => s.isRotating !== false);
     const glowSprites = getCircuitGlowSprites();
@@ -29582,19 +29583,16 @@ export default function App() {
       }
 
       // 3b. Live Ammeter & Voltmeter Needles (uses precomputed meter metadata — 0 .filter()/.find() per frame!)
-      // Only jitter needle when closed-loop current actually flows so open-switch circuits sleep at 0 FPS!
+      // Respect exact Kirchhoff `m.active` per meter so a Voltmeter across the battery stays live even when the main switch is open!
       if (isSimulating && meters.length > 0) {
-        const isFlowingNow =
-          simData.isCircuitClosed && (!simData.autoSwitch || simData.autoSwitch.closed);
         for (let mIdx = 0; mIdx < meters.length; mIdx++) {
           const m = meters[mIdx];
           const baseAng = -Math.PI / 4;
           const phaseSeed = m.compIdx * 1.37;
-          const oscAng =
-            m.active && isFlowingNow
-              ? Math.sin(elapsedSec * 9.4 * speedMultiplier + phaseSeed) * 0.052 +
-                Math.sin(elapsedSec * 16.3 * speedMultiplier + phaseSeed + 0.85) * 0.021
-              : 0;
+          const oscAng = m.active
+            ? Math.sin(elapsedSec * 9.4 * speedMultiplier + phaseSeed) * 0.052 +
+              Math.sin(elapsedSec * 16.3 * speedMultiplier + phaseSeed + 0.85) * 0.021
+            : 0;
           const ang = baseAng + oscAng;
           const ux = Math.cos(ang);
           const uy = Math.sin(ang);
