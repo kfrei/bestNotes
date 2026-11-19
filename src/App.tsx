@@ -11308,7 +11308,7 @@ export default function App() {
       }
 
       // Always allow 1-finger touch on interactive Atom / ChemOCR / 3D Molecule controls on iPad (even in Pencil-Only Mode or any tool!)
-      if (atomOverlayHitRef.current && ptX > -90000) {
+      if (atomOverlayHitRef.current && ptX > -90000 && ((showSimulationPanel && simActiveCategory === 'atoms') || isLivePdfMode)) {
         const aHit = atomOverlayHitRef.current;
         for (const btn of aHit.buttons || []) {
           if (
@@ -11449,7 +11449,7 @@ export default function App() {
         }
       }
 
-      if (forceOverlayHitRef.current) {
+      if (forceOverlayHitRef.current && ((showSimulationPanel && simActiveCategory === 'forces') || isLivePdfMode)) {
         const fHit = forceOverlayHitRef.current;
         for (const btn of fHit.buttons) {
           if (
@@ -11473,7 +11473,7 @@ export default function App() {
         }
       }
 
-      if (springOverlayHitRef.current) {
+      if (springOverlayHitRef.current && ((showSimulationPanel && simActiveCategory === 'springs') || isLivePdfMode)) {
         const spHit = springOverlayHitRef.current;
         if (
           spHit.pauseBtnBox &&
@@ -11548,9 +11548,9 @@ export default function App() {
         }
       }
 
-      // Always allow 1-finger touch on interactive Heat Simulation objects, handles & action pills (even in Pencil-Only Mode!)
+      // Allow 1-finger touch on interactive Heat Simulation objects ONLY when Sim panel is open on Heat (or Live PDF mode)
       const curHeatSim = (heatSim as any).getLiveSim ? (heatSim as any).getLiveSim() : heatSim.activeHeatSim;
-      if (curHeatSim && ptX > -90000) {
+      if (curHeatSim && ptX > -90000 && ((showSimulationPanel && simActiveCategory === 'heat') || isLivePdfMode)) {
         if (curHeatSim.graph?.visible) {
           const g = curHeatSim.graph;
           if (ptX >= g.x - 8 && ptX <= g.x + g.width + 8 && ptY >= g.y - 8 && ptY <= g.y + g.height + 8) {
@@ -11589,7 +11589,7 @@ export default function App() {
         }
       }
 
-      if (isSimulating) {
+      if (isSimulating && ((showSimulationPanel && simActiveCategory === 'circuits') || isLivePdfMode)) {
         const hits =
           autoSwitchHitsRef.current.length > 0
             ? autoSwitchHitsRef.current
@@ -39103,7 +39103,12 @@ export default function App() {
     // 0a-forces. Interactive Forces Simulation Canvas Buttons & Handles:
     //            - On-Canvas Pill Buttons (Ανάλυση, Σύνθεση, Δυνάμεις, Παύση, Τροχιά, Συνισταμένη, ◀, ▶, Υπολογισμοί)
     //            - Draggable Vector Tips (F, F1, F2, or Free Vector Tip >), Origin Dot, Green Incline Peak Handle, Paused Pendulum Bob & Calc Card
-    if (forceOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
+    if (
+      forceOverlayHitRef.current &&
+      ((showSimulationPanel && simActiveCategory === 'forces') || isLivePdfMode) &&
+      effectiveTool !== 'eraser' &&
+      effectiveTool !== 'laser'
+    ) {
       const fHit = forceOverlayHitRef.current;
       const curForceSim = getActiveForceSim(targetPage);
       if (!fHit.simId || (curForceSim && curForceSim.id === fHit.simId)) {
@@ -39236,7 +39241,12 @@ export default function App() {
     }
 
     // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Reaction Card Selection/Resize/Drag, Valence Electrons & Nuclei:
-    if (atomOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
+    if (
+      atomOverlayHitRef.current &&
+      ((showSimulationPanel && simActiveCategory === 'atoms') || isLivePdfMode) &&
+      effectiveTool !== 'eraser' &&
+      effectiveTool !== 'laser'
+    ) {
       const aHit = atomOverlayHitRef.current;
 
       // 0-btn) Priority 1: Explicit 3D Window Controls (☁️ Νέφος ON/OFF, ✕ Close, 3D Molecule Tabs) & Reaction View Toggle (2D/3D, ➔, Bond Label)
@@ -39529,7 +39539,12 @@ export default function App() {
       setActiveChemCorrection(null);
     }
 
-    if (atomOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
+    if (
+      atomOverlayHitRef.current &&
+      ((showSimulationPanel && simActiveCategory === 'atoms') || isLivePdfMode) &&
+      effectiveTool !== 'eraser' &&
+      effectiveTool !== 'laser'
+    ) {
       const aHit = atomOverlayHitRef.current;
 
       // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit (or central atom for proportional molecule scaling)
@@ -39714,8 +39729,11 @@ export default function App() {
       }
     }
 
-    // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (Pencil click, burner on/off, dragging objects & graph)
-    if (heatSim.activeHeatSim) {
+    // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (ONLY when Sim panel is open on Heat, Live PDF, or Eraser)
+    if (
+      heatSim.activeHeatSim &&
+      ((showSimulationPanel && simActiveCategory === 'heat') || isLivePdfMode || activeTool === 'eraser')
+    ) {
       if (heatSim.handlePointerDown(e, pt.x, pt.y, activeTool)) {
         e.preventDefault();
         wakeSimCanvas();
@@ -39743,7 +39761,12 @@ export default function App() {
     //            1) Blue Square Handles (□) on the +A / -A blue dashed lines (symmetric amplitude sliding)
     //            2) Draggable Live Graph Cards (x(t), υ(t), α(t)) & their "✕" close buttons
     //            3) Direct Mass Block pulling along the oscillation axis to release into SHM!
-    if (springOverlayHitRef.current && effectiveTool !== 'eraser' && effectiveTool !== 'laser') {
+    if (
+      springOverlayHitRef.current &&
+      ((showSimulationPanel && simActiveCategory === 'springs') || isLivePdfMode) &&
+      effectiveTool !== 'eraser' &&
+      effectiveTool !== 'laser'
+    ) {
       const spHit = springOverlayHitRef.current;
       // 0) Check On-Canvas "⏸ Παύση / ▶ Συνέχεια", "🧹 Καθαρισμός" & "⏹" Pill Buttons
       if (
@@ -40058,8 +40081,8 @@ export default function App() {
       }
     }
 
-    // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (or any manual switch)!
-    if (isSimulating || showSimulationPanel) {
+    // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (ONLY when Sim panel is open on Circuits or Live PDF)
+    if ((showSimulationPanel && simActiveCategory === 'circuits') || isLivePdfMode) {
       const activeCircuitSim = getActiveCircuitSim(targetPage);
       const hits =
         autoSwitchHitsRef.current.length > 0
