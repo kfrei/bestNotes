@@ -2743,6 +2743,52 @@ export default function App() {
       }
     }
   }, [simActiveCategory]);
+
+  // Auto-sync the Simulation Panel's active tab (and Forces sub-tab) to match whatever simulation exists on the current page
+  const syncSimCategoryToPage = useCallback((page: NotePage) => {
+    const hasHeat = Boolean(page.heatSims && page.heatSims.length > 0);
+    const activeF = getActiveForceSim(page);
+    const hasForces = Boolean(activeF || (page.forceSims && page.forceSims.length > 0));
+    const hasCircuits = getValidCircuitSims(page).length > 0;
+    const hasSprings = getValidSpringSims(page).length > 0;
+    const hasAtoms = getValidAtomSims(page).length > 0;
+
+    if (activeF) {
+      setForceSimSubTab(activeF.mode);
+    } else if (page.forceSims && page.forceSims.length > 0) {
+      setForceSimSubTab(page.forceSims[0].mode);
+    }
+
+    setSimActiveCategory((cur) => {
+      // If current tab already matches a simulation on this page, keep it
+      if (
+        (cur === 'heat' && hasHeat) ||
+        (cur === 'forces' && hasForces) ||
+        (cur === 'circuits' && hasCircuits) ||
+        (cur === 'springs' && hasSprings) ||
+        (cur === 'atoms' && hasAtoms)
+      ) {
+        return cur;
+      }
+      // Otherwise automatically switch to the simulation present on this page!
+      if (hasHeat) return 'heat';
+      if (hasForces) return 'forces';
+      if (hasCircuits) return 'circuits';
+      if (hasSprings) return 'springs';
+      if (hasAtoms) return 'atoms';
+      // Plain page with no simulations yet -> preserve last selected category
+      if (cur) return cur;
+      try {
+        const saved = localStorage.getItem('bestnotes_last_sim_category') as any;
+        if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat'].includes(saved)) {
+          return saved;
+        }
+      } catch {
+        // ignore
+      }
+      return 'circuits';
+    });
+  }, []);
   const [isTvReceiverMode, setIsTvReceiverMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -4444,6 +4490,11 @@ export default function App() {
   activePageLiveRef.current = activePage;
   const pageWidth = getPageLogicalWidth(activePage);
   const pageHeight = getPageLogicalHeight(activePage);
+
+  useEffect(() => {
+    if (!showSimulationPanel) return;
+    syncSimCategoryToPage(activePage);
+  }, [showSimulationPanel, activePage.id, syncSimCategoryToPage]);
 
   // On-demand PDF page renderer tick & resolver (so 170-page PDFs stay at their exact 13.1 MB native size!)
   const [, setPdfPageRenderTick] = useState<number>(0);
@@ -60066,28 +60117,8 @@ export default function App() {
                       setShowSimulationPanel((v) => {
                         const next = !v;
                         if (next) {
-                          const existingF = getActiveForceSim(activePage);
-                          if (existingF) {
-                            setForceSimSubTab(existingF.mode);
-                          }
-                          // When reopening, prioritize preserving the user's last active simulation category!
-                          setSimActiveCategory((cur) => {
-                            if (cur) return cur;
-                            try {
-                              const saved = localStorage.getItem('bestnotes_last_sim_category') as any;
-                              if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat'].includes(saved)) {
-                                return saved;
-                              }
-                            } catch {
-                              // ignore
-                            }
-                            if (activePage.heatSims && activePage.heatSims.length > 0) return 'heat';
-                            if (activePage.forceSims && activePage.forceSims.length > 0) return 'forces';
-                            if (getValidCircuitSims(activePage).length > 0) return 'circuits';
-                            if (getValidSpringSims(activePage).length > 0) return 'springs';
-                            if ((activePage.atomSims || []).length > 0) return 'atoms';
-                            return 'circuits';
-                          });
+                          // Automatically detect and open the exact simulation tab (and sub-tab) present on the active page!
+                          syncSimCategoryToPage(activePage);
                         } else {
                           // When closing the panel, pause active motion while keeping all simulations visible on paper
                           if (isSimulating) setIsSimulating(false);
