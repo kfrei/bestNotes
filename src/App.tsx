@@ -3926,6 +3926,7 @@ export default function App() {
   const staticCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const activeCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const overTextCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const mountedCanvasNodesRef = useRef<WeakSet<HTMLCanvasElement>>(new WeakSet());
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overTextCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -8766,20 +8767,14 @@ export default function App() {
           if (opts?.closingTab || targetNbId !== activeNotebook.id) {
             const stC = staticCanvasMapRef.current.get(p.id);
             if (stC && !stC.isConnected) {
-              stC.width = 0;
-              stC.height = 0;
               staticCanvasMapRef.current.delete(p.id);
             }
             const acC = activeCanvasMapRef.current.get(p.id);
             if (acC && !acC.isConnected) {
-              acC.width = 0;
-              acC.height = 0;
               activeCanvasMapRef.current.delete(p.id);
             }
             const ovC = overTextCanvasMapRef.current.get(p.id);
             if (ovC && !ovC.isConnected) {
-              ovC.width = 0;
-              ovC.height = 0;
               overTextCanvasMapRef.current.delete(p.id);
             }
           }
@@ -8792,11 +8787,7 @@ export default function App() {
             }
             for (const im of p.images || []) {
               if (im.dataUrl && !usedImageUrls.has(im.dataUrl)) {
-                const cachedImg = imageElementsCacheRef.current.get(im.dataUrl);
-                if (cachedImg) {
-                  cachedImg.src = '';
-                  imageElementsCacheRef.current.delete(im.dataUrl);
-                }
+                imageElementsCacheRef.current.delete(im.dataUrl);
               }
             }
           }
@@ -12874,13 +12865,16 @@ export default function App() {
             if (imgObj.dataUrl.startsWith('http')) {
               imgEl.crossOrigin = 'anonymous';
             }
-            const loadedPageId = pageObj.id;
             imgEl.onload = () => {
-              staticPageRenderCacheRef.current.delete(loadedPageId);
+              staticPageRenderCacheRef.current.clear();
               renderStaticSceneRef.current(true);
             };
             imgEl.src = imgObj.dataUrl;
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
+          }
+
+          if (!imgEl.complete) {
+            staticPageRenderCacheRef.current.delete(pageObj.id);
           }
 
           if (imgEl.complete && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
@@ -67315,20 +67309,19 @@ export default function App() {
                     <canvas
                       ref={(el) => {
                         if (el) {
-                          const isNewlyMounted = staticCanvasMapRef.current.get(pageObj.id) !== el;
+                          const targetW = Math.round(pW * CANVAS_DPR);
+                          const targetH = Math.round(pH * CANVAS_DPR);
+                          if (el.width !== targetW) el.width = targetW;
+                          if (el.height !== targetH) el.height = targetH;
                           staticCanvasMapRef.current.set(pageObj.id, el);
                           if (isCurrentActive) staticCanvasRef.current = el;
-                          if (isNewlyMounted) {
+                          if (!mountedCanvasNodesRef.current.has(el)) {
+                            mountedCanvasNodesRef.current.add(el);
+                            staticPageRenderCacheRef.current.delete(pageObj.id);
                             scheduleCoalescedStaticRender();
                           }
                         } else {
-                          const old = staticCanvasMapRef.current.get(pageObj.id);
-                          if (old) {
-                            old.width = 0;
-                            old.height = 0;
-                          }
                           staticCanvasMapRef.current.delete(pageObj.id);
-                          staticPageRenderCacheRef.current.delete(pageObj.id);
                         }
                       }}
                       width={pW * CANVAS_DPR}
@@ -67379,8 +67372,12 @@ export default function App() {
                     <canvas
                       ref={(el) => {
                         if (el) {
+                          const targetW = Math.round(pW * CANVAS_DPR);
+                          const targetH = Math.round(pH * CANVAS_DPR);
+                          if (el.width !== targetW) el.width = targetW;
+                          if (el.height !== targetH) el.height = targetH;
                           activeCanvasMapRef.current.set(pageObj.id, el);
-                          if (isCurrentActive && (activeCanvasRef.current !== el || !activeCtxRef.current)) {
+                          if (isCurrentActive) {
                             activeCanvasRef.current = el;
                             const ctx =
                               (el.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) ||
@@ -67393,11 +67390,6 @@ export default function App() {
                             }
                           }
                         } else {
-                          const old = activeCanvasMapRef.current.get(pageObj.id);
-                          if (old) {
-                            old.width = 0;
-                            old.height = 0;
-                          }
                           activeCanvasMapRef.current.delete(pageObj.id);
                         }
                       }}
@@ -69838,22 +69830,20 @@ export default function App() {
                     <canvas
                       ref={(el) => {
                         if (el) {
-                          const isNewlyMounted = overTextCanvasMapRef.current.get(pageObj.id) !== el;
+                          const targetW = Math.round(pW * CANVAS_DPR);
+                          const targetH = Math.round(pH * CANVAS_DPR);
+                          if (el.width !== targetW) el.width = targetW;
+                          if (el.height !== targetH) el.height = targetH;
                           overTextCanvasMapRef.current.set(pageObj.id, el);
                           if (isCurrentActive) overTextCanvasRef.current = el;
-                          if (isNewlyMounted) {
+                          if (!mountedCanvasNodesRef.current.has(el)) {
+                            mountedCanvasNodesRef.current.add(el);
                             overCanvasDirtyMapRef.current.delete(pageObj.id);
+                            staticPageRenderCacheRef.current.delete(pageObj.id);
                             scheduleCoalescedStaticRender();
                           }
                         } else {
-                          const old = overTextCanvasMapRef.current.get(pageObj.id);
-                          if (old) {
-                            old.width = 0;
-                            old.height = 0;
-                          }
                           overTextCanvasMapRef.current.delete(pageObj.id);
-                          overCanvasDirtyMapRef.current.delete(pageObj.id);
-                          staticPageRenderCacheRef.current.delete(pageObj.id);
                         }
                       }}
                       width={pW * CANVAS_DPR}
