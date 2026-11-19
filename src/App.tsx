@@ -48151,12 +48151,7 @@ export default function App() {
       if (p.y > maxY) maxY = p.y;
     }
     const diag = Math.hypot(maxX - minX, maxY - minY);
-    if (diag < 10 || diag > 78 || totalLen < 14 || totalLen > 140) return null;
     const directDist = distance(rawPts[0], rawPts[rawPts.length - 1]);
-    // Reject closed loops (like ρ, ο, 0, α) and straight lines
-    if (directDist <= Math.max(8, diag * 0.34) || directDist / Math.max(1, totalLen) > 0.82) {
-      return null;
-    }
 
     // Only inspect the most recent stroke on the target layer so handwriting near older lines is never converted!
     let targetCandidate: StrokeObject | null = null;
@@ -48173,6 +48168,21 @@ export default function App() {
 
     const isAutoLineOrArrow =
       s.isShape && (s.shapeType === 'line' || s.shapeType === 'arrow') && s.points.length === 2;
+
+    // Two-tier gating:
+    // - Snapped straight lines (`isAutoLineOrArrow`) were deliberately created with Hold-to-Snap / Shape tool,
+    //   so compact/slightly-curved hand-drawn V tips (like force vectors) are accepted naturally.
+    // - Freehand strokes stay ultra-strict so Greek handwriting (μ, ρ, π, 1, -, =) NEVER becomes an arrow!
+    const minDiag = isAutoLineOrArrow ? 7 : 10;
+    const minTotalLen = isAutoLineOrArrow ? 10 : 14;
+    const minDirect = isAutoLineOrArrow ? Math.max(5.5, diag * 0.3) : Math.max(8, diag * 0.34);
+    const maxDirectRatio = isAutoLineOrArrow ? 0.88 : 0.82;
+    if (diag < minDiag || diag > 78 || totalLen < minTotalLen || totalLen > 140) return null;
+    // Reject closed loops (like ρ, ο, 0, α) and straight lines
+    if (directDist <= minDirect || directDist / Math.max(1, totalLen) > maxDirectRatio) {
+      return null;
+    }
+
     let isStraightFreehand = false;
     if (!isAutoLineOrArrow && !s.isShape && s.points.length >= 2) {
       let sPathLen = 0;
@@ -48190,7 +48200,8 @@ export default function App() {
     const p0 = s.points[0];
     const p1 = s.points[s.points.length - 1];
     const lineLen = distance(p0, p1);
-    if (lineLen < 60 || diag > Math.min(72, lineLen * 0.55)) return null;
+    const minLineLen = isAutoLineOrArrow ? 35 : 60;
+    if (lineLen < minLineLen || diag > Math.min(72, lineLen * 0.6)) return null;
 
     const endpoints: { which: 'end' | 'start'; E: BezierPoint; A: BezierPoint }[] = [];
     if (!s.arrowEnd) endpoints.push({ which: 'end', E: p1, A: p0 });
@@ -48232,12 +48243,12 @@ export default function App() {
       const perpSpan = maxLy - minLy;
 
       // Apex must sit directly on/at the tip of the line endpoint E
-      if (distance(apexPt, ep.E) > 14) continue;
-      if (maxLx < -5 || maxLx > 16) continue;
-      if (minLx < -38 || minLx > -4) continue;
-      if (maxLx - minLx < 6) continue;
-      if (perpSpan < 9 || perpSpan > 56) continue;
-      if (Math.abs(apexLy) > 8) continue;
+      if (distance(apexPt, ep.E) > (isAutoLineOrArrow ? 18 : 14)) continue;
+      if (maxLx < (isAutoLineOrArrow ? -7 : -5) || maxLx > (isAutoLineOrArrow ? 18 : 16)) continue;
+      if (minLx < -40 || minLx > (isAutoLineOrArrow ? -2.5 : -4)) continue;
+      if (maxLx - minLx < (isAutoLineOrArrow ? 3.5 : 6)) continue;
+      if (perpSpan < (isAutoLineOrArrow ? 7 : 9) || perpSpan > 56) continue;
+      if (Math.abs(apexLy) > (isAutoLineOrArrow ? 10 : 8)) continue;
 
       const firstLx = lxArr[0];
       const lastLx = lxArr[rawPts.length - 1];
@@ -48256,21 +48267,36 @@ export default function App() {
       const leg1Chord = distance(rawPts[0], apexPt);
       const leg2Chord = distance(apexPt, rawPts[rawPts.length - 1]);
 
-      // Both legs of the '>' chevron must be straight segments of balanced length straddling opposite sides of the shaft
-      const isStrictChevronV =
-        leg1Chord >= 7 &&
-        leg2Chord >= 7 &&
-        leg1Chord <= 42 &&
-        leg2Chord <= 42 &&
-        Math.min(leg1Chord, leg2Chord) >= Math.max(leg1Chord, leg2Chord) * 0.45 &&
-        leg1Chord / Math.max(1, leg1PathLen) >= 0.88 &&
-        leg2Chord / Math.max(1, leg2PathLen) >= 0.88 &&
-        leg1Chord + leg2Chord >= totalLen * 0.88 &&
-        maxLx - firstLx >= Math.max(6, leg1Chord * 0.48) &&
-        maxLx - lastLx >= Math.max(6, leg2Chord * 0.48) &&
-        firstLy * lastLy < 0 &&
-        Math.min(Math.abs(firstLy), Math.abs(lastLy)) >= 4 &&
-        Math.abs(firstLy - lastLy) >= 9;
+      // Both legs of the '>' chevron must straddle opposite sides of the shaft.
+      // Slightly more natural curve/angle tolerance on already-snapped straight shafts (`isAutoLineOrArrow`),
+      // while keeping freehand shafts ultra-strict so handwriting never triggers false arrows.
+      const isStrictChevronV = isAutoLineOrArrow
+        ? leg1Chord >= 4.5 &&
+          leg2Chord >= 4.5 &&
+          leg1Chord <= 44 &&
+          leg2Chord <= 44 &&
+          Math.min(leg1Chord, leg2Chord) >= Math.max(leg1Chord, leg2Chord) * 0.35 &&
+          leg1Chord / Math.max(1, leg1PathLen) >= 0.72 &&
+          leg2Chord / Math.max(1, leg2PathLen) >= 0.72 &&
+          leg1Chord + leg2Chord >= totalLen * 0.75 &&
+          maxLx - firstLx >= Math.max(2.5, leg1Chord * 0.28) &&
+          maxLx - lastLx >= Math.max(2.5, leg2Chord * 0.28) &&
+          firstLy * lastLy < 0 &&
+          Math.min(Math.abs(firstLy), Math.abs(lastLy)) >= 2.5 &&
+          Math.abs(firstLy - lastLy) >= 7
+        : leg1Chord >= 7 &&
+          leg2Chord >= 7 &&
+          leg1Chord <= 42 &&
+          leg2Chord <= 42 &&
+          Math.min(leg1Chord, leg2Chord) >= Math.max(leg1Chord, leg2Chord) * 0.45 &&
+          leg1Chord / Math.max(1, leg1PathLen) >= 0.88 &&
+          leg2Chord / Math.max(1, leg2PathLen) >= 0.88 &&
+          leg1Chord + leg2Chord >= totalLen * 0.88 &&
+          maxLx - firstLx >= Math.max(6, leg1Chord * 0.48) &&
+          maxLx - lastLx >= Math.max(6, leg2Chord * 0.48) &&
+          firstLy * lastLy < 0 &&
+          Math.min(Math.abs(firstLy), Math.abs(lastLy)) >= 4 &&
+          Math.abs(firstLy - lastLy) >= 9;
 
       if (!isStrictChevronV) continue;
 
