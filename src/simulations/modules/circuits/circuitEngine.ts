@@ -5613,6 +5613,89 @@ export function autoAlignAndConnectCircuit(
     }
   }
 
+  // Final Guarantee: For any pictorial bulb (asymmetric left/right terminal heights),
+  // if the adjacent horizontal wire at leftTerm.x or rightTerm.x sits on a different row (e.g. main rail Y vs bottom contact Y),
+  // synthesize the vertical step-bridge segment so a completed/aligned circuit NEVER has a floating gap!
+  const allResultWiresForBridge = [
+    ...currentStrokes.filter((s) => !replacedWireStrokeIds.has(s.id) && !classifyCircuitStrokeKind(s) && s.points.length === 2),
+    ...newWireStrokes,
+  ];
+  for (let bIdx = 0; bIdx < alignedComps.length; bIdx++) {
+    const comp = alignedComps[bIdx];
+    if (comp.kind !== 'bulb') continue;
+    const terminals = [
+      { key: 'L', pt: comp.leftTerm, isRight: false },
+      { key: 'R', pt: comp.rightTerm, isRight: true },
+    ];
+    for (const term of terminals) {
+      // Find nearest horizontal wire whose endpoint sits near term.pt.x but offset vertically (4..48px)
+      let bestWire: StrokeObject | null = null;
+      let bestWireY = term.pt.y;
+      let bestDist = Infinity;
+      for (const w of allResultWiresForBridge) {
+        const a = w.points[0];
+        const b = w.points[w.points.length - 1];
+        if (Math.abs(a.y - b.y) > 4) continue; // horizontal wires only
+        const wy = (a.y + b.y) / 2;
+        const dy = Math.abs(wy - term.pt.y);
+        if (dy < 4 || dy > 48) continue;
+        const xMin = Math.min(a.x, b.x);
+        const xMax = Math.max(a.x, b.x);
+        const nearEndpointX = term.isRight ? xMin : xMax;
+        const dx = Math.abs(nearEndpointX - term.pt.x);
+        if (dx <= 26 && dx + dy < bestDist) {
+          bestDist = dx + dy;
+          bestWire = w;
+          bestWireY = wy;
+        }
+      }
+      if (!bestWire) continue;
+
+      const bridgeX = term.pt.x;
+      const yTop = Math.min(term.pt.y, bestWireY);
+      const yBot = Math.max(term.pt.y, bestWireY);
+
+      // Check if a vertical wire already bridges (bridgeX, yTop..yBot)
+      const alreadyBridged = allResultWiresForBridge.some((w) => {
+        const a = w.points[0];
+        const b = w.points[w.points.length - 1];
+        if (Math.abs(a.x - b.x) > 5) return false;
+        const wx = (a.x + b.x) / 2;
+        if (Math.abs(wx - bridgeX) > 10) return false;
+        const wyMin = Math.min(a.y, b.y);
+        const wyMax = Math.max(a.y, b.y);
+        return wyMin <= yTop + 4 && wyMax >= yBot - 4;
+      });
+      if (alreadyBridged) continue;
+
+      // Snap the adjacent horizontal wire's endpoint X cleanly to bridgeX so the corner meets at 90°
+      if (bestWire.points.length === 2) {
+        const p0 = bestWire.points[0];
+        const p1 = bestWire.points[1];
+        if (term.isRight) {
+          if (p0.x <= p1.x) p0.x = bridgeX;
+          else p1.x = bridgeX;
+        } else {
+          if (p0.x >= p1.x) p0.x = bridgeX;
+          else p1.x = bridgeX;
+        }
+        p1.cx = (p0.x + p1.x) / 2;
+        p1.cy = (p0.y + p1.y) / 2;
+      }
+
+      const bridgeStroke = makeCleanWireStroke(
+        bestWire,
+        bridgeX,
+        yTop,
+        bridgeX,
+        yBot,
+        `bulb-bridge-${bIdx}-${term.key}`
+      );
+      newWireStrokes.push(bridgeStroke);
+      allResultWiresForBridge.push(bridgeStroke);
+    }
+  }
+
   const keptStrokes = currentStrokes.filter((s) => !replacedWireStrokeIds.has(s.id));
   return [...keptStrokes, ...newWireStrokes];
 }
