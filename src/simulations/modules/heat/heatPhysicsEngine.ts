@@ -454,11 +454,15 @@ export function stepHeatSimulation(sim: HeatSimConfig, dt: number): HeatSimConfi
     }
 
     // Smooth response curve for realistic mercury/alcohol movement
-    if (Math.abs(targetTemp - ts.temperature) <= 0.02) {
+    // Snap cleanly within 0.06°C so target values like 80°C always settle to exact 80.0°C (never stuck at 79.9°C)
+    if (Math.abs(targetTemp - ts.temperature) <= 0.06) {
       ts.temperature = targetTemp;
     } else {
       const alpha = 1.0 - Math.exp(-timeStep * (vesselDipped ? 3.5 : 0.8));
       ts.temperature += (targetTemp - ts.temperature) * alpha;
+      if (Math.abs(targetTemp - ts.temperature) <= 0.06) {
+        ts.temperature = targetTemp;
+      }
     }
 
     if (Math.abs(ts.temperature - prevTemp) > 0.005 || ts.dippedVesselId !== prevDipped) {

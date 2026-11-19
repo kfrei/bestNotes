@@ -7,7 +7,7 @@ import {
   HeatObjectType,
   FlameIntensity,
 } from './types';
-import { stepHeatSimulation } from './heatPhysicsEngine';
+import { stepHeatSimulation, findDippedVesselForThermometer } from './heatPhysicsEngine';
 import { createDefaultHeatSim } from './HeatSimulationModule';
 import { recognizeHeatSketch, createHeatObjectFromRecognition } from './HeatSketchRecognizer';
 import {
@@ -542,55 +542,68 @@ export function useHeatSimulation(
 
   const resetSim = useCallback(() => {
     updateActiveHeatSim((prev: HeatSimConfig) => {
+      const ambient = prev.ambientTemperature ?? 20;
+      // Pass 1: reset burners, containers (preserving exact initialTemp including 0°C), and tripods
+      const resetBaseObjects = prev.objects.map((obj: HeatObject) => {
+        if (obj.type === 'burner' && obj.burnerState) {
+          return {
+            ...obj,
+            burnerState: {
+              ...obj.burnerState,
+              isOn: false,
+              flameCycle: 0,
+              intensity: 'medium' as const,
+              noticeUntil: undefined,
+            },
+          };
+        }
+        if (obj.containerState) {
+          return {
+            ...obj,
+            containerState: {
+              ...obj.containerState,
+              temperature: obj.containerState.initialTemp ?? ambient,
+              isBoiling: false,
+              boilingIntensity: 0,
+            },
+          };
+        }
+        if (obj.tripodState) {
+          return {
+            ...obj,
+            tripodState: {
+              ...obj.tripodState,
+              wireGauzeTemp: ambient,
+            },
+          };
+        }
+        return obj;
+      });
+
+      // Pass 2: reset each thermometer to the exact reset initialTemp of its dipped container (or ambient if undipped)
+      const resetContainers = resetBaseObjects.filter((o) => Boolean(o.containerState));
+      const finalObjects = resetBaseObjects.map((obj: HeatObject) => {
+        if (!obj.thermometerState) return obj;
+        const dipped = findDippedVesselForThermometer(obj, resetContainers, true);
+        const exactResetTemp = dipped?.containerState
+          ? dipped.containerState.temperature
+          : ambient;
+        return {
+          ...obj,
+          thermometerState: {
+            ...obj.thermometerState,
+            dippedVesselId: dipped?.id,
+            temperature: exactResetTemp,
+          },
+        };
+      });
+
       const next = {
         ...prev,
         elapsedSec: 0,
         isRunning: false,
         history: [],
-        objects: prev.objects.map((obj: HeatObject) => {
-          if (obj.type === 'burner' && obj.burnerState) {
-            return {
-              ...obj,
-              burnerState: {
-                ...obj.burnerState,
-                isOn: false,
-                flameCycle: 0,
-                intensity: 'medium' as const,
-                noticeUntil: undefined,
-              },
-            };
-          }
-          if (obj.containerState) {
-            return {
-              ...obj,
-              containerState: {
-                ...obj.containerState,
-                temperature: obj.containerState.initialTemp || (prev.ambientTemperature ?? 20),
-                isBoiling: false,
-                boilingIntensity: 0,
-              },
-            };
-          }
-          if (obj.thermometerState) {
-            return {
-              ...obj,
-              thermometerState: {
-                ...obj.thermometerState,
-                temperature: prev.ambientTemperature ?? 20,
-              },
-            };
-          }
-          if (obj.tripodState) {
-            return {
-              ...obj,
-              tripodState: {
-                ...obj.tripodState,
-                wireGauzeTemp: prev.ambientTemperature ?? 20,
-              },
-            };
-          }
-          return obj;
-        }),
+        objects: finalObjects,
       };
       liveSimRef.current = next;
       return next;

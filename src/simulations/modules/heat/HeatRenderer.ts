@@ -5555,9 +5555,18 @@ export function isHeatSimulationVisuallyActive(sim: HeatSimConfig | null | undef
   if (sim.isRunning) return true;
   const now = performance.now();
   const wallNow = Date.now();
+  const ambientTemp = sim.ambientTemperature ?? 20;
+  const containers = sim.objects.filter((o) => Boolean(o.containerState));
   for (const obj of sim.objects) {
     if (obj.burnerState?.noticeUntil && obj.burnerState.noticeUntil > wallNow) {
       return true;
+    }
+    if (obj.thermometerState) {
+      const dipped = findDippedVesselForThermometer(obj, containers, true);
+      const targetTemp = dipped?.containerState ? dipped.containerState.temperature : ambientTemp;
+      if (Math.abs(targetTemp - obj.thermometerState.temperature) > 0.05) {
+        return true;
+      }
     }
     if (obj.containerState && (obj.containerState.volumeMl ?? 0) > 0) {
       const slosh = containerSloshMap.get(obj.id);
