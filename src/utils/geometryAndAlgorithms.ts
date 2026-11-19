@@ -6598,35 +6598,35 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       s = s
         .replace(
           /(\d+(?:[.,]\d+)?)\s*m\s*\/\s*(?:s\s*\^?\s*2|s²|\|?2)(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_MS2__'
+          '$1 \uE001'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*m\s*\/\s*s(?![\^²20-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_MS__'
+          '$1 \uE002'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*km\s*\/\s*h(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_KMH__'
+          '$1 \uE003'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*rad\s*\/\s*(?:s\s*\^?\s*2|s²)(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_RADS2__'
+          '$1 \uE004'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*rad\s*\/\s*s(?![\^²20-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_RADS__'
+          '$1 \uE005'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*N\s*\/\s*m(?![\^²³0-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/g,
-          '$1 __UNIT_NM__'
+          '$1 \uE006'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*N\s*\/\s*C(?![\^²³0-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/g,
-          '$1 __UNIT_NC__'
+          '$1 \uE007'
         )
         .replace(
           /(\d+(?:[.,]\d+)?)\s*kg\s*\/\s*m\s*\^?\s*3(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
-          '$1 __UNIT_KGM3__'
+          '$1 \uE008'
         )
         // Contextual Latin -> Greek disambiguation in Physics equations:
         // e.g. `SF = m*a` -> `ΣF = m*a`, `Dx/Dt` -> `Δx/Δt`, `ημ(wt)` / `συν(wt)` / `sin(wt)` / `cos(wt)` -> `ω*t`
@@ -6921,14 +6921,14 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       .replace(/!=/g, ' \\ne ')
       .replace(/\+-|±/g, ' \\pm ')
       .replace(/\*/g, ' \\cdot ')
-      .replace(/\s*__UNIT_MS2__/g, '\\,\\text{m/s}^{2}')
-      .replace(/\s*__UNIT_MS__/g, '\\,\\text{m/s}')
-      .replace(/\s*__UNIT_KMH__/g, '\\,\\text{km/h}')
-      .replace(/\s*__UNIT_RADS2__/g, '\\,\\text{rad/s}^{2}')
-      .replace(/\s*__UNIT_RADS__/g, '\\,\\text{rad/s}')
-      .replace(/\s*__UNIT_NM__/g, '\\,\\text{N/m}')
-      .replace(/\s*__UNIT_NC__/g, '\\,\\text{N/C}')
-      .replace(/\s*__UNIT_KGM3__/g, '\\,\\text{kg/m}^{3}');
+      .replace(/\s*\uE001/g, '\\,\\text{m/s}^{2}')
+      .replace(/\s*\uE002/g, '\\,\\text{m/s}')
+      .replace(/\s*\uE003/g, '\\,\\text{km/h}')
+      .replace(/\s*\uE004/g, '\\,\\text{rad/s}^{2}')
+      .replace(/\s*\uE005/g, '\\,\\text{rad/s}')
+      .replace(/\s*\uE006/g, '\\,\\text{N/m}')
+      .replace(/\s*\uE007/g, '\\,\\text{N/C}')
+      .replace(/\s*\uE008/g, '\\,\\text{kg/m}^{3}');
 
     if (depth === 0) {
       // Single-token SI units after `= <number>` at the end of a step (e.g. `= 20 N`, `= 5 kg`, `= 4 s`, `= 50 Hz`, `= 100 J`)
