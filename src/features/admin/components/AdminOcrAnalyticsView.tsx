@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles,
-  Cpu,
   Calculator,
   FlaskConical,
   FileText,
@@ -12,14 +11,32 @@ import {
   Clapperboard,
   ShieldCheck,
   Users,
-  Percent,
   BarChart3,
+  KeyRound,
+  AlertOctagon,
+  RefreshCw,
+  Clock,
+  Info,
 } from 'lucide-react';
-import type { DailyTrafficStats } from '../types';
+import {
+  GEMINI_API1_OBSERVED_CAPACITY,
+  GEMINI_API2_ESTIMATED_CAPACITY_MAX,
+  GEMINI_API2_ESTIMATED_CAPACITY_MIN,
+  type DailyTrafficStats,
+  type GeminiApi1ProbeResult,
+} from '../types';
 import {
   computeOcrMetrics,
   exportOcrToCsv,
+  getDayApiKeyBreakdown,
 } from '../services/trafficService';
+import {
+  formatProbeCountdown,
+  getGeminiKeyAvailability,
+  isApi1ProbeDue,
+  loadApi1ProbeResult,
+  probeGeminiApi1Health,
+} from '../services/geminiKeyHealthService';
 
 export interface AdminOcrAnalyticsViewProps {
   traffic: DailyTrafficStats[];
@@ -31,7 +48,57 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
   isLoading,
 }) => {
   const [searchDate, setSearchDate] = useState<string>('');
-  const [chartMode, setChartMode] = useState<'quotaPct' | 'type' | 'attribution'>('quotaPct');
+  const [chartMode, setChartMode] = useState<'apiKey' | 'type' | 'attribution'>('apiKey');
+  const [probeResult, setProbeResult] = useState<GeminiApi1ProbeResult | null>(() =>
+    loadApi1ProbeResult()
+  );
+  const [isProbingApi1, setIsProbingApi1] = useState<boolean>(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  const probeResultRef = useRef<GeminiApi1ProbeResult | null>(probeResult);
+  probeResultRef.current = probeResult;
+  const isMountedRef = useRef<boolean>(true);
+
+  const keyAvailability = getGeminiKeyAvailability();
+
+  const runApi1Probe = useCallback(async (force: boolean) => {
+    setIsProbingApi1(true);
+    try {
+      const res = await probeGeminiApi1Health({ force });
+      if (!isMountedRef.current) return;
+      setProbeResult(res);
+      setNowMs(Date.now());
+    } finally {
+      if (isMountedRef.current) {
+        setIsProbingApi1(false);
+      }
+    }
+  }, []);
+
+  // Auto-run 6-hour API 1 health probe on mount if due, and re-check every 60s while panel stays open
+  useEffect(() => {
+    isMountedRef.current = true;
+    const cached = loadApi1ProbeResult();
+    if (cached) {
+      setProbeResult(cached);
+    }
+    if (isApi1ProbeDue(cached)) {
+      void runApi1Probe(false);
+    }
+
+    const intervalId = window.setInterval(() => {
+      const currentNow = Date.now();
+      setNowMs(currentNow);
+      if (isApi1ProbeDue(probeResultRef.current, currentNow)) {
+        void runApi1Probe(false);
+      }
+    }, 60_000);
+
+    return () => {
+      isMountedRef.current = false;
+      window.clearInterval(intervalId);
+    };
+  }, [runApi1Probe]);
 
   const ocrMetrics = computeOcrMetrics(traffic);
 
@@ -39,31 +106,12 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
     t.date.toLowerCase().includes(searchDate.toLowerCase())
   );
 
-  // Maximum AI total across recent days for proportional histogram height
+  // Maximum AI total across recent 14 days for proportional histogram height
   const recentDays = traffic.slice(0, 14).reverse();
   const maxOcrInChart = Math.max(
     1,
     ...recentDays.map((t) => t.ocrTotalCount || 0)
   );
-
-  // Maximum % quota across recent 14 days
-  const maxDayQuotaPct = Math.max(
-    0.1,
-    ...recentDays.map((t) => Number((((t.ocrTotalCount || 0) / 1500) * 100).toFixed(1)))
-  );
-
-  // Average % quota across recent 14 days
-  const avgQuotaPct =
-    recentDays.length > 0
-      ? Number(
-          (
-            recentDays.reduce(
-              (acc, t) => acc + ((t.ocrTotalCount || 0) / 1500) * 100,
-              0
-            ) / recentDays.length
-          ).toFixed(1)
-        )
-      : 0;
 
   // Admin vs Others proportions today
   const adminTodayPct =
@@ -75,6 +123,30 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
       ? 100 - adminTodayPct
       : 0;
 
+  // Derived API 1 live status
+  const api1Recovered = probeResult?.status === 'ok';
+  const api1RateLimited = probeResult?.status === 'rate_limited_429';
+  const api1ProbeError = probeResult?.status === 'error';
+  const api1DisplayTotal =
+    ocrMetrics.allTimeApi1Total > 0
+      ? ocrMetrics.allTimeApi1Total
+      : GEMINI_API1_OBSERVED_CAPACITY;
+  const api1ProbeTimeLabel = probeResult?.checkedAt
+    ? new Date(probeResult.checkedAt).toLocaleString('el-GR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+  const api1ProbeCodeLabel =
+    probeResult && probeResult.httpCode > 0
+      ? `HTTP ${probeResult.httpCode}`
+      : 'Σφάλμα δικτύου';
+  const api1NextCountdown = probeResult?.nextCheckAt
+    ? formatProbeCountdown(probeResult.nextCheckAt, nowMs)
+    : 'Εκκρεμεί τώρα';
+
   return (
     <div className="space-y-6">
       {/* 1. Header & Actions */}
@@ -82,10 +154,10 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         <div>
           <h2 className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-[#1b2a4a]" />
-            <span>Ανάλυση AI & Κατανάλωση Δωρεάν Ορίου Gemini</span>
+            <span>Ανάλυση AI & Κατάσταση Gemini API Keys</span>
           </h2>
           <p className="text-xs text-[#64748b]">
-            Πλήρης καταμέτρηση OCR (Κείμενο, Μαθηματικά, Χημεία) & Έξυπνου Ζωντανέματος (Smart Sketch) με ραβδόγραμμα % κατανάλωσης ανά ημέρα.
+            Πραγματική καταμέτρηση OCR (Κείμενο, Μαθηματικά, Χημεία) & Ζωντανέματος ανά API Key, με αυτόματο έλεγχο ανά 6 ώρες για το API 1.
           </p>
         </div>
 
@@ -100,55 +172,274 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         </button>
       </div>
 
-      {/* 2. Google Gemini Free Tier Quota Hero Card */}
-      <div className="p-5 rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl border border-white/90 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-[#eef3f8] border border-[#1b2a4a]/20 text-[#1b2a4a] flex items-center justify-center shadow-xs">
-              <Cpu className="w-6 h-6 text-[#1b2a4a]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-[#1b2a4a]">
-                  Ημερήσια Χρήση Δωρεάν AI (Google Gemini API Free Tier)
-                </h3>
-                <span className="px-2 py-0.5 rounded-full bg-[#eef3f8] text-[#1b2a4a] text-[10px] font-bold border border-[#1b2a4a]/20">
-                  100% ΔΩΡΕΑΝ
-                </span>
+      {/* 2. Gemini API Key 1 (Depleted / 6h Probe) vs API Key 2 (Active) Dual Hero Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* API Key 1 Card (Old Project) */}
+        <div
+          className={`p-5 rounded-3xl ipados-liquid-glass backdrop-blur-2xl border shadow-sm space-y-4 ${
+            api1Recovered
+              ? 'bg-emerald-50/70 border-emerald-200'
+              : api1RateLimited || api1ProbeError
+              ? 'bg-amber-50/60 border-amber-200/90'
+              : 'bg-[#fdfbf7]/85 border-rose-200/80'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-11 h-11 rounded-2xl border flex items-center justify-center shadow-xs shrink-0 ${
+                  api1Recovered
+                    ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                    : api1RateLimited || api1ProbeError
+                    ? 'bg-amber-100 border-amber-300 text-amber-800'
+                    : 'bg-rose-100/90 border-rose-200 text-rose-700'
+                }`}
+              >
+                {api1Recovered ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : (
+                  <AlertOctagon className="w-5 h-5" />
+                )}
               </div>
-              <p className="text-xs text-[#64748b] mt-0.5">
-                Όριο: <strong className="text-[#1b2a4a]">1.500 αιτήματα / ημέρα (RPD)</strong> & 15 αιτήματα / λεπτό (RPM)
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-[#1b2a4a]">
+                    API Key 1 (Παλιό Project)
+                  </h3>
+                  {api1Recovered ? (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-300">
+                      ΕΝΕΡΓΟ / ΕΚΑΝΕ RESET (HTTP 200)
+                    </span>
+                  ) : api1RateLimited ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300">
+                      ΟΡΙΟ ΡΥΘΜΟΥ (HTTP 429)
+                    </span>
+                  ) : api1ProbeError ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300">
+                      ΣΦΑΛΜΑ ΕΛΕΓΧΟΥ ({api1ProbeCodeLabel})
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-300">
+                      ΕΞΑΝΤΛΗΜΕΝΟ / ΓΕΜΑΤΟ (HTTP 402)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#64748b] mt-0.5">
+                  {api1Recovered
+                    ? `Το API Key 1 απάντησε κανονικά (HTTP 200) — ιστορικό: ${api1DisplayTotal.toLocaleString()} αιτήματα`
+                    : api1RateLimited
+                    ? `Προσωρινό όριο ρυθμού/quota (HTTP 429) — ιστορικό: ${api1DisplayTotal.toLocaleString()} αιτήματα`
+                    : `Εξαντλήθηκαν τα prepayment credits μετά από ~${api1DisplayTotal.toLocaleString()} καταγεγραμμένα αιτήματα`}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <div className="text-[10px] font-semibold text-[#64748b]">Σύνολο API 1</div>
+              <div className="text-xl font-black text-[#1b2a4a] tabular-nums">
+                {ocrMetrics.allTimeApi1Total.toLocaleString()}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-white/70 px-4 py-2.5 rounded-2xl border border-[#dfd8cb]/80 shadow-2xs">
-            <div className="text-right">
-              <div className="text-[11px] font-semibold text-[#64748b]">Υπόλοιπο Σήμερα</div>
-              <div className="text-lg font-black text-[#1b2a4a] tabular-nums">
-                {ocrMetrics.quotaRemaining.toLocaleString()} / 1.500
+          {/* Fullness bar */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-slate-700">
+                Κατάσταση Κλειδιού:{' '}
+                <strong
+                  className={
+                    api1Recovered
+                      ? 'text-emerald-700'
+                      : api1RateLimited || api1ProbeError
+                      ? 'text-amber-700'
+                      : 'text-rose-700'
+                  }
+                >
+                  {api1Recovered
+                    ? 'Διαθέσιμο ξανά (HTTP 200)'
+                    : api1RateLimited
+                    ? 'Όριο ρυθμού / quota (HTTP 429)'
+                    : api1ProbeError
+                    ? `Αποτυχία ελέγχου (${api1ProbeCodeLabel}) — επανάληψη σύντομα`
+                    : 'Γεμάτο — 100% εξαντλημένο (HTTP 402)'}
+                </strong>
+              </span>
+              <span className="font-bold text-slate-500 tabular-nums">
+                Σήμερα: {ocrMetrics.todayApi1}
+              </span>
+            </div>
+            <div className="w-full h-2.5 rounded-full bg-slate-200/80 overflow-hidden p-0.5 border border-black/5">
+              <div
+                style={{ width: '100%' }}
+                className={`h-full rounded-full transition-all duration-700 ${
+                  api1Recovered
+                    ? 'bg-emerald-600'
+                    : api1RateLimited || api1ProbeError
+                    ? 'bg-amber-500'
+                    : 'bg-rose-500'
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* 6-Hour Automated Health Probe Strip */}
+          <div className="p-3 rounded-2xl bg-white/80 border border-[#dfd8cb]/90 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#1b2a4a]">
+                <Clock className="w-3.5 h-3.5 text-[#1b2a4a]" />
+                <span>Αυτόματος Έλεγχος API 1 ανά 6 ώρες</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void runApi1Probe(true)}
+                disabled={isProbingApi1}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1b2a4a] text-white hover:bg-[#152238] disabled:opacity-50 text-[11px] font-semibold transition cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${isProbingApi1 ? 'animate-spin' : ''}`} />
+                <span>{isProbingApi1 ? 'Έλεγχος...' : 'Έλεγχος API 1 τώρα'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-slate-600">
+              <div>
+                Τελευταίος έλεγχος:{' '}
+                <strong className="text-[#1b2a4a]">
+                  {api1ProbeTimeLabel
+                    ? `${api1ProbeTimeLabel} (${api1ProbeCodeLabel})`
+                    : 'Σε εξέλιξη...'}
+                </strong>
+              </div>
+              <div className="sm:text-right">
+                Επόμενος (6ωρο):{' '}
+                <strong className="text-[#1b2a4a]">{api1NextCountdown}</strong>
               </div>
             </div>
-            <CheckCircle2 className="w-6 h-6 text-[#1b2a4a]" />
+
+            {probeResult?.message && (
+              <div className="text-[10px] font-mono text-slate-600 bg-slate-100/80 px-2.5 py-1.5 rounded-lg border border-slate-200/80 break-words">
+                [{probeResult.model}] {probeResult.message}
+              </div>
+            )}
+
+            <div className="flex items-start gap-1.5 text-[10.5px] text-slate-600 pt-0.5 leading-snug">
+              <Info className="w-3.5 h-3.5 text-[#1b2a4a] shrink-0 mt-0.5" />
+              <span>
+                Το σφάλμα <strong>HTTP 402 (prepayment credits depleted)</strong> συνήθως{' '}
+                <strong>δεν κάνει αυτόματο ημερήσιο/μηνιαίο reset</strong> εκτός αν προστεθούν credits. Ο 6ωρος έλεγχος επιβεβαιώνει αυτόματα αν η Google ανανεώσει ποτέ trial credits (HTTP 200).
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Progress Bar & Percentage */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-700">
-              Κατανάλωση Σήμερα: <strong className="text-[#1b2a4a]">{ocrMetrics.todayTotal} αιτήματα AI</strong>
-            </span>
-            <span className="font-black text-xs text-[#1b2a4a]">
-              {ocrMetrics.quotaUsedPercent}% του δωρεάν ορίου
-            </span>
+        {/* API Key 2 Card (New Project — projects/949176547214) */}
+        <div className="p-5 rounded-3xl ipados-liquid-glass bg-[#fdfbf7]/85 backdrop-blur-2xl border border-emerald-200/90 shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center shadow-xs shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-[#1b2a4a]">
+                      API Key 2 (Νέο Project)
+                    </h3>
+                    {keyAvailability.activeSlot === 'custom' ? (
+                      <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold border border-sky-300">
+                        CUSTOM KEY OVERRIDE
+                      </span>
+                    ) : keyAvailability.hasApi2 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-300">
+                        ΕΝΕΡΓΟ (ΚΥΡΙΟ)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300">
+                        ΜΗ ΔΙΑΜΟΡΦΩΜΕΝΟ
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#64748b] mt-0.5">
+                    Project <code className="font-mono text-[#1b2a4a]">projects/949176547214</code> • Ξεκινά από 0 (νέες κλήσεις AI/OCR)
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <div className="text-[10px] font-semibold text-[#64748b]">Χρήση API 2</div>
+                <div className="text-xl font-black text-emerald-700 tabular-nums">
+                  {ocrMetrics.allTimeApi2Total.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Realistic Capacity Reference Progress Bar */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-700">
+                  Κλήσεις API 2:{' '}
+                  <strong className="text-[#1b2a4a]">
+                    {ocrMetrics.allTimeApi2Total.toLocaleString()}
+                  </strong>{' '}
+                  <span className="text-[11px] text-[#64748b]">
+                    (Σήμερα: {ocrMetrics.todayApi2})
+                  </span>
+                </span>
+                <span className="font-black text-xs text-emerald-700 tabular-nums">
+                  ~{ocrMetrics.api2EstimatedUsedPercent}% της εκτίμησης
+                </span>
+              </div>
+
+              <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden p-0.5 border border-black/5">
+                <div
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      ocrMetrics.allTimeApi2Total > 0
+                        ? Math.max(3, ocrMetrics.api2EstimatedUsedPercent)
+                        : 0
+                    )}%`,
+                  }}
+                  className="h-full rounded-full transition-all duration-700 bg-emerald-600"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden p-0.5 border border-black/5">
-            <div
-              style={{ width: `${Math.min(100, Math.max(3, ocrMetrics.quotaUsedPercent))}%` }}
-              className="h-full rounded-full transition-all duration-700 bg-[#1b2a4a]"
-            />
+          {/* Empirical Capacity Reference Box */}
+          <div className="p-3 rounded-2xl bg-white/80 border border-[#dfd8cb]/90 space-y-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] font-semibold text-[#64748b]">
+                  Εκτιμώμενη Χωρητικότητα
+                </div>
+                <div className="text-sm font-black text-[#1b2a4a] tabular-nums">
+                  ~{GEMINI_API2_ESTIMATED_CAPACITY_MIN}–{GEMINI_API2_ESTIMATED_CAPACITY_MAX} αιτήματα
+                </div>
+                <div className="text-[10px] text-[#64748b]">
+                  Αναφορά API 1: ~{ocrMetrics.api2EstimatedCapacityRef} κλήσεις
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-semibold text-[#64748b]">
+                  Εκτιμώμενο Υπόλοιπο
+                </div>
+                <div className="text-sm font-black text-emerald-700 tabular-nums">
+                  ~{ocrMetrics.api2EstimatedRemaining.toLocaleString()} αιτήματα
+                </div>
+                <div className="text-[10px] text-[#64748b]">
+                  Ενεργό slot:{' '}
+                  <strong className="text-[#1b2a4a]">
+                    {keyAvailability.activeSlot.toUpperCase()}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[10.5px] text-slate-600 leading-snug border-t border-[#efebe3] pt-2">
+              Η εκτίμηση βασίζεται στο πραγματικό όριο που άντεξε το API 1 (~{ocrMetrics.api2EstimatedCapacityRef} αιτήματα OCR/AI) αντί για το παρωχημένο θεωρητικό 1.500/ημέρα. Κάθε νέα κλήση με το API 2 καταγράφεται ξεχωριστά στο Firestore.
+            </div>
           </div>
         </div>
       </div>
@@ -284,27 +575,29 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
           <div className="text-xl font-black text-[#1b2a4a]">
             {ocrMetrics.allTimeOcrTotal.toLocaleString()}
           </div>
-          <div className="text-[10px] text-[#64748b] mt-0.5">όλα τα requests AI</div>
+          <div className="text-[10px] text-[#64748b] mt-0.5">
+            API 1: {ocrMetrics.allTimeApi1Total} • API 2: {ocrMetrics.allTimeApi2Total}
+          </div>
         </div>
       </div>
 
-      {/* 5. Daily % Quota Bar Chart & Histograms (Last 14 days) */}
+      {/* 5. Daily Histograms (Last 14 days) */}
       <div className="p-5 rounded-3xl bg-white/75 backdrop-blur-md border border-white/85 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#dfd8cb]/60 pb-3">
           <div>
             <h3 className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
               <span>
-                {chartMode === 'quotaPct'
-                  ? 'Ραβδόγραμμα % Κατανάλωσης Δωρεάν Ορίου Gemini (1.500 αιτήματα / ημέρα)'
+                {chartMode === 'apiKey'
+                  ? 'Ημερήσια Χρήση AI ανά Gemini API Key (API 1 vs API 2)'
                   : chartMode === 'type'
                   ? 'Ημερήσιο Ιστόγραμμα AI ανά Τύπο (Κείμενο, Math, Χημεία, Ζωντάνεμα)'
                   : 'Ημερήσια Κατανομή AI: Admin vs Υπόλοιποι Χρήστες'}
               </span>
             </h3>
             <p className="text-[11px] text-[#64748b] mt-0.5">
-              {chartMode === 'quotaPct'
-                ? `14-day Μ.Ο.: ${avgQuotaPct}% | Σήμερα: ${ocrMetrics.quotaUsedPercent}% (${ocrMetrics.todayTotal} / 1.500)`
+              {chartMode === 'apiKey'
+                ? `Σύνολο API 1: ${ocrMetrics.allTimeApi1Total} | Σύνολο API 2: ${ocrMetrics.allTimeApi2Total} | Τελευταίες ${recentDays.length} ημέρες`
                 : `Τελευταίες ${recentDays.length} καταγεγραμμένες ημέρες`}
             </p>
           </div>
@@ -313,15 +606,15 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
           <div className="flex items-center gap-1 bg-[#efebe3]/80 p-1 rounded-xl self-start sm:self-auto">
             <button
               type="button"
-              onClick={() => setChartMode('quotaPct')}
+              onClick={() => setChartMode('apiKey')}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                chartMode === 'quotaPct'
+                chartMode === 'apiKey'
                   ? 'bg-[#1b2a4a] text-white shadow-2xs'
                   : 'text-[#1b2a4a] hover:bg-white/60'
               }`}
             >
-              <Percent className="w-3.5 h-3.5" />
-              <span>% Quota</span>
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>API 1 vs API 2</span>
             </button>
             <button
               type="button"
@@ -352,13 +645,13 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
 
         {/* Legend strip according to chart mode */}
         <div className="flex flex-wrap items-center justify-between text-[11px] text-[#64748b] gap-2 pt-1">
-          {chartMode === 'quotaPct' && (
+          {chartMode === 'apiKey' && (
             <div className="flex flex-wrap items-center gap-4">
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> % Κατανάλωση Ορίου
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> API 1 (Παλιό — εξαντλημένο 402)
               </span>
-              <span className="text-[10.5px] text-[#64748b]">
-                Όριο: <strong>1.500 requests/ημέρα</strong>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" /> API 2 (Νέο — ενεργό)
               </span>
             </div>
           )}
@@ -406,17 +699,15 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             const animC = t.ocrAnimCount || 0;
             const adminC = t.ocrAdminCount || 0;
             const othersC = Math.max(0, total - adminC);
+            const { api1Count, api2Count, customCount } = getDayApiKeyBreakdown(t);
 
-            const quotaPct = Number(((total / 1500) * 100).toFixed(1));
+            const totalHeight =
+              total > 0 ? Math.max(10, Math.round((total / maxOcrInChart) * 100)) : 4;
 
-            // Dynamic heights based on selected mode
-            let totalHeight = 4;
-            if (chartMode === 'quotaPct') {
-              // Scale relative to peak day or minimum 14% height for visibility of small % (e.g. 0.2%)
-              totalHeight = total > 0 ? Math.max(14, Math.min(100, Math.round((quotaPct / Math.max(2, maxDayQuotaPct)) * 100))) : 4;
-            } else {
-              totalHeight = total > 0 ? Math.max(10, Math.round((total / maxOcrInChart) * 100)) : 4;
-            }
+            const keyDenominator = Math.max(total, api1Count + api2Count + customCount);
+            const api1Pct = keyDenominator > 0 ? (api1Count / keyDenominator) * 100 : 0;
+            const api2Pct = keyDenominator > 0 ? (api2Count / keyDenominator) * 100 : 0;
+            const customPct = keyDenominator > 0 ? (customCount / keyDenominator) * 100 : 0;
 
             const textPct = total > 0 ? (textC / total) * 100 : 0;
             const mathPct = total > 0 ? (mathC / total) * 100 : 0;
@@ -428,20 +719,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
 
             return (
               <div key={t.date} className="flex flex-col items-center gap-1 h-full justify-end group">
-                {/* % Indicator above bar in % Quota mode */}
-                {chartMode === 'quotaPct' && (
-                  <span
-                    className={`text-[10px] font-extrabold tabular-nums transition ${
-                      total > 0
-                        ? 'text-[#1b2a4a] group-hover:scale-110'
-                        : 'text-slate-300'
-                    }`}
-                  >
-                    {quotaPct}%
-                  </span>
-                )}
-
-                {chartMode !== 'quotaPct' && total > 0 && (
+                {total > 0 && (
                   <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums">
                     {total}
                   </span>
@@ -451,10 +729,20 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                 <div
                   style={{ height: `${totalHeight}%` }}
                   className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
-                  title={`${t.date}: ${quotaPct}% του δωρεάν ορίου | ${total}/1.500 AI requests (${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC})`}
+                  title={`${t.date}: ${total} AI requests (API 1: ${api1Count}, API 2: ${api2Count}${customCount > 0 ? `, Custom: ${customCount}` : ''} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC})`}
                 >
-                  {chartMode === 'quotaPct' && (
-                    <div className="w-full h-full bg-[#1b2a4a]" />
+                  {chartMode === 'apiKey' && (
+                    <>
+                      {customPct > 0 && (
+                        <div style={{ height: `${customPct}%` }} className="w-full bg-sky-500" />
+                      )}
+                      {api2Pct > 0 && (
+                        <div style={{ height: `${api2Pct}%` }} className="w-full bg-emerald-600" />
+                      )}
+                      {api1Pct > 0 && (
+                        <div style={{ height: `${api1Pct}%` }} className="w-full bg-rose-500" />
+                      )}
+                    </>
                   )}
 
                   {chartMode === 'type' && (
@@ -486,10 +774,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                   )}
                 </div>
 
-                {/* Subtext beneath bar: total count & date */}
-                <span className="text-[9px] font-semibold text-slate-500 tabular-nums">
-                  {total}
-                </span>
+                {/* Subtext beneath bar: date */}
                 <span className="text-[10px] text-[#64748b] group-hover:text-[#1b2a4a] group-hover:font-bold transition truncate max-w-full">
                   {t.date.slice(5)}
                 </span>
@@ -524,14 +809,14 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               <tr className="bg-[#efebe3]/60 text-[#1b2a4a] font-bold border-b border-[#dfd8cb]">
                 <th className="py-2.5 px-3.5">Ημερομηνία</th>
                 <th className="py-2.5 px-3">Σύνολο AI</th>
+                <th className="py-2.5 px-3">API 1 (Παλιό)</th>
+                <th className="py-2.5 px-3">API 2 (Νέο)</th>
                 <th className="py-2.5 px-3">Admin (Εσύ)</th>
                 <th className="py-2.5 px-3">Άλλοι / Guests</th>
                 <th className="py-2.5 px-3">Κείμενο</th>
                 <th className="py-2.5 px-3">Μαθηματικά</th>
                 <th className="py-2.5 px-3">Χημεία</th>
                 <th className="py-2.5 px-3">Ζωντάνεμα</th>
-                <th className="py-2.5 px-3">% Κατανάλωση (1.500)</th>
-                <th className="py-2.5 px-3">Υπόλοιπο Δωρεάν</th>
                 <th className="py-2.5 px-3 text-right">Τελευταίο Event</th>
               </tr>
             </thead>
@@ -553,13 +838,36 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                   const total = t.ocrTotalCount || 0;
                   const adminCount = t.ocrAdminCount || 0;
                   const othersCount = Math.max(0, total - adminCount);
-                  const pct = Number(((total / 1500) * 100).toFixed(1));
-                  const rem = Math.max(0, 1500 - total);
+                  const { api1Count, api2Count } = getDayApiKeyBreakdown(t);
 
                   return (
                     <tr key={t.date} className="hover:bg-white/80 transition-colors">
                       <td className="py-2.5 px-3.5 font-bold text-[#1b2a4a]">{t.date}</td>
-                      <td className="py-2.5 px-3 font-extrabold text-[#1b2a4a]">{total}</td>
+                      <td className="py-2.5 px-3 font-extrabold text-[#1b2a4a] tabular-nums">
+                        {total}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[11px] border tabular-nums ${
+                            api1Count > 0
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-slate-50 text-slate-400 border-slate-200'
+                          }`}
+                        >
+                          {api1Count}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[11px] border tabular-nums ${
+                            api2Count > 0
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 text-slate-400 border-slate-200'
+                          }`}
+                        >
+                          {api2Count}
+                        </span>
+                      </td>
                       <td className="py-2.5 px-3">
                         <span className="px-2 py-0.5 rounded-full bg-[#eef3f8] text-[#1b2a4a] font-bold text-[11px] border border-[#1b2a4a]/25">
                           {adminCount}
@@ -589,19 +897,6 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                         <span className="px-1.5 py-0.5 rounded-md bg-[#5c4a72]/10 text-[#5c4a72] font-semibold text-[11px]">
                           {t.ocrAnimCount || 0}
                         </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold border bg-[#eef3f8] text-[#1b2a4a] border-[#1b2a4a]/20">
-                            {pct}%
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            ({total}/1.5k)
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-700 tabular-nums font-semibold">
-                        {rem.toLocaleString()}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[11px] text-[#64748b]">
                         {t.updatedAt

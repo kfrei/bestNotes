@@ -15,7 +15,11 @@ import {
   increment,
 } from '../../../firebase';
 import type { DailyTrafficStats, DailyOcrMetrics, AiActionKind } from '../types';
-import { GEMINI_FREE_TIER_DAILY_LIMIT } from '../types';
+import { GEMINI_API1_OBSERVED_CAPACITY } from '../types';
+import {
+  getActiveGeminiApiKeySlot,
+  type GeminiApiKeySlot,
+} from '../../../utils/geometryAndAlgorithms';
 
 export function getTodayDateString(): string {
   const now = new Date();
@@ -186,6 +190,9 @@ export async function fetchDailyTrafficHistory(): Promise<DailyTrafficStats[]> {
         ocrOtherUsersCount: Number(data.ocrOtherUsersCount) || 0,
         ocrGuestCount: Number(data.ocrGuestCount) || 0,
         ocrTotalCount: Number(data.ocrTotalCount) || 0,
+        ocrApi1Count: Number(data.ocrApi1Count) || 0,
+        ocrApi2Count: Number(data.ocrApi2Count) || 0,
+        ocrCustomKeyCount: Number(data.ocrCustomKeyCount) || 0,
         updatedAt: data.updatedAt || '',
       });
     });
@@ -241,15 +248,32 @@ export function exportTrafficToCsv(traffic: DailyTrafficStats[]): void {
 }
 
 /**
+ * Derives per-key AI request counts for a given day without breaking historical Firestore docs.
+ * Historical records without `ocrApi2Count` / `ocrCustomKeyCount` belong to API Key 1 (Old Project).
+ */
+export function getDayApiKeyBreakdown(day?: DailyTrafficStats): {
+  api1Count: number;
+  api2Count: number;
+  customCount: number;
+} {
+  const total = day?.ocrTotalCount || 0;
+  const api2Count = day?.ocrApi2Count || 0;
+  const customCount = day?.ocrCustomKeyCount || 0;
+  const api1Count = Math.max(0, total - api2Count - customCount);
+  return { api1Count, api2Count, customCount };
+}
+
+/**
  * Atomically records an AI request (OCR or Animation) in Firestore under `daily_traffic/{today}`
- * Tracks exact feature type and attribution (Admin vs Other Users vs Guests)
+ * Tracks exact feature type, attribution (Admin vs Other Users vs Guests), and active Gemini API key slot.
  */
 export async function recordOcrUsage(
   kind: AiActionKind,
-  caller?: { isGuest?: boolean; isAdmin?: boolean }
+  caller?: { isGuest?: boolean; isAdmin?: boolean; apiKeySlot?: GeminiApiKeySlot }
 ): Promise<void> {
   if (typeof window === 'undefined') return;
   const today = getTodayDateString();
+  const keySlot = caller?.apiKeySlot ?? getActiveGeminiApiKeySlot();
 
   try {
     const docRef = doc(db, 'daily_traffic', today);
@@ -263,6 +287,14 @@ export async function recordOcrUsage(
     else if (kind === 'math') fieldMap.ocrMathCount = increment(1);
     else if (kind === 'chem') fieldMap.ocrChemCount = increment(1);
     else if (kind === 'anim') fieldMap.ocrAnimCount = increment(1);
+
+    if (keySlot === 'api2') {
+      fieldMap.ocrApi2Count = increment(1);
+    } else if (keySlot === 'api1') {
+      fieldMap.ocrApi1Count = increment(1);
+    } else if (keySlot === 'custom') {
+      fieldMap.ocrCustomKeyCount = increment(1);
+    }
 
     if (caller?.isAdmin) {
       fieldMap.ocrAdminCount = increment(1);
@@ -279,8 +311,9 @@ export async function recordOcrUsage(
 }
 
 /**
- * Computes aggregated AI & Google Gemini API Free Tier Quota statistics
- * Includes breakdown by type (Text, Math, Chem, Animation) and user (Admin vs Others)
+ * Computes aggregated AI & Gemini API Key 1 / Key 2 usage statistics.
+ * Includes breakdown by type (Text, Math, Chem, Animation), user (Admin vs Others),
+ * and API Key slot (API 1 legacy vs API 2 active).
  */
 export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics {
   const today = getTodayDateString();
@@ -294,14 +327,27 @@ export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics
   const todayAdmin = todayEntry?.ocrAdminCount || 0;
   const todayOthers = Math.max(0, todayTotal - todayAdmin);
 
-  const quotaLimit = GEMINI_FREE_TIER_DAILY_LIMIT;
-  const quotaUsedPercent = Number(((todayTotal / quotaLimit) * 100).toFixed(1));
-  const quotaRemaining = Math.max(0, quotaLimit - todayTotal);
+  const todayKeys = getDayApiKeyBreakdown(todayEntry);
 
   const allTimeOcrTotal = traffic.reduce((acc, t) => acc + (t.ocrTotalCount || 0), 0);
   const allTimeAdminTotal = traffic.reduce((acc, t) => acc + (t.ocrAdminCount || 0), 0);
   const allTimeOthersTotal = Math.max(0, allTimeOcrTotal - allTimeAdminTotal);
   const allTimeAnimTotal = traffic.reduce((acc, t) => acc + (t.ocrAnimCount || 0), 0);
+
+  const allTimeApi2Total = traffic.reduce((acc, t) => acc + (t.ocrApi2Count || 0), 0);
+  const allTimeCustomKeyTotal = traffic.reduce((acc, t) => acc + (t.ocrCustomKeyCount || 0), 0);
+  const allTimeApi1Total = traffic.reduce(
+    (acc, t) => acc + getDayApiKeyBreakdown(t).api1Count,
+    0
+  );
+
+  // Use API 1's actual observed total (~207) as realistic reference capacity for API 2
+  const api2EstimatedCapacityRef =
+    allTimeApi1Total >= 50 ? allTimeApi1Total : GEMINI_API1_OBSERVED_CAPACITY;
+  const api2EstimatedUsedPercent = Number(
+    ((allTimeApi2Total / api2EstimatedCapacityRef) * 100).toFixed(1)
+  );
+  const api2EstimatedRemaining = Math.max(0, api2EstimatedCapacityRef - allTimeApi2Total);
 
   return {
     todayTotal,
@@ -311,13 +357,18 @@ export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics
     todayAnim,
     todayAdmin,
     todayOthers,
-    dailyQuotaLimit: quotaLimit,
-    quotaUsedPercent,
-    quotaRemaining,
+    todayApi1: todayKeys.api1Count,
+    todayApi2: todayKeys.api2Count,
     allTimeOcrTotal,
     allTimeAdminTotal,
     allTimeOthersTotal,
     allTimeAnimTotal,
+    allTimeApi1Total,
+    allTimeApi2Total,
+    allTimeCustomKeyTotal,
+    api2EstimatedCapacityRef,
+    api2EstimatedUsedPercent,
+    api2EstimatedRemaining,
   };
 }
 
@@ -328,14 +379,14 @@ export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
   const headers = [
     'Ημερομηνία',
     'Σύνολο AI Requests',
+    'API 1 (Παλιό Project)',
+    'API 2 (Νέο Project)',
     'Admin (Εσύ)',
     'Υπόλοιποι (Άλλοι/Guests)',
     'Κείμενο (Text)',
     'Μαθηματικά (Math)',
     'Χημεία (Chem)',
     'Ζωντάνεμα (Animation)',
-    'Ποσοστό Δωρεάν Ορίου (%)',
-    'Υπόλοιπο Δωρεάν (από 1.500)',
     'Τελευταίο Event',
   ];
 
@@ -343,19 +394,18 @@ export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
     const total = t.ocrTotalCount || 0;
     const adminCount = t.ocrAdminCount || 0;
     const othersCount = Math.max(0, total - adminCount);
-    const pct = ((total / GEMINI_FREE_TIER_DAILY_LIMIT) * 100).toFixed(1);
-    const rem = Math.max(0, GEMINI_FREE_TIER_DAILY_LIMIT - total);
+    const { api1Count, api2Count } = getDayApiKeyBreakdown(t);
     return [
       t.date,
       total,
+      api1Count,
+      api2Count,
       adminCount,
       othersCount,
       t.ocrTextCount || 0,
       t.ocrMathCount || 0,
       t.ocrChemCount || 0,
       t.ocrAnimCount || 0,
-      `${pct}%`,
-      rem,
       t.updatedAt,
     ];
   });
@@ -385,6 +435,7 @@ export function trackAiAction(kind: AiActionKind, user?: { email?: string | null
   void recordOcrUsage(kind, {
     isGuest: !user,
     isAdmin: user?.email?.toLowerCase() === adminEmail,
+    apiKeySlot: getActiveGeminiApiKeySlot(),
   });
 }
 

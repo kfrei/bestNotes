@@ -15511,6 +15511,45 @@ export function computeMathGraphAnimationFrame(
 // AI ANIMATE (SMART SKETCH ANIMATOR + GEMINI OMNI 1.1 FLASH VIDEO & AUDIO)
 // ============================================================================
 
+export type GeminiApiKeySlot = 'api1' | 'api2' | 'custom' | 'none';
+
+/**
+ * Returns Gemini API Key 1 (legacy project — VITE_GV_A / VITE_GV_B reversed).
+ * Never hardcodes any raw key.
+ */
+export function getGeminiApi1Key(): string {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return '';
+  return (partA + partB).split('').reverse().join('').trim();
+}
+
+/**
+ * Returns Gemini API Key 2 (new primary project — VITE_GV_PRIMARY).
+ * Never hardcodes any raw key.
+ */
+export function getGeminiApi2Key(): string {
+  return (((import.meta as any).env?.VITE_GV_PRIMARY || '') as string).trim();
+}
+
+/**
+ * Returns which Gemini API key slot is currently primary for outgoing AI/OCR calls.
+ */
+export function getActiveGeminiApiKeySlot(customKey?: string): GeminiApiKeySlot {
+  let storedCustom = '';
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      storedCustom = window.localStorage.getItem('bestnotes_custom_gemini_key') || '';
+    }
+  } catch {
+    // ignore localStorage read errors
+  }
+  if ((customKey ?? storedCustom).trim()) return 'custom';
+  if (getGeminiApi2Key()) return 'api2';
+  if (getGeminiApi1Key()) return 'api1';
+  return 'none';
+}
+
 export function getEffectiveGeminiApiKey(customKey?: string): string {
   return getAllCandidateGeminiApiKeys(customKey)[0] || '';
 }
@@ -15527,14 +15566,10 @@ function getAllCandidateGeminiApiKeys(customKey?: string): string[] {
   }
   const trimmedCustom = (customKey ?? storedCustom).trim();
   if (trimmedCustom) keys.push(trimmedCustom);
-  const primaryEnv = (((import.meta as any).env?.VITE_GV_PRIMARY || '') as string).trim();
+  const primaryEnv = getGeminiApi2Key();
   if (primaryEnv && !keys.includes(primaryEnv)) keys.push(primaryEnv);
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (partA && partB) {
-    const builtin = (partA + partB).split('').reverse().join('');
-    if (builtin && !keys.includes(builtin)) keys.push(builtin);
-  }
+  const builtin = getGeminiApi1Key();
+  if (builtin && !keys.includes(builtin)) keys.push(builtin);
   return keys;
 }
 
