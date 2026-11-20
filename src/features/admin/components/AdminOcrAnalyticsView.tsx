@@ -20,8 +20,6 @@ import {
 } from 'lucide-react';
 import {
   GEMINI_API1_OBSERVED_CAPACITY,
-  GEMINI_API2_ESTIMATED_CAPACITY_MAX,
-  GEMINI_API2_ESTIMATED_CAPACITY_MIN,
   type DailyTrafficStats,
   type GeminiApi1ProbeResult,
 } from '../types';
@@ -361,7 +359,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                     )}
                   </div>
                   <p className="text-[11px] text-[#64748b] mt-0.5">
-                    Project <code className="font-mono text-[#1b2a4a]">projects/949176547214</code> • Ξεκινά από 0 (νέες κλήσεις AI/OCR)
+                    Project <code className="font-mono text-[#1b2a4a]">FreiderikosK</code> (<code className="font-mono text-[#1b2a4a]">949176547214</code>) • Free Tier (20 RPD/μοντέλο)
                   </p>
                 </div>
               </div>
@@ -407,38 +405,39 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             </div>
           </div>
 
-          {/* Empirical Capacity Reference Box */}
+          {/* Official Google AI Studio Free Tier Limits Box */}
           <div className="p-3 rounded-2xl bg-white/80 border border-[#dfd8cb]/90 space-y-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-[10px] font-semibold text-[#64748b]">
-                  Εκτιμώμενη Χωρητικότητα
+                  Επίσημο Όριο Free Tier (AI Studio)
                 </div>
                 <div className="text-sm font-black text-[#1b2a4a] tabular-nums">
-                  ~{GEMINI_API2_ESTIMATED_CAPACITY_MIN}–{GEMINI_API2_ESTIMATED_CAPACITY_MAX} αιτήματα
+                  20 RPD / μοντέλο • 5 RPM
                 </div>
                 <div className="text-[10px] text-[#64748b]">
-                  Αναφορά API 1: ~{ocrMetrics.api2EstimatedCapacityRef} κλήσεις
+                  250K TPM • Reset κάθε μέρα 10:00 π.μ. (UTC-8)
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] font-semibold text-[#64748b]">
-                  Εκτιμώμενο Υπόλοιπο
+                  Σήμερα (API 2) / Εκτίμηση
                 </div>
                 <div className="text-sm font-black text-emerald-700 tabular-nums">
-                  ~{ocrMetrics.api2EstimatedRemaining.toLocaleString()} αιτήματα
+                  {ocrMetrics.todayApi2} σήμερα • ~{ocrMetrics.api2EstimatedRemaining.toLocaleString()} σύνολο
                 </div>
                 <div className="text-[10px] text-[#64748b]">
                   Ενεργό slot:{' '}
                   <strong className="text-[#1b2a4a]">
                     {keyAvailability.activeSlot.toUpperCase()}
-                  </strong>
+                  </strong>{' '}
+                  • Αναφορά API 1: ~{ocrMetrics.api2EstimatedCapacityRef}
                 </div>
               </div>
             </div>
 
             <div className="text-[10.5px] text-slate-600 leading-snug border-t border-[#efebe3] pt-2">
-              Η εκτίμηση βασίζεται στο πραγματικό όριο που άντεξε το API 1 (~{ocrMetrics.api2EstimatedCapacityRef} αιτήματα OCR/AI) αντί για το παρωχημένο θεωρητικό 1.500/ημέρα. Κάθε νέα κλήση με το API 2 καταγράφεται ξεχωριστά στο Firestore.
+              Στο <strong>Free Tier</strong> κάθε Flash μοντέλο (<code>Gemini 3 Flash</code>, <code>Gemini 2.5/3.8 Flash</code>) έχει όριο <strong>20 αιτήματα/ημέρα (RPD)</strong> &amp; <strong>5/λεπτό (RPM)</strong> με ημερήσιο reset στις 10:00 π.μ. Ελλάδας. Με αυτόματο rotation στα 5 μοντέλα φτάνει ~40–100 OCR/ημέρα δωρεάν (ενώ σε Paid Tier 1 κοστίζει ~0,20 €/1.000 OCR).
             </div>
           </div>
         </div>

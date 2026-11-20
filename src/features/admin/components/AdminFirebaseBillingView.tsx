@@ -18,11 +18,6 @@ import type {
   FirebaseDailyUsageRow,
 } from '../../../firebase';
 import { signInToGoogleDrive, refreshGoogleDriveTokenSilently } from '../../../firebase';
-import {
-  GEMINI_API1_OBSERVED_CAPACITY,
-  GEMINI_API2_ESTIMATED_CAPACITY_MAX,
-  GEMINI_API2_ESTIMATED_CAPACITY_MIN,
-} from '../types';
 
 export interface AdminFirebaseBillingViewProps {
   usage: AdminFirebaseUsageResponse | null;
@@ -335,10 +330,10 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
       title: 'Google Gemini OCR API (generativelanguage)',
       icon: <Sparkles className="w-4 h-4 text-purple-700" />,
       used: todayRow?.geminiApiCalls ?? todayRow?.geminiCalls ?? 0,
-      limit: GEMINI_API1_OBSERVED_CAPACITY,
-      periodLabel: `Σήμερα (${todayRow?.geminiApiErrors ? `${todayRow.geminiApiErrors} σφάλμ.` : 'Cloud Monitoring'}) • Εκτίμηση ~${GEMINI_API2_ESTIMATED_CAPACITY_MIN}–${GEMINI_API2_ESTIMATED_CAPACITY_MAX}/key`,
-      subLabel: `Μήνας: ${(currentMonthRow?.geminiApiCalls ?? currentMonthRow?.geminiCalls ?? 0).toLocaleString('el-GR')} επιτυχείς κλήσεις • API 1: 402 (γεμάτο), API 2: ενεργό`,
-      rateLabel: `Εκτίμηση Blaze OCR (~0,0005 €/κλήση): Σήμερα ${formatEur(
+      limit: 100,
+      periodLabel: `Σήμερα (${todayRow?.geminiApiErrors ? `${todayRow.geminiApiErrors} σφάλμ.` : 'Free Tier'}) • 20 RPD/Flash μοντέλο (5 RPM)`,
+      subLabel: `Μήνας: ${(currentMonthRow?.geminiApiCalls ?? currentMonthRow?.geminiCalls ?? 0).toLocaleString('el-GR')} επιτυχείς κλήσεις • API 1: 402 (γεμάτο), API 2: ενεργό (reset 10:00 π.μ.)`,
+      rateLabel: `Paid Tier 1 αν χρειαστεί (~0,20 €/1.000 OCR): Σήμερα ${formatEur(
         todayRow?.geminiEstCostEur || 0
       )} • Μήνας ${formatEur(currentMonthRow?.geminiEstCostEur || 0)}`,
     },
