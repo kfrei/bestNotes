@@ -15,7 +15,7 @@ import {
   increment,
 } from '../../../firebase';
 import type { DailyTrafficStats, DailyOcrMetrics, AiActionKind } from '../types';
-import { GEMINI_API1_OBSERVED_CAPACITY } from '../types';
+import { GEMINI_FREE_TIER_DAILY_CAPACITY } from '../types';
 import {
   getActiveGeminiApiKeySlot,
   type GeminiApiKeySlot,
@@ -248,22 +248,6 @@ export function exportTrafficToCsv(traffic: DailyTrafficStats[]): void {
 }
 
 /**
- * Derives per-key AI request counts for a given day without breaking historical Firestore docs.
- * Historical records without `ocrApi2Count` / `ocrCustomKeyCount` belong to API Key 1 (Old Project).
- */
-export function getDayApiKeyBreakdown(day?: DailyTrafficStats): {
-  api1Count: number;
-  api2Count: number;
-  customCount: number;
-} {
-  const total = day?.ocrTotalCount || 0;
-  const api2Count = day?.ocrApi2Count || 0;
-  const customCount = day?.ocrCustomKeyCount || 0;
-  const api1Count = Math.max(0, total - api2Count - customCount);
-  return { api1Count, api2Count, customCount };
-}
-
-/**
  * Atomically records an AI request (OCR or Animation) in Firestore under `daily_traffic/{today}`
  * Tracks exact feature type, attribution (Admin vs Other Users vs Guests), and active Gemini API key slot.
  */
@@ -311,9 +295,8 @@ export async function recordOcrUsage(
 }
 
 /**
- * Computes aggregated AI & Gemini API Key 1 / Key 2 usage statistics.
- * Includes breakdown by type (Text, Math, Chem, Animation), user (Admin vs Others),
- * and API Key slot (API 1 legacy vs API 2 active).
+ * Computes aggregated AI & OCR usage statistics against the active Free Tier daily rotation limit (100 req/day).
+ * Includes breakdown by type (Text, Math, Chem, Animation) and attribution (Admin vs Others).
  */
 export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics {
   const today = getTodayDateString();
@@ -327,27 +310,14 @@ export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics
   const todayAdmin = todayEntry?.ocrAdminCount || 0;
   const todayOthers = Math.max(0, todayTotal - todayAdmin);
 
-  const todayKeys = getDayApiKeyBreakdown(todayEntry);
+  const todayDailyLimit = GEMINI_FREE_TIER_DAILY_CAPACITY;
+  const todayUsedPercent = Number(((todayTotal / todayDailyLimit) * 100).toFixed(1));
+  const todayRemaining = Math.max(0, todayDailyLimit - todayTotal);
 
   const allTimeOcrTotal = traffic.reduce((acc, t) => acc + (t.ocrTotalCount || 0), 0);
   const allTimeAdminTotal = traffic.reduce((acc, t) => acc + (t.ocrAdminCount || 0), 0);
   const allTimeOthersTotal = Math.max(0, allTimeOcrTotal - allTimeAdminTotal);
   const allTimeAnimTotal = traffic.reduce((acc, t) => acc + (t.ocrAnimCount || 0), 0);
-
-  const allTimeApi2Total = traffic.reduce((acc, t) => acc + (t.ocrApi2Count || 0), 0);
-  const allTimeCustomKeyTotal = traffic.reduce((acc, t) => acc + (t.ocrCustomKeyCount || 0), 0);
-  const allTimeApi1Total = traffic.reduce(
-    (acc, t) => acc + getDayApiKeyBreakdown(t).api1Count,
-    0
-  );
-
-  // Use API 1's actual observed total (~207) as realistic reference capacity for API 2
-  const api2EstimatedCapacityRef =
-    allTimeApi1Total >= 50 ? allTimeApi1Total : GEMINI_API1_OBSERVED_CAPACITY;
-  const api2EstimatedUsedPercent = Number(
-    ((allTimeApi2Total / api2EstimatedCapacityRef) * 100).toFixed(1)
-  );
-  const api2EstimatedRemaining = Math.max(0, api2EstimatedCapacityRef - allTimeApi2Total);
 
   return {
     todayTotal,
@@ -357,18 +327,13 @@ export function computeOcrMetrics(traffic: DailyTrafficStats[]): DailyOcrMetrics
     todayAnim,
     todayAdmin,
     todayOthers,
-    todayApi1: todayKeys.api1Count,
-    todayApi2: todayKeys.api2Count,
+    todayDailyLimit,
+    todayUsedPercent,
+    todayRemaining,
     allTimeOcrTotal,
     allTimeAdminTotal,
     allTimeOthersTotal,
     allTimeAnimTotal,
-    allTimeApi1Total,
-    allTimeApi2Total,
-    allTimeCustomKeyTotal,
-    api2EstimatedCapacityRef,
-    api2EstimatedUsedPercent,
-    api2EstimatedRemaining,
   };
 }
 
@@ -379,8 +344,8 @@ export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
   const headers = [
     'Ημερομηνία',
     'Σύνολο AI Requests',
-    'API 1 (Παλιό Project)',
-    'API 2 (Νέο Project)',
+    `% Ημ. Ορίου (${GEMINI_FREE_TIER_DAILY_CAPACITY})`,
+    `Υπόλοιπο Σήμερα (από ${GEMINI_FREE_TIER_DAILY_CAPACITY})`,
     'Admin (Εσύ)',
     'Υπόλοιποι (Άλλοι/Guests)',
     'Κείμενο (Text)',
@@ -392,14 +357,15 @@ export function exportOcrToCsv(traffic: DailyTrafficStats[]): void {
 
   const rows = traffic.map((t) => {
     const total = t.ocrTotalCount || 0;
+    const usedPct = `${((total / GEMINI_FREE_TIER_DAILY_CAPACITY) * 100).toFixed(1)}%`;
+    const remaining = Math.max(0, GEMINI_FREE_TIER_DAILY_CAPACITY - total);
     const adminCount = t.ocrAdminCount || 0;
     const othersCount = Math.max(0, total - adminCount);
-    const { api1Count, api2Count } = getDayApiKeyBreakdown(t);
     return [
       t.date,
       total,
-      api1Count,
-      api2Count,
+      usedPct,
+      remaining,
       adminCount,
       othersCount,
       t.ocrTextCount || 0,

@@ -46,21 +46,12 @@ export interface DailyTrafficStats {
   updatedAt: string;            // ISO timestamp
 }
 
-export const GEMINI_API1_OBSERVED_CAPACITY = 207;      // Real-world exhaustion point observed on API 1 before HTTP 402
-export const GEMINI_API2_ESTIMATED_CAPACITY_MIN = 200; // Conservative reference floor based on API 1
-export const GEMINI_API2_ESTIMATED_CAPACITY_MAX = 250; // Reference ceiling based on API 1
-export const GEMINI_API1_PROBE_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours automatic health probe interval
-
-export type GeminiApi1ProbeStatus = 'ok' | 'depleted_402' | 'rate_limited_429' | 'error';
-
-export interface GeminiApi1ProbeResult {
-  status: GeminiApi1ProbeStatus;
-  httpCode: number;
-  message: string;
-  model: string;
-  checkedAt: string;   // ISO timestamp
-  nextCheckAt: string; // ISO timestamp (checkedAt + 6 hours)
-}
+export const GEMINI_FREE_TIER_RPD_PER_MODEL = 20;
+export const GEMINI_FREE_TIER_RPM = 5;
+export const GEMINI_FREE_TIER_TPM = 250_000;
+export const GEMINI_FREE_TIER_ROTATION_MODELS = 5;
+export const GEMINI_FREE_TIER_DAILY_CAPACITY =
+  GEMINI_FREE_TIER_RPD_PER_MODEL * GEMINI_FREE_TIER_ROTATION_MODELS; // 100 req/day across 5 Flash/Lite models
 
 export interface DailyOcrMetrics {
   todayTotal: number;
@@ -70,18 +61,13 @@ export interface DailyOcrMetrics {
   todayAnim: number;
   todayAdmin: number;
   todayOthers: number;
-  todayApi1: number;
-  todayApi2: number;
+  todayDailyLimit: number;
+  todayUsedPercent: number;
+  todayRemaining: number;
   allTimeOcrTotal: number;
   allTimeAdminTotal: number;
   allTimeOthersTotal: number;
   allTimeAnimTotal: number;
-  allTimeApi1Total: number;
-  allTimeApi2Total: number;
-  allTimeCustomKeyTotal: number;
-  api2EstimatedCapacityRef: number;
-  api2EstimatedUsedPercent: number;
-  api2EstimatedRemaining: number;
 }
 
 export interface AdminAggregateMetrics {
