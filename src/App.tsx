@@ -231,6 +231,7 @@ import {
   generateSmartGreekTagsFromImages,
   formatGreekPseudocodeIfDetected,
   transcribeHandwrittenStrokesWithGemini,
+  transcribeHandwrittenCodeWithGemini,
   transcribeHandwrittenMathWithGemini,
   transcribeHandwrittenChemistryWithGemini,
   analyzeTypedChemistryWithGemini,
@@ -6682,7 +6683,7 @@ export default function App() {
         liveSimCanvas: simCanvasRef.current,
         rulersByPageId,
         isCircuitSimulating: isSimulating,
-        circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+        circuitSwitchClosed: simCircuitSwitchClosed,
         circuitShowElectrons: simShowElectrons,
         circuitFlowDirection: simFlowDirection,
         circuitShowDarkWireTrack: simShowDarkWireTrack,
@@ -7000,7 +7001,7 @@ export default function App() {
           activePageId: activePage?.id,
           rulersByPageId,
           isCircuitSimulating: isSimulating,
-          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitSwitchClosed: simCircuitSwitchClosed,
           circuitShowElectrons: simShowElectrons,
           circuitFlowDirection: simFlowDirection,
           circuitShowDarkWireTrack: simShowDarkWireTrack,
@@ -7472,7 +7473,7 @@ export default function App() {
           liveSimCanvas: simCanvasRef.current,
           rulersByPageId,
           isCircuitSimulating: isSimulating,
-          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitSwitchClosed: simCircuitSwitchClosed,
           circuitShowElectrons: simShowElectrons,
           circuitFlowDirection: simFlowDirection,
           circuitShowDarkWireTrack: simShowDarkWireTrack,
@@ -7806,7 +7807,7 @@ export default function App() {
           liveSimCanvas: simCanvasRef.current,
           rulersByPageId,
           isCircuitSimulating: isSimulating,
-          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitSwitchClosed: simCircuitSwitchClosed,
           circuitShowElectrons: simShowElectrons,
           circuitFlowDirection: simFlowDirection,
           circuitShowDarkWireTrack: simShowDarkWireTrack,
@@ -8140,7 +8141,7 @@ export default function App() {
           liveSimCanvas: simCanvasRef.current,
           rulersByPageId,
           isCircuitSimulating: isSimulating,
-          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitSwitchClosed: simCircuitSwitchClosed,
           circuitShowElectrons: simShowElectrons,
           circuitFlowDirection: simFlowDirection,
           circuitShowDarkWireTrack: simShowDarkWireTrack,
@@ -13100,7 +13101,7 @@ export default function App() {
           .filter((sm) => sm.naturalSpringStrokeId && !sm.showNaturalSpring)
           .map((sm) => sm.naturalSpringStrokeId!)
       );
-      const pageForceSims = pageObj.forceSims || [];
+      const pageForceSims = getValidForceSims(pageObj);
       const activePageForceSim =
         pageForceSims.find((fs) => fs.id === pageObj.activeForceSimId) || pageForceSims[0] || null;
       if (isCurrentActivePage && activePageForceSim && activePageForceSim.mode === 'pendulum') {
@@ -13350,9 +13351,10 @@ export default function App() {
           }
           // While a pendulum force simulation is active on the current page, hide the static rod & bob strokes so only the interactive pendulum renders on the overlay!
           if (isCurrentActivePage) {
+            const validForceSims = getValidForceSims(pageObj);
             const actForceSim =
-              (pageObj.forceSims || []).find((fs) => fs.id === pageObj.activeForceSimId) ||
-              (pageObj.forceSims || [])[0];
+              validForceSims.find((fs) => fs.id === pageObj.activeForceSimId) ||
+              validForceSims[0];
             if (
               actForceSim &&
               actForceSim.mode === 'pendulum' &&
@@ -52232,7 +52234,7 @@ export default function App() {
     []
   );
 
-  // 1. Manual (on-demand) Lasso Handwriting or Imported/Pasted Image -> Calligraphic / Greek Text & Pseudocode OCR conversion via Gemini Vision
+  // 1. Manual (on-demand) Lasso Handwriting or Imported/Pasted Image -> Calligraphic / Greek Text OCR conversion via Gemini Vision
   const handleConvertLassoToCalligraphic = useCallback(async () => {
     if (isConvertingHandwriting) return;
     const baseIds =
@@ -52322,7 +52324,7 @@ export default function App() {
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
 
     setIsConvertingHandwriting(true);
-    showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου / ψευδογλώσσας...');
+    showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου...');
 
     try {
       const loadedImgs = await Promise.all(
@@ -52392,10 +52394,249 @@ export default function App() {
         return;
       }
 
-      const rawCleanText = transcribed.replace(/^\n+|\n+$/g, '').trimEnd();
+      const rawCleanText = transcribed.trim();
+      const reflowedText = reflowTextForResponsiveBox(rawCleanText);
+      const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
+      const targetLayerId = selStrokes[0]?.layerId || selImages[0]?.layerId || activeLayerId;
+      const chosenFont: TextFontStyle = 'marker';
+      const boxX = Math.max(12, Math.round(minX));
+      const boxY = Math.max(12, Math.round(minY));
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const initBoxW = Math.max(160, Math.min(pW - boxX - 12, Math.round(maxX - minX + 32)));
+      const initBoxH = Math.max(48, Math.min(pH - boxY - 12, Math.round(maxY - minY + 24)));
+      const finalFontSize = Math.max(
+        18,
+        Math.min(
+          64,
+          computeMaxFitFontSizeForBox(reflowedText, chosenFont, false, initBoxW, initBoxH)
+        )
+      );
+
+      const newTxt: TextObject = {
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: boxX,
+        y: boxY,
+        boxWidth: initBoxW,
+        boxHeight: initBoxH,
+        text: reflowedText,
+        isMath: false,
+        color: dominantColor,
+        fontSize: finalFontSize,
+        bold: false,
+        fontFamily: chosenFont,
+        layerId: targetLayerId,
+      };
+
+      const removeStrokeSet = new Set(selStrokes.map((s) => s.id));
+      const removeImageSet = new Set(selImages.map((im) => im.id));
+      updateActivePage((page) => ({
+        ...page,
+        strokes: page.strokes.filter((s) => !removeStrokeSet.has(s.id)),
+        images: (page.images || []).filter((im) => !removeImageSet.has(im.id)),
+        texts: [...(page.texts || []), newTxt],
+      }));
+
+      setSelectedStrokeIds([]);
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(newTxt.id);
+      setTextFontFamily(chosenFont);
+      setTextBold(false);
+      setTextFontSize(finalFontSize);
+      setShowToolSubBar(true);
+      showToast('✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε Πένα! (Ctrl+Z για αναίρεση)');
+    } finally {
+      setIsConvertingHandwriting(false);
+    }
+  }, [
+    isConvertingHandwriting,
+    selectedStrokeIds,
+    selectedImageIds,
+    selectedImageId,
+    activeNodeStrokeId,
+    activePage,
+    activeNotebook?.title,
+    strokeColor,
+    activeLayerId,
+    loadImageElementForOcr,
+    computeMaxFitFontSizeForBox,
+    updateActivePage,
+    showToast,
+  ]);
+
+  // 1b. Manual (on-demand) Lasso Handwriting or Image -> Code / Greek ΑΕΠΠ Pseudocode (ΓΛΩΣΣΑ) OCR with automatic indentation (inside Math menu)
+  const handleConvertLassoToCodeOCR = useCallback(async () => {
+    if (isConvertingHandwriting) return;
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const effImgIds =
+      selectedImageIds.length > 0
+        ? selectedImageIds
+        : selectedImageId
+        ? [selectedImageId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const imgIdSet = new Set(effImgIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgIdSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
+    }
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    const selImages = (activePage.images || []).filter(
+      (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
+    if (selStrokes.length === 0 && selImages.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τον χειρόγραφο κώδικα ή μια εικόνα με Ψευδογλώσσα/Κώδικα!');
+      return;
+    }
+    trackAiAction('math', currentUser);
+
+    const strokeWithBounds = selStrokes.map((st) => ({ st, b: getStrokeBounds(st) }));
+    const substantialBounds = strokeWithBounds.filter(
+      ({ b }) => b.maxX - b.minX >= 9 || b.maxY - b.minY >= 9
+    );
+    let mainMinY = Infinity;
+    let mainMaxY = -Infinity;
+    for (const { b } of substantialBounds) {
+      if (b.minY < mainMinY) mainMinY = b.minY;
+      if (b.maxY > mainMaxY) mainMaxY = b.maxY;
+    }
+    const ocrStrokes =
+      substantialBounds.length > 0
+        ? strokeWithBounds
+            .filter(({ b }) => {
+              const isTinyDot = b.maxX - b.minX < 9 && b.maxY - b.minY < 9;
+              if (!isTinyDot) return true;
+              return b.maxY >= mainMinY - 24 && b.minY <= mainMaxY + 24;
+            })
+            .map(({ st }) => st)
+        : selStrokes;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of ocrStrokes) {
+      const b = getStrokeBounds(st);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    for (const im of selImages) {
+      if (im.clipPolygon && im.clipPolygon.length >= 3) {
+        for (const pt of im.clipPolygon) {
+          const px = im.x + pt.x;
+          const py = im.y + pt.y;
+          if (px < minX) minX = px;
+          if (py < minY) minY = py;
+          if (px > maxX) maxX = px;
+          if (py > maxY) maxY = py;
+        }
+      } else {
+        if (im.x < minX) minX = im.x;
+        if (im.y < minY) minY = im.y;
+        if (im.x + im.width > maxX) maxX = im.x + im.width;
+        if (im.y + im.height > maxY) maxY = im.y + im.height;
+      }
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    setIsConvertingHandwriting(true);
+    showToast('💻 Κώδικας OCR: Αναγνώριση κώδικα / Ψευδογλώσσας ΑΕΠΠ με εσοχές...');
+
+    try {
+      const loadedImgs = await Promise.all(
+        selImages.map(async (im) => ({
+          im,
+          el: await loadImageElementForOcr(im.dataUrl),
+        }))
+      );
+
+      const pad = 32;
+      const rawW = Math.max(48, Math.ceil(maxX - minX));
+      const rawH = Math.max(32, Math.ceil(maxY - minY));
+      const scale = 2;
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = (rawW + pad * 2) * scale;
+      cropCanvas.height = (rawH + pad * 2) * scale;
+      const cropCtx = cropCanvas.getContext('2d');
+      if (!cropCtx) return;
+
+      cropCtx.fillStyle = '#ffffff';
+      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.save();
+      cropCtx.scale(scale, scale);
+      cropCtx.translate(-minX + pad, -minY + pad);
+      for (const { im, el } of loadedImgs) {
+        if (!el) continue;
+        cropCtx.save();
+        if (im.rotation) {
+          const icx = im.x + im.width / 2;
+          const icy = im.y + im.height / 2;
+          cropCtx.translate(icx, icy);
+          cropCtx.rotate((im.rotation * Math.PI) / 180);
+          cropCtx.translate(-icx, -icy);
+        }
+        if (im.clipPolygon && im.clipPolygon.length >= 3) {
+          cropCtx.beginPath();
+          cropCtx.moveTo(im.x + im.clipPolygon[0].x, im.y + im.clipPolygon[0].y);
+          for (let i = 1; i < im.clipPolygon.length; i++) {
+            cropCtx.lineTo(im.x + im.clipPolygon[i].x, im.y + im.clipPolygon[i].y);
+          }
+          cropCtx.closePath();
+          cropCtx.clip();
+        }
+        cropCtx.drawImage(el, im.x, im.y, im.width, im.height);
+        cropCtx.restore();
+      }
+      for (const st of ocrStrokes) {
+        drawStrokeOnContext(cropCtx, st);
+      }
+      cropCtx.restore();
+
+      const cropDataUrl = cropCanvas.toDataURL('image/png');
+      const transcribed = await Promise.race([
+        transcribeHandwrittenCodeWithGemini(cropDataUrl, activeNotebook?.title || ''),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
+      ]);
+      if (!transcribed || !transcribed.trim()) {
+        if (selStrokes.length > 0) {
+          const beautified = beautifyHandwritingStrokes(selStrokes);
+          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
+          updateActivePage((page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
+          }));
+        }
+        showToast(getUnifiedOcrErrorMessage());
+        return;
+      }
+
+      const rawCleanText = transcribed
+        .replace(/\r\n?/g, '\n')
+        .replace(/^\n+|\n+$/g, '')
+        .trimEnd();
       const { text: formattedCode, isPseudocode } = formatGreekPseudocodeIfDetected(rawCleanText);
-      const finalOcrText = isPseudocode ? formattedCode : rawCleanText;
-      const dominantColor = selStrokes[0]?.color || '#1e293b';
+      const finalCodeText = isPseudocode
+        ? formattedCode
+        : rawCleanText
+            .split('\n')
+            .map((line) => `${line.replace(/\t/g, '    ')}\u200B`)
+            .join('\n');
+      const dominantColor =
+        selStrokes.length > 0 ? selStrokes[0]?.color || strokeColor || '#1e293b' : '#1e293b';
       const targetLayerId = selStrokes[0]?.layerId || selImages[0]?.layerId || activeLayerId;
       const chosenFont: TextFontStyle = 'marker';
       const boxX = Math.max(12, Math.round(minX));
@@ -52404,20 +52645,17 @@ export default function App() {
       const pH = getPageLogicalHeight(activePage);
       const maxAvailW = Math.max(160, pW - boxX - 12);
       const maxAvailH = Math.max(48, pH - boxY - 12);
-      const baseBoxW = Math.max(
-        isPseudocode ? 260 : 160,
-        Math.min(maxAvailW, Math.round(maxX - minX + (isPseudocode ? 96 : 32)))
-      );
+      const baseBoxW = Math.max(260, Math.min(maxAvailW, Math.round(maxX - minX + 96)));
       const baseBoxH = Math.max(48, Math.min(maxAvailH, Math.round(maxY - minY + 24)));
       const finalFontSize = Math.max(
         18,
         Math.min(
           64,
-          computeMaxFitFontSizeForBox(finalOcrText, chosenFont, false, baseBoxW, baseBoxH)
+          computeMaxFitFontSizeForBox(finalCodeText, chosenFont, false, baseBoxW, baseBoxH)
         )
       );
       const measuredLayout = measureWrappedTextLayout(
-        finalOcrText,
+        finalCodeText,
         chosenFont,
         false,
         finalFontSize,
@@ -52432,7 +52670,7 @@ export default function App() {
         y: boxY,
         boxWidth: initBoxW,
         boxHeight: initBoxH,
-        text: finalOcrText,
+        text: finalCodeText,
         isMath: false,
         color: dominantColor,
         fontSize: finalFontSize,
@@ -52461,8 +52699,8 @@ export default function App() {
       setShowToolSubBar(true);
       showToast(
         isPseudocode
-          ? "✍️ Κείμενο OCR: Αναγνωρίστηκε Ψευδογλώσσα Γ' Λυκείου με αυτόματες εσοχές! (Ctrl+Z για αναίρεση)"
-          : '✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε κείμενο! (Ctrl+Z για αναίρεση)'
+          ? "💻 Κώδικας OCR: Αναγνωρίστηκε Ψευδογλώσσα ΑΕΠΠ με αυτόματες εσοχές! (Ctrl+Z για αναίρεση)"
+          : '💻 Κώδικας OCR: Ο κώδικας μετατράπηκε με διατήρηση εσοχών! (Ctrl+Z για αναίρεση)'
       );
     } finally {
       setIsConvertingHandwriting(false);
@@ -62050,6 +62288,7 @@ export default function App() {
                         setOpenMenu={setOpenLassoOcrMenu}
                         onConvertTextOcr={() => void handleConvertLassoToCalligraphic()}
                         onConvertMathOcr={() => void handleConvertLassoToMathOCR()}
+                        onConvertCodeOcr={() => void handleConvertLassoToCodeOCR()}
                         onConvertMathGraph={() => void handleConvertLassoToMathGraph()}
                         onConvertToPolygon={handleConvertSelectedStrokesToPolygon}
                         onConvertChemOcr={() => void handleConvertLassoToChemOCR()}

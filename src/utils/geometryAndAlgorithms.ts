@@ -5672,8 +5672,8 @@ export function formatGreekPseudocodeIfDetected(rawText: string): {
 }
 
 /**
- * Uses Gemini Flash Vision to transcribe Lasso-selected Greek handwritten strokes (or an image) into clean
- * Greek text (preserving line breaks, accents, and Greek Γ' Λυκείου ΑΕΠΠ pseudocode indentation).
+ * Uses Gemini Flash Vision to transcribe Lasso-selected Greek handwritten strokes into clean
+ * Greek text (preserving line breaks and accents) so it can be rendered in a Calligraphic font.
  */
 export async function transcribeHandwrittenStrokesWithGemini(
   imageDataUrl: string,
@@ -5694,13 +5694,87 @@ export async function transcribeHandwrittenStrokesWithGemini(
 
   const parts: any[] = [
     {
-      text: `Διάβασε με απόλυτη ακρίβεια το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ ή τυπωμένο κείμενο (ή κώδικα/ψευδογλώσσα/αριθμούς/σύμβολα) που φαίνεται στην εικόνα${contextHint}.
-1. Διόρθωσε αυτόματα τυχόν ατελή γράμματα ή τόνους ώστε οι ελληνικές λέξεις να είναι ορθογραφικά σωστές και να βγάζουν νόημα.
-2. Διατήρησε τις αλλαγές γραμμής (\\n) αν το κείμενο είναι γραμμένο σε πολλές σειρές.
-3. ΕΙΔΙΚΑ αν το κείμενο είναι Ψευδογλώσσα Προγραμματισμού Γ' Λυκείου (ΑΕΠΠ) ή κώδικας:
-   - Αναγνώρισε σωστά το βέλος εκχώρησης (←) π.χ. Σ ← 0 ή Σ ← Σ + Α[i, j].
-   - Χρησιμοποίησε την επίσημη σύνταξη εντολών ΑΕΠΠ με κάτω παύλα όπου προβλέπεται: Για ... από ... μέχρι ... [με_βήμα ...], Τέλος_επανάληψης, Όσο ... επανάλαβε, Αρχή_επανάληψης, Μέχρις_ότου ..., Αν ... τότε, Αλλιώς_αν ... τότε, Αλλιώς, Τέλος_αν, Επίλεξε ..., Περίπτωση ..., Τέλος_επιλογών, Διάβασε, Εμφάνισε, Εκτύπωσε, Αλγόριθμος, Τέλος_προγράμματος, Τέλος_συνάρτησης, Τέλος_διαδικασίας.
-   - Τοποθέτησε κάθε εντολή σε ξεχωριστή γραμμή (\\n) και εφάρμοσε σωστές εσοχές (4 κενά ανά επίπεδο εμφώλευσης) για τα μπλοκ Για..Τέλος_επανάληψης, Όσο..Τέλος_επανάληψης, Αρχή_επανάληψης..Μέχρις_ότου, Αν/Αλλιώς_αν/Αλλιώς..Τέλος_αν.
+      text: `Διάβασε με απόλυτη ακρίβεια το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ κείμενο (ή αριθμούς/σύμβολα) που φαίνεται στην εικόνα${contextHint}. Διόρθωσε αυτόματα τυχόν ατελή γράμματα ή τόνους ώστε οι ελληνικές λέξεις να είναι ορθογραφικά σωστές και να βγάζουν νόημα, διατήρησε τις αλλαγές γραμμής (\\n) αν το κείμενο είναι γραμμένο σε πολλές σειρές, και επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής {"text": "..."} χωρίς κανένα άλλο σχόλιο.`,
+    },
+    {
+      inlineData: {
+        mimeType: compact.mimeType,
+        data: compact.base64,
+      },
+    },
+  ];
+
+  const candidateModels = getPrioritizedVisionModels();
+
+  const tryTranscribeWithModel = async (
+    modelName: string,
+    timeoutMs = 26000
+  ): Promise<string | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const { ok, rawText } = await fetchVisionCompletionRawText(
+        cleanName,
+        parts,
+        apiKey,
+        ctrl.signal
+      );
+      if (!ok || !rawText) {
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
+      const parsed = safeParseVisionJson(rawText);
+      const transcribed =
+        typeof parsed?.text === 'string'
+          ? parsed.text.trim()
+          : Array.isArray(parsed)
+          ? parsed.join(' ').trim()
+          : '';
+      if (transcribed.length > 0) {
+        cachedWorkingVisionModel = cleanName;
+        return transcribed;
+      }
+    } catch {
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
+    }
+    return null;
+  };
+
+  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1300, 26000);
+}
+
+/**
+ * Uses Gemini Flash Vision to transcribe Lasso-selected handwritten or printed programming code
+ * and Greek Γ' Λυκείου ΑΕΠΠ pseudocode (ΓΛΩΣΣΑ) with proper line breaks and 4-space indentation.
+ */
+export async function transcribeHandwrittenCodeWithGemini(
+  imageDataUrl: string,
+  notebookTitle = ''
+): Promise<string | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const compact = await downscaleImageDataUrlForVision(imageDataUrl);
+  if (!compact) return null;
+
+  const contextHint =
+    notebookTitle && !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim())
+      ? ` (από σχολική σημείωση με θέμα "${notebookTitle}")`
+      : '';
+
+  const parts: any[] = [
+    {
+      text: `Διάβασε με απόλυτη ακρίβεια τον ΧΕΙΡΟΓΡΑΦΟ ή τυπωμένο κώδικα / Ψευδογλώσσα Προγραμματισμού Γ' Λυκείου (ΑΕΠΠ / ΓΛΩΣΣΑ) που φαίνεται στην εικόνα${contextHint}.
+1. Αναγνώρισε σωστά το βέλος εκχώρησης (←) π.χ. Σ ← 0 ή Σ ← Σ + Α[i, j], καθώς και τελεστές σύγκρισης (<=, >=, <>, =, <, >) και λογικούς τελεστές (ΚΑΙ, Ή, ΟΧΙ, mod, div).
+2. Αν είναι Ψευδογλώσσα ΑΕΠΠ / ΓΛΩΣΣΑ, χρησιμοποίησε την επίσημη σύνταξη εντολών με κάτω παύλα όπου προβλέπεται: Για ... από ... μέχρι ... [με_βήμα ...], Τέλος_επανάληψης, Όσο ... επανάλαβε, Αρχή_επανάληψης, Μέχρις_ότου ..., Αν ... τότε, Αλλιώς_αν ... τότε, Αλλιώς, Τέλος_αν, Επίλεξε ..., Περίπτωση ..., Τέλος_επιλογών, Διάβασε, Εμφάνισε, Εκτύπωσε, Αλγόριθμος, Πρόγραμμα, Συνάρτηση, Διαδικασία, Τέλος_προγράμματος, Τέλος_συνάρτησης, Τέλος_διαδικασίας.
+3. Τοποθέτησε κάθε εντολή σε ξεχωριστή γραμμή (\\n) και εφάρμοσε σωστές εσοχές (4 κενά ανά επίπεδο εμφώλευσης) για τα μπλοκ κώδικα (Για..Τέλος_επανάληψης, Όσο..Τέλος_επανάληψης, Αρχή_επανάληψης..Μέχρις_ότου, Αν/Αλλιώς_αν/Αλλιώς..Τέλος_αν, ή εσοχές Python/C/JavaScript/Java αν πρόκειται για άλλη γλώσσα).
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής {"text": "..."} χωρίς κανένα άλλο σχόλιο.`,
     },
     {
@@ -5734,9 +5808,9 @@ export async function transcribeHandwrittenStrokesWithGemini(
       const parsed = safeParseVisionJson(rawText);
       const transcribed =
         typeof parsed?.text === 'string'
-          ? parsed.text.replace(/^\n+|\n+$/g, '').trimEnd()
+          ? parsed.text.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '').trimEnd()
           : Array.isArray(parsed)
-          ? parsed.join('\n').replace(/^\n+|\n+$/g, '').trimEnd()
+          ? parsed.join('\n').replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '').trimEnd()
           : '';
       if (transcribed.length > 0) {
         cachedWorkingVisionModel = cleanName;

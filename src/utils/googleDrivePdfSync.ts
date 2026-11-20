@@ -5,6 +5,7 @@ import {
   StrokeObject,
   TextObject,
   CircuitSimConfig,
+  ForceSimConfig,
   HookeMeasurementRow,
   A4_GRID_STEP_PX,
   getPageLogicalWidth,
@@ -869,12 +870,14 @@ function areStrokesWithinCircuitTolForPdf(a: StrokeObject, b: StrokeObject, tol 
   return false;
 }
 
-function getExpandedCircuitClustersForPdf(page: NotePage, visibleLayerIds: Set<string>): StrokeObject[][] {
+function getExpandedCircuitClustersForPdf(
+  page: NotePage,
+  visibleLayerIds: Set<string>
+): { sim: CircuitSimConfig; strokes: StrokeObject[] }[] {
   const allVisible = (page.strokes || []).filter(
     (s) => visibleLayerIds.size === 0 || !s.layerId || visibleLayerIds.has(s.layerId)
   );
-  const clusters: StrokeObject[][] = [];
-  const usedIds = new Set<string>();
+  const clusters: { sim: CircuitSimConfig; strokes: StrokeObject[] }[] = [];
 
   for (const sim of page.circuitSims || []) {
     const baseSet = new Set(sim.strokeIds || []);
@@ -921,62 +924,216 @@ function getExpandedCircuitClustersForPdf(page: NotePage, visibleLayerIds: Set<s
     }
     const clusterStrokes = allVisible.filter((s) => out.has(s.id));
     if (clusterStrokes.length >= 2) {
-      for (const s of clusterStrokes) usedIds.add(s.id);
-      clusters.push(clusterStrokes);
-    }
-  }
-
-  // Also include any unregistered circuit cluster on the page that contains a battery/voltage-source and a load
-  const remaining = allVisible.filter(
-    (s) => !usedIds.has(s.id) && isCircuitEligibleStrokeForPdf(s)
-  );
-  const visited = new Set<string>();
-  for (const seed of remaining) {
-    if (visited.has(seed.id)) continue;
-    const compIds = new Set<string>([seed.id]);
-    if (seed.groupId) {
-      for (const g of remaining) {
-        if (g.groupId === seed.groupId) compIds.add(g.id);
-      }
-    }
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const curMembers = remaining.filter((s) => compIds.has(s.id));
-      for (const cand of remaining) {
-        if (compIds.has(cand.id)) continue;
-        if (curMembers.some((m) => areStrokesWithinCircuitTolForPdf(cand, m, 40))) {
-          compIds.add(cand.id);
-          changed = true;
-          if (cand.groupId) {
-            for (const g of remaining) {
-              if (g.groupId === cand.groupId) compIds.add(g.id);
-            }
-          }
-        }
-      }
-    }
-    for (const id of compIds) visited.add(id);
-    const clusterStrokes = remaining.filter((s) => compIds.has(s.id));
-    const hasSource = clusterStrokes.some(
-      (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-    );
-    const hasLoadOrWire = clusterStrokes.some(
-      (s) =>
-        s.shapeType === 'bulb' ||
-        s.shapeType === 'bulb-symbol' ||
-        s.shapeType === 'resistor' ||
-        s.shapeType === 'fan' ||
-        s.shapeType === 'ammeter' ||
-        s.shapeType === 'voltmeter' ||
-        s.shapeType === 'line'
-    );
-    if (hasSource && hasLoadOrWire) {
-      clusters.push(clusterStrokes);
+      clusters.push({ sim, strokes: clusterStrokes });
     }
   }
 
   return clusters;
+}
+
+interface PdfParticleSubSeg {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  effLen: number;
+}
+
+interface PdfPreparedParticleChain {
+  subSegs: PdfParticleSubSeg[];
+  cumEffDist: number[];
+  totalEffLen: number;
+  count: number;
+  stepDist: number;
+  avgSpeed: number;
+}
+
+function buildParticleChainsForPdf(
+  simData: ReturnType<typeof analyzeCircuitForSimulation>
+): PdfPreparedParticleChain[] {
+  interface SimChainWork {
+    startPt: { x: number; y: number };
+    endPt: { x: number; y: number };
+    subSegs: PdfParticleSubSeg[];
+    rawEffLen: number;
+    weightedSpeed: number;
+    avgSpeed: number;
+  }
+
+  const workChains: SimChainWork[] = [];
+  if (
+    simData.isCircuitClosed &&
+    (!simData.autoSwitch || simData.autoSwitch.closed) &&
+    simData.wireSegments.length > 0
+  ) {
+    for (const seg of simData.wireSegments) {
+      if (!seg.inClosedLoop || !seg.active || seg.currentSpeed <= 0.001) continue;
+      const polyPts =
+        seg.pathPoints && seg.pathPoints.length >= 2
+          ? seg.pathPoints
+          : [
+              { x: seg.x1, y: seg.y1 },
+              { x: seg.x2, y: seg.y2 },
+            ];
+      const actualLens: number[] = [];
+      let totalActual = 0;
+      for (let i = 0; i < polyPts.length - 1; i++) {
+        const d = Math.hypot(polyPts[i + 1].x - polyPts[i].x, polyPts[i + 1].y - polyPts[i].y);
+        actualLens.push(d);
+        totalActual += d;
+      }
+      if (totalActual < 1) continue;
+      const isResistorZigZag = Boolean(seg.pathPoints && seg.pathPoints.length >= 8);
+      const startPt = polyPts[0];
+      const endPt = polyPts[polyPts.length - 1];
+      const horizSpan = Math.max(24, Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y));
+      const targetEffLen = isResistorZigZag ? horizSpan : totalActual;
+      const scale = targetEffLen / Math.max(1e-4, totalActual);
+      const subSegs: PdfParticleSubSeg[] = [];
+      for (let i = 0; i < polyPts.length - 1; i++) {
+        if (actualLens[i] < 1e-4) continue;
+        subSegs.push({
+          x1: polyPts[i].x,
+          y1: polyPts[i].y,
+          x2: polyPts[i + 1].x,
+          y2: polyPts[i + 1].y,
+          effLen: actualLens[i] * scale,
+        });
+      }
+      if (subSegs.length === 0) continue;
+      workChains.push({
+        startPt: { x: startPt.x, y: startPt.y },
+        endPt: { x: endPt.x, y: endPt.y },
+        subSegs,
+        rawEffLen: targetEffLen,
+        weightedSpeed: targetEffLen * seg.currentSpeed,
+        avgSpeed: seg.currentSpeed,
+      });
+    }
+
+    const CHAIN_JOIN_TOL = 18;
+    let mergedChain = true;
+    while (mergedChain && workChains.length > 1) {
+      mergedChain = false;
+      for (let pass = 0; pass < 2 && !mergedChain; pass++) {
+        for (let i = 0; i < workChains.length && !mergedChain; i++) {
+          const a = workChains[i];
+          const outMatches: number[] = [];
+          for (let j = 0; j < workChains.length; j++) {
+            if (i === j) continue;
+            const b = workChains[j];
+            if (Math.abs(a.avgSpeed - b.avgSpeed) > 0.38) continue;
+            if (Math.hypot(a.endPt.x - b.startPt.x, a.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+              outMatches.push(j);
+            }
+          }
+          if (outMatches.length === 0) continue;
+          if (pass === 0 && outMatches.length > 1) continue;
+          const j = outMatches[0];
+          const b = workChains[j];
+          if (pass === 0) {
+            let inCount = 0;
+            for (let k = 0; k < workChains.length; k++) {
+              if (k === j) continue;
+              const c = workChains[k];
+              if (Math.abs(c.avgSpeed - b.avgSpeed) > 0.38) continue;
+              if (Math.hypot(c.endPt.x - b.startPt.x, c.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+                inCount++;
+              }
+            }
+            if (inCount > 1) continue;
+          }
+          const gap = Math.hypot(b.startPt.x - a.endPt.x, b.startPt.y - a.endPt.y);
+          if (gap > 0.5) {
+            a.subSegs.push({
+              x1: a.endPt.x,
+              y1: a.endPt.y,
+              x2: b.startPt.x,
+              y2: b.startPt.y,
+              effLen: gap,
+            });
+            a.rawEffLen += gap;
+            a.weightedSpeed += gap * ((a.avgSpeed + b.avgSpeed) * 0.5);
+          }
+          a.subSegs.push(...b.subSegs);
+          a.endPt = { ...b.endPt };
+          a.rawEffLen += b.rawEffLen;
+          a.weightedSpeed += b.weightedSpeed;
+          a.avgSpeed = a.weightedSpeed / Math.max(1, a.rawEffLen);
+          workChains.splice(j, 1);
+          mergedChain = true;
+        }
+      }
+    }
+  }
+
+  return workChains.map((wc) => {
+    const cumEffDist: number[] = [0];
+    for (const ss of wc.subSegs) {
+      cumEffDist.push(cumEffDist[cumEffDist.length - 1] + ss.effLen);
+    }
+    const totalEffLen = Math.max(1, cumEffDist[cumEffDist.length - 1]);
+    const count = Math.max(1, Math.round(totalEffLen / 32));
+    const stepDist = totalEffLen / count;
+    return {
+      subSegs: wc.subSegs,
+      cumEffDist,
+      totalEffLen,
+      count,
+      stepDist,
+      avgSpeed: wc.avgSpeed,
+    };
+  });
+}
+
+function getValidForceSimsForPdf(
+  page: NotePage,
+  visibleLayerIds?: Set<string>
+): ForceSimConfig[] {
+  const strokes = page.strokes || [];
+  const strokeMap = new Map(strokes.map((s) => [s.id, s]));
+  const isStrokeVisible = (st: StrokeObject) =>
+    !visibleLayerIds || visibleLayerIds.size === 0 || !st.layerId || visibleLayerIds.has(st.layerId);
+  return (page.forceSims || []).filter((sim) => {
+    if (sim.primaryStrokeId) {
+      const pSt = strokeMap.get(sim.primaryStrokeId);
+      if (!pSt || pSt.attachedToSpringId || !isStrokeVisible(pSt)) return false;
+      if (
+        sim.mode === 'analysis' &&
+        (!sim.step || sim.step === 0) &&
+        (!sim.anMode || sim.anMode === 'none') &&
+        pSt.shapeType === 'arrow' &&
+        pSt.points.length >= 2
+      ) {
+        const p0 = pSt.points[0];
+        const hasBranchingSiblingArrow = strokes.some(
+          (other) =>
+            other.id !== pSt.id &&
+            (other.shapeType === 'arrow' || Boolean(other.arrowEnd)) &&
+            other.points.length >= 2 &&
+            Math.hypot(other.points[0].x - p0.x, other.points[0].y - p0.y) <= 45
+        );
+        if (hasBranchingSiblingArrow) return false;
+      }
+    }
+    if (
+      (sim.mode === 'synthesis' || sim.mode === 'incline' || sim.mode === 'pendulum') &&
+      sim.secondaryStrokeId
+    ) {
+      const sSt = strokeMap.get(sim.secondaryStrokeId);
+      if (!sSt || sSt.attachedToSpringId || !isStrokeVisible(sSt)) return false;
+    }
+    return true;
+  });
+}
+
+function getActiveForceSimForPdf(
+  page: NotePage,
+  visibleLayerIds?: Set<string>
+): ForceSimConfig | null {
+  const valid = getValidForceSimsForPdf(page, visibleLayerIds);
+  if (valid.length === 0) return null;
+  return valid.find((sim) => sim.id === page.activeForceSimId) || valid[0];
 }
 
 /**
@@ -987,7 +1144,8 @@ function drawPageSimulationsSnapshotForPdf(
   ctx: CanvasRenderingContext2D,
   page: NotePage,
   options?: PdfExportOptions,
-  skipCircuits = false
+  skipCircuits = false,
+  skipForces = false
 ) {
   const visibleLayerIds = new Set(
     (page.layers || []).filter((l) => l.visible).map((l) => l.id)
@@ -997,16 +1155,38 @@ function drawPageSimulationsSnapshotForPdf(
   if (!skipCircuits) {
     const circuitClusters = getExpandedCircuitClustersForPdf(page, visibleLayerIds);
     const isThisActivePage = options?.activePageId === page.id;
-    const switchClosed =
-      isThisActivePage && options?.circuitSwitchClosed !== undefined
-        ? options.circuitSwitchClosed
-        : true;
-    const showElectrons =
-      options?.circuitShowElectrons !== undefined ? options.circuitShowElectrons : true;
-    const flowDir = options?.circuitFlowDirection || 'electrons';
-    const showDarkTrack = Boolean(options?.circuitShowDarkWireTrack);
+    const activeCircuitId =
+      page.activeCircuitSimId && circuitClusters.some((c) => c.sim.id === page.activeCircuitSimId)
+        ? page.activeCircuitSimId
+        : circuitClusters[0]?.sim.id;
 
-    for (const clusterStrokes of circuitClusters) {
+    for (const { sim, strokes: clusterStrokes } of circuitClusters) {
+      const isThisActiveSim =
+        isThisActivePage && Boolean(options?.isCircuitSimulating) && sim.id === activeCircuitId;
+      const switchClosed =
+        typeof sim.switchClosed === 'boolean'
+          ? sim.switchClosed
+          : isThisActiveSim && options?.circuitSwitchClosed !== undefined
+            ? options.circuitSwitchClosed
+            : false;
+      const showElectrons =
+        typeof sim.showElectrons === 'boolean'
+          ? sim.showElectrons
+          : isThisActiveSim && options?.circuitShowElectrons !== undefined
+            ? options.circuitShowElectrons
+            : true;
+      const flowDir =
+        sim.flowDirection ||
+        (isThisActiveSim && options?.circuitFlowDirection
+          ? options.circuitFlowDirection
+          : 'electrons');
+      const showDarkTrack =
+        typeof sim.showDarkWireTrack === 'boolean'
+          ? sim.showDarkWireTrack
+          : isThisActiveSim
+            ? Boolean(options?.circuitShowDarkWireTrack)
+            : false;
+
       const simData = analyzeCircuitForSimulation(clusterStrokes, switchClosed);
       if (simData.components.length === 0) continue;
 
@@ -1187,65 +1367,56 @@ function drawPageSimulationsSnapshotForPdf(
         ctx.restore();
       }
 
-      // 0D. Charge Carriers / Electrons along Active Wire Segments (ONLY when switch is CLOSED & current flows!)
+      // 0D. Charge Carriers / Electrons along Continuous Particle Chains (ONLY when switch is CLOSED & current flows!)
       if (
         showElectrons &&
         simData.isCircuitClosed &&
         (!simData.autoSwitch || simData.autoSwitch.closed) &&
         simData.wireSegments.length > 0
       ) {
-        const spacing = 32;
-        for (const seg of simData.wireSegments) {
-          if (!seg.inClosedLoop || !seg.active || seg.currentSpeed <= 0.001) continue;
-          const polyPts =
-            seg.pathPoints && seg.pathPoints.length >= 2
-              ? seg.pathPoints
-              : [
-                  { x: seg.x1, y: seg.y1 },
-                  { x: seg.x2, y: seg.y2 },
-                ];
-          const cumDist: number[] = [0];
-          for (let i = 0; i < polyPts.length - 1; i++) {
-            const sdx = polyPts[i + 1].x - polyPts[i].x;
-            const sdy = polyPts[i + 1].y - polyPts[i].y;
-            cumDist.push(cumDist[i] + Math.hypot(sdx, sdy));
-          }
-          const totalPolyLen = Math.max(1, cumDist[cumDist.length - 1]);
-          const isResistorZigZag = Boolean(seg.pathPoints && seg.pathPoints.length >= 8);
-          const horizSpan = Math.max(24, Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1));
-          const count = isResistorZigZag
-            ? Math.max(2, Math.min(4, Math.round(horizSpan / 26)))
-            : Math.max(1, Math.round(totalPolyLen / spacing));
-          const stepDist = totalPolyLen / count;
-          const rawOffset = stepDist * 0.35;
-
+        const particleChains = buildParticleChainsForPdf(simData);
+        const sw = simData.autoSwitch;
+        if (particleChains.length > 0) {
           ctx.save();
-          for (let k = 0; k < count; k++) {
-            const d = rawOffset + k * stepDist;
-            if (d < 2 || d > totalPolyLen - 2) continue;
-            let subIdx = 0;
-            while (subIdx < cumDist.length - 2 && cumDist[subIdx + 1] < d) {
-              subIdx++;
-            }
-            const segLenSub = Math.max(1e-4, cumDist[subIdx + 1] - cumDist[subIdx]);
-            const tSub = Math.max(0, Math.min(1, (d - cumDist[subIdx]) / segLenSub));
-            const px =
-              polyPts[subIdx].x + tSub * (polyPts[subIdx + 1].x - polyPts[subIdx].x);
-            const py =
-              polyPts[subIdx].y + tSub * (polyPts[subIdx + 1].y - polyPts[subIdx].y);
+          if (flowDir === 'electrons') {
+            ctx.fillStyle = '#84cc16';
+            ctx.shadowColor = '#4ade80';
+            ctx.shadowBlur = 7;
+          } else {
+            ctx.fillStyle = '#38bdf8';
+            ctx.shadowColor = '#0ea5e9';
+            ctx.shadowBlur = 7;
+          }
 
-            ctx.beginPath();
-            ctx.arc(px, py, 4.8, 0, Math.PI * 2);
-            if (flowDir === 'electrons') {
-              ctx.fillStyle = '#84cc16';
-              ctx.shadowColor = '#4ade80';
-              ctx.shadowBlur = 7;
-            } else {
-              ctx.fillStyle = '#38bdf8';
-              ctx.shadowColor = '#0ea5e9';
-              ctx.shadowBlur = 7;
+          for (const chain of particleChains) {
+            const { subSegs, cumEffDist, count, stepDist } = chain;
+            const rawOffset = stepDist * 0.35;
+            let subIdx = 0;
+            for (let k = 0; k < count; k++) {
+              const d = rawOffset + k * stepDist;
+              while (subIdx < subSegs.length - 1 && cumEffDist[subIdx + 1] < d) {
+                subIdx++;
+              }
+              const ss = subSegs[subIdx];
+              const segLenSub = Math.max(1e-4, ss.effLen);
+              const tSub = Math.max(0, Math.min(1, (d - cumEffDist[subIdx]) / segLenSub));
+              const px = ss.x1 + tSub * (ss.x2 - ss.x1);
+              const py = ss.y1 + tSub * (ss.y2 - ss.y1);
+
+              if (
+                sw &&
+                !sw.closed &&
+                Math.abs(px - sw.x) <= 14 &&
+                py >= sw.yTop - 4 &&
+                py <= sw.yBottom + 4
+              ) {
+                continue;
+              }
+
+              ctx.beginPath();
+              ctx.arc(px, py, 4.8, 0, Math.PI * 2);
+              ctx.fill();
             }
-            ctx.fill();
           }
           ctx.restore();
         }
@@ -2082,54 +2253,438 @@ function drawPageSimulationsSnapshotForPdf(
     }
   }
 
-  // 3. Force Vector / Pendulum / Inclined Plane Simulations
-  for (const fSim of page.forceSims || []) {
-    ctx.save();
-    if (fSim.mode === 'analysis') {
-      const ox = fSim.originX;
-      const oy = fSim.originY;
-      const fxPx = (fSim.fxUnits ?? 8) * A4_GRID_STEP_PX;
-      const fyPx = -(fSim.fyUnits ?? 6) * A4_GRID_STEP_PX;
-      ctx.strokeStyle = '#94a3b8';
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(ox + fxPx, oy);
-      ctx.lineTo(ox + fxPx, oy + fyPx);
-      ctx.lineTo(ox, oy + fyPx);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Fx & Fy arrows
-      ctx.strokeStyle = '#16a34a';
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox + fxPx, oy);
-      ctx.stroke();
-      ctx.strokeStyle = '#dc2626';
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox, oy + fyPx);
-      ctx.stroke();
-    } else if (fSim.mode === 'pendulum') {
-      const px = fSim.originX;
-      const py = fSim.originY;
-      const L = fSim.rodLengthPx || 230;
-      const ang = fSim.pendulumAngleRad ?? Math.PI / 5;
-      const bx = px + L * Math.sin(ang);
-      const by = py + L * Math.cos(ang);
-      ctx.strokeStyle = '#475569';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      ctx.fillStyle = '#2563eb';
-      ctx.beginPath();
-      ctx.arc(bx, by, 16, 0, Math.PI * 2);
-      ctx.fill();
+  // 3. Force Vector / Pendulum / Inclined Plane Simulations (Active valid simulation only!)
+  if (!skipForces) {
+    const fSim = getActiveForceSimForPdf(page, visibleLayerIds);
+    if (fSim) {
+      ctx.save();
+      if (fSim.mode === 'analysis') {
+        const ox = fSim.originX;
+        const oy = fSim.originY;
+        const fxPx = (fSim.fxUnits ?? 8) * A4_GRID_STEP_PX;
+        const fyPx = -(fSim.fyUnits ?? 6) * A4_GRID_STEP_PX;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(ox + fxPx, oy);
+        ctx.lineTo(ox + fxPx, oy + fyPx);
+        ctx.lineTo(ox, oy + fyPx);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Fx & Fy arrows
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(ox + fxPx, oy);
+        ctx.stroke();
+        ctx.strokeStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(ox, oy + fyPx);
+        ctx.stroke();
+      } else if (fSim.mode === 'pendulum') {
+        const drawHaloLabel = (
+          txt: string,
+          lx: number,
+          ly: number,
+          color: string,
+          font = 'bold 14px system-ui, -apple-system, sans-serif',
+          align: CanvasTextAlign = 'center'
+        ) => {
+          ctx.save();
+          ctx.font = font;
+          ctx.textAlign = align;
+          ctx.textBaseline = 'middle';
+          ctx.lineWidth = 3.6;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+          ctx.lineJoin = 'round';
+          ctx.strokeText(txt, lx, ly);
+          ctx.fillStyle = color;
+          ctx.fillText(txt, lx, ly);
+          ctx.restore();
+        };
+
+        const drawSimLineOrAxis = (
+          x1: number,
+          y1: number,
+          x2: number,
+          y2: number,
+          color: string,
+          lineWidth: number,
+          dash: number[],
+          hasArrow: boolean,
+          labelTxt?: string,
+          labelColor?: string,
+          labelFont = 'italic bold 19px Georgia, "Times New Roman", serif'
+        ) => {
+          const angDir = Math.atan2(y2 - y1, x2 - x1);
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.lineCap = 'round';
+          ctx.setLineDash(dash);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (hasArrow && Math.hypot(x2 - x1, y2 - y1) >= 8) {
+            const headLen = 9.5;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(
+              x2 - headLen * Math.cos(angDir - 0.42),
+              y2 - headLen * Math.sin(angDir - 0.42)
+            );
+            ctx.lineTo(
+              x2 - headLen * Math.cos(angDir + 0.42),
+              y2 - headLen * Math.sin(angDir + 0.42)
+            );
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.restore();
+          if (labelTxt) {
+            drawHaloLabel(
+              labelTxt,
+              x2 + 15 * Math.cos(angDir),
+              y2 + 15 * Math.sin(angDir),
+              labelColor || color,
+              labelFont
+            );
+          }
+        };
+
+        const drawSimVector = (
+          x1: number,
+          y1: number,
+          x2: number,
+          y2: number,
+          color: string,
+          lineWidth: number,
+          labelTxt?: string,
+          labelPos?: { x: number; y: number }
+        ) => {
+          const totalLen = Math.hypot(x2 - x1, y2 - y1);
+          if (totalLen < 2) return;
+          const angDir = Math.atan2(y2 - y1, x2 - x1);
+          const headLen = Math.min(12.5, Math.max(8, totalLen * 0.35));
+          const shaftEndX = x2 - headLen * 0.65 * Math.cos(angDir);
+          const shaftEndY = y2 - headLen * 0.65 * Math.sin(angDir);
+
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(shaftEndX, shaftEndY);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.lineTo(
+            x2 - headLen * Math.cos(angDir - 0.44),
+            y2 - headLen * Math.sin(angDir - 0.44)
+          );
+          ctx.lineTo(
+            x2 - headLen * Math.cos(angDir + 0.44),
+            y2 - headLen * Math.sin(angDir + 0.44)
+          );
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+
+          if (labelTxt) {
+            const lx = labelPos ? labelPos.x : x2 + 18 * Math.cos(angDir);
+            const ly = labelPos ? labelPos.y : y2 + 18 * Math.sin(angDir);
+            drawHaloLabel(labelTxt, lx, ly, color, 'bold 14.5px system-ui, -apple-system, sans-serif');
+          }
+        };
+
+        const PX = fSim.originX;
+        const PY = fSim.originY;
+        const L = fSim.rodLengthPx || 230;
+        const ang = fSim.pendulumAngleRad ?? Math.PI / 4;
+        const bx = PX + L * Math.sin(ang);
+        const by = PY + L * Math.cos(ang);
+
+        // Vertical Dashed Equilibrium Line (Θ.Ι.)
+        ctx.save();
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.55)';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(PX, PY);
+        ctx.lineTo(PX, PY + L + 16);
+        ctx.stroke();
+        ctx.restore();
+
+        drawHaloLabel(
+          'Θ.Ι.',
+          PX,
+          PY + L + 28,
+          '#64748b',
+          '600 11px system-ui, -apple-system, sans-serif'
+        );
+
+        // Visual Retention of Maximum Angle / Amplitude (θmax) ghost bobs
+        const maxA = fSim.pendulumMaxAngleRad || 0;
+        if (!fSim.showForces && maxA > 0.05) {
+          const maxBxL = PX - L * Math.sin(maxA);
+          const maxByL = PY + L * Math.cos(maxA);
+          const maxBxR = PX + L * Math.sin(maxA);
+          const maxByR = PY + L * Math.cos(maxA);
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.35)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 3]);
+
+          ctx.beginPath();
+          ctx.arc(maxBxL, maxByL, 19, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(maxBxR, maxByR, 19, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(PX, PY);
+          ctx.lineTo(maxBxL, maxByL);
+          ctx.moveTo(PX, PY);
+          ctx.lineTo(maxBxR, maxByR);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Angle Sector & 'θ' Label when displaced
+        if (Math.abs(ang) > 0.04) {
+          const arcR = Math.min(48, Math.max(30, L * 0.22));
+          const startA = Math.PI / 2 - ang;
+          const endA = Math.PI / 2;
+          ctx.save();
+          ctx.fillStyle = 'rgba(14, 165, 233, 0.10)';
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 2]);
+          ctx.beginPath();
+          ctx.moveTo(PX, PY);
+          ctx.arc(PX, PY, arcR, startA, endA, ang < 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          const midA = Math.PI / 2 - ang / 2;
+          drawHaloLabel(
+            'θ',
+            PX + (arcR + 12) * Math.cos(midA),
+            PY + (arcR + 12) * Math.sin(midA),
+            '#334155',
+            'italic bold 13.5px Georgia, serif'
+          );
+        }
+
+        // Dark Rod + Bob (matching live canvas vector style)
+        ctx.save();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(PX, PY);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+        ctx.beginPath();
+        ctx.arc(bx, by + 3, 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(bx, by, 19, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        const B_N = 10;
+        const L_m = Math.max(0.2, L / 230);
+        const G = 9.81;
+        const omega = fSim.isPaused ? 0 : (fSim.pendulumAngVel || 0);
+        const centripetalRatio = (omega * omega * L_m) / G;
+        const t_ratio = Math.max(0, Math.cos(ang) + centripetalRatio);
+        const T_N = t_ratio * B_N;
+
+        const wm_vis = Math.min(102, Math.max(48, L * 0.52));
+        const tm_vis = Math.min(wm_vis * t_ratio, Math.max(20, L - 20));
+        const wa = Math.PI / 2;
+        const ta = Math.atan2(PY - by, PX - bx);
+        const showNums = Boolean(fSim.showNumericValues);
+        const curStep = fSim.step || 0;
+        const axLen = 150;
+        const isLeft = bx < PX;
+        const s = Math.sin(ang);
+        const c = Math.cos(ang);
+
+        // Step-by-step Analysis of T or B when paused
+        if (fSim.isPaused && fSim.showForces && fSim.anMode === 'T') {
+          const vecTipX = bx + tm_vis * Math.cos(ta);
+          const vecTipY = by + tm_vis * Math.sin(ta);
+          const xax1 = isLeft ? { x: bx - axLen, y: by } : { x: bx + axLen, y: by };
+          const xax2 = isLeft ? { x: bx + axLen, y: by } : { x: bx - axLen, y: by };
+          const yax1 = { x: bx, y: by + axLen };
+          const yax2 = { x: bx, y: by - axLen };
+
+          if (curStep >= 1) {
+            drawSimLineOrAxis(xax1.x, xax1.y, xax2.x, xax2.y, '#7cb342', 1.8, [5, 4], true, 'x', '#558b2f');
+          }
+          if (curStep >= 2) {
+            drawSimLineOrAxis(yax1.x, yax1.y, yax2.x, yax2.y, '#7cb342', 1.8, [5, 4], true, 'y', '#558b2f');
+          }
+          if (curStep >= 3) {
+            drawSimLineOrAxis(vecTipX, vecTipY, vecTipX, by, '#64748b', 1.7, [3, 3], false);
+          }
+          if (curStep >= 4) {
+            drawSimVector(
+              bx,
+              by,
+              vecTipX,
+              by,
+              '#0e6efd',
+              3.2,
+              showNums ? `Tx = ${(T_N * Math.abs(s)).toFixed(1)} N` : 'Tx'
+            );
+          }
+          if (curStep >= 5) {
+            drawSimLineOrAxis(vecTipX, vecTipY, bx, vecTipY, '#64748b', 1.7, [3, 3], false);
+          }
+          if (curStep >= 6) {
+            drawSimVector(
+              bx,
+              by,
+              bx,
+              vecTipY,
+              '#0e6efd',
+              3.2,
+              showNums ? `Ty = ${(T_N * c).toFixed(1)} N` : 'Ty'
+            );
+          }
+        } else if (fSim.isPaused && fSim.showForces && fSim.anMode === 'B') {
+          const wTipX = bx;
+          const wTipY = by + wm_vis;
+          const yHalfLen = Math.max(tm_vis + 24, L * 0.52);
+          const yax2 = { x: bx - yHalfLen * s, y: by - yHalfLen * c };
+          const yNegLen = 135;
+          const yax1 = { x: bx + yNegLen * s, y: by + yNegLen * c };
+
+          const axLenX = 165;
+          const p1 = { x: bx - axLenX * c, y: by + axLenX * s };
+          const p2 = { x: bx + axLenX * c, y: by - axLenX * s };
+          const xax1 = isLeft ? (p1.x < p2.x ? p1 : p2) : p1.x > p2.x ? p1 : p2;
+          const xax2 = isLeft ? (p1.x < p2.x ? p2 : p1) : p1.x > p2.x ? p2 : p1;
+
+          const wy = wm_vis * Math.cos(ang);
+          const vByX = wy * Math.sin(ang);
+          const vByY = wy * Math.cos(ang);
+          const vBxX = -vByX;
+          const vBxY = wm_vis - vByY;
+          const pByX = bx + vByX;
+          const pByY = by + vByY;
+          const pBxX = bx + vBxX;
+          const pBxY = by + vBxY;
+
+          if (curStep >= 1) {
+            drawSimLineOrAxis(xax1.x, xax1.y, xax2.x, xax2.y, '#7cb342', 1.8, [5, 4], true, 'x', '#558b2f');
+          }
+          if (curStep >= 2) {
+            drawSimLineOrAxis(yax1.x, yax1.y, yax2.x, yax2.y, '#7cb342', 1.8, [5, 4], true, 'y', '#558b2f');
+          }
+          if (curStep >= 3) {
+            drawSimLineOrAxis(wTipX, wTipY, pBxX, pBxY, '#64748b', 1.7, [3, 3], false);
+          }
+          if (curStep >= 4) {
+            drawSimVector(
+              bx,
+              by,
+              pBxX,
+              pBxY,
+              '#dc3545',
+              3.2,
+              showNums ? `Bx = ${(B_N * Math.abs(s)).toFixed(1)} N` : 'Bx'
+            );
+          }
+          if (curStep >= 5) {
+            drawSimLineOrAxis(wTipX, wTipY, pByX, pByY, '#64748b', 1.7, [3, 3], false);
+          }
+          if (curStep >= 6) {
+            drawSimVector(
+              bx,
+              by,
+              pByX,
+              pByY,
+              '#dc3545',
+              3.2,
+              showNums ? `By = ${(B_N * c).toFixed(1)} N` : 'By'
+            );
+          }
+        }
+
+        // B & T Force Vectors
+        if (fSim.showForces) {
+          drawSimVector(
+            bx,
+            by,
+            bx,
+            by + wm_vis,
+            '#dc3545',
+            3.6,
+            showNums ? `B = ${B_N} N` : 'B'
+          );
+          const tTipX = bx + tm_vis * Math.cos(ta);
+          const tTipY = by + tm_vis * Math.sin(ta);
+          const isNearVertical = Math.abs(ang) < 0.12;
+          const sideSign = ang >= 0 ? 1 : -1;
+          const tLabelPos = isNearVertical
+            ? { x: tTipX + (showNums ? 34 : 15), y: Math.max(PY + 14, tTipY + 2) }
+            : {
+                x: tTipX + sideSign * (showNums ? 26 : 14) * Math.cos(ang),
+                y: Math.max(PY + 14, tTipY - 6),
+              };
+          drawSimVector(
+            bx,
+            by,
+            tTipX,
+            tTipY,
+            '#0e6efd',
+            3.6,
+            showNums ? `T = ${T_N.toFixed(1)} N` : 'T',
+            tLabelPos
+          );
+        }
+
+        // ΣF Resultant & Parallelogram Dashed Lines
+        if (fSim.showForces && fSim.showResultant) {
+          const wx = wm_vis * Math.cos(wa);
+          const wy = wm_vis * Math.sin(wa);
+          const tx = tm_vis * Math.cos(ta);
+          const ty = tm_vis * Math.sin(ta);
+          const sx = wx + tx;
+          const sy = wy + ty;
+
+          if (fSim.isPaused) {
+            drawSimLineOrAxis(bx + tx, by + ty, bx + sx, by + sy, '#64748b', 1.6, [5, 4], false);
+            drawSimLineOrAxis(bx + wx, by + wy, bx + sx, by + sy, '#64748b', 1.6, [5, 4], false);
+          }
+          drawSimVector(bx, by, bx + sx, by + sy, '#27a69a', 3.8, 'ΣF');
+        }
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 }
 
@@ -2495,6 +3050,176 @@ async function drawKatexMathObjectForPdf(
  * - Exact padding matching the canvas DOM (`px-1 py-0` for `math-graph-txt-` labels vs `px-3 py-1.5` for text boxes)
  * - True superscripts (`^2`, `^{2}`), subscripts (`_max`, `_0`, `_1`, `_{max}`), stacked fractions (`\frac{1}{2}`), and math symbols!
  */
+interface PdfTextFontSpec {
+  style: string;
+  weight: string;
+  stack: string;
+  primaryFamily: string;
+}
+
+function getPdfTextFontSpec(
+  fontFamily: TextObject['fontFamily'],
+  isBold?: boolean,
+  isMath?: boolean
+): PdfTextFontSpec {
+  const boldActive = Boolean(isBold) || fontFamily === 'calligraphic-bold';
+  switch (fontFamily) {
+    case 'calligraphic':
+    case 'calligraphic-bold':
+      return boldActive
+        ? {
+            style: '',
+            weight: '700',
+            stack: '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsHandBold"',
+          }
+        : {
+            style: '',
+            weight: '500',
+            stack: '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsHand"',
+          };
+    case 'marker':
+      return boldActive
+        ? {
+            style: '',
+            weight: '700',
+            stack: '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsPenBold"',
+          }
+        : {
+            style: '',
+            weight: '400',
+            stack: '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsPen"',
+          };
+    case 'fun':
+      return boldActive
+        ? {
+            style: '',
+            weight: '700',
+            stack: '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsFunBold"',
+          }
+        : {
+            style: '',
+            weight: '400',
+            stack: '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsFun"',
+          };
+    case 'diary':
+      return boldActive
+        ? {
+            style: '',
+            weight: '700',
+            stack: '"ExplainBoardsDiaryBold", "ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsDiaryBold"',
+          }
+        : {
+            style: '',
+            weight: '400',
+            stack: '"ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsDiary"',
+          };
+    case 'mansalva':
+      return {
+        style: 'oblique',
+        weight: '400',
+        stack: '"Mansalva", "ExplainBoardsPenLegacy", cursive, sans-serif',
+        primaryFamily: '"Mansalva"',
+      };
+    case 'handwritten':
+      return {
+        style: 'oblique',
+        weight: boldActive ? '800' : '400',
+        stack: '"Playpen Sans", "ExplainBoardsHand", cursive, sans-serif',
+        primaryFamily: '"Playpen Sans"',
+      };
+    case 'neohellenic':
+      return {
+        style: 'italic',
+        weight: boldActive ? '700' : '400',
+        stack: '"GFS Neohellenic", "Ysabeau Infant", Georgia, "Times New Roman", serif',
+        primaryFamily: '"GFS Neohellenic"',
+      };
+    case 'sans':
+      return {
+        style: '',
+        weight: boldActive ? '800' : '500',
+        stack: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        primaryFamily: '"Plus Jakarta Sans"',
+      };
+    default:
+      if (isMath) {
+        return {
+          style: 'italic',
+          weight: boldActive ? '700' : '600',
+          stack: '"GFS Neohellenic", Georgia, "Times New Roman", serif',
+          primaryFamily: '"GFS Neohellenic"',
+        };
+      }
+      return {
+        style: '',
+        weight: boldActive ? '800' : '500',
+        stack: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        primaryFamily: '"Plus Jakarta Sans"',
+      };
+  }
+}
+
+async function ensureNotebookFontsLoadedForPdf(notebook: Notebook): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return;
+  const queries = new Set<string>();
+  const addSpec = (spec: PdfTextFontSpec) => {
+    const stylePrefix = spec.style === 'italic' ? 'italic ' : '';
+    queries.add(`${stylePrefix}${spec.weight} 20px ${spec.primaryFamily}`);
+  };
+
+  for (const page of notebook.pages || []) {
+    for (const tx of page.texts || []) {
+      addSpec(getPdfTextFontSpec(tx.fontFamily, tx.bold, Boolean(tx.isMath)));
+      const rawSource = (tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '';
+      if (rawSource.includes('\\frac{')) {
+        addSpec(getPdfTextFontSpec(tx.fontFamily, true, Boolean(tx.isMath)));
+      }
+      if (!tx.isMath && tx.spans && tx.spans.length > 0) {
+        const bSet = new Set<number>([0, rawSource.length]);
+        for (const sp of tx.spans) {
+          if (sp.start >= 0 && sp.start <= rawSource.length) bSet.add(sp.start);
+          if (sp.end >= 0 && sp.end <= rawSource.length) bSet.add(sp.end);
+        }
+        const bounds = Array.from(bSet).sort((a, b) => a - b);
+        for (let i = 0; i < bounds.length - 1; i++) {
+          const rs = bounds[i];
+          if (bounds[i + 1] <= rs) continue;
+          let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
+          let segFam = tx.fontFamily;
+          for (const sp of tx.spans) {
+            if (rs >= sp.start && rs < sp.end) {
+              if (sp.bold !== undefined) segBold = sp.bold;
+              if (sp.fontFamily !== undefined) segFam = sp.fontFamily;
+            }
+          }
+          addSpec(getPdfTextFontSpec(segFam, segBold, false));
+        }
+      }
+    }
+  }
+
+  if (queries.size === 0) return;
+  try {
+    await Promise.race([
+      Promise.allSettled([
+        document.fonts.ready,
+        ...Array.from(queries).map((q) => document.fonts.load(q, 'ΑαΒβΓγΔδΕεΩωAaBb0123')),
+      ]),
+      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  } catch {
+    // ignore font load errors and proceed with export
+  }
+}
+
 async function drawTextObjectForPdf(
   ctx: CanvasRenderingContext2D,
   tx: TextObject,
@@ -2506,38 +3231,11 @@ async function drawTextObjectForPdf(
   const isMathLabel =
     tx.id.startsWith('math-graph-txt-') || Boolean(tx.groupId?.startsWith('math-graph-grp-'));
   const fSize = tx.fontSize || 20;
-  const isItalic = tx.fontFamily === 'neohellenic' || Boolean(tx.isMath);
-  const fontStyle = isItalic ? 'italic ' : '';
-  const fontWeight = tx.bold ? 'bold ' : tx.isMath ? '600 ' : '500 ';
-  const fontStack =
-    tx.fontFamily === 'calligraphic'
-      ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-      : tx.fontFamily === 'calligraphic-bold'
-      ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-      : tx.fontFamily === 'neohellenic'
-      ? '"GFS Neohellenic", "Arima", Georgia, "Times New Roman", serif'
-      : tx.fontFamily === 'handwritten'
-      ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
-      : tx.fontFamily === 'mansalva'
-      ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
-      : tx.fontFamily === 'marker'
-      ? tx.bold
-        ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
-        : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
-      : tx.fontFamily === 'fun'
-      ? tx.bold
-        ? '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
-        : '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
-      : tx.fontFamily === 'diary'
-      ? tx.bold
-        ? '"ExplainBoardsDiaryBold", "ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
-        : '"ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
-      : tx.isMath
-      ? '"GFS Neohellenic", Georgia, "Times New Roman", serif'
-      : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const baseFontSpec = getPdfTextFontSpec(tx.fontFamily, tx.bold, Boolean(tx.isMath));
+  const boldFontSpec = getPdfTextFontSpec(tx.fontFamily, true, Boolean(tx.isMath));
 
   if (tx.isMath) {
-    const renderedKatex = await drawKatexMathObjectForPdf(ctx, tx, page, isMathLabel, fontStack);
+    const renderedKatex = await drawKatexMathObjectForPdf(ctx, tx, page, isMathLabel, baseFontSpec.stack);
     if (renderedKatex) return;
   }
 
@@ -2548,8 +3246,10 @@ async function drawTextObjectForPdf(
     ctx.shadowOffsetY = Math.max(1.1, fSize * 0.055);
     ctx.shadowBlur = Math.max(2.0, fSize * 0.08);
   }
-  const makeFont = (sz: number, boldOverride?: boolean) =>
-    `${fontStyle}${boldOverride ? 'bold ' : fontWeight}${Math.max(7, sz).toFixed(1)}px ${fontStack}`;
+  const makeFont = (sz: number, boldOverride?: boolean) => {
+    const spec = boldOverride ? boldFontSpec : baseFontSpec;
+    return `${spec.style ? `${spec.style} ` : ''}${spec.weight} ${Math.max(7, sz).toFixed(1)}px ${spec.stack}`;
+  };
 
   const cleanLatexLine = (str: string): string =>
     str
@@ -2695,33 +3395,6 @@ async function drawTextObjectForPdf(
   const maxLineW = !tx.isMath ? Math.max(36, effectiveBoxW - padX * 2) : 0;
 
   if (!tx.isMath && tx.spans && tx.spans.length > 0) {
-    const getFontStackForFamily = (fam: TextObject['fontFamily'], isBold?: boolean) =>
-      fam === 'calligraphic'
-        ? isBold
-          ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-          : '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-        : fam === 'calligraphic-bold'
-        ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-        : fam === 'neohellenic'
-        ? '"GFS Neohellenic", "Arima", Georgia, "Times New Roman", serif'
-        : fam === 'handwritten'
-        ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
-        : fam === 'mansalva'
-        ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
-        : fam === 'marker'
-        ? isBold
-          ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
-          : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
-        : fam === 'fun'
-        ? isBold
-          ? '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
-          : '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif'
-        : fam === 'diary'
-        ? isBold
-          ? '"ExplainBoardsDiaryBold", "ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
-          : '"ExplainBoardsDiary", "ExplainBoardsHand", cursive, sans-serif'
-        : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-
     const getStyleAt = (charIdx: number) => {
       let segSz = fSize;
       let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
@@ -2737,11 +3410,11 @@ async function drawTextObjectForPdf(
           if (sp.fontFamily !== undefined) segFam = sp.fontFamily;
         }
       }
-      const segItalic = segFam === 'neohellenic';
-      const segFont = `${segItalic ? 'italic ' : ''}${segBold ? 'bold ' : '500 '}${Math.max(
+      const segSpec = getPdfTextFontSpec(segFam, segBold, false);
+      const segFont = `${segSpec.style ? `${segSpec.style} ` : ''}${segSpec.weight} ${Math.max(
         7,
         segSz
-      ).toFixed(1)}px ${getFontStackForFamily(segFam, segBold)}`;
+      ).toFixed(1)}px ${segSpec.stack}`;
       return { sz: segSz, bold: segBold, shadow: segShadow, color: segColor, font: segFont };
     };
 
@@ -3334,6 +4007,8 @@ export async function exportNotebookToPdfBlob(
   notebook: Notebook,
   options?: PdfExportOptions
 ): Promise<Blob> {
+  await ensureNotebookFontsLoadedForPdf(notebook);
+
   const pageImages: {
     jpegBytes: Uint8Array;
     pixelW: number;
@@ -3391,8 +4066,16 @@ export async function exportNotebookToPdfBlob(
       }
     }
 
+    const activeForceSim = getActiveForceSimForPdf(page, visibleLayerIds);
+    const skipForceStrokeIds = new Set<string>();
+    if (activeForceSim && activeForceSim.mode === 'pendulum') {
+      if (activeForceSim.primaryStrokeId) skipForceStrokeIds.add(activeForceSim.primaryStrokeId);
+      if (activeForceSim.secondaryStrokeId) skipForceStrokeIds.add(activeForceSim.secondaryStrokeId);
+    }
+
     for (const st of page.strokes || []) {
       if (visibleLayerIds.size > 0 && st.layerId && !visibleLayerIds.has(st.layerId)) continue;
+      if (skipForceStrokeIds.has(st.id)) continue;
       try {
         drawStrokeForPdf(ctx, st);
       } catch {
@@ -4042,6 +4725,7 @@ export async function syncNotebookPdfToGoogleDrive(
  * (angle drag, synthesis & analysis), and 2D/3D atoms & molecules.
  */
 export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<Blob> {
+  await ensureNotebookFontsLoadedForPdf(notebook);
   const pagesPayload: any[] = [];
 
   for (const page of notebook.pages) {
@@ -4090,12 +4774,14 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
 
     // Collect stroke IDs that will be dynamically animated in the Live PDF player
     // (pendulum rod/bob, oscillating spring/mass, and draggable force vectors)
+    const activeForceSim = getActiveForceSimForPdf(page, visibleLayerIds);
+    const validForceSims = activeForceSim ? [activeForceSim] : [];
     const dynamicStrokeIds = new Set<string>();
     for (const sp of page.springSims || []) {
       if (sp.eqSpringStrokeId) dynamicStrokeIds.add(sp.eqSpringStrokeId);
       if (sp.massStrokeId) dynamicStrokeIds.add(sp.massStrokeId);
     }
-    for (const fs of page.forceSims || []) {
+    for (const fs of validForceSims) {
       if (fs.primaryStrokeId) dynamicStrokeIds.add(fs.primaryStrokeId);
       if (fs.secondaryStrokeId) dynamicStrokeIds.add(fs.secondaryStrokeId);
     }
@@ -4107,7 +4793,8 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
     }
 
     // Render static Hooke tables/graphs and the Ruler (Χάρακας) if visible on the page
-    drawPageSimulationsSnapshotForPdf(ctx, page, undefined, true);
+    // Skip circuits and forceSims so static snapshots are never baked behind the animated Live PDF player
+    drawPageSimulationsSnapshotForPdf(ctx, page, undefined, true, true);
     drawRulerAndPointersForPdf(ctx, page);
 
     for (const tx of page.texts || []) {
@@ -4154,7 +4841,7 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
       strokes: page.strokes || [],
       circuitSims: page.circuitSims || [],
       springSims: page.springSims || [],
-      forceSims: page.forceSims || [],
+      forceSims: validForceSims,
       atomSims: enrichedAtomSims,
     });
   }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Type, ChevronDown, FlaskConical, Atom } from 'lucide-react';
+import { Type, ChevronDown, FlaskConical, Atom, Code2 } from 'lucide-react';
 
 export interface LassoOcrButtonsProps {
   isConvertingHandwriting: boolean;
@@ -7,6 +7,7 @@ export interface LassoOcrButtonsProps {
   setOpenMenu: (menu: 'math' | 'chem' | null | ((prev: 'math' | 'chem' | null) => 'math' | 'chem' | null)) => void;
   onConvertTextOcr: () => void;
   onConvertMathOcr: () => void;
+  onConvertCodeOcr: () => void;
   onConvertMathGraph: () => void;
   onConvertToPolygon: () => void;
   onConvertChemOcr: () => void;
@@ -20,6 +21,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
   setOpenMenu,
   onConvertTextOcr,
   onConvertMathOcr,
+  onConvertCodeOcr,
   onConvertMathGraph,
   onConvertToPolygon,
   onConvertChemOcr,
@@ -47,7 +49,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
         <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
       </button>
 
-      {/* 2. Math Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο) */}
+      {/* 2. Math Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο, Κώδικας) */}
       <div className="relative">
         <button
           type="button"
@@ -59,7 +61,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb]'
           }`}
-          title="Μαθηματικά & Γεωμετρία OCR (Εξίσωση, Διάγραμμα, Πολύγωνο)"
+          title="Μαθηματικά, Γεωμετρία & Κώδικας OCR (Εξίσωση, Διάγραμμα, Πολύγωνο, Κώδικας)"
         >
           <span className="font-serif font-bold text-[12px] leading-none">Σ</span>
           <span>Math</span>
@@ -130,6 +132,24 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 <span>Πολύγωνο</span>
               </span>
               <span className="text-[10px] text-[#64748b] font-medium">Ένωση γραμμών</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenu(null);
+                onConvertCodeOcr();
+              }}
+              disabled={isConvertingHandwriting}
+              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              title="Κώδικας OCR: Αναγνώριση χειρόγραφου κώδικα & Ψευδογλώσσας ΑΕΠΠ (ΓΛΩΣΣΑ) με αυτόματες εσοχές"
+            >
+              <span className="flex items-center gap-2 font-semibold text-xs">
+                <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center">
+                  <Code2 className="w-3.5 h-3.5" />
+                </span>
+                <span>Κώδικας</span>
+              </span>
+              <span className="text-[10px] text-[#64748b] font-medium">ΑΕΠΠ / Εσοχές</span>
             </button>
           </div>
         )}
