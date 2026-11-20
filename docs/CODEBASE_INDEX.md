@@ -1,6 +1,7 @@
-# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`v1.02 — heatSimFixed`)
+# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`v1.1 — simPDFFixes`)
 
-> **Σκοπός:** Αυτό το έγγραφο αποτελεί τον κεντρικό χάρτη πλοήγησης (Code Index) του BestNotes / ExplainBoards. Καταγράφει αναλυτικά πού βρίσκεται κάθε λειτουργία, πώς οργανώνονται τα domains (`src/simulations/`, `src/stem-engines/`, `src/canvas-tools/`, `src/features/library/`, `src/services/storage/`, `src/features/admin/`), πώς αποσυντίθεται το `src/App.tsx` και το `src/utils/geometryAndAlgorithms.ts`, και πώς γίνεται το code-splitting ώστε οποιοσδήποτε προγραμματιστής ή AI agent να εντοπίζει ακαριαία τον κώδικα.
+> **Σκοπός:** Αυτό το έγγραφο αποτελεί τον κεντρικό χάρτη πλοήγησης (Code Index) του BestNotes / ExplainBoards (συγχρονισμένο με το [../CODEBASE_INDEX.md](../CODEBASE_INDEX.md)). Καταγράφει αναλυτικά πού βρίσκεται κάθε λειτουργία, πώς οργανώνονται τα domains (`src/simulations/`, `src/stem-engines/`, `src/canvas-tools/`, `src/features/library/`, `src/services/storage/`, `src/features/admin/`), πώς αποσυντίθεται το `src/App.tsx` και το `src/utils/geometryAndAlgorithms.ts`, και πώς γίνεται το code-splitting ώστε οποιοσδήποτε προγραμματιστής ή AI agent να εντοπίζει ακαριαία τον κώδικα.
+> **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [./SIMULATION_GUIDELINES.md](./SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling).
 
 ---
 
@@ -61,7 +62,7 @@ graph TD
         AdminTelemHook["hooks/useAppTelemetry.ts"]
         AdminStats["services/userStatsService.ts"]
         AdminTraffic["services/trafficService.ts"]
-        AdminViews["components/ (AdminSidebar, AdminKpiCards, AdminUsersTable, AdminTrafficView, AdminOcrAnalyticsView)"]
+        AdminViews["components/ (AdminSidebar, AdminKpiCards, AdminUsersTable, AdminTrafficView, AdminOcrAnalyticsView, AdminFirebaseBillingView, AdminPerformanceView)"]
     end
 
     App --> SimIndex
@@ -88,9 +89,9 @@ graph TD
 | | `src/simulations/registry/SimulationRegistry.ts` | Plug-and-play Registry (`register`, `get`, `listByCategory`) | Κεντρική καταγραφή προσομοιώσεων |
 | **Ηλεκτρικά Κυκλώματα (`modules/circuits/`)** | `src/simulations/modules/circuits/index.ts` | Barrel export για όλη τη Μηχανή Κυκλωμάτων | Πλήρης αυτονομία κυκλωμάτων |
 | | `src/simulations/modules/circuits/types.ts` | `CircuitComponentKind`, `CircuitComponentInfo`, `HandDrawnCircuitRecognitionResult`, `SimulatedWireSegment`, `SimulatedComponentState`, `AutoVerticalSwitchInfo`, `CircuitSimulationData`, `CircuitSimConfig` | Όλοι οι τύποι κυκλωμάτων |
-| | `src/simulations/modules/circuits/circuitEngine.ts` | `classifyCircuitStrokeKind`, `getCircuitComponentsWithTerminals`, `repairCircuitMeterStrokes`, `splitWiresUnderCircuitComponent`, `getCircuitWireRailSnapDelta`, `adaptCircuitWiresOnScaleTransform`, `adaptCircuitWiresOnComponentMove`, `toggleSwitchStrokeGroup`, `recognizeHandDrawnCircuitSymbols`, `autoAlignAndConnectCircuit`, `convertCircuitComponents`, `analyzeCircuitForSimulation` (με **LRU Memoization Cache** `O(1)` για αμετάβλητα strokes) | Αφαίρεση **7.138 γραμμών** από το `geometryAndAlgorithms.ts` + `O(1)` cache στον επιλυτή Kirchhoff |
+| | `src/simulations/modules/circuits/circuitEngine.ts` | `classifyCircuitStrokeKind`, `getCircuitComponentsWithTerminals`, `repairCircuitMeterStrokes`, `splitWiresUnderCircuitComponent`, `getCircuitWireRailSnapDelta`, `adaptCircuitWiresOnScaleTransform`, `adaptCircuitWiresOnComponentMove`, `toggleSwitchStrokeGroup`, `recognizeHandDrawnCircuitSymbols`, `autoAlignAndConnectCircuit`, `convertCircuitComponents`, `analyzeCircuitForSimulation` (με **LRU Memoization Cache** `O(1)`, αυτόματη γεφύρωση `bulb-bridge` για ασύμμετρους εικονιστικούς ακροδέκτες λαμπτήρα `14587c8`, και `m.active` Kirchhoff για ζωντανό βολτόμετρο πηγής `V_πηγής` με ανοιχτό διακόπτη `c09a552`) | Αφαίρεση **7.138 γραμμών** από το `geometryAndAlgorithms.ts` + `O(1)` cache στον επιλυτή Kirchhoff |
 | | `src/simulations/modules/circuits/circuitHelpers.ts` | `getValidCircuitSims`, `getAllNotebookCircuitSims`, `getActiveCircuitSim`, `getNextDefaultCircuitSimName`, `isCircuitEligibleStroke`, `areStrokesWithinCircuitTol`, `getSimExpandedStrokeSet`, `expandWholeCircuitStrokeIds`, `runScopedCircuitOperationOnPage`, `splitWiresAndSyncPageSims` | Αφαίρεση **335 γραμμών** από το `App.tsx` |
-| | `src/simulations/modules/circuits/CircuitControlPanel.tsx` | Πλήρες Dashboard UI για τα Ηλεκτρικά Κυκλώματα (επιλογέας `sim01`/`sim02` με φωτεινή ένδειξη ON/OFF, Play/Pause, `Ένωση`, `Ολοκλήρωση`, Αποδοχή/Ακύρωση πρότασης, διακόπτης, μετατροπή `Σχήματα ↔ Σύμβολα`, φορά ηλεκτρονίων/συμβατική, ταχύτητα) | Αφαίρεση **775 γραμμών** inline JSX από το `App.tsx` |
+| | `src/simulations/modules/circuits/CircuitControlPanel.tsx` | Πλήρες Dashboard UI για τα Ηλεκτρικά Κυκλώματα (επιλογέας `sim01`/`sim02` με πράσινο ενεργό / μαύρο ανενεργό pill σε όλα τα 5 Sim tabs `fcf607f`, Play/Pause, `Ένωση`, `Ολοκλήρωση`, Αποδοχή/Ακύρωση πρότασης, διακόπτης, μετατροπή `Σχήματα ↔ Σύμβολα`, φορά ηλεκτρονίων/συμβατική, ταχύτητα) | Αφαίρεση **775 γραμμών** inline JSX από το `App.tsx` |
 | | `src/simulations/modules/circuits/CircuitSimulationModule.ts` | `CircuitSimulationModule` & `CIRCUIT_OBJECT_CATALOG` (8 εξαρτήματα κυκλώματος) | Εγγραφή στο `SimulationRegistry` |
 | **Θερμότητα & Θερμοδυναμική (`modules/heat/`)** | `src/simulations/modules/heat/index.ts` | Barrel export για όλη την ενότητα Θερμότητας | Πλήρης αυτονομία Θερμότητας |
 | | `src/simulations/modules/heat/types.ts` | `HeatSimConfig`, `HeatObject`, `HeatObjectType`, `LiquidType`, `LIQUID_REGISTRY` (Νερό, Γάλα, Ελαιόλαδο), `HeatContainerState`, `HeatBurnerState`, `HeatTripodState`, `HeatThermometerState`, `HeatGraphConfig` | Μοντέλα δεδομένων Θερμότητας |
@@ -117,7 +118,7 @@ graph TD
 | | `src/stem-engines/ocr/OcrPrompts.ts` | System prompts για Ελληνικό χειρόγραφο, LaTeX, Χημικές Εξισώσεις, 3D Μόρια |
 | | `src/stem-engines/chemistry/periodicTableData.ts` | Περιοδικός πίνακας, Bohr models, χημικές εξισώσεις |
 | | `src/stem-engines/math/physicsEquationsLibrary.ts` | Κατάλογος εξισώσεων φυσικής ελληνικού αναλυτικού προγράμματος |
-| | `src/stem-engines/ui/LassoOcrButtons.tsx` | Κορδέλα 3 κουμπιών OCR (`Text OCR`, `Σ Math ▾`, `⚗ Chem ▾`) |
+| | `src/stem-engines/ui/LassoOcrButtons.tsx` | Κορδέλα 3 κουμπιών OCR (`textOCR`, `Σ Math ▾` με `Εξίσωση`, `Διάγραμμα`, `Πολύγωνο`, και ξεχωριστό **`Κώδικας`** για ΑΕΠΠ/εσοχές `c453bca`, `⚗ Chem ▾`) |
 | **Canvas Tools & Fonts** | `src/canvas-tools/index.ts` | Master Facade export για εργαλεία σχεδίασης και παλέτες |
 | | `src/canvas-tools/palette/colorPresets.ts` | `PRESET_COLORS`, `DEFAULT_COLOR_SLOTS`, `THICKNESS_PRESETS`, `APP_NAVY` |
 | | `src/canvas-tools/tools/toolCatalog.ts` | `TOOL_DESCRIPTORS` & helper queries |
@@ -125,14 +126,18 @@ graph TD
 | **Library** | `src/features/library/index.ts` | Master Facade export για τη βιβλιοθήκη και τους φακέλους (`RecentlyOpenedStrip`, `LibraryDeleteModal`, `FolderEditModal`, `folderPresets`) |
 | | `src/components/LibraryNoteMiniThumb.tsx` | Κάρτα προεπισκόπησης σημειωματάριου στη Βιβλιοθήκη (περιλαμβάνει `PageStrokesThumbCanvas` + `PageHeatSimsThumbCanvas`) |
 | **Storage, Compression & Sync** | `src/services/storage/storageCleaners.ts` | `compactStrokeForStorage` (**Lossless συμπίεση σημείων 240Hz Apple Pencil / GoodNotes κατά 55%–70%** + στρογγυλοποίηση `0.1px`), `cleanNotebookForStorage`, `serializeNotebookForFirestore`, `cleanNotebookForLibraryCache`, `getNotebookContentScore` |
-| | `src/services/storage/indexedDb.ts` | `openBestNotesIdb`, `saveNotebooksToIndexedDB`, `loadNotebooksFromIndexedDB` |
+| | `src/services/storage/indexedDb.ts` | `openBestNotesIdb` (**singleton IDB connection cache** `b6f78d2`), `saveNotebooksToIndexedDB`, `loadNotebooksFromIndexedDB` |
 | | `src/services/storage/localAndIdbSync.ts` | `saveCustomFoldersToLocalAndIdb`, `saveNotebooksToLocalAndIdb`, `saveLibraryShelfCache` |
 | | `src/services/storage/firestoreSync.ts` | `saveNotebookToFirestoreChunked`, `getMonotonicIsoTimestamp` |
-| **Seeds & Importers** | `src/data/seeds/index.ts` | 11 έτοιμα εκπαιδευτικά τετράδια (απομονωμένα στο δικό τους chunk `data-seeds`) |
+| **OCR, PDF Export & Telemetry** | `src/utils/geometryAndAlgorithms.ts` | Multi-key Gemini OCR failover (`Admin key → VITE_GV_PRIMARY → VITE_GV_A/B`) με HTTP `402` handling & κατάργηση σιωπηλής αλλοίωσης `beautifyHandwritingStrokes` σε αποτυχία OCR (`fcf607f`), επαναφορά `textOCR` & διαχωρισμός `Math → Κώδικας` (`c453bca`), Unicode PUA SI unit sentinels (`d0d00be`) & Unicode-safe ελληνικό LaTeX (`b6f78d2`) |
+| | `src/utils/googleDrivePdfSync.ts` | Εξαγωγή PDF & `Live PDF` (`v1.1` overhaul `c453bca`): Circuits Option A (καμία αυτόματη ανίχνευση σε μη καταχωρημένα σκίτσα, σεβασμός per-circuit `switchClosed`/`showElectrons` & συνεχείς αλυσίδες σωματιδίων), PDF font stack/weight parity + `document.fonts.load` preloading, Pendulum `forceSims` validation, απόκρυψη στατικών strokes, πλήρης διανυσματική ισοδυναμία & διόρθωση φόντου `Live PDF` |
+| | `src/utils/perfTelemetry.ts` & `src/components/AdminPerfPill.tsx` | Zero-cost Live Telemetry Απόδοσης (Sim Frame ms, Active Live Loops, Long Tasks `>50ms`, RAM & Canvas VRAM, 1-click Παύση Όλων) |
+| **Seeds & Importers** | `src/data/seedIds.ts` & `src/data/seeds/index.ts` | Lightweight `seedIds.ts` που αποτρέπει το eager download του `data-seeds` chunk (**`-888.7 KB` gzip** στο αρχικό boot `b6f78d2`) + 11 έτοιμα εκπαιδευτικά τετράδια |
 | | `src/utils/goodnotesParser.ts` | Native `.goodnotes` (ZIP + Protobuf + `bv41` LZ4) & `.bestnotes` parser με αυτόματη συμπίεση `compactStrokeForStorage` |
 | | `src/utils/pdfAndImageImporter.ts` | PDF & Image importer με adaptive DPI και local IndexedDB caching |
-| **Admin & Telemetry** | `src/features/admin/index.ts` | Απομονωμένο Admin Portal (`AdminPortal.tsx`, `AdminDashboard.tsx`, `useAdminRoute`, `useAppTelemetry`, `userStatsService`, `trafficService`) |
-| **Bundling & Code Splitting** | `vite.config.ts` | Έξυπνος διαχωρισμός σε 9 ανεξάρτητα chunks: `vendor-react`, `vendor-firebase`, `vendor-pdf-zip`, `vendor-math`, `vendor-icons`, `feature-simulations`, `feature-admin`, `data-seeds`, και κύριο `index` (**μείωση gzip μεγέθους κύριου bundle κατά 65%**, από `1.796 kB` σε `622 kB`) |
+| **Admin, Security & Routing** | `src/features/admin/index.ts` | Απομονωμένο Admin Portal (`AdminPortal.tsx`, `AdminDashboard.tsx`, `AdminFirebaseBillingView.tsx`, `AdminPerformanceView.tsx`, `useAdminRoute`, `useAppTelemetry`, `userStatsService`, `trafficService`) |
+| | `firestore.rules` & `index.html` | Θωρακισμένοι Firestore Security Rules και διόρθωση `_vcheck` redirect (`b6f78d2`) |
+| **Bundling & Code Splitting** | `vite.config.ts` | Έξυπνος διαχωρισμός σε 9 ανεξάρτητα chunks: `vendor-react`, `vendor-firebase`, `vendor-pdf-zip`, `vendor-math`, `vendor-icons`, `feature-simulations`, `feature-admin`, lazy `data-seeds` (`-888.7 KB` gzip από το initial boot `b6f78d2`), και κύριο `index` |
 
 ---
 

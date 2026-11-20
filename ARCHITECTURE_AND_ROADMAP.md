@@ -1,7 +1,7 @@
 # 📘 BestNotes — Πλήρης Τεχνική Τεκμηρίωση, Αρχιτεκτονική & Roadmap Υλοποίησης
 
 > [!IMPORTANT]
-> **Κεντρική Φιλοσοφία του BestNotes (`v1.05 — mainFixes`):**
+> **Κεντρική Φιλοσοφία του BestNotes (`v1.1 — simPDFFixes`):**
 > Δημιουργούμε το απόλυτο εργαλείο χειρόγραφων σημειώσεων για **iPad (με Apple Pencil Pro)**, **Android Tablets** και **Web**, κρατώντας **100% το οικείο, γρήγορο UI και την αίσθηση γραφής του Goodnotes 6**, αφαιρώντας τα περιττά (ήχος/βίντεο) και ενσωματώνοντας **εγγενή γραφιστικά εργαλεία από τα Adobe Illustrator & Photoshop**, **ζωντανές προσομοιώσεις STEM** με **αυστηρό Κανόνα Μηδενικής Επιβράδυνσης (Zero-Slowdown Charter: `0.00 ms` / `0 RAF/sec` σε παύση, `< 4.0 ms` ενεργό, lazy VRAM, live telemetry)** καθώς και **αθόρυβο προγραμματισμένο συγχρονισμό στο Google Drive** (`08:00–14:00` κάθε 1ω, `14:00–20:00` κάθε 2ω).
 
 ---
@@ -286,10 +286,10 @@ sequenceDiagram
 
 ---
 
-## 9. Κατάσταση Έργου — Έκδοση `v1.02 (heatSimFixed)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
+## 9. Κατάσταση Έργου — Έκδοση `v1.1 (simPDFFixes)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
 
 > [!NOTE]
-> **Τρέχουσα Έκδοση:** **`v1.02 — heatSimFixed`** (18 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`v1.1 — simPDFFixes`** (20 Νοεμβρίου 2026) — για τις νεότερες αναβαθμίσεις `v1.05`–`v1.1`, βλέπε επίσης την Ενότητα 12.1 (#10).
 > **Live Web App (Primary):** [https://explainboards.web.app](https://explainboards.web.app) & [https://mybestnotes.web.app](https://mybestnotes.web.app) (και [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app))
 > **GitHub Repository:** [https://github.com/kfrei/bestNotes](https://github.com/kfrei/bestNotes)
 
@@ -451,7 +451,7 @@ sequenceDiagram
   * Αναγνώριση κυκλωμάτων ή επιλογή με Λάσο + πάτημα **`Sim`**, με αυτόματη απόκρυψη του πλαισίου επιλογής του Λάσο ώστε να μη δημιουργεί οπτικό θόρυβο.
   * Ενιαία λίστα `sim01`, `sim02`, `sim03` με ενσωματωμένο μολυβάκι μετονομασίας (`✎`) και διαγραφή (`✕`), με δυνατότητα **ταυτόχρονης και ανεξάρτητης εκτέλεσης πολλαπλών κυκλωμάτων** στην ίδια ή διαφορετικές σελίδες.
   * Πατώντας σε οποιοδήποτε `sim01` / `sim02`, η σελίδα εκτελεί **ομαλό scroll (`scrollToCircuitSim`, `420ms` cubic ease-out)** κεντράροντας το αντίστοιχο κύκλωμα στην οθόνη.
-  * *Σημείωση:* Για την αναλυτική τεκμηρίωση των πρόσφατων σφαλμάτων κυκλωμάτων (πολλαπλές ταυτόχρονες sims, κενό διακόπτη, σταθερότητα σχεδίων στο refresh, και προσανατολισμός αμπερομέτρου), δείτε το [`docs/BUGS_CIRCUIT_SIMULATION.md`](file:///Users/freiderikosk/Downloads/BestNotes/docs/BUGS_CIRCUIT_SIMULATION.md).
+  * *Σημείωση:* Για την αναλυτική τεκμηρίωση των πρόσφατων σφαλμάτων κυκλωμάτων (πολλαπλές ταυτόχρονες sims, κενό διακόπτη, σταθερότητα σχεδίων στο refresh, προσανατολισμός αμπερομέτρου, `V_πηγής` με ανοιχτό διακόπτη, `bulb-bridge` & PDF Option A), δείτε το [`docs/BUGS_CIRCUIT_SIMULATION.md`](./docs/BUGS_CIRCUIT_SIMULATION.md).
 * **✨ Αυτόματη Ολοκλήρωση Κυκλώματος (`✨ Ολοκλήρωση`) με 4 Κόμβους Ολίσθησης (`tl`, `tr`, `br`, `bl`):**
   * Αυτόματη ευθυγράμμιση των στοιχείων στον πάνω/κάτω κλάδο και πρόταση ολοκλήρωσης του βρόχου με **μαύρη διακεκομμένη γραμμή (`#111827`)** και **Διακόπτη** στον αριστερό κατακόρυφο κλάδο.
   * Με το πάτημα του **`✓ Αποδοχή`** πάνω στο σχήμα, αν υπήρχαν μόνο στοιχεία χωρίς γραμμές δημιουργείται **μαύρη συνεχής γραμμή**, ενώ αν υπήρχε ήδη σχεδιασμένο τμήμα κυκλώματος **κληρονομείται αυτόματα ο τύπος γραμμής (`lineStyle`), το χρώμα, το πάχος, το `penType` και η διαφάνεια** των υπαρχόντων καλωδίων, και καταχωρείται αυτόματα ως νέο `sim02` / `sim03`.
@@ -558,9 +558,10 @@ sequenceDiagram
    - Sticky Toolbars: `z-40`
    - Floating Modals & Panels: `z-50`
    - Toast & High-priority Dropdowns: `z-[9999]`
-3. **Ομαδοποίηση OCR & Εργαλείων:**
-   - 3 καθαρά κουμπιά: `Text OCR` (άμεση εκτέλεση), `Math` Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο), `Chem` Dropdown (Αντιδράσεις, 3D, Άτομο).
+3. **Ομαδοποίηση OCR, Sim Pills & Εργαλείων (`v1.1`):**
+   - 3 καθαρά κουμπιά OCR: `textOCR` (άμεση εκτέλεση, επαναφορά συμπεριφοράς προ `80e282d`), `Math` Dropdown (`Εξίσωση`, `Διάγραμμα`, `Πολύγωνο`, και ξεχωριστό **`Κώδικας`** για ΑΕΠΠ/εσοχές `c453bca`), `Chem` Dropdown (`Αντιδράσεις`, `3D Μόριο`, `2D Άτομο`).
    - Τα ενεργά κουμπιά φέρουν φόντο `#0066ff` με λευκό κείμενο, ενώ τα ανενεργά φόντο `#efebe3` με περίγραμμα `#dfd8cb` και κείμενο `#2c3e50`.
+   - **Ενιαία Sim Pills (5 Καρτέλες `Sim`):** Πράσινα ενεργά / μαύρα ανενεργά pills σε όλες τις 5 καρτέλες προσομοιώσεων (`Κυκλώματα`, `Ελατήρια`, `Δυνάμεις`, `Άτομο`, `Θερμότητα` — `fcf607f`), με αυστηρό gating των canvas interactions (συμπεριλαμβανομένου του αυτόματου snapping βαριδίου & δείκτη σε άφορτο ελατήριο μόνο όταν είναι ανοιχτό το `Sim → Ελατήρια`).
 
 ### 11.3 iPadOS Liquid Glass UI (Frosted Translucency & Vibrancy)
 
@@ -582,7 +583,7 @@ sequenceDiagram
 ## 12. 🏛️ Αρχιτεκτονική Αποσύνθεσης & Ευρετήριο Κώδικα (Modular Architecture & Code Index)
 
 > [!NOTE]
-> Για τον πλήρη πίνακα συμβόλων και αρχείων, βλέπε το αναλυτικό έγγραφο **[CODEBASE_INDEX.md](file:///Users/freiderikosk/Downloads/BestNotes/docs/CODEBASE_INDEX.md)**.
+> Για τον πλήρη πίνακα συμβόλων και αρχείων, βλέπε το αναλυτικό έγγραφο **[CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md)** (και το [./CODEBASE_INDEX.md](./CODEBASE_INDEX.md)).
 
 Με την εξέλιξη του BestNotes, ο μονολιθικός κώδικας του `src/App.tsx` διασπάστηκε σε **4 αυτοτελείς πυλώνες (Domain Folders)**, καθένας με το δικό του **Master Facade (`index.ts`)**:
 
@@ -621,8 +622,9 @@ sequenceDiagram
    - **Cloud Firestore Sync:** `firestoreSync.ts` (`saveNotebookToFirestoreChunked`, multi-chunk atomic batches).
    - **Facade:** `src/services/storage/index.ts`.
 
-6. **`src/data/seeds/` (Έτοιμα Εκπαιδευτικά Τετράδια Φυσικής/Χημείας/Βιολογίας):**
-   - **11 Θεματικά Τετράδια:** `einsteinNoteSeed.ts`, `davinciNoteSeed.ts`, `electricCircuitNoteSeed.ts`, `conductorsAndCurrentNoteSeed.ts`, `electricalResistanceNoteSeed.ts`, `scienceNotesSeed.ts`, `volcanoNoteSeed.ts`, `waterChemistryNoteSeed.ts`, `waterPhasesNoteSeed.ts`, `weightAndWaterPhasesSeed.ts`, `cellBiologyNoteSeed.ts`.
+6. **`src/data/seedIds.ts` & `src/data/seeds/` (Lazy Έτοιμα Εκπαιδευτικά Τετράδια — `-888.7 KB` gzip `b6f78d2`):**
+   - **Lightweight Seed IDs (`src/data/seedIds.ts`):** Απομονωμένα string IDs ώστε η αρχική εκκίνηση να μην κατεβάζει ποτέ eagerly το chunk `data-seeds` (`~1.22 MB` base64 assets) εκτός αν απαιτείται provisioning.
+   - **11 Θεματικά Τετράδια (`src/data/seeds/index.ts`):** `einsteinNoteSeed.ts`, `davinciNoteSeed.ts`, `electricCircuitNoteSeed.ts`, `conductorsAndCurrentNoteSeed.ts`, `electricalResistanceNoteSeed.ts`, `scienceNotesSeed.ts`, `volcanoNoteSeed.ts`, `waterChemistryNoteSeed.ts`, `waterPhasesNoteSeed.ts`, `weightAndWaterPhasesSeed.ts`, `cellBiologyNoteSeed.ts`.
    - **Facade:** `src/data/seeds/index.ts`.
 
 7. **`src/components/modals/` (Contextual Modals του Canvas Editor):**
@@ -644,8 +646,14 @@ sequenceDiagram
    - **Facade:** `src/features/admin/index.ts`.
 
 9. **`vite.config.ts` (Βελτιστοποίηση Φόρτωσης & Manual Chunks):**
-   - **Code Splitting:** Διαχωρισμός σε ανεξάρτητα chunks (`vendor-react`, `vendor-firebase`, `vendor-icons`, και `feature-admin`). Το Admin Dashboard (~72 kB) φορτώνεται αποκλειστικά on-demand και δεν επιβαρύνει ούτε 1 byte τους κανονικούς χρήστες.
+   - **Code Splitting:** Διαχωρισμός σε ανεξάρτητα chunks (`vendor-react`, `vendor-firebase`, `vendor-icons`, `feature-admin`, και lazy `data-seeds` με εξοικονόμηση `-888.7 KB` gzip στο αρχικό boot `b6f78d2`). Το Admin Dashboard (~72 kB) φορτώνεται αποκλειστικά on-demand και δεν επιβαρύνει ούτε 1 byte τους κανονικούς χρήστες.
    - **Caching & Latency:** Ο browser του iPad φορτώνει παράλληλα μικρά πακέτα ($0.3\text{s}$) και τα διατηρεί σε μόνιμη HTTP cache.
+
+10. **Αρχιτεκτονικές Αναβαθμίσεις `v1.1 — simPDFFixes` (`b6f78d2`, `c09a552`, `14587c8`, `c453bca`, `fcf607f`):**
+    - **4-Axis Audit Packages A+B+C (`b6f78d2`):** Lazy `data-seeds` (`-888.7 KB` gzip), θωρακισμένοι κανόνες `firestore.rules`, singleton IndexedDB connection cache (`src/services/storage/indexedDb.ts`), διορθώσεις ελληνικού LaTeX / Undo / UI καρτελών `Sim`, και διόρθωση `_vcheck` redirect (`index.html`).
+    - **Κυκλώματα (`c09a552`, `14587c8`):** Ζωντανή βελόνα βολτομέτρου πηγής (`V_πηγής`) με ανοιχτό διακόπτη (Kirchhoff `m.active`) & αυτόματη κατακόρυφη γεφύρωση `bulb-bridge` για ασύμμετρους εικονιστικούς ακροδέκτες λαμπτήρα.
+    - **PDF Export & `Live PDF` Overhaul (`c453bca`, `src/utils/googleDrivePdfSync.ts`):** Circuits Option A (καμία αυθαίρετη αυτόματη ανίχνευση σε μη καταχωρημένα σκίτσα, σεβασμός αποθηκευμένων per-circuit `switchClosed`/`showElectrons` & συνεχείς αλυσίδες σωματιδίων), PDF font stack/weight parity + `document.fonts.load` preloading, Pendulum `forceSims` validation, απόκρυψη στατικών strokes, πλήρης διανυσματική ισοδυναμία και διόρθωση φόντου `Live PDF`.
+    - **Multi-Key Gemini OCR Failover (`fcf607f`, `src/utils/geometryAndAlgorithms.ts`):** Κλιμακωτό failover (`Admin key → VITE_GV_PRIMARY → VITE_GV_A/B`) με χειρισμό `HTTP 402` και κατάργηση της σιωπηλής αλλοίωσης `beautifyHandwritingStrokes` σε αποτυχία OCR.
 
 ---
 

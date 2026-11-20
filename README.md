@@ -1,9 +1,29 @@
-# 📝 BestNotes / ExplainBoards — `v1.05 (mainFixes)`
+# 📝 BestNotes / ExplainBoards — `v1.1 (simPDFFixes)`
 
 > **Live Web App (Primary):** [**https://explainboards.web.app**](https://explainboards.web.app) & [**https://mybestnotes.web.app**](https://mybestnotes.web.app)  
 > **Mirror Hosting:** [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app)  
 > **Πολιτική Απορρήτου & Όροι Χρήσης:** [`/privacy`](https://explainboards.web.app/privacy) • [`/terms`](https://explainboards.web.app/terms)  
-> **Τρέχουσα Έκδοση:** **`v1.05 — mainFixes`** (19 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`v1.1 — simPDFFixes`** (20 Νοεμβρίου 2026)
+
+### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `v1.1 — simPDFFixes`
+* **4-Axis Audit Packages A + B + C (`b6f78d2`):**
+  * **Lazy `data-seeds` (`-888.7 KB` gzip στο αρχικό boot):** Απομόνωση των string IDs στο `src/data/seedIds.ts` ώστε τα 11 έτοιμα εκπαιδευτικά τετράδια (`~1.22 MB` base64 assets) να μην κατεβαίνουν ποτέ στην αρχική εκκίνηση αν δεν απαιτείται provisioning.
+  * **Ασφάλεια & Συγχρονισμός:** Θωρακισμένοι κανόνες `firestore.rules`, **singleton IndexedDB connection cache** (`src/services/storage/indexedDb.ts`), διόρθωση redirect `_vcheck` (`index.html`), καθώς και διορθώσεις σε ελληνικό LaTeX, ιστορικό Undo και UI καρτελών `Sim`.
+* **Βελτιώσεις Προσομοιώσεων Κυκλωμάτων (`c09a552`, `14587c8`):**
+  * **Ζωντανή Βελόνα Βολτομέτρου Πηγής (`V_πηγής`) με Ανοιχτό Διακόπτη:** Σεβασμός του Kirchhoff `m.active` ώστε το βολτόμετρο που είναι συνδεδεμένο στους πόλους της μπαταρίας να διατηρεί ενεργή/ζωντανή βελόνα ακόμα και όταν ο κύριος διακόπτης του κυκλώματος είναι ανοιχτός.
+  * **Αυτόματη Γεφύρωση Λαμπτήρα (`bulb-bridge`):** Αυτόματη κατακόρυφη γεφύρωση μεταξύ ασύμμετρων εικονιστικών ακροδεκτών λαμπτήρα και κύριου αγωγού (`src/simulations/modules/circuits/circuitEngine.ts`).
+* **Αναβάθμιση OCR & Ριζική Αναδόμηση Εξαγωγής PDF / `Live PDF` (`c453bca`):**
+  * **Επαναφορά `textOCR` & Ξεχωριστό `Math → Κώδικας` OCR:** Επαναφορά του `textOCR` στη σταθερή συμπεριφορά προ `80e282d` και μεταφορά της αναγνώρισης ψευδογλώσσας ΑΕΠΠ / κώδικα με αυτόματες εσοχές σε ξεχωριστή επιλογή **`Κώδικας`** μέσα στο dropdown `Σ Math ▾` (`LassoOcrButtons.tsx`).
+  * **PDF Export Overhaul (`googleDrivePdfSync.ts`):**
+    * **Κυκλώματα (Option A):** Καμία αυθαίρετη αυτόματη ανίχνευση σε μη καταχωρημένα σκίτσα — εξαγωγή μόνο των καταχωρημένων `circuitSims` με σεβασμό στα αποθηκευμένα per-circuit `switchClosed` / `showElectrons` και συνεχείς αλυσίδες σωματιδίων.
+    * **Γραμματοσειρές PDF:** Απόλυτη ισοδυναμία font stack & πάχους (weight parity) με τον Editor + προφόρτωση μέσω `document.fonts.load` πριν από το rendering.
+    * **Εκκρεμές & `Live PDF`:** Επικύρωση `forceSims`, απόκρυψη στατικών strokes, πλήρης διανυσματική ισοδυναμία (full vector parity) και διόρθωση φόντου στο `Live PDF`.
+* **Sim-Gated Snapping Ελατηρίων, Ενιαία Pills & Multi-Key Gemini OCR Failover (`fcf607f`):**
+  * **Sim-Gated (`Sim → Ελατήρια`) Snapping:** Αυτόματο μαγνητικό κούμπωμα βαριδίου και δείκτη σε άφορτο ελατήριο αποκλειστικά όταν είναι ενεργή η καρτέλα `Sim → Ελατήρια`.
+  * **Ενιαία Χρωματική Κατάσταση Sim Pills:** Πράσινα ενεργά / μαύρα ανενεργά pills σε όλες τις **5 καρτέλες `Sim`** (`Κυκλώματα`, `Ελατήρια`, `Δυνάμεις`, `Άτομο`, `Θερμότητα`).
+  * **Multi-Key Gemini OCR Failover:** Κλιμακωτή εναλλαγή κλειδιών (`Admin key → VITE_GV_PRIMARY → VITE_GV_A/B`) με ρητό χειρισμό `HTTP 402` και κατάργηση της σιωπηλής αλλοίωσης χειρογράφων (`beautifyHandwritingStrokes`) σε περίπτωση αποτυχίας OCR.
+
+---
 
 ### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `v1.05 — mainFixes`
 * **Zero-Slowdown Simulation Engine & Live Performance Telemetry (`perfTelemetry.ts`, `AdminPerfPill.tsx`, `AdminPerformanceView.tsx`):**
