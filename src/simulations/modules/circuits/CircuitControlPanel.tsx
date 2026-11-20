@@ -164,8 +164,8 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                     key={sim.id}
                     className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                       isCurrent
-                        ? 'bg-[#efebe3] text-[#234978] border-[#234978]/50 shadow-2xs'
-                        : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
+                        : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                     }`}
                   >
                     {isEditingThis ? (
@@ -222,8 +222,8 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                         }}
                         className={`px-1 py-1 text-[10px] cursor-pointer transition ${
                           isCurrent
-                            ? 'text-[#475569] hover:text-[#234978]'
-                            : 'text-[#94a3b8] hover:text-[#234978]'
+                            ? 'text-emerald-700/80 hover:text-emerald-900'
+                            : 'text-slate-500 hover:text-slate-900'
                         }`}
                         title={`Μετονομασία "${sim.name}"`}
                       >
@@ -235,8 +235,8 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                       onClick={() => onRemoveSim(entry)}
                       className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                         isCurrent
-                          ? 'text-[#475569] hover:text-[#b91c1c]'
-                          : 'text-[#94a3b8] hover:text-[#b91c1c]'
+                          ? 'text-emerald-700/80 hover:text-[#b91c1c]'
+                          : 'text-slate-500 hover:text-[#b91c1c]'
                       }`}
                       title={`Αφαίρεση "${sim.name}" από τη λίστα προσομοιώσεων`}
                     >

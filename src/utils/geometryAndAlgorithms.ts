@@ -5006,9 +5006,19 @@ export function renderPageStrokesToSnapshotDataUrl(strokes: StrokeObject[]): str
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
-const QUOTA_STORAGE_KEY = 'bestnotes_vision_quota_v1';
+const QUOTA_STORAGE_KEY = 'bestnotes_vision_quota_v2';
+const QUOTA_KEYS_SIG_STORAGE_KEY = 'bestnotes_vision_keys_sig_v2';
 let cachedWorkingVisionModel: string | null = null;
+let lastGeminiKeysSignature = '';
 const quotaExhaustedVisionModels = new Map<string, number>();
+
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    lastGeminiKeysSignature = window.localStorage.getItem(QUOTA_KEYS_SIG_STORAGE_KEY) || '';
+  }
+} catch {
+  // ignore
+}
 
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -5042,19 +5052,46 @@ function saveQuotaExhaustedToStorage(): void {
   }
 }
 
-export type VisionOcrFailureReason = 'quota' | 'timeout' | 'unrecognized' | null;
+export type VisionOcrFailureReason = 'credits' | 'quota' | 'timeout' | 'unrecognized' | null;
 let lastVisionOcrFailureReason: VisionOcrFailureReason = null;
+let currentCallSaw402 = false;
 let currentCallSaw429 = false;
 let currentCallSaw200 = false;
 
+function syncVisionQuotaWithActiveKeys(keys: string[]): void {
+  const sig = keys.map((k) => k.slice(-6)).join('|');
+  if (lastGeminiKeysSignature !== sig) {
+    if (lastGeminiKeysSignature || quotaExhaustedVisionModels.size > 0) {
+      for (const k of Array.from(quotaExhaustedVisionModels.keys())) {
+        if (!k.startsWith('groq:') && !k.startsWith('mistral:')) {
+          quotaExhaustedVisionModels.delete(k);
+        }
+      }
+      saveQuotaExhaustedToStorage();
+    }
+    lastGeminiKeysSignature = sig;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(QUOTA_KEYS_SIG_STORAGE_KEY, sig);
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function resetVisionFailureTracking(): void {
   lastVisionOcrFailureReason = null;
+  currentCallSaw402 = false;
   currentCallSaw429 = false;
   currentCallSaw200 = false;
 }
 
 function recordVisionHttpStatus(status: number, modelName?: string): void {
-  if (status === 429) {
+  if (status === 402 || status === 403) {
+    currentCallSaw402 = true;
+    if (modelName) markVisionModelQuotaExhausted(modelName);
+  } else if (status === 429) {
     currentCallSaw429 = true;
     if (modelName) markVisionModelQuotaExhausted(modelName);
   } else if (status >= 200 && status < 300) {
@@ -5065,6 +5102,8 @@ function recordVisionHttpStatus(status: number, modelName?: string): void {
 function finalizeVisionFailureReason(): void {
   if (currentCallSaw200) {
     lastVisionOcrFailureReason = 'unrecognized';
+  } else if (currentCallSaw402) {
+    lastVisionOcrFailureReason = 'credits';
   } else if (currentCallSaw429) {
     lastVisionOcrFailureReason = 'quota';
   } else {
@@ -5077,6 +5116,9 @@ export function getLastVisionOcrFailureReason(): VisionOcrFailureReason {
 }
 
 export function getUnifiedOcrErrorMessage(): string {
+  if (lastVisionOcrFailureReason === 'credits') {
+    return '⛔ Εξαντλήθηκαν τα διαθέσιμα credits/χρέωση του Gemini API (HTTP 402) — πρόσθεσε νέο κλειδί API από το Admin Panel.';
+  }
   if (lastVisionOcrFailureReason === 'quota') {
     return '⛔ Πέρας μετατροπών OCR — εξαντλήθηκαν τα διαθέσιμα ημερήσια tokens του Gemini.';
   }
@@ -5184,7 +5226,7 @@ function buildVisionGenerationConfig(cleanModelName: string): Record<string, any
 async function fetchVisionCompletionRawText(
   modelName: string,
   parts: any[],
-  geminiApiKey: string,
+  geminiApiKey: string | string[],
   signal: AbortSignal
 ): Promise<{ status: number; ok: boolean; rawText: string | null }> {
   const cleanName = modelName.replace(/^models\//, '');
@@ -5231,25 +5273,62 @@ async function fetchVisionCompletionRawText(
     return { status: res.status, ok: true, rawText };
   }
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${geminiApiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal,
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: buildVisionGenerationConfig(cleanName),
-      }),
-    }
-  );
-  recordVisionHttpStatus(res.status, cleanName);
-  if (!res.ok) {
-    return { status: res.status, ok: false, rawText: null };
+  const candidateKeys = (Array.isArray(geminiApiKey) ? geminiApiKey : [geminiApiKey])
+    .map((k) => (k || '').trim())
+    .filter((k) => k.length > 0);
+  if (candidateKeys.length === 0) {
+    return { status: 0, ok: false, rawText: null };
   }
-  const data = await res.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-  return { status: res.status, ok: true, rawText };
+
+  let lastStatus = 0;
+  let saw402Or403 = false;
+  let saw429 = false;
+  let brokeOnNonKeyError = false;
+  for (let i = 0; i < candidateKeys.length; i++) {
+    const key = candidateKeys[i];
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${encodeURIComponent(key)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: buildVisionGenerationConfig(cleanName),
+        }),
+      }
+    );
+    lastStatus = res.status;
+    if (res.ok) {
+      recordVisionHttpStatus(res.status, cleanName);
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+      return { status: res.status, ok: true, rawText };
+    }
+    // Fail over immediately to the next Gemini key on billing/quota/auth/bad-key errors
+    if (res.status === 402 || res.status === 429 || res.status === 403 || res.status === 400) {
+      if (res.status === 402 || res.status === 403) {
+        saw402Or403 = true;
+        currentCallSaw402 = true;
+      } else if (res.status === 429) {
+        saw429 = true;
+        currentCallSaw429 = true;
+      }
+      continue;
+    }
+    // Non-key error (e.g. 404 model not found, 503 overloaded): stop trying keys on this model
+    brokeOnNonKeyError = true;
+    break;
+  }
+
+  const effectiveStatus =
+    !brokeOnNonKeyError && saw402Or403
+      ? 402
+      : !brokeOnNonKeyError && saw429
+      ? 429
+      : lastStatus;
+  recordVisionHttpStatus(effectiveStatus, cleanName);
+  return { status: effectiveStatus, ok: false, rawText: null };
 }
 
 function safeParseVisionJson(rawText: string): any {
@@ -5341,10 +5420,9 @@ export async function generateSmartGreekTagsFromImages(
   imageDataUrls: string[],
   pageTexts: string[] = []
 ): Promise<string[]> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return [];
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  if (apiKeys.length === 0) return [];
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const parts: any[] = [
     {
@@ -5386,25 +5464,13 @@ export async function generateSmartGreekTagsFromImages(
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: ctrl.signal,
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: buildVisionGenerationConfig(cleanName),
-          }),
-        }
+      const { ok, rawText } = await fetchVisionCompletionRawText(
+        cleanName,
+        parts,
+        apiKeys,
+        ctrl.signal
       );
-      if (!res.ok) {
-        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
-        return null;
-      }
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) return null;
+      if (!ok || !rawText) return null;
       const parsed = safeParseVisionJson(rawText);
       const arr = Array.isArray(parsed)
         ? parsed
@@ -5679,10 +5745,8 @@ export async function transcribeHandwrittenStrokesWithGemini(
   imageDataUrl: string,
   notebookTitle = ''
 ): Promise<string | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const compact = await downscaleImageDataUrlForVision(imageDataUrl);
   if (!compact) return null;
@@ -5717,7 +5781,7 @@ export async function transcribeHandwrittenStrokesWithGemini(
       const { ok, rawText } = await fetchVisionCompletionRawText(
         cleanName,
         parts,
-        apiKey,
+        apiKeys,
         ctrl.signal
       );
       if (!ok || !rawText) {
@@ -5756,10 +5820,8 @@ export async function transcribeHandwrittenCodeWithGemini(
   imageDataUrl: string,
   notebookTitle = ''
 ): Promise<string | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const compact = await downscaleImageDataUrlForVision(imageDataUrl);
   if (!compact) return null;
@@ -5798,7 +5860,7 @@ export async function transcribeHandwrittenCodeWithGemini(
       const { ok, rawText } = await fetchVisionCompletionRawText(
         cleanName,
         parts,
-        apiKey,
+        apiKeys,
         ctrl.signal
       );
       if (!ok || !rawText) {
@@ -6072,10 +6134,8 @@ export async function transcribeHandwrittenMathWithGemini(
   imageDataUrl: string,
   notebookTitle = ''
 ): Promise<{ latex: string; plainText: string } | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const compact = await downscaleImageDataUrlForVision(imageDataUrl);
   if (!compact) return null;
@@ -6133,7 +6193,7 @@ export async function transcribeHandwrittenMathWithGemini(
       const { ok, rawText } = await fetchVisionCompletionRawText(
         cleanName,
         parts,
-        apiKey,
+        apiKeys,
         ctrl.signal
       );
       if (!ok || !rawText) {
@@ -6200,10 +6260,8 @@ export async function transcribeHandwrittenChemistryWithGemini(
   imageDataUrl: string,
   notebookTitle = ''
 ): Promise<AiChemistryOcrResponse | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const compact = await downscaleImageDataUrlForVision(imageDataUrl);
   if (!compact) return null;
@@ -6258,7 +6316,7 @@ export async function transcribeHandwrittenChemistryWithGemini(
       const { ok, rawText } = await fetchVisionCompletionRawText(
         cleanName,
         parts,
-        apiKey,
+        apiKeys,
         ctrl.signal
       );
       if (!ok || !rawText) {
@@ -6326,10 +6384,9 @@ export async function transcribeHandwrittenChemistryWithGemini(
 export async function analyzeTypedChemistryWithGemini(
   rawUserReaction: string
 ): Promise<AiChemistryOcrResponse | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB || !rawUserReaction.trim()) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  if (!rawUserReaction.trim()) return null;
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const parts: any[] = [
     {
@@ -6354,7 +6411,7 @@ export async function analyzeTypedChemistryWithGemini(
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const { ok, rawText } = await fetchVisionCompletionRawText(cleanName, parts, apiKey, ctrl.signal);
+      const { ok, rawText } = await fetchVisionCompletionRawText(cleanName, parts, apiKeys, ctrl.signal);
       if (!ok || !rawText) return null;
       const parsed = safeParseVisionJson(rawText);
       const corrEq = typeof parsed?.correctedEquation === 'string' ? parsed.correctedEquation.trim() : '';
@@ -7045,10 +7102,8 @@ export async function transcribeEquationForGraphWithGemini(
   latex?: string;
   kind?: string;
 } | null> {
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return null;
-  const apiKey = (partA + partB).split('').reverse().join('');
+  const apiKeys = getAllCandidateGeminiApiKeys();
+  syncVisionQuotaWithActiveKeys(apiKeys);
 
   const compact = await downscaleImageDataUrlForVision(imageDataUrl);
   if (!compact) return null;
@@ -7101,7 +7156,7 @@ export async function transcribeEquationForGraphWithGemini(
       const { ok, rawText } = await fetchVisionCompletionRawText(
         cleanName,
         parts,
-        apiKey,
+        apiKeys,
         ctrl.signal
       );
       if (!ok || !rawText) {
@@ -15457,18 +15512,23 @@ export function computeMathGraphAnimationFrame(
 // ============================================================================
 
 export function getEffectiveGeminiApiKey(customKey?: string): string {
-  const trimmedCustom = (customKey ?? localStorage.getItem('bestnotes_custom_gemini_key') ?? '').trim();
-  if (trimmedCustom) return trimmedCustom;
-  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
-  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
-  if (!partA || !partB) return '';
-  return (partA + partB).split('').reverse().join('');
+  return getAllCandidateGeminiApiKeys(customKey)[0] || '';
 }
 
 function getAllCandidateGeminiApiKeys(customKey?: string): string[] {
   const keys: string[] = [];
-  const trimmedCustom = (customKey ?? localStorage.getItem('bestnotes_custom_gemini_key') ?? '').trim();
+  let storedCustom = '';
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      storedCustom = window.localStorage.getItem('bestnotes_custom_gemini_key') || '';
+    }
+  } catch {
+    // ignore localStorage read errors
+  }
+  const trimmedCustom = (customKey ?? storedCustom).trim();
   if (trimmedCustom) keys.push(trimmedCustom);
+  const primaryEnv = (((import.meta as any).env?.VITE_GV_PRIMARY || '') as string).trim();
+  if (primaryEnv && !keys.includes(primaryEnv)) keys.push(primaryEnv);
   const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
   const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
   if (partA && partB) {

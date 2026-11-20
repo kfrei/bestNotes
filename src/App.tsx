@@ -24738,7 +24738,11 @@ export default function App() {
     showToast('🧲 Το ελατήριο συνδέθηκε μαγνητικά στη βάση στήριξης!');
   };
 
-  const attachMassToSpringAndCreateEquilibriumClone = (springId: string, massId: string) => {
+  const attachMassToSpringAndCreateEquilibriumClone = (
+    springId: string,
+    massId: string,
+    preferredFixedEnd?: 'start' | 'end'
+  ) => {
     let didScheduleSettle = false;
     setSelectedStrokeIds([]);
     setActiveNodeStrokeId(null);
@@ -24796,10 +24800,14 @@ export default function App() {
           }
         }
         if (!supportStrokeId) {
-          // Fallback: whichever terminal is farther from the dragged mass block is the fixed end!
-          const dStartToMass = Math.hypot(info.startTerm.x - massCx, info.startTerm.y - massCy);
-          const dEndToMass = Math.hypot(info.endTerm.x - massCx, info.endTerm.y - massCy);
-          fixedEnd = dStartToMass >= dEndToMass ? 'start' : 'end';
+          if (preferredFixedEnd) {
+            fixedEnd = preferredFixedEnd;
+          } else {
+            // Fallback: whichever terminal is farther from the dragged mass block is the fixed end!
+            const dStartToMass = Math.hypot(info.startTerm.x - massCx, info.startTerm.y - massCy);
+            const dEndToMass = Math.hypot(info.endTerm.x - massCx, info.endTerm.y - massCy);
+            fixedEnd = dStartToMass >= dEndToMass ? 'start' : 'end';
+          }
         }
       }
 
@@ -46444,10 +46452,58 @@ export default function App() {
                 continue;
               }
               if (other.shapeType === 'spring') {
-                const existingSimOnSp = getValidSpringSims(activePage).find(
+                const validSims = getValidSpringSims(activePage);
+                const existingSimOnSp = validSims.find(
                   (sm) => sm.eqSpringStrokeId === other.id
                 );
-                if (!existingSimOnSp) continue;
+                if (!existingSimOnSp) {
+                  // Auto-snap mass onto unloaded spring ONLY when Sim -> Springs tab is open
+                  if (
+                    !(showSimulationPanel && simActiveCategory === 'springs') ||
+                    validSims.some((sm) => sm.naturalSpringStrokeId === other.id)
+                  ) {
+                    continue;
+                  }
+                  const spInfo = getSpringTerminalsAndWidthVec(other);
+                  let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
+                  if (!other.springSupport?.fixedEnd) {
+                    const dStart = Math.hypot(
+                      spInfo.startTerm.x - candCx,
+                      spInfo.startTerm.y - candCy
+                    );
+                    const dEnd = Math.hypot(
+                      spInfo.endTerm.x - candCx,
+                      spInfo.endTerm.y - candCy
+                    );
+                    fixedEnd = dStart >= dEnd ? 'start' : 'end';
+                  }
+                  const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                  const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                  const ux = (freePt.x - fixedPt.x) / spInfo.length;
+                  const uy = (freePt.y - fixedPt.y) / spInfo.length;
+                  const halfSpan = (w: number, h: number) =>
+                    Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
+                  const candHalf = halfSpan(mW, mH);
+                  const candAttachX = candCx - ux * candHalf;
+                  const candAttachY = candCy - uy * candHalf;
+                  const floorGap =
+                    uy < -0.45 ? 2 : draggedSt.shapeType === 'hooked-weight' ? -2 : 0;
+                  const dFree = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
+                  if (dFree <= hookSnapRadius && (!matchedPhysicsMagnet || dFree < matchedPhysicsMagnet.dist)) {
+                    matchedPhysicsMagnet = {
+                      kind: 'mass-to-spring',
+                      springStrokeId: other.id,
+                      massStrokeId: draggedSt.id,
+                      fixedEnd,
+                      targetX: freePt.x,
+                      targetY: freePt.y,
+                      snapDx: freePt.x + ux * floorGap - candAttachX,
+                      snapDy: freePt.y + uy * floorGap - candAttachY,
+                      dist: dFree,
+                    };
+                  }
+                  continue;
+                }
                 const spInfo = getSpringTerminalsAndWidthVec(other);
                 const fixedPt =
                   existingSimOnSp.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
@@ -46593,10 +46649,12 @@ export default function App() {
               const existingSimOnSp = getValidSpringSims(activePage).find(
                 (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
               );
-              if (!existingSimOnSp) continue;
+              if (!existingSimOnSp && !(showSimulationPanel && simActiveCategory === 'springs')) {
+                continue;
+              }
               const spInfo = getSpringTerminalsAndWidthVec(other);
               const fixedEnd: 'start' | 'end' =
-                existingSimOnSp.fixedEnd || other.springSupport?.fixedEnd || 'start';
+                existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
               const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
               const dTail = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
               const dMid = Math.hypot(candMidX - freePt.x, candMidY - freePt.y);
@@ -46808,6 +46866,15 @@ export default function App() {
                   physObj.childWeightId
                 ) {
                   attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
+                } else if (
+                  physObj.kind === 'mass-to-spring' &&
+                  physObj.massStrokeId
+                ) {
+                  attachMassToSpringAndCreateEquilibriumClone(
+                    physObj.springStrokeId,
+                    physObj.massStrokeId,
+                    physObj.fixedEnd
+                  );
                 } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
                   attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
                 }
@@ -48749,6 +48816,15 @@ export default function App() {
         ) {
           attachWeightToWeightChain(pendingPhys.parentWeightId, pendingPhys.childWeightId);
         } else if (
+          pendingPhys.kind === 'mass-to-spring' &&
+          pendingPhys.massStrokeId
+        ) {
+          attachMassToSpringAndCreateEquilibriumClone(
+            pendingPhys.springStrokeId,
+            pendingPhys.massStrokeId,
+            pendingPhys.fixedEnd
+          );
+        } else if (
           pendingPhys.kind === 'pointer-to-spring' &&
           pendingPhys.pointerStrokeId
         ) {
@@ -49854,22 +49930,66 @@ export default function App() {
       setShowToolSubBar(true);
     }
 
-    // STRICT EXPLICIT SIMULATIONS ONLY:
-    // Never auto-create a Pendulum, Incline, or new Spring Sim on stroke pointerUp!
-    // Only allow attaching extra hooked-weights or spring-pointer onto an ALREADY registered SpringSimConfig!
+    // Allow attaching extra hooked-weights or spring-pointer onto an ALREADY registered SpringSimConfig,
+    // AND auto-snapping hooked-weight / spring-pointer onto unloaded springs when Sim -> Springs is open.
     if (isShape && newStroke.shapeType === 'hooked-weight') {
       const nb = getStrokeBounds(newStroke);
+      const mW = Math.max(16, nb.maxX - nb.minX);
+      const mH = Math.max(16, nb.maxY - nb.minY);
       const topHookX = (nb.minX + nb.maxX) / 2;
       const topHookY = nb.minY;
+      const massCx = topHookX;
+      const massCy = (nb.minY + nb.maxY) / 2;
+      const isSpringsTabOpen = showSimulationPanel && simActiveCategory === 'springs';
+      const validSims = getValidSpringSims(activePage);
       let matchedParentWeightId: string | null = null;
+      let matchedUnloadedSpringId: string | null = null;
+      let matchedUnloadedSpringFixedEnd: 'start' | 'end' | undefined = undefined;
       let bestDist = 72;
       for (const other of activePage.strokes) {
         if (other.id === newStroke.id) continue;
         if (other.shapeType === 'spring') {
-          const existingSimOnSp = getValidSpringSims(activePage).find(
+          const existingSimOnSp = validSims.find(
             (sm) => sm.eqSpringStrokeId === other.id
           );
-          if (!existingSimOnSp) continue;
+          if (!existingSimOnSp) {
+            if (
+              !isSpringsTabOpen ||
+              validSims.some((sm) => sm.naturalSpringStrokeId === other.id)
+            ) {
+              continue;
+            }
+            const spInfo = getSpringTerminalsAndWidthVec(other);
+            let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
+            if (!other.springSupport?.fixedEnd) {
+              const dStart = Math.hypot(
+                spInfo.startTerm.x - massCx,
+                spInfo.startTerm.y - massCy
+              );
+              const dEnd = Math.hypot(
+                spInfo.endTerm.x - massCx,
+                spInfo.endTerm.y - massCy
+              );
+              fixedEnd = dStart >= dEnd ? 'start' : 'end';
+            }
+            const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+            const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+            const ux = (freePt.x - fixedPt.x) / spInfo.length;
+            const uy = (freePt.y - fixedPt.y) / spInfo.length;
+            const candHalf = Math.abs(ux) * (mW / 2) + Math.abs(uy) * (mH / 2);
+            const candAttachX = massCx - ux * candHalf;
+            const candAttachY = massCy - uy * candHalf;
+            const dAttach = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
+            const dTopHook = Math.hypot(topHookX - freePt.x, topHookY - freePt.y);
+            const dFree = Math.min(dAttach, dTopHook);
+            if (dFree < bestDist) {
+              bestDist = dFree;
+              matchedUnloadedSpringId = other.id;
+              matchedUnloadedSpringFixedEnd = fixedEnd;
+              matchedParentWeightId = null;
+            }
+            continue;
+          }
           const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
           const tailId = existingChain[existingChain.length - 1];
           const tailSt = tailId ? activePage.strokes.find((s) => s.id === tailId) : undefined;
@@ -49879,11 +49999,12 @@ export default function App() {
             if (dTail < bestDist) {
               bestDist = dTail;
               matchedParentWeightId = tailSt.id;
+              matchedUnloadedSpringId = null;
             }
           }
         } else if (other.shapeType === 'hooked-weight') {
           const rootId = getWeightChainRootId(activePage, other.id);
-          const attachedSimOnOther = getValidSpringSims(activePage).find(
+          const attachedSimOnOther = validSims.find(
             (sm) => sm.massStrokeId === rootId
           );
           if (!attachedSimOnOther) continue;
@@ -49897,6 +50018,7 @@ export default function App() {
           if (dW < bestDist) {
             bestDist = dW;
             matchedParentWeightId = tailSt.id;
+            matchedUnloadedSpringId = null;
           }
         }
       }
@@ -49905,6 +50027,13 @@ export default function App() {
         window.setTimeout(() => {
           suppressNextUndoRecordRef.current = true;
           attachWeightToWeightChain(pid, newStroke.id);
+        }, 10);
+      } else if (matchedUnloadedSpringId) {
+        const sid = matchedUnloadedSpringId;
+        const fe = matchedUnloadedSpringFixedEnd;
+        window.setTimeout(() => {
+          suppressNextUndoRecordRef.current = true;
+          attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id, fe);
         }, 10);
       }
     } else if (
@@ -49917,6 +50046,7 @@ export default function App() {
       const headPt = newStroke.points[newStroke.points.length - 1];
       const midX = (tailX + headPt.x) / 2;
       const midY = (tailY + headPt.y) / 2;
+      const isSpringsTabOpen = showSimulationPanel && simActiveCategory === 'springs';
       let matchedSpringId: string | null = null;
       let bestDist = 82;
       for (const other of activePage.strokes) {
@@ -49924,10 +50054,10 @@ export default function App() {
         const existingSimOnSp = getValidSpringSims(activePage).find(
           (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
         );
-        if (!existingSimOnSp) continue;
+        if (!existingSimOnSp && !isSpringsTabOpen) continue;
         const spInfo = getSpringTerminalsAndWidthVec(other);
         const fixedEnd: 'start' | 'end' =
-          existingSimOnSp.fixedEnd || other.springSupport?.fixedEnd || 'start';
+          existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
         const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
         const dTail = Math.hypot(tailX - freePt.x, tailY - freePt.y);
         const dMid = Math.hypot(midX - freePt.x, midY - freePt.y);
@@ -52382,14 +52512,6 @@ export default function App() {
         new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!transcribed || !transcribed.trim()) {
-        if (selStrokes.length > 0) {
-          const beautified = beautifyHandwritingStrokes(selStrokes);
-          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
-          updateActivePage((page) => ({
-            ...page,
-            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
-          }));
-        }
         showToast(getUnifiedOcrErrorMessage());
         return;
       }
@@ -52612,14 +52734,6 @@ export default function App() {
         new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!transcribed || !transcribed.trim()) {
-        if (selStrokes.length > 0) {
-          const beautified = beautifyHandwritingStrokes(selStrokes);
-          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
-          updateActivePage((page) => ({
-            ...page,
-            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
-          }));
-        }
         showToast(getUnifiedOcrErrorMessage());
         return;
       }
@@ -52870,14 +52984,6 @@ export default function App() {
         new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!mathRes || !mathRes.latex.trim()) {
-        if (selStrokes.length > 0) {
-          const beautified = beautifyHandwritingStrokes(selStrokes);
-          const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
-          updateActivePage((page) => ({
-            ...page,
-            strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
-          }));
-        }
         showToast(getUnifiedOcrErrorMessage());
         return;
       }
@@ -65192,8 +65298,8 @@ export default function App() {
                                       key={sim.id}
                                       className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                         isCurrent
-                                          ? 'bg-[#efebe3] text-[#234978] border-[#234978]/50 shadow-2xs'
-                                          : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
+                                          : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                       }`}
                                     >
                                       {isEditingThis ? (
@@ -65251,8 +65357,8 @@ export default function App() {
                                           }}
                                           className={`px-1 py-1 text-[10px] cursor-pointer transition ${
                                             isCurrent
-                                              ? 'text-[#475569] hover:text-[#234978]'
-                                              : 'text-[#94a3b8] hover:text-[#234978]'
+                                              ? 'text-emerald-700/80 hover:text-emerald-900'
+                                              : 'text-slate-500 hover:text-slate-900'
                                           }`}
                                           title={`Μετονομασία "${sim.name}"`}
                                         >
@@ -65305,8 +65411,8 @@ export default function App() {
                                         }}
                                         className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                           isCurrent
-                                            ? 'text-[#475569] hover:text-[#b91c1c]'
-                                            : 'text-[#94a3b8] hover:text-[#b91c1c]'
+                                            ? 'text-emerald-700/80 hover:text-[#b91c1c]'
+                                            : 'text-slate-500 hover:text-[#b91c1c]'
                                         }`}
                                         title={`Αφαίρεση "${sim.name}"`}
                                       >
@@ -65909,8 +66015,8 @@ export default function App() {
                                     key={sim.id}
                                     className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
-                                        ? 'bg-[#efebe3] text-[#234978] border-[#234978]/50 shadow-2xs'
-                                        : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
+                                        : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
                                     <button
@@ -65946,8 +66052,8 @@ export default function App() {
                                       }}
                                       className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
                                         isCurrent
-                                          ? 'text-[#475569] hover:text-[#b91c1c]'
-                                          : 'text-[#94a3b8] hover:text-[#b91c1c]'
+                                          ? 'text-emerald-700/80 hover:text-[#b91c1c]'
+                                          : 'text-slate-500 hover:text-[#b91c1c]'
                                       }`}
                                       title={`Αφαίρεση προσομοίωσης "${sim.name}" (τα σχήματα παραμένουν στη σελίδα)`}
                                     >
@@ -66526,8 +66632,8 @@ export default function App() {
                                     key={sim.id}
                                     className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
-                                        ? 'bg-[#efebe3] text-[#234978] border-[#234978]/50 shadow-2xs'
-                                        : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
+                                        : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
                                     <button
@@ -66580,8 +66686,8 @@ export default function App() {
                                       }}
                                       className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
                                         isCurrent
-                                          ? 'text-[#475569] hover:text-[#b91c1c]'
-                                          : 'text-[#94a3b8] hover:text-[#b91c1c]'
+                                          ? 'text-emerald-700/80 hover:text-[#b91c1c]'
+                                          : 'text-slate-500 hover:text-[#b91c1c]'
                                       }`}
                                       title={`Διαγραφή προσομοίωσης "${sim.name}"`}
                                     >

@@ -48,7 +48,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
             Ενεργή Προσομοίωση:
           </span>
-          <span className="px-2 py-0.5 rounded-md bg-[#efebe3] border border-[#234978]/35 text-[#234978] font-bold">
+          <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs">
             {sim.name || 'θερμότητα1'}
           </span>
         </div>
