@@ -113,7 +113,7 @@ import {
   type User,
 } from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
-import { AdminPerfPill } from './components/AdminPerfPill';
+import { AdminPerfPill, AdminPerfDropdownButton } from './components/AdminPerfPill';
 import { recordSimFrameSample, markSimLoopStopped } from './utils/perfTelemetry';
 import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
@@ -1516,6 +1516,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   // Dedicated Admin routing & telemetry encapsulated in isolated domain hooks
   const { isAdminOpen, openAdmin, closeAdmin } = useAdminRoute();
+  const [showAdminPerfPanel, setShowAdminPerfPanel] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<'overview' | 'perf' | undefined>(undefined);
   useAppTelemetry(currentUser, notebooks, isAuthResolved);
 
@@ -56593,43 +56594,32 @@ export default function App() {
             </>
           )}
 
-          {/* Admin Live Performance Monitor Pill & Portal Quick-Launch (Visible only to Admin) */}
+          {/* Persistent Admin Live Performance Portal (trigger lives inside User Profile dropdown) */}
           {currentUser?.email === ADMIN_EMAIL && (
-            <>
-              <AdminPerfPill
-                openTabsCount={openNotebookIds.length}
-                activePageCount={activeNotebook?.pages?.length || 0}
-                activePageStrokeCount={activePage?.strokes?.length || 0}
-                onPauseAllSimulations={() => {
-                  setIsSimulating(false);
-                  setIsSpringPaused(true);
-                  heatSimLiveRef.current?.pauseHeatingAndSim?.();
-                  updateActivePage((p) => ({
-                    ...p,
-                    forceSims: (p.forceSims || []).map((fs) => ({ ...fs, isPaused: true })),
-                    atomSims: (p.atomSims || []).map((as) => ({ ...as, isRotating: false })),
-                  }));
-                  markSimLoopStopped();
-                  showToast('⏸ Όλες οι ενεργές προσομοιώσεις μπήκαν σε παύση (0% CPU)');
-                }}
-                onOpenAdminPerfTab={() => {
-                  setAdminInitialTab('perf');
-                  openAdmin();
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminInitialTab('overview');
-                  openAdmin();
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
-                title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-white" />
-                <span>Admin</span>
-              </button>
-            </>
+            <AdminPerfPill
+              renderTrigger={false}
+              isOpen={showAdminPerfPanel}
+              onOpenChange={setShowAdminPerfPanel}
+              openTabsCount={openNotebookIds.length}
+              activePageCount={activeNotebook?.pages?.length || 0}
+              activePageStrokeCount={activePage?.strokes?.length || 0}
+              onPauseAllSimulations={() => {
+                setIsSimulating(false);
+                setIsSpringPaused(true);
+                heatSimLiveRef.current?.pauseHeatingAndSim?.();
+                updateActivePage((p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).map((fs) => ({ ...fs, isPaused: true })),
+                  atomSims: (p.atomSims || []).map((as) => ({ ...as, isRotating: false })),
+                }));
+                markSimLoopStopped();
+                showToast('⏸ Όλες οι ενεργές προσομοιώσεις μπήκαν σε παύση (0% CPU)');
+              }}
+              onOpenAdminPerfTab={() => {
+                setAdminInitialTab('perf');
+                openAdmin();
+              }}
+            />
           )}
 
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
@@ -56684,17 +56674,28 @@ export default function App() {
                   {currentUser ? (
                     <>
                       {currentUser?.email === ADMIN_EMAIL && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowUserDropdown(false);
-                            openAdmin();
-                          }}
-                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b2a4a] hover:bg-[#152238] text-white text-xs font-bold transition cursor-pointer border border-white/10 shadow-xs active:scale-98"
-                        >
-                          <ShieldCheck className="w-3.5 h-3.5 text-white" />
-                          <span>Πίνακας Ελέγχου Admin</span>
-                        </button>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <AdminPerfDropdownButton
+                            isOpen={showAdminPerfPanel}
+                            onClick={() => {
+                              setShowAdminPerfPanel((v) => !v);
+                              setShowUserDropdown(false);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowUserDropdown(false);
+                              setAdminInitialTab('overview');
+                              openAdmin();
+                            }}
+                            className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1b2a4a] hover:bg-[#152238] text-white text-[11px] font-bold transition cursor-pointer border border-white/10 shadow-xs active:scale-98"
+                            title="ExplainBoards Admin Dashboard (freiderikoskostas@gmail.com)"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-white shrink-0" />
+                            <span>Admin</span>
+                          </button>
+                        </div>
                       )}
                       <button
                         onClick={async () => {

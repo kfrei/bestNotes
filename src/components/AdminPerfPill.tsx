@@ -19,9 +19,63 @@ export interface AdminPerfPillProps {
   activePageStrokeCount: number;
   onPauseAllSimulations: () => void;
   onOpenAdminPerfTab: () => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  renderTrigger?: boolean;
 }
 
 const PANEL_WIDTH = 344;
+
+export const AdminPerfDropdownButton: React.FC<{
+  isOpen: boolean;
+  onClick: () => void;
+}> = ({ isOpen, onClick }) => {
+  const [snap, setSnap] = useState<PerfSnapshot>(() => getPerfSnapshot(false));
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      setSnap(getPerfSnapshot(false));
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const dotColor =
+    snap.health === 'slow'
+      ? 'bg-rose-500 animate-pulse'
+      : snap.health === 'busy'
+      ? 'bg-amber-500'
+      : snap.simRafActive
+      ? 'bg-sky-500'
+      : 'bg-emerald-500';
+
+  const pillText = snap.simRafActive
+    ? `${snap.avgSimFrameMs.toFixed(1)}ms • ${Math.max(1, snap.activeSimLabels.length)} live`
+    : snap.longTasksLastMin > 0
+    ? `Idle • ${snap.longTasksLastMin} lag`
+    : '0.0ms • Idle';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition cursor-pointer shadow-xs active:scale-98 ${
+        isOpen
+          ? 'bg-[#234978] text-white border-[#1b3a60]'
+          : snap.health === 'slow'
+          ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
+          : snap.health === 'busy'
+          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+          : 'bg-[#f4f1ea] hover:bg-[#eae4d8] text-[#1b2a4a] border-[#dfd8cb]'
+      }`}
+      title="Live Μετρητής Απόδοσης (5 λεπτά — CPU / Frames / RAM / Προσομοιώσεις)"
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+      <Activity className="w-3.5 h-3.5 opacity-80 shrink-0" />
+      <span className="tabular-nums truncate">{pillText}</span>
+    </button>
+  );
+};
 
 export const AdminPerfPill: React.FC<AdminPerfPillProps> = ({
   openTabsCount,
@@ -29,8 +83,20 @@ export const AdminPerfPill: React.FC<AdminPerfPillProps> = ({
   activePageStrokeCount,
   onPauseAllSimulations,
   onOpenAdminPerfTab,
+  isOpen,
+  onOpenChange,
+  renderTrigger = true,
 }) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isOpen !== undefined ? isOpen : internalOpen;
+  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    const resolved = typeof next === 'function' ? next(open) : next;
+    if (onOpenChange) {
+      onOpenChange(resolved);
+    } else {
+      setInternalOpen(resolved);
+    }
+  };
   const [snap, setSnap] = useState<PerfSnapshot>(() => getPerfSnapshot(false));
 
   // Floating panel position — starts cleanly BELOW both top toolbars (y = 112) on the right
@@ -423,6 +489,10 @@ export const AdminPerfPill: React.FC<AdminPerfPillProps> = ({
           document.body
         )
       : null;
+
+  if (!renderTrigger) {
+    return floatingPanel;
+  }
 
   return (
     <div className="relative">
