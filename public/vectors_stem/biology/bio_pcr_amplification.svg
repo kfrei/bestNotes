@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <text x="180" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Αλυσιδωτή Αντίδραση Πολυμεράσης (PCR)</text>
+  <rect x="24" y="54" width="94" height="58" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8"/>
+  <text x="71" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#b91c1c">1. Αποδιάταξη</text>
+  <text x="71" y="96" text-anchor="middle" font-size="11" fill="#334155">~95°C</text>
+  <line x1="118" y1="83" x2="132" y2="83" stroke="#334155" stroke-width="2" marker-end="url(#aK)"/>
+  <rect x="134" y="54" width="94" height="58" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+  <text x="181" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#b45309">2. Υβριδοποίηση</text>
+  <text x="181" y="96" text-anchor="middle" font-size="11" fill="#334155">~55°C (Primers)</text>
+  <line x1="228" y1="83" x2="242" y2="83" stroke="#334155" stroke-width="2" marker-end="url(#aK)"/>
+  <rect x="244" y="54" width="94" height="58" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/>
+  <text x="291" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#15803d">3. Επιμήκυνση</text>
+  <text x="291" y="96" text-anchor="middle" font-size="11" fill="#334155">~72°C (Taq)</text>
+  <!-- Exponential amplification -->
+  <text x="180" y="166" text-anchor="middle" font-size="15" font-weight="700" fill="#2563eb">1 → 2 → 4 → 8 → ... → 2ⁿ αντίγραφα DNA</text>
+
+</g>
+</svg>

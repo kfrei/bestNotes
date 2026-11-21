@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <text x="180" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Διπλή Έλικα DNA (A=T, G≡C)</text>
+  <!-- Two sinusoidal backbones -->
+  <path d="M 40 90 C 90 42, 130 164, 180 116 C 230 68, 270 164, 320 116" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M 40 142 C 90 190, 130 68, 180 116 C 230 164, 270 68, 320 116" stroke="#dc2626" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Base pair rungs -->
+  <g stroke-width="3" stroke-linecap="round">
+    <line x1="68" y1="80" x2="68" y2="152" stroke="#16a34a"/>
+    <line x1="94" y1="82" x2="94" y2="148" stroke="#f59e0b"/>
+    <line x1="144" y1="108" x2="144" y2="124" stroke="#7c3aed"/>
+    <line x1="214" y1="102" x2="214" y2="132" stroke="#16a34a"/>
+    <line x1="244" y1="90" x2="244" y2="142" stroke="#f59e0b"/>
+    <line x1="274" y1="98" x2="274" y2="134" stroke="#7c3aed"/>
+  </g>
+  <text x="36" y="78" font-size="11" font-weight="700" fill="#2563eb">5'</text>
+  <text x="36" y="162" font-size="11" font-weight="700" fill="#dc2626">3'</text>
+  <text x="322" y="106" font-size="11" font-weight="700" fill="#2563eb">3'</text>
+  <text x="322" y="136" font-size="11" font-weight="700" fill="#dc2626">5'</text>
+  <text x="180" y="212" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">Συμπληρωματικότητα: A = T (2 δ.H) • G ≡ C (3 δ.H)</text>
+
+</g>
+</svg>

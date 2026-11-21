@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Stand -->
+  <line x1="72" y1="216" x2="210" y2="216" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+  <line x1="92" y1="28" x2="92" y2="216" stroke="#475569" stroke-width="3.2"/>
+  <line x1="92" y1="92" x2="148" y2="92" stroke="#475569" stroke-width="2.6"/>
+  <!-- Funnel + Filter paper -->
+  <polygon points="146,56 218,56 188,108 188,142 176,142 176,108" fill="url(#glass)" stroke="#334155" stroke-width="2" stroke-linejoin="round"/>
+  <polygon points="154,58 210,58 182,102" fill="#fef3c7" stroke="#b45309" stroke-width="1.3" stroke-dasharray="3 2"/>
+  <!-- Residue dots -->
+  <g fill="#92400e"><circle cx="176" cy="84" r="2.4"/><circle cx="184" cy="88" r="2.2"/><circle cx="188" cy="82" r="2.1"/><circle cx="180" cy="94" r="2"/></g>
+  <!-- Drops -->
+  <circle cx="182" cy="152" r="2.6" fill="#0284c7"/><circle cx="182" cy="166" r="2.6" fill="#0284c7"/>
+  <!-- Beaker with filtrate -->
+  <path d="M 142 150 L 142 210 Q 142 214 148 214 L 216 214 Q 222 214 222 210 L 222 150" stroke="#334155" stroke-width="2.2"/>
+  <rect x="144" y="182" width="76" height="30" fill="url(#liqB)"/>
+  <!-- Labels -->
+  <text x="180" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Διήθηση (Διαχωρισμός Στερεού–Υγρού)</text>
+  <text x="228" y="68" font-size="11" font-weight="700" fill="#b45309">Διηθητικό χαρτί</text>
+  <text x="228" y="92" font-size="11" font-weight="700" fill="#92400e">Ίζημα (στερεό)</text>
+  <text x="232" y="198" font-size="11" font-weight="700" fill="#0369a1">Διήθημα (υγρό)</text>
+
+</g>
+</svg>

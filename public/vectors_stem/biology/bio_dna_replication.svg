@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <text x="180" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Ημισυντηρητική Αντιγραφή DNA</text>
+  <!-- Parental double strand on left -->
+  <line x1="28" y1="112" x2="132" y2="112" stroke="#2563eb" stroke-width="4"/>
+  <line x1="28" y1="128" x2="132" y2="128" stroke="#2563eb" stroke-width="4"/>
+  <!-- Replication fork opening -->
+  <line x1="132" y1="112" x2="322" y2="62" stroke="#2563eb" stroke-width="4"/>
+  <line x1="132" y1="128" x2="322" y2="178" stroke="#2563eb" stroke-width="4"/>
+  <!-- New daughter strands (red) -->
+  <line x1="154" y1="118" x2="318" y2="76" stroke="#dc2626" stroke-width="3.4" marker-end="url(#aR)"/>
+  <line x1="316" y1="164" x2="244" y2="145" stroke="#dc2626" stroke-width="3.4" marker-end="url(#aR)"/>
+  <line x1="230" y1="142" x2="162" y2="124" stroke="#dc2626" stroke-width="3.4" marker-end="url(#aR)"/>
+  <!-- Helicase -->
+  <polygon points="122,120 146,106 146,134" fill="#16a34a"/>
+  <text x="134" y="158" text-anchor="middle" font-size="10" font-weight="700" fill="#16a34a">Ελικάση</text>
+  <text x="268" y="54" font-size="11" font-weight="700" fill="#dc2626">Συνεχής (5'→3')</text>
+  <text x="242" y="200" font-size="11" font-weight="700" fill="#dc2626">Ασυνεχής (Okazaki)</text>
+
+</g>
+</svg>

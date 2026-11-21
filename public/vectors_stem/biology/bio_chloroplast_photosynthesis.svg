@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <text x="180" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Χλωροπλάστης — Φωτοσύνθεση</text>
+  <ellipse cx="180" cy="122" rx="138" ry="68" fill="#dcfce7" stroke="#15803d" stroke-width="2.6"/>
+  <!-- Grana (thylakoid stacks) -->
+  <g fill="#22c55e" stroke="#14532d" stroke-width="1.4">
+    <rect x="86" y="88" width="44" height="12" rx="6"/><rect x="86" y="102" width="44" height="12" rx="6"/>
+    <rect x="86" y="116" width="44" height="12" rx="6"/><rect x="86" y="130" width="44" height="12" rx="6"/>
+  </g>
+  <text x="108" y="160" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532d">Φωτεινή φάση</text>
+  <!-- Calvin cycle in stroma -->
+  <circle cx="242" cy="118" r="32" stroke="#0284c7" stroke-width="2.4" stroke-dasharray="6 4"/>
+  <text x="242" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0369a1">Κύκλος</text>
+  <text x="242" y="130" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0369a1">Calvin</text>
+  <!-- ATP/NADPH arrow -->
+  <line x1="136" y1="114" x2="204" y2="114" stroke="#d97706" stroke-width="2.2" marker-end="url(#aO)"/>
+  <text x="170" y="106" text-anchor="middle" font-size="10" font-weight="700" fill="#b45309">ATP</text>
+  <text x="180" y="216" text-anchor="middle" font-size="11.5" font-weight="700" fill="#15803d">6CO₂ + 6H₂O + Φως → C₆H₁₂O₆ + 6O₂</text>
+
+</g>
+</svg>

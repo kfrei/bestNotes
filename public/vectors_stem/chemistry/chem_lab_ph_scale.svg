@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/></marker>
+    <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/></marker>
+    <marker id="aK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/></marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff" stop-opacity="0.9"/><stop offset="100%" stop-color="#bae6fd" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="liqB" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.8"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqY" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.85"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0.75"/>
+    </linearGradient>
+    <linearGradient id="liqG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0" stop-opacity="0.85"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="liqP" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.85"/><stop offset="100%" stop-color="#db2777" stop-opacity="0.65"/>
+    </linearGradient>
+    <radialGradient id="sphR" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/><stop offset="60%" stop-color="#ef4444"/><stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="sphB" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="60%" stop-color="#2563eb"/><stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="sphG" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#86efac"/><stop offset="60%" stop-color="#16a34a"/><stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="sphO" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fde68a"/><stop offset="60%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <text x="180" y="34" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">Κλίμακα pH (0 – 14)</text>
+  <!-- 15 colored pH blocks -->
+  <g stroke="#ffffff" stroke-width="1">
+    <rect x="20" y="76" width="21" height="44" rx="3" fill="#dc2626"/>
+    <rect x="41" y="76" width="21" height="44" rx="3" fill="#ea580c"/>
+    <rect x="62" y="76" width="21" height="44" rx="3" fill="#f97316"/>
+    <rect x="83" y="76" width="21" height="44" rx="3" fill="#f59e0b"/>
+    <rect x="104" y="76" width="21" height="44" rx="3" fill="#eab308"/>
+    <rect x="125" y="76" width="21" height="44" rx="3" fill="#84cc16"/>
+    <rect x="146" y="76" width="21" height="44" rx="3" fill="#4ade80"/>
+    <rect x="167" y="76" width="26" height="52" rx="4" fill="#16a34a" stroke="#1e293b" stroke-width="2"/>
+    <rect x="193" y="76" width="21" height="44" rx="3" fill="#14b8a6"/>
+    <rect x="214" y="76" width="21" height="44" rx="3" fill="#06b6d4"/>
+    <rect x="235" y="76" width="21" height="44" rx="3" fill="#0ea5e9"/>
+    <rect x="256" y="76" width="21" height="44" rx="3" fill="#2563eb"/>
+    <rect x="277" y="76" width="21" height="44" rx="3" fill="#4f46e5"/>
+    <rect x="298" y="76" width="21" height="44" rx="3" fill="#7c3aed"/>
+    <rect x="319" y="76" width="21" height="44" rx="3" fill="#6b21a8"/>
+  </g>
+  <g font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">
+    <text x="30" y="102">0</text><text x="51" y="102">1</text><text x="72" y="102">2</text>
+    <text x="93" y="102">3</text><text x="114" y="102">4</text><text x="135" y="102">5</text>
+    <text x="156" y="102">6</text><text x="180" y="106" font-size="12">7</text>
+    <text x="203" y="102">8</text><text x="224" y="102">9</text><text x="245" y="102">10</text>
+    <text x="266" y="102">11</text><text x="287" y="102">12</text><text x="308" y="102">13</text><text x="329" y="102">14</text>
+  </g>
+  <line x1="158" y1="154" x2="28" y2="154" stroke="#dc2626" stroke-width="2.4" marker-end="url(#aR)"/>
+  <text x="92" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="#dc2626">Όξινο (pH &lt; 7)</text>
+  <text x="180" y="158" text-anchor="middle" font-size="12" font-weight="700" fill="#16a34a">Ουδέτερο</text>
+  <line x1="202" y1="154" x2="332" y2="154" stroke="#4f46e5" stroke-width="2.4" marker-end="url(#aB)"/>
+  <text x="268" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="#4f46e5">Βασικό (pH &gt; 7)</text>
+
+</g>
+</svg>
