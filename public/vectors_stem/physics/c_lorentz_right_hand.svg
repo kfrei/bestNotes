@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Magnetic field B into page (x symbols) -->
+  <rect x="46" y="38" width="268" height="164" rx="10" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <g stroke="#0284c7" stroke-width="1.8" opacity="0.55">
+    <path d="M 74 62 L 84 72 M 84 62 L 74 72"/>
+    <path d="M 134 62 L 144 72 M 144 62 L 134 72"/>
+    <path d="M 214 62 L 224 72 M 224 62 L 214 72"/>
+    <path d="M 274 62 L 284 72 M 284 62 L 274 72"/>
+    <path d="M 74 166 L 84 176 M 84 166 L 74 176"/>
+    <path d="M 134 166 L 144 176 M 144 166 L 134 176"/>
+    <path d="M 214 166 L 224 176 M 224 166 L 214 176"/>
+    <path d="M 274 166 L 284 176 M 284 166 L 274 176"/>
+  </g>
+  <text x="290" y="58" font-size="13" font-weight="700" fill="#0284c7">B (⊗)</text>
+  <!-- Current-carrying conductor -->
+  <rect x="64" y="114" width="232" height="14" rx="4" fill="url(#metal)" stroke="#334155" stroke-width="1.8"/>
+  <line x1="94" y1="121" x2="158" y2="121" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arrR)"/>
+  <text x="122" y="144" font-size="13" font-weight="700" fill="#dc2626">I</text>
+  <!-- Force F_L upwards -->
+  <line x1="180" y1="114" x2="180" y2="48" stroke="#16a34a" stroke-width="3.4" marker-end="url(#arrG)"/>
+  <text x="190" y="64" font-size="14" font-weight="700" fill="#16a34a">F_L = B · I · L</text>
+  <text x="180" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Δύναμη Laplace σε Αγωγό εντός Μαγνητικού Πεδίου</text>
+
+</g>
+</svg>

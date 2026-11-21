@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Axes -->
+  <line x1="54" y1="204" x2="54" y2="28" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrK)"/>
+  <line x1="54" y1="204" x2="330" y2="204" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrK)"/>
+  <text x="36" y="40" font-size="14" font-weight="700" fill="#1e293b">P</text>
+  <text x="322" y="224" font-size="14" font-weight="700" fill="#1e293b">V</text>
+  <!-- Starting point -->
+  <circle cx="118" cy="76" r="4.5" fill="#1e293b"/>
+  <!-- Isobaric -->
+  <line x1="118" y1="76" x2="262" y2="76" stroke="#16a34a" stroke-width="2.6" marker-end="url(#arrG)"/>
+  <text x="268" y="80" font-size="11" font-weight="700" fill="#16a34a">Ισοβαρής</text>
+  <!-- Isothermal -->
+  <path d="M 118 76 Q 178 118 262 132" stroke="#2563eb" stroke-width="2.6" marker-end="url(#arrB)"/>
+  <text x="268" y="136" font-size="11" font-weight="700" fill="#2563eb">Ισόθερμη</text>
+  <!-- Adiabatic (steeper) -->
+  <path d="M 118 76 Q 158 148 232 178" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arrR)"/>
+  <text x="238" y="182" font-size="11" font-weight="700" fill="#dc2626">Αδιαβατική</text>
+  <!-- Isochoric -->
+  <line x1="118" y1="76" x2="118" y2="178" stroke="#d97706" stroke-width="2.6" marker-end="url(#arrO)"/>
+  <text x="64" y="176" font-size="11" font-weight="700" fill="#d97706">Ισόχωρη</text>
+  <text x="196" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Θερμοδυναμικές Μεταβολές (P–V)</text>
+
+</g>
+</svg>

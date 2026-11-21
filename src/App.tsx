@@ -374,6 +374,10 @@ import {
   type MindMapGrade,
 } from './data/mindMapsCatalog';
 import {
+  STEM_VECTORS_CATALOG,
+  type StemVectorSubject,
+} from './data/vectors';
+import {
   PERIODIC_ELEMENTS_H_TO_RN,
   getPeriodicElementByZ,
   formatChemEquationText,
@@ -1418,7 +1422,7 @@ export default function App() {
           simShowDarkWireTrack?: boolean;
           simSpeedMultiplier?: number;
           showShapeLibraryPanel?: boolean;
-          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'custom';
+          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom';
           librarySubjectFilter?: 'Όλα' | MindMapSubject;
           libraryGradeFilter?: 'Όλες' | MindMapGrade;
           stickerCategoryFilter?: StickerCategory;
@@ -2848,7 +2852,7 @@ export default function App() {
     origX: number;
     origY: number;
   } | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'custom'>(
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom'>(
     () => initialSession?.libraryTab || 'all'
   );
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>(
@@ -63858,6 +63862,17 @@ export default function App() {
                         Εικονίδια ({iconsTotal})
                       </button>
                       <button
+                        onClick={() => setLibraryTab('vectors')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'vectors'
+                            ? 'bg-[#234978] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#234978]'
+                        }`}
+                        title="Νέα συλλογή καθαρών Native Vector (.svg) διαγραμμάτων STEM Γυμνασίου & Λυκείου"
+                      >
+                        Vectors ({STEM_VECTORS_CATALOG.length})
+                      </button>
+                      <button
                         onClick={() => setLibraryTab('custom')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'custom'
@@ -64564,6 +64579,182 @@ export default function App() {
                                 {filteredCatalog.length})
                               </button>
                             )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : libraryTab === 'vectors' ? (
+                  (() => {
+                    const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
+                    const filteredVectors = STEM_VECTORS_CATALOG.filter((item) => {
+                      if (librarySubjectFilter !== 'Όλα' && item.subject !== librarySubjectFilter) {
+                        return false;
+                      }
+                      if (libraryGradeFilter !== 'Όλες' && item.grade !== libraryGradeFilter) {
+                        return false;
+                      }
+                      if (!qNorm) return true;
+                      const hay = normalizeGreekText(
+                        `${item.title} ${item.subject} ${item.grade} ${item.chapter} ${item.chapterTitle} ${item.tags.join(' ')}`
+                      );
+                      return matchesGreekSearchTokens(hay, qNorm);
+                    });
+
+                    const subjectColors: Record<StemVectorSubject, string> = {
+                      Φυσική: 'bg-sky-50 text-sky-700 border-sky-200',
+                      Χημεία: 'bg-amber-50 text-amber-700 border-amber-200',
+                      Βιολογία: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                      Γεωγραφία: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    };
+
+                    return (
+                      <div key="tab-vectors" className="flex flex-col min-h-0 flex-1">
+                        {/* Search Input */}
+                        <div className="relative mb-2 shrink-0">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={shapeLibSearchQuery}
+                            onChange={(e) => {
+                              setShapeLibSearchQuery(e.target.value);
+                              setStickerSearchQuery(e.target.value);
+                            }}
+                            placeholder="Αναζήτηση Vector (π.χ. φακός, newton, carnot, πυκνωτής)..."
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-xs text-[#2c3e50] placeholder:text-[#a8a29e] focus:outline-none focus:border-[#234978] focus:ring-1 focus:ring-[#234978]/30"
+                          />
+                          {shapeLibSearchQuery && (
+                            <button
+                              onClick={() => {
+                                setShapeLibSearchQuery('');
+                                setStickerSearchQuery('');
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a8a29e] hover:text-[#234978] cursor-pointer"
+                              title="Καθαρισμός αναζήτησης"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Subject + Grade Filters */}
+                        <div className="flex items-center justify-between gap-1 mb-1.5 shrink-0 flex-wrap">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(['Όλα', 'Φυσική', 'Χημεία', 'Βιολογία', 'Γεωγραφία'] as const).map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setLibrarySubjectFilter(s)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                  librarySubjectFilter === s
+                                    ? 'bg-[#234978] text-white border-[#234978]'
+                                    : 'bg-[#efebe3] text-[#2c3e50] border-[#dfd8cb] hover:bg-[#e4ded2]'
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-bold text-[#234978] shrink-0">
+                            {filteredVectors.length} SVG
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 mb-2 pb-2 border-b border-[#dfd8cb] shrink-0 flex-wrap">
+                          {(
+                            [
+                              'Όλες',
+                              "Β' Γυμνασίου",
+                              "Γ' Γυμνασίου",
+                              "Α' Λυκείου",
+                              "Β' Λυκείου",
+                              "Γ' Λυκείου",
+                            ] as const
+                          ).map((g) => (
+                            <button
+                              key={g}
+                              onClick={() => setLibraryGradeFilter(g)}
+                              className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-semibold border transition cursor-pointer ${
+                                libraryGradeFilter === g
+                                  ? 'bg-slate-700 text-white border-slate-700'
+                                  : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                              }`}
+                            >
+                              {g.replace(' Γυμνασίου', ' Γυμν.').replace(' Λυκείου', ' Λυκ.')}
+                            </button>
+                          ))}
+                        </div>
+
+                        {filteredVectors.length === 0 ? (
+                          <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+                            <p className="text-xs text-[#64748b] mb-2">
+                              Δεν βρέθηκαν Vector διαγράμματα με αυτά τα φίλτρα
+                            </p>
+                            <button
+                              onClick={() => {
+                                setLibrarySubjectFilter('Όλα');
+                                setLibraryGradeFilter('Όλες');
+                                setShapeLibSearchQuery('');
+                              }}
+                              className="px-3 py-1 rounded-full bg-[#234978] text-white text-[11px] font-semibold cursor-pointer"
+                            >
+                              Επαναφορά Φίλτρων
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="overflow-y-auto pr-1 grid grid-cols-2 gap-2 max-h-[46vh]">
+                            {filteredVectors.map((item) => (
+                              <div
+                                key={item.id}
+                                onClick={() => {
+                                  insertImageDataUrlOnPage(
+                                    item.url,
+                                    `✨ Προστέθηκε Vector SVG: «${item.title}»`
+                                  );
+                                }}
+                                className="group flex flex-col justify-between p-2 rounded-xl border border-[#dfd8cb] bg-[#fdfbf7] hover:bg-[#efebe3]/70 hover:border-[#234978]/60 transition cursor-pointer shadow-2xs"
+                                title={`${item.title} (${item.subject} ${item.grade} • ${item.chapter})\nΚλικ για εισαγωγή ως καθαρό Vector SVG`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between gap-1 mb-1">
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${subjectColors[item.subject]}`}
+                                    >
+                                      {item.subject}
+                                    </span>
+                                    <span className="text-[9px] font-semibold text-[#64748b] truncate">
+                                      {item.grade.replace(' Γυμνασίου', ' Γυμν.').replace(' Λυκείου', ' Λυκ.')}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className="w-full h-24 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                    style={{
+                                      backgroundImage: 'radial-gradient(#e2e8f0 1px, transparent 1px)',
+                                      backgroundSize: '10px 10px',
+                                    }}
+                                  >
+                                    <img
+                                      src={item.url}
+                                      alt={item.title}
+                                      loading="lazy"
+                                      decoding="async"
+                                      className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
+                                    />
+                                  </div>
+                                  <div className="mt-1.5 text-[10.5px] font-bold text-[#2c3e50] leading-tight line-clamp-2">
+                                    {item.title}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {item.tags.slice(0, 3).map((tg) => (
+                                      <span
+                                        key={tg}
+                                        className="px-1.5 py-0.5 rounded bg-[#efebe3] text-[8.5px] font-medium text-[#475569]"
+                                      >
+                                        {tg}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

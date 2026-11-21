@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Optical fiber tube -->
+  <rect x="24" y="72" width="312" height="96" rx="14" fill="url(#glass)" stroke="#0284c7" stroke-width="2.2"/>
+  <rect x="24" y="56" width="312" height="16" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.1"/>
+  <rect x="24" y="168" width="312" height="16" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.1"/>
+  <text x="180" y="48" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">Ολική Εσωτερική Ανάκλαση — Οπτική Ίνα (θ &gt; θκ)</text>
+  <text x="36" y="68" font-size="10" font-weight="600" fill="#475569">Επένδυση (n₂)</text>
+  <text x="36" y="124" font-size="11" font-weight="700" fill="#0369a1">Πυρήνας (n₁ &gt; n₂)</text>
+  <!-- Bouncing laser ray -->
+  <polyline points="20,136 96,74 180,166 264,74 338,136" stroke="#dc2626" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#arrR)"/>
+  <!-- Normals at bounce points -->
+  <line x1="96" y1="74" x2="96" y2="112" stroke="#64748b" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <line x1="180" y1="166" x2="180" y2="128" stroke="#64748b" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="180" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#dc2626">ημ(θκ) = n₂ / n₁</text>
+
+</g>
+</svg>

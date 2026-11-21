@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Field lines from + to - -->
+  <g stroke="#2563eb" stroke-width="1.8" fill="none">
+    <line x1="116" y1="120" x2="244" y2="120" marker-end="url(#arrB)"/>
+    <path d="M 110 106 C 142 60, 218 60, 250 106" marker-end="url(#arrB)"/>
+    <path d="M 110 134 C 142 180, 218 180, 250 134" marker-end="url(#arrB)"/>
+    <path d="M 102 100 C 122 20, 238 20, 258 100"/>
+    <path d="M 102 140 C 122 220, 238 220, 258 140"/>
+    <path d="M 88 110 C 60 88, 40 74, 24 66"/>
+    <path d="M 88 130 C 60 152, 40 166, 24 174"/>
+    <path d="M 272 110 C 300 88, 320 74, 336 66"/>
+    <path d="M 272 130 C 300 152, 320 166, 336 174"/>
+  </g>
+  <circle cx="102" cy="120" r="18" fill="url(#posQ)"/>
+  <text x="102" y="126" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">+</text>
+  <circle cx="258" cy="120" r="18" fill="url(#negQ)"/>
+  <text x="258" y="126" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">−</text>
+  <text x="180" y="226" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Δυναμικές Γραμμές Ηλεκτρικού Διπόλου</text>
+
+</g>
+</svg>

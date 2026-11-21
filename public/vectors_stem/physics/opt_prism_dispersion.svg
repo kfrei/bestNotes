@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- White incoming beam -->
+  <line x1="20" y1="146" x2="126" y2="118" stroke="#475569" stroke-width="4"/>
+  <text x="22" y="132" font-size="12" font-weight="700" fill="#334155">Λευκό φως</text>
+  <!-- Glass Prism -->
+  <polygon points="180,32 98,196 262,196" fill="url(#glass)" stroke="#0284c7" stroke-width="2.4" stroke-linejoin="round"/>
+  <!-- Internal fan -->
+  <polygon points="126,118 224,114 236,148" fill="#fef08a" opacity="0.35"/>
+  <!-- Rainbow Spectrum Exiting -->
+  <line x1="224" y1="114" x2="342" y2="112" stroke="#ef4444" stroke-width="3.2"/>
+  <line x1="226" y1="120" x2="342" y2="126" stroke="#f97316" stroke-width="3.2"/>
+  <line x1="228" y1="126" x2="342" y2="140" stroke="#eab308" stroke-width="3.2"/>
+  <line x1="230" y1="132" x2="342" y2="154" stroke="#22c55e" stroke-width="3.2"/>
+  <line x1="232" y1="138" x2="342" y2="168" stroke="#06b6d4" stroke-width="3.2"/>
+  <line x1="234" y1="143" x2="342" y2="182" stroke="#3b82f6" stroke-width="3.2"/>
+  <line x1="236" y1="148" x2="342" y2="196" stroke="#7c3aed" stroke-width="3.2"/>
+  <text x="278" y="98" font-size="11" font-weight="700" fill="#dc2626">Ερυθρό</text>
+  <text x="278" y="214" font-size="11" font-weight="700" fill="#7c3aed">Ιώδες</text>
+  <text x="180" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Ανάλυση Λευκού Φωτός σε Πρίσμα</text>
+
+</g>
+</svg>

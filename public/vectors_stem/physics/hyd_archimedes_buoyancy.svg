@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <!-- Beaker -->
+  <path d="M 96 40 L 96 208 Q 96 216 106 216 L 254 216 Q 264 216 264 208 L 264 40"
+        stroke="#334155" stroke-width="2.6" stroke-linecap="round"/>
+  <!-- Water -->
+  <rect x="98" y="86" width="164" height="128" fill="url(#water)"/>
+  <path d="M 98 86 Q 138 80 180 86 Q 222 92 262 86" stroke="#0284c7" stroke-width="2"/>
+  <!-- Submerged block -->
+  <rect x="148" y="114" width="64" height="52" rx="5" fill="url(#blockG)" stroke="#334155" stroke-width="2"/>
+  <circle cx="180" cy="140" r="3" fill="#1e293b"/>
+  <!-- Weight vector W (down) -->
+  <line x1="180" y1="140" x2="180" y2="206" stroke="#dc2626" stroke-width="3" marker-end="url(#arrR)"/>
+  <text x="190" y="198" font-size="14" font-weight="700" fill="#dc2626">W</text>
+  <!-- Buoyancy vector A (up) -->
+  <line x1="180" y1="140" x2="180" y2="54" stroke="#2563eb" stroke-width="3" marker-end="url(#arrB)"/>
+  <text x="190" y="70" font-size="14" font-weight="700" fill="#2563eb">A (Άνωση)</text>
+  <text x="180" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Αρχή του Αρχιμήδη: A = ρυγρ · g · Vβυθ</text>
+
+</g>
+</svg>

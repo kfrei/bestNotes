@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240" fill="none">
+  <defs>
+    <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 9 5 L 1 8.5 z" fill="#1e293b"/>
+    </marker>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.82"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.58"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="55%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="blockG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <radialGradient id="posQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="55%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="negQ" cx="35%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <line x1="50" y1="208" x2="50" y2="26" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrK)"/>
+  <line x1="50" y1="208" x2="328" y2="208" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrK)"/>
+  <text x="32" y="38" font-size="14" font-weight="700" fill="#1e293b">P</text>
+  <text x="322" y="226" font-size="14" font-weight="700" fill="#1e293b">V</text>
+  <!-- Cycle area -->
+  <path d="M 112 64 Q 168 84 228 94 Q 254 140 282 174 Q 214 166 154 152 Q 130 112 112 64 Z"
+        fill="#fef08a" fill-opacity="0.45"/>
+  <!-- 1->2 Isothermal expansion Qh -->
+  <path d="M 112 64 Q 168 84 228 94" stroke="#dc2626" stroke-width="2.8" marker-end="url(#arrR)"/>
+  <!-- 2->3 Adiabatic expansion -->
+  <path d="M 228 94 Q 254 140 282 174" stroke="#d97706" stroke-width="2.6" marker-end="url(#arrO)"/>
+  <!-- 3->4 Isothermal compression Qc -->
+  <path d="M 282 174 Q 214 166 154 152" stroke="#2563eb" stroke-width="2.8" marker-end="url(#arrB)"/>
+  <!-- 4->1 Adiabatic compression -->
+  <path d="M 154 152 Q 130 112 112 64" stroke="#16a34a" stroke-width="2.6" marker-end="url(#arrG)"/>
+  <text x="174" y="68" font-size="12" font-weight="700" fill="#dc2626">Qₕ (Tₕ)</text>
+  <text x="200" y="186" font-size="12" font-weight="700" fill="#2563eb">Qc (Tc)</text>
+  <text x="196" y="132" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Wολ</text>
+  <text x="196" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Κύκλος Carnot (e = 1 − Tc/Tₕ)</text>
+
+</g>
+</svg>
