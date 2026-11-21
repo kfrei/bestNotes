@@ -23,7 +23,7 @@ import {
   analyzeCircuitForSimulation,
   convertPlainTextToMathLatex,
   splitAndCleanMathLatexLines,
-  drawShadedSphereStroke,
+  drawShaded3DShapeStroke,
 } from './geometryAndAlgorithms';
 
 function getStrokeBounds(s: StrokeObject): { minX: number; maxX: number; minY: number; maxY: number } {
@@ -444,8 +444,14 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     return;
   }
 
-  if (s.shapeType === 'shaded-sphere' && s.points.length >= 4) {
-    if (drawShadedSphereStroke(ctx, s)) return;
+  if (
+    (s.shapeType === 'shaded-sphere' ||
+      s.shapeType === 'shaded-cuboid' ||
+      s.shapeType === 'shaded-cylinder' ||
+      s.shapeType === 'shaded-pyramid') &&
+    s.points.length >= 4
+  ) {
+    if (drawShaded3DShapeStroke(ctx, s)) return;
   }
 
   if (s.shapeType === 'title-box' && s.points.length >= 4) {

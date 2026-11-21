@@ -60,7 +60,10 @@ export type ShapePresetType =
   | 'thermometer'
   | 'title-box'
   | 'sphere'
-  | 'shaded-sphere';
+  | 'shaded-cuboid'
+  | 'shaded-cylinder'
+  | 'shaded-sphere'
+  | 'shaded-pyramid';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';

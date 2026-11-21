@@ -210,7 +210,7 @@ import {
   isScribbleEraseGesture,
   tryMatchShadowCornerOnBox,
   tryMatchSphereEquatorOnCircle,
-  drawShadedSphereStroke,
+  drawShaded3DShapeStroke,
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
   beautifyHandwritingStrokes,
@@ -9942,7 +9942,10 @@ export default function App() {
       s.shapeType === 'voltmeter-needle' ||
       s.shapeType === 'voltmeter-label' ||
       s.shapeType === 'title-box' ||
-      s.shapeType === 'shaded-sphere'
+      s.shapeType === 'shaded-cuboid' ||
+      s.shapeType === 'shaded-cylinder' ||
+      s.shapeType === 'shaded-sphere' ||
+      s.shapeType === 'shaded-pyramid'
     );
   };
 
@@ -12185,9 +12188,15 @@ export default function App() {
       }
     }
 
-    // 0b2. 3D Shaded Sketch Sphere ('shaded-sphere'): radial shading, specular highlight & subtle contact shadow!
-    if (s.shapeType === 'shaded-sphere' && s.points.length >= 4) {
-      if (drawShadedSphereStroke(ctx, s)) return;
+    // 0b2. Studio-Shaded 3D Shapes ('shaded-sphere', 'shaded-cuboid', 'shaded-cylinder', 'shaded-pyramid')
+    if (
+      (s.shapeType === 'shaded-sphere' ||
+        s.shapeType === 'shaded-cuboid' ||
+        s.shapeType === 'shaded-cylinder' ||
+        s.shapeType === 'shaded-pyramid') &&
+      s.points.length >= 4
+    ) {
+      if (drawShaded3DShapeStroke(ctx, s)) return;
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
@@ -25897,7 +25906,7 @@ export default function App() {
     // Look for a mass block strictly inside the user's Lasso selection
     const sp = springsInSel[springsInSel.length - 1];
     const info = getSpringTerminalsAndWidthVec(sp);
-    const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere', 'shaded-sphere'];
+    const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere', 'shaded-cuboid', 'shaded-cylinder', 'shaded-sphere', 'shaded-pyramid'];
     const mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
     const pointerInSel = selStrokes.find(
       (s) =>
@@ -49829,7 +49838,14 @@ export default function App() {
                 x: rawPts[0].x + (shapePreset === 'title-box' ? 280 : 110),
                 y:
                   rawPts[0].y +
-                  (shapePreset === 'ellipse' || shapePreset === 'sphere' ? 110 : 75),
+                  (shapePreset === 'ellipse' ||
+                  shapePreset === 'sphere' ||
+                  shapePreset === 'shaded-sphere' ||
+                  shapePreset === 'shaded-cuboid' ||
+                  shapePreset === 'shaded-cylinder' ||
+                  shapePreset === 'shaded-pyramid'
+                    ? 110
+                    : 75),
                 pressure: 0.7,
               },
             ]
@@ -50267,16 +50283,23 @@ export default function App() {
 
     // Respect the selected fillStyle ('none' for outline-only when "Χωρίς Γέμισμα" is active).
     // Exception: 'title-box' ALWAYS comes filled with 90% transparency regardless of toolbar fill/transparency state!
+    const isShaded3DShape =
+      shapeType === 'shaded-cuboid' ||
+      shapeType === 'shaded-cylinder' ||
+      shapeType === 'shaded-sphere' ||
+      shapeType === 'shaded-pyramid';
     const commitFillStyle: FillStyleType =
-      shapeType === 'title-box'
-        ? 'solid'
-        : shapeType === 'hooked-weight'
-          ? fillStyle !== 'none'
-            ? fillStyle
-            : 'solid'
-          : canAutoFillStroke
-            ? fillStyle
-            : 'none';
+      isShaded3DShape
+        ? 'gradient'
+        : shapeType === 'title-box'
+          ? 'solid'
+          : shapeType === 'hooked-weight'
+            ? fillStyle !== 'none'
+              ? fillStyle
+              : 'solid'
+            : canAutoFillStroke
+              ? fillStyle
+              : 'none';
 
     const existingFreePtrCount =
       shapeType === 'spring-pointer'
@@ -50300,7 +50323,7 @@ export default function App() {
             : strokeColor
           : undefined,
       fillStyle: commitFillStyle,
-      fillTransparency: shapeType === 'title-box' ? 90 : fillTransparency,
+      fillTransparency: isShaded3DShape ? 0 : shapeType === 'title-box' ? 90 : fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -62131,6 +62154,91 @@ export default function App() {
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 16 2.5 L 4.5 16 L 16 19.5 L 27.5 16 Z" />
                               <line x1="16" y1="2.5" x2="16" y2="19.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-cuboid',
+                          title: 'Φωτοσκιασμένος Κύβος 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <defs>
+                                <linearGradient id="bn-sh-cube-top" x1="100%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" />
+                                  <stop offset="100%" stopColor="#cbd5e1" />
+                                </linearGradient>
+                                <linearGradient id="bn-sh-cube-front" x1="100%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#94a3b8" />
+                                  <stop offset="100%" stopColor="#475569" />
+                                </linearGradient>
+                                <linearGradient id="bn-sh-cube-right" x1="100%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#e2e8f0" />
+                                  <stop offset="100%" stopColor="#64748b" />
+                                </linearGradient>
+                              </defs>
+                              <polygon points="4,7 11,2.5 27,2.5 20,7" fill="url(#bn-sh-cube-top)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <polygon points="4,7 20,7 20,19 4,19" fill="url(#bn-sh-cube-front)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <polygon points="20,7 27,2.5 27,14.5 20,19" fill="url(#bn-sh-cube-right)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-cylinder',
+                          title: 'Φωτοσκιασμένος Κύλινδρος 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <defs>
+                                <linearGradient id="bn-sh-cyl-body" x1="0%" y1="50%" x2="100%" y2="50%">
+                                  <stop offset="0%" stopColor="#64748b" />
+                                  <stop offset="18%" stopColor="#475569" />
+                                  <stop offset="55%" stopColor="#cbd5e1" />
+                                  <stop offset="82%" stopColor="#ffffff" />
+                                  <stop offset="100%" stopColor="#94a3b8" />
+                                </linearGradient>
+                                <linearGradient id="bn-sh-cyl-top" x1="100%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" />
+                                  <stop offset="100%" stopColor="#cbd5e1" />
+                                </linearGradient>
+                              </defs>
+                              <path d="M 7 5 L 7 17 A 9 2.8 0 0 0 25 17 L 25 5 Z" fill="url(#bn-sh-cyl-body)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <ellipse cx="16" cy="5" rx="9" ry="2.8" fill="url(#bn-sh-cyl-top)" stroke="#475569" strokeWidth="1.1" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-sphere',
+                          title: 'Φωτοσκιασμένη Σφαίρα 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <defs>
+                                <radialGradient id="bn-sh-sph" cx="64%" cy="34%" r="65%">
+                                  <stop offset="0%" stopColor="#ffffff" />
+                                  <stop offset="45%" stopColor="#cbd5e1" />
+                                  <stop offset="85%" stopColor="#64748b" />
+                                  <stop offset="100%" stopColor="#475569" />
+                                </radialGradient>
+                              </defs>
+                              <circle cx="16" cy="11" r="8.5" fill="url(#bn-sh-sph)" stroke="#475569" strokeWidth="1.1" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-pyramid',
+                          title: 'Φωτοσκιασμένη Πυραμίδα 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <defs>
+                                <linearGradient id="bn-sh-pyr-l" x1="80%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#94a3b8" />
+                                  <stop offset="100%" stopColor="#475569" />
+                                </linearGradient>
+                                <linearGradient id="bn-sh-pyr-r" x1="20%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" />
+                                  <stop offset="100%" stopColor="#cbd5e1" />
+                                </linearGradient>
+                              </defs>
+                              <polygon points="16,2.5 4.5,16 16,19.5" fill="url(#bn-sh-pyr-l)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <polygon points="16,2.5 16,19.5 27.5,16" fill="url(#bn-sh-pyr-r)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
                             </svg>
                           ),
                         },

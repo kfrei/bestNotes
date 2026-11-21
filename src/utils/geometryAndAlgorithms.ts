@@ -1329,14 +1329,33 @@ function buildPresetShape(
       points: [p0, p1],
     };
   }
-  if (preset === 'cuboid' || preset === 'cylinder' || preset === 'sphere' || preset === 'pyramid') {
+  if (
+    preset === 'cuboid' ||
+    preset === 'cylinder' ||
+    preset === 'sphere' ||
+    preset === 'pyramid' ||
+    preset === 'shaded-cuboid' ||
+    preset === 'shaded-cylinder' ||
+    preset === 'shaded-sphere' ||
+    preset === 'shaded-pyramid'
+  ) {
     const w3d = Math.max(72, maxX - minX);
     const h3d = Math.max(72, maxY - minY);
     const cx = minX + w3d / 2;
     const cy = minY + h3d / 2;
     const isNearSquare = Math.abs(w3d - h3d) < Math.max(w3d, h3d) * 0.24;
-    const finalW = preset === 'sphere' || (preset === 'cuboid' && isNearSquare) ? (w3d + h3d) / 2 : w3d;
-    const finalH = preset === 'sphere' || (preset === 'cuboid' && isNearSquare) ? (w3d + h3d) / 2 : h3d;
+    const finalW =
+      preset === 'sphere' ||
+      preset === 'shaded-sphere' ||
+      ((preset === 'cuboid' || preset === 'shaded-cuboid') && isNearSquare)
+        ? (w3d + h3d) / 2
+        : w3d;
+    const finalH =
+      preset === 'sphere' ||
+      preset === 'shaded-sphere' ||
+      ((preset === 'cuboid' || preset === 'shaded-cuboid') && isNearSquare)
+        ? (w3d + h3d) / 2
+        : h3d;
     const halfW = finalW / 2;
     const halfH = finalH / 2;
     return {
@@ -17612,35 +17631,11 @@ export function tryMatchSphereEquatorOnCircle(
 }
 
 /**
- * Shared Canvas 2D renderer for 'shaded-sphere' shapes (used identically in Editor & PDF Export).
- * Draws a rich 3D shaded sketch sphere with bright specular highlight, deep crescent shadow,
- * reflected rim light, soft elliptical contact shadow, and subtle contour matching stroke color.
+ * Shared studio-shading color palette for all 4 shaded 3D shapes
+ * ('shaded-sphere', 'shaded-cuboid', 'shaded-cylinder', 'shaded-pyramid').
  */
-export function drawShadedSphereStroke(
-  ctx: CanvasRenderingContext2D,
-  s: StrokeObject
-): boolean {
-  if (s.shapeType !== 'shaded-sphere' || s.points.length < 4) return false;
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const p of s.points) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  const rx = (maxX - minX) * 0.5;
-  const ry = (maxY - minY) * 0.5;
-  if (rx < 2 || ry < 2) return false;
-  const cx = (minX + maxX) * 0.5;
-  const cy = (minY + maxY) * 0.5;
-  const baseAlpha = s.opacity ?? 1;
-
-  // Parse stroke color to decide between pearl/silver-gray (for neutral ink) vs harmonious color tint
-  const hex = (s.color || '#64748b').trim();
+function buildShaded3DPalette(colorHex?: string) {
+  const hex = (colorHex || '#64748b').trim();
   let r = 100;
   let g = 116;
   let b = 139;
@@ -17672,77 +17667,395 @@ export function drawShadedSphereStroke(
       b1 + (b2 - b1) * t
     )})`;
 
-  const cSpec = isNeutral ? '#ffffff' : mixRgb(r, g, b, 255, 255, 255, 0.96);
-  const cLight = isNeutral ? '#f3f5f8' : mixRgb(r, g, b, 255, 255, 255, 0.68);
-  const cMid = isNeutral ? '#c9d1dc' : mixRgb(r, g, b, 255, 255, 255, 0.22);
-  const cShade = isNeutral ? '#818c9e' : mixRgb(r, g, b, 10, 18, 36, 0.34);
-  const cDeep = isNeutral ? '#525c6d' : mixRgb(r, g, b, 6, 12, 26, 0.58);
+  return {
+    cSpec: isNeutral ? '#ffffff' : mixRgb(r, g, b, 255, 255, 255, 0.96),
+    cLight: isNeutral ? '#f3f5f8' : mixRgb(r, g, b, 255, 255, 255, 0.68),
+    cMid: isNeutral ? '#c9d1dc' : mixRgb(r, g, b, 255, 255, 255, 0.22),
+    cShade: isNeutral ? '#818c9e' : mixRgb(r, g, b, 10, 18, 36, 0.34),
+    cDeep: isNeutral ? '#525c6d' : mixRgb(r, g, b, 6, 12, 26, 0.58),
+  };
+}
+
+/**
+ * Shared Canvas 2D renderer for all 4 studio-shaded 3D shapes
+ * ('shaded-sphere', 'shaded-cuboid', 'shaded-cylinder', 'shaded-pyramid'),
+ * used identically in both the interactive Editor and PDF / Live PDF Export.
+ */
+export function drawShaded3DShapeStroke(
+  ctx: CanvasRenderingContext2D,
+  s: StrokeObject
+): boolean {
+  if (
+    (s.shapeType !== 'shaded-sphere' &&
+      s.shapeType !== 'shaded-cuboid' &&
+      s.shapeType !== 'shaded-cylinder' &&
+      s.shapeType !== 'shaded-pyramid') ||
+    s.points.length < 4
+  ) {
+    return false;
+  }
+
+  const baseAlpha = s.opacity ?? 1;
+  const { cSpec, cLight, cMid, cShade, cDeep } = buildShaded3DPalette(s.color);
+  const contourColor = s.color || '#64748b';
+  const contourWidth = Math.max(0.9, Math.min(1.8, (s.width || 2) * 0.5));
+
+  // Helper: draw soft elliptical ground contact shadow at (sx, sy) with radii (srx, sry)
+  const drawGroundShadow = (sx: number, sy: number, srx: number, sry: number, rot = 0) => {
+    ctx.save();
+    ctx.translate(sx, sy);
+    if (rot) ctx.rotate(rot);
+    ctx.scale(Math.max(4, srx), Math.max(2.5, sry));
+    const shadowGrad = ctx.createRadialGradient(0, 0, 0.06, 0, 0, 1);
+    shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.3 * baseAlpha).toFixed(3)})`);
+    shadowGrad.addColorStop(0.45, `rgba(15, 23, 42, ${(0.14 * baseAlpha).toFixed(3)})`);
+    shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  // ── 1. SHADED 3D SPHERE ───────────────────────────────────────────────────
+  if (s.shapeType === 'shaded-sphere') {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of s.points) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const rx = (maxX - minX) * 0.5;
+    const ry = (maxY - minY) * 0.5;
+    if (rx < 2 || ry < 2) return false;
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    drawGroundShadow(cx - rx * 0.22, cy + ry * 0.94, rx * 0.98, ry * 0.24);
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
+    ctx.translate(cx, cy);
+    ctx.scale(rx, ry);
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.clip();
+
+    const bodyGrad = ctx.createRadialGradient(0.32, -0.32, 0.03, 0.1, -0.08, 1.26);
+    bodyGrad.addColorStop(0, cSpec);
+    bodyGrad.addColorStop(0.2, cLight);
+    bodyGrad.addColorStop(0.52, cMid);
+    bodyGrad.addColorStop(0.8, cShade);
+    bodyGrad.addColorStop(1, cDeep);
+    ctx.fillStyle = bodyGrad;
+    ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+
+    const bounceGrad = ctx.createRadialGradient(-0.68, 0.68, 0.04, -0.58, 0.58, 0.58);
+    bounceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    bounceGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = bounceGrad;
+    ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+
+    const specGrad = ctx.createRadialGradient(0.34, -0.34, 0.01, 0.34, -0.34, 0.34);
+    specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    specGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.28)');
+    specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = specGrad;
+    ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = contourWidth;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+    return true;
+  }
+
+  // Bilinear quad mapping on [q0, q1, q2, q3] so rotation & non-uniform stretch work seamlessly!
+  const [q0, q1, q2, q3] = s.points;
+  const bilerp = (u: number, v: number) => ({
+    x:
+      (1 - u) * (1 - v) * q0.x +
+      u * (1 - v) * q1.x +
+      u * v * q2.x +
+      (1 - u) * v * q3.x,
+    y:
+      (1 - u) * (1 - v) * q0.y +
+      u * (1 - v) * q1.y +
+      u * v * q2.y +
+      (1 - u) * v * q3.y,
+  });
+  const wLen = Math.hypot(q1.x - q0.x, q1.y - q0.y);
+  const hLen = Math.hypot(q3.x - q0.x, q3.y - q0.y);
+  if (wLen < 2 || hLen < 2) return false;
+  const quadAngle = Math.atan2(q1.y - q0.y, q1.x - q0.x);
+
+  const traceEllipseBilerp = (
+    uc: number,
+    vc: number,
+    ru: number,
+    rv: number,
+    startAng: number,
+    endAng: number,
+    moveToFirst: boolean,
+    steps = 40
+  ) => {
+    for (let i = 0; i <= steps; i++) {
+      const ang = startAng + (endAng - startAng) * (i / steps);
+      const pt = bilerp(uc + Math.cos(ang) * ru, vc + Math.sin(ang) * rv);
+      if (i === 0 && moveToFirst) ctx.moveTo(pt.x, pt.y);
+      else ctx.lineTo(pt.x, pt.y);
+    }
+  };
 
   ctx.save();
   ctx.setLineDash([]);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
 
-  // 1. Soft elliptical ground contact shadow (slightly bottom-left, grounding the 3D sphere)
-  ctx.save();
-  ctx.translate(cx - rx * 0.22, cy + ry * 0.94);
-  ctx.scale(rx * 0.98, Math.max(2.5, ry * 0.24));
-  const shadowGrad = ctx.createRadialGradient(0, 0, 0.06, 0, 0, 1);
-  shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.32 * baseAlpha).toFixed(3)})`);
-  shadowGrad.addColorStop(0.45, `rgba(15, 23, 42, ${(0.15 * baseAlpha).toFixed(3)})`);
-  shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
-  ctx.fillStyle = shadowGrad;
-  ctx.beginPath();
-  ctx.arc(0, 0, 1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  // ── 2. SHADED 3D CUBOID / CUBE ────────────────────────────────────────────
+  if (s.shapeType === 'shaded-cuboid') {
+    const fTL = bilerp(0, 0.28);
+    const fTR = bilerp(0.72, 0.28);
+    const fBR = bilerp(0.72, 1.0);
+    const fBL = bilerp(0, 1.0);
+    const bTL = bilerp(0.28, 0);
+    const bTR = bilerp(1.0, 0);
+    const bBR = bilerp(1.0, 0.72);
 
-  // 2. Sphere 3D shaded body (unit-circle transform so stretched ellipses shade cleanly too)
+    const shCenter = bilerp(0.42, 0.99);
+    drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.56, hLen * 0.14, quadAngle);
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
+
+    // Top face (brightest — catches top-right light)
+    const topGrad = ctx.createLinearGradient(bTR.x, bTR.y, fTL.x, fTL.y);
+    topGrad.addColorStop(0, cSpec);
+    topGrad.addColorStop(0.55, cLight);
+    topGrad.addColorStop(1, cMid);
+    ctx.fillStyle = topGrad;
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(bTL.x, bTL.y);
+    ctx.lineTo(bTR.x, bTR.y);
+    ctx.lineTo(fTR.x, fTR.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Right face (medium-bright — side-lit from top-right)
+    const rightGrad = ctx.createLinearGradient(bTR.x, bTR.y, fBR.x, fBR.y);
+    rightGrad.addColorStop(0, cLight);
+    rightGrad.addColorStop(0.55, cMid);
+    rightGrad.addColorStop(1, cShade);
+    ctx.fillStyle = rightGrad;
+    ctx.beginPath();
+    ctx.moveTo(fTR.x, fTR.y);
+    ctx.lineTo(bTR.x, bTR.y);
+    ctx.lineTo(bBR.x, bBR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Front face (shaded side with smooth 3D falloff to bottom-left)
+    const frontGrad = ctx.createLinearGradient(fTR.x, fTR.y, fBL.x, fBL.y);
+    frontGrad.addColorStop(0, cMid);
+    frontGrad.addColorStop(0.45, cShade);
+    frontGrad.addColorStop(1, cDeep);
+    ctx.fillStyle = frontGrad;
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fTR.x, fTR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.lineTo(fBL.x, fBL.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Crisp specular edge highlight along lit bevels (fTL->fTR->bTR and fTR->fBR)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fTR.x, fTR.y);
+    ctx.lineTo(bTR.x, bTR.y);
+    ctx.moveTo(fTR.x, fTR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.stroke();
+
+    // Subtle crisp contour
+    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = contourWidth;
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fTR.x, fTR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.lineTo(fBL.x, fBL.y);
+    ctx.closePath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(bTL.x, bTL.y);
+    ctx.lineTo(bTR.x, bTR.y);
+    ctx.lineTo(bBR.x, bBR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.moveTo(fTR.x, fTR.y);
+    ctx.lineTo(bTR.x, bTR.y);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+    return true;
+  }
+
+  // ── 3. SHADED 3D CYLINDER ─────────────────────────────────────────────────
+  if (s.shapeType === 'shaded-cylinder') {
+    const shCenter = bilerp(0.42, 0.96);
+    drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.56, hLen * 0.14, quadAngle);
+
+    const pLeftMid = bilerp(0, 0.5);
+    const pRightMid = bilerp(1, 0.5);
+
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
+
+    // Cylindrical body with smooth left-to-right 3D highlight wrap
+    const bodyGrad = ctx.createLinearGradient(pLeftMid.x, pLeftMid.y, pRightMid.x, pRightMid.y);
+    bodyGrad.addColorStop(0.0, cShade);
+    bodyGrad.addColorStop(0.16, cDeep);
+    bodyGrad.addColorStop(0.44, cMid);
+    bodyGrad.addColorStop(0.7, cLight);
+    bodyGrad.addColorStop(0.83, cSpec);
+    bodyGrad.addColorStop(1.0, cMid);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    traceEllipseBilerp(0.5, 0.16, 0.5, 0.16, Math.PI, 0, true);
+    traceEllipseBilerp(0.5, 0.84, 0.5, 0.16, 0, Math.PI, false);
+    ctx.closePath();
+    ctx.fill();
+
+    // Top flat cap ellipse (bright, gently shaded from top-right to front-left)
+    const capTR = bilerp(0.82, 0.04);
+    const capBL = bilerp(0.18, 0.28);
+    const capGrad = ctx.createLinearGradient(capTR.x, capTR.y, capBL.x, capBL.y);
+    capGrad.addColorStop(0, cSpec);
+    capGrad.addColorStop(0.55, cLight);
+    capGrad.addColorStop(1, cMid);
+    ctx.fillStyle = capGrad;
+    ctx.beginPath();
+    traceEllipseBilerp(0.5, 0.16, 0.5, 0.16, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.fill();
+
+    // Specular rim highlight along front lip of top ellipse
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
+    ctx.beginPath();
+    traceEllipseBilerp(0.5, 0.16, 0.5, 0.16, 0.12, Math.PI - 0.12, true);
+    ctx.stroke();
+
+    // Subtle crisp contour
+    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = contourWidth;
+    ctx.beginPath();
+    traceEllipseBilerp(0.5, 0.16, 0.5, 0.16, 0, Math.PI * 2, true);
+    const pTopL = bilerp(0, 0.16);
+    const pBotL = bilerp(0, 0.84);
+    const pTopR = bilerp(1, 0.16);
+    const pBotR = bilerp(1, 0.84);
+    ctx.moveTo(pTopL.x, pTopL.y);
+    ctx.lineTo(pBotL.x, pBotL.y);
+    traceEllipseBilerp(0.5, 0.84, 0.5, 0.16, Math.PI, 0, false);
+    ctx.lineTo(pTopR.x, pTopR.y);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+    return true;
+  }
+
+  // ── 4. SHADED 3D PYRAMID ──────────────────────────────────────────────────
+  const pApex = bilerp(0.5, 0);
+  const pLeft = bilerp(0, 0.76);
+  const pFront = bilerp(0.5, 1.0);
+  const pRight = bilerp(1.0, 0.76);
+
+  const shCenter = bilerp(0.38, 0.94);
+  drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.54, hLen * 0.14, quadAngle);
+
   ctx.save();
   ctx.globalAlpha = baseAlpha;
-  ctx.translate(cx, cy);
-  ctx.scale(rx, ry);
 
+  // Left face (in shadow — rich 3D depth)
+  const leftGrad = ctx.createLinearGradient(pApex.x, pApex.y, pLeft.x, pFront.y);
+  leftGrad.addColorStop(0, cMid);
+  leftGrad.addColorStop(0.42, cShade);
+  leftGrad.addColorStop(1, cDeep);
+  ctx.fillStyle = leftGrad;
   ctx.beginPath();
-  ctx.arc(0, 0, 1, 0, Math.PI * 2);
-  ctx.clip();
+  ctx.moveTo(pApex.x, pApex.y);
+  ctx.lineTo(pLeft.x, pLeft.y);
+  ctx.lineTo(pFront.x, pFront.y);
+  ctx.closePath();
+  ctx.fill();
 
-  // Primary radial shading (light source from top-right, rich deep crescent bottom-left)
-  const bodyGrad = ctx.createRadialGradient(0.32, -0.32, 0.03, 0.1, -0.08, 1.26);
-  bodyGrad.addColorStop(0, cSpec);
-  bodyGrad.addColorStop(0.2, cLight);
-  bodyGrad.addColorStop(0.52, cMid);
-  bodyGrad.addColorStop(0.8, cShade);
-  bodyGrad.addColorStop(1, cDeep);
-  ctx.fillStyle = bodyGrad;
-  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
-
-  // Subtle reflected ambient bounce highlight along far bottom-left rim
-  const bounceGrad = ctx.createRadialGradient(-0.68, 0.68, 0.04, -0.58, 0.58, 0.58);
-  bounceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
-  bounceGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = bounceGrad;
-  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
-
-  // Tight soft specular hotspot top-right for unmistakable 3D volume
-  const specGrad = ctx.createRadialGradient(0.34, -0.34, 0.01, 0.34, -0.34, 0.34);
-  specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
-  specGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.28)');
-  specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = specGrad;
-  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
-  ctx.restore();
-
-  // 3. Very subtle crisp sketch contour matching the stroke color
-  ctx.save();
-  ctx.globalAlpha = baseAlpha * 0.36;
-  ctx.strokeStyle = s.color || '#64748b';
-  ctx.lineWidth = Math.max(0.9, Math.min(1.8, (s.width || 2) * 0.5));
+  // Right face (bright — catches direct top-right light)
+  const rightGrad = ctx.createLinearGradient(pApex.x, pApex.y, pRight.x, pFront.y);
+  rightGrad.addColorStop(0, cSpec);
+  rightGrad.addColorStop(0.45, cLight);
+  rightGrad.addColorStop(1, cMid);
+  ctx.fillStyle = rightGrad;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.moveTo(pApex.x, pApex.y);
+  ctx.lineTo(pFront.x, pFront.y);
+  ctx.lineTo(pRight.x, pRight.y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Crisp highlight along front central ridge (pApex -> pFront)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.68)';
+  ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
+  ctx.beginPath();
+  ctx.moveTo(pApex.x, pApex.y);
+  ctx.lineTo(pFront.x, pFront.y);
   ctx.stroke();
-  ctx.restore();
 
+  // Subtle crisp contour
+  ctx.globalAlpha = baseAlpha * 0.36;
+  ctx.strokeStyle = contourColor;
+  ctx.lineWidth = contourWidth;
+  ctx.beginPath();
+  ctx.moveTo(pApex.x, pApex.y);
+  ctx.lineTo(pLeft.x, pLeft.y);
+  ctx.lineTo(pFront.x, pFront.y);
+  ctx.lineTo(pRight.x, pRight.y);
+  ctx.closePath();
+  ctx.moveTo(pApex.x, pApex.y);
+  ctx.lineTo(pFront.x, pFront.y);
+  ctx.stroke();
+
+  ctx.restore();
   ctx.restore();
   return true;
+}
+
+/** Backwards-compatible alias for shaded sphere rendering. */
+export function drawShadedSphereStroke(
+  ctx: CanvasRenderingContext2D,
+  s: StrokeObject
+): boolean {
+  return drawShaded3DShapeStroke(ctx, s);
 }
 
 
