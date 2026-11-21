@@ -55972,18 +55972,6 @@ export default function App() {
           >
             <RefreshCw className="w-4 h-4 text-sky-300" />
           </button>
-
-          {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
-          {viewMode === 'editor' && notebooks.length > 0 && (
-            <button
-              data-popover-trigger="thumbnails"
-              onClick={() => setShowThumbnailsModal((v) => !v)}
-              className="flex items-center justify-center p-1.5 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-indigo-100 transition cursor-pointer"
-              title={`Σελίδες (${activeNotebook.pages.length}) — Προβολή όλων των σελίδων σε Μικρογραφίες`}
-            >
-              <LayoutGrid className="w-4 h-4 text-sky-300" />
-            </button>
-          )}
         </div>
 
         {/* Center: Authentic Goodnotes 6 / Chrome-Style Elastic Document Tabs */}
