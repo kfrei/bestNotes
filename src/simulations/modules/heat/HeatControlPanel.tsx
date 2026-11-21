@@ -6,6 +6,7 @@ import { HeatSimConfig, HeatObjectType } from './types';
 
 export interface HeatControlPanelProps {
   sim: HeatSimConfig | null;
+  locationLabel?: string;
   onToggleRun: () => void;
   onReset: () => void;
   onToggleGraph?: () => void;
@@ -23,6 +24,7 @@ export interface HeatControlPanelProps {
 
 export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   sim,
+  locationLabel,
   onToggleRun,
   onReset,
   showStopwatch = false,
@@ -48,7 +50,15 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
             Ενεργή Προσομοίωση:
           </span>
-          <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs">
+          <span
+            className="relative group px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs cursor-default"
+            title={locationLabel ? `${locationLabel} — "${sim.name || 'θερμότητα1'}"` : undefined}
+          >
+            {locationLabel && (
+              <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                {locationLabel}
+              </span>
+            )}
             {sim.name || 'θερμότητα1'}
           </span>
         </div>

@@ -65366,15 +65366,21 @@ export default function App() {
                                     setSyncStatus('dirty');
                                     setEditingSpringSimId(null);
                                   };
+                                  const simLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${spPageIdx + 1}`;
                                   return (
                                     <div
                                       key={sim.id}
-                                      className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
+                                      className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                         isCurrent
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
                                           : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                       }`}
                                     >
+                                      {!isEditingThis && (
+                                        <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                                          {simLocationLabel}
+                                        </span>
+                                      )}
                                       {isEditingThis ? (
                                         <input
                                           type="text"
@@ -65415,7 +65421,7 @@ export default function App() {
                                             scrollToSpringSim(spPageIdx, sim);
                                           }}
                                           className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1"
-                                          title={`Μετάβαση & Ενεργοποίηση ελατηρίου "${sim.name}"`}
+                                          title={`${simLocationLabel} — Μετάβαση & Ενεργοποίηση "${sim.name}"`}
                                         >
                                           <span>{sim.name}</span>
                                         </button>
@@ -66083,15 +66089,19 @@ export default function App() {
                             <div className="flex flex-wrap gap-1">
                               {validForceSims.map((sim) => {
                                 const isCurrent = activeForce?.id === sim.id;
+                                const forceLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`;
                                 return (
                                   <div
                                     key={sim.id}
-                                    className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
+                                    className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
                                         : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
+                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                                      {forceLocationLabel}
+                                    </span>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -66102,6 +66112,7 @@ export default function App() {
                                         );
                                       }}
                                       className="px-2.5 py-1 flex items-center cursor-pointer"
+                                      title={`${forceLocationLabel} — "${sim.name}"`}
                                     >
                                       <span>{sim.name}</span>
                                     </button>
@@ -66700,15 +66711,19 @@ export default function App() {
                             <div className="flex flex-wrap gap-1">
                               {validAtomSims.map((sim) => {
                                 const isCurrent = activeAtomSim?.id === sim.id;
+                                const atomLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`;
                                 return (
                                   <div
                                     key={sim.id}
-                                    className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
+                                    className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                                       isCurrent
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
                                         : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
+                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                                      {atomLocationLabel}
+                                    </span>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -66730,6 +66745,7 @@ export default function App() {
                                         }))
                                       }
                                       className="px-2 py-1 flex items-center gap-1 cursor-pointer"
+                                      title={`${atomLocationLabel} — "${sim.name}"`}
                                     >
                                       <span>
                                         {sim.showReactionEquation === false &&
@@ -67037,6 +67053,7 @@ export default function App() {
                 ) : simActiveCategory === 'heat' ? (
                   <HeatControlPanel
                     sim={heatSim.activeHeatSim}
+                    locationLabel={`📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`}
                     onToggleRun={() => {
                       const willRun = !heatSim.activeHeatSim?.isRunning;
                       if (willRun && !showHeatStopwatch) {

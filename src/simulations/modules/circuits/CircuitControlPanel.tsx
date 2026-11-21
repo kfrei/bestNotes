@@ -152,9 +152,10 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
             </div>
             <div className="flex flex-wrap gap-1">
               {allNotebookSims.map((entry) => {
-                const { sim, pageId: simPageId } = entry;
+                const { sim, pageId: simPageId, pageIdx: simPageIdx } = entry;
                 const isCurrent = simPageId === activePage.id && activeSim?.id === sim.id;
                 const isEditingThis = editingSimId === sim.id;
+                const circuitLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${simPageIdx + 1}`;
                 const commitSimName = () => {
                   const trimmed = editingSimName.trim() || sim.name;
                   onCommitSimName(simPageId, sim.id, trimmed);
@@ -162,12 +163,17 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                 return (
                   <div
                     key={sim.id}
-                    className={`inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
+                    className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
                       isCurrent
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
                         : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
                     }`}
                   >
+                    {!isEditingThis && (
+                      <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                        {circuitLocationLabel}
+                      </span>
+                    )}
                     {isEditingThis ? (
                       <input
                         type="text"
@@ -191,7 +197,7 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                         type="button"
                         onClick={() => onSelectSim(entry)}
                         className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1.5"
-                        title={`Μετάβαση & Ενεργοποίηση κυκλώματος "${sim.name}" (${
+                        title={`${circuitLocationLabel} — "${sim.name}" (${
                           sim.switchClosed ? 'Κλειστό 🟢' : 'Ανοιχτό 🔴'
                         }, ${
                           sim.flowDirection === 'conventional'
