@@ -32445,7 +32445,7 @@ export default function App() {
             ctx.fill();
             ctx.stroke();
             ctx.restore();
-            handlesHit.push({ kind: 'incline-peak', x: pPeak.x, y: pPeak.y, r: 24 });
+            handlesHit.push({ kind: 'incline-peak', x: pPeak.x, y: pPeak.y, r: 13 });
 
             // Compute block center of mass (cx, cy)
             let cx = (pStart.x + pPeak.x) / 2 - 22 * Math.sin(angle);
@@ -39264,10 +39264,10 @@ export default function App() {
           }
         }
         // In Lasso mode, let Lasso tool select & drag selections instead of force handles capturing the touch,
-        // BUT ALWAYS allow grabbing the pendulum bob directly to adjust length or start oscillation!
+        // BUT ALWAYS allow grabbing the pendulum bob or the green incline peak handle directly!
         for (const h of fHit.handles) {
           if (h.kind === 'calc-box') continue;
-          if (effectiveTool === 'lasso' && h.kind !== 'pendulum-bob') continue;
+          if (effectiveTool === 'lasso' && h.kind !== 'pendulum-bob' && h.kind !== 'incline-peak') continue;
           const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
           if (isHit) {
               e.preventDefault();
