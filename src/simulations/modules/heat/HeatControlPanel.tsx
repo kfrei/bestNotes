@@ -71,7 +71,6 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
             {sim && (
               <span
                 className="relative group px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs cursor-default"
-                title={locationLabel ? `${locationLabel} — "${sim.name || 'θερμότητα1'}"` : undefined}
               >
                 {locationLabel && (
                   <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
@@ -89,7 +88,6 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
                   type="button"
                   onClick={() => onJumpToExternalSim?.(ext)}
                   className="relative group inline-flex items-center px-2 py-0.5 rounded-lg border text-[11px] font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70 transition cursor-pointer"
-                  title={`${extLocationLabel} — Άνοιγμα αρχείου & μετάβαση στο "${ext.simName}"`}
                 >
                   <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
                     {extLocationLabel}
