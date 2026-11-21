@@ -56260,34 +56260,9 @@ export default function App() {
                 {multiPageSpreadCols > 1 && <span>×{multiPageSpreadCols}</span>}
               </button>
 
-              {/* 16:9 Full-Width & Fullscreen Direct 1-Click Button */}
-              <button
-                onClick={() => {
-                  const nextFull = !isFullBleedWidth;
-                  setIsFullBleedWidth(nextFull);
-                  const fullZ = computeFitWidthZoom(pageWidth, nextFull);
-                  applyPaperTransformDirect(fullZ, 0, panRef.current.y, nextFull);
-                  setShowHdmiProjectorPopover(false);
-                  if (nextFull) {
-                    const docEl = document.documentElement as any;
-                    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
-                      if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
-                      else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-                    }
-                    showToast('📺 16:9: Γέμισμα 100% Πλάτους & Πλήρης Οθόνη!');
-                  } else if (document.fullscreenElement && document.exitFullscreen) {
-                    void document.exitFullscreen().catch(() => {});
-                  }
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                  isFullBleedWidth
-                    ? 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
-                    : 'bg-[#263961]/70 hover:bg-[#263961] text-slate-300 hover:text-white'
-                }`}
-                title="Γέμισμα 100% Πλάτους & Πλήρης Οθόνη (16:9)"
-              >
-                <span>16:9</span>
-              </button>
+              {/* PARKED FEATURE (hidden temporarily to save top-bar space — see ARCHITECTURE_AND_ROADMAP.md Section 14):
+                  16:9 Full-Width & Fullscreen Direct 1-Click Button (isFullBleedWidth + requestFullscreen).
+                  All underlying state & logic (isFullBleedWidth, computeFitWidthZoom, applyPaperTransformDirect) remain intact for 1-step restore. */}
 
               {/* Page Indicator (Click to open Thumbnail Grid!) */}
               <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
