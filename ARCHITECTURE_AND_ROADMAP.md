@@ -731,19 +731,21 @@ sequenceDiagram
     * **iPadOS:** Χρήση του ενσωματωμένου **Apple Vision (`VNRecognizeTextRequest`)** με υποστήριξη Ελληνικών (`el-GR`), 100% offline, `0€`, απεριόριστες σελίδες.
     * **Android:** Χρήση του **Google ML Kit Digital Ink Recognition (`el`)** που διαβάζει απευθείας τα διανυσματικά strokes $(x, y, t)$ (όπως το Samsung Notes / MyScript), 100% offline, `0€`, απεριόριστες σελίδες.
 
-### 15.3 Native iPadOS & Android Στρατηγική (Capacitor + Hybrid Native Wet-Ink Overlay)
-*Πώς αποκτάμε **Native Ink Latency (`0ms`)**, **Apple Pencil Pro Hardware Gestures (Squeeze + Haptics)** και **100% Offline Handwriting Search** χωρίς να ξαναγράψουμε την εφαρμογή:*
+### 15.3 Native iPadOS & Android Στρατηγική — Native Ink Latency & Hardware Gestures (Capacitor + Hybrid Native Wet-Ink Overlay)
 
-1. **Φάση 1 — Native Shell με Capacitor (`npx cap add ios` / `android` — 0% ξαναγράψιμο κώδικα):**
-   * Τυλίγει αυτούσιο το React/TypeScript/Vite build του ExplainBoards σε native iPadOS & Android apps.
+> [!IMPORTANT]
+> **Γιατί χρειάζονται Native Apps για `0ms` Latency & Hardware Gestures:** Ο browser (Safari/Chrome) **δεν δίνει πρόσβαση** σε hardware APIs όπως το **Apple Pencil Pro Squeeze / Haptics**, τα **Samsung S-Pen Air Actions**, το **Apple Vision / Google ML Kit** ή το native **`0ms` Metal/PencilKit rendering**. **Όμως δεν χρειάζεται να ξαναγράψουμε την εφαρμογή από την αρχή** — η μετάβαση γίνεται σε 2 καθαρά βήματα πάνω στον ίδιο ακριβώς React/TypeScript κώδικα:
+
+1. **Βήμα 1 — Capacitor Native Wrapper (`npx cap add ios` / `android` — 0% ξαναγράψιμο κώδικα):**
+   * Τυλίγει αυτούσιο το React/Vite app μας σε native iPadOS & Android apps.
    * **Τι ξεκλειδώνει άμεσα (με μικρά Swift/Kotlin plugins ~200 γραμμών):**
-     * **Apple Pencil Pro Squeeze & Haptics** (`UIPencilInteraction` → άνοιγμα κυκλικής παλέτας κάτω από τη μύτη με απτική δόνηση).
-     * **Samsung S-Pen Air Actions & Side Button** (άμεση εναλλαγή Pen ↔ Eraser/Lasso).
-     * **100% Offline Handwriting Search** (Apple Vision σε iPadOS / Google ML Kit Digital Ink σε Android).
+     * **Apple Pencil Pro Squeeze + Haptics** (`UIPencilInteraction` → κυκλική παλέτα κάτω από τη μύτη με απτική δόνηση).
+     * **Samsung S-Pen Button / Air Actions** (άμεση εναλλαγή Pen ↔ Eraser/Lasso).
+     * **100% Offline, απεριόριστο Handwriting Search** (Apple Vision σε iPadOS / Google ML Kit Digital Ink σε Android).
      * **Native File System & Share Sheet** (άμεσο άνοιγμα `.pdf` / `.goodnotes` από Files app).
-2. **Φάση 2 — Hybrid Native Wet-Ink Overlay (για πραγματικό `0ms` Apple Notes / Noteful feel):**
-   * Σε ένα απλό WebView, η ζωντανή γραφή εξακολουθεί να περνάει από HTML5 Canvas (`desynchronized: true` + `getCoalescedEvents()` — ήδη πολύ γρήγορο στα 120Hz, αλλά με ~15–25ms pipeline latency).
-   * Για **πραγματικό `0ms` Metal/PencilKit latency**, προστίθεται ένα διάφανο native overlay (`PKCanvasView` / Metal layer) **αποκλειστικά για το ενεργό stroke κατά τη διάρκεια που ακουμπάει η μύτη**. Μόλις σηκωθεί το Pencil (`pointerup`), το native layer στέλνει τα ακριβή vector points `(x, y, pressure, tilt)` στο ExplainBoards engine και καθαρίζει — δίνοντας 100% native αίσθηση γραφής ενώ διατηρούμε ανέπαφα όλα τα Simulations, Illustrator/Photoshop tools, OCR και Live TV!
+2. **Βήμα 2 — Hybrid Native Wet-Ink Overlay (για πραγματικό `0ms` feel Apple Notes / Noteful):**
+   * Σε ένα απλό WebView, η ζωντανή γραφή περνάει από HTML5 Canvas (`desynchronized: true` + `getCoalescedEvents()` — ήδη πολύ γρήγορο στα 120Hz, αλλά με ~15–25ms pipeline latency).
+   * Βάζουμε ένα διάφανο native **`PKCanvasView` / Metal layer μόνο για τη ζωντανή γραμμή όσο ακουμπάει η μύτη (`0ms` latency)**. Μόλις σηκωθεί το Pencil (`pointerup`), το native layer παραδίδει τα ακριβή vector points `(x, y, pressure, tilt)` στη δική μας μηχανή ExplainBoards και καθαρίζει — δίνοντας **100% native αίσθηση γραφής** κρατώντας ανέπαφα όλα τα Simulations, Illustrator/Photoshop tools, OCR και Live TV!
 
 
 
