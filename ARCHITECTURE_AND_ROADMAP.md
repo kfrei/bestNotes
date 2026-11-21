@@ -692,6 +692,60 @@ sequenceDiagram
   - **Πού βρισκόταν:** Στο header του editor σε `src/App.tsx`, ακριβώς ανάμεσα στο κουμπί `multiPageSpreadCols` (Διπλή Σελίδα) και στον δείκτη σελίδας (`1/2`).
   - **Κατάσταση κώδικα:** Όλη η υποκείμενη λογική (`isFullBleedWidth`, `computeFitWidthZoom`, `applyPaperTransformDirect`, καθώς και το ξεχωριστό `Live 16:9` / `Live TV`) παραμένει άθικτη — η επαναφορά του κουμπιού γίνεται σε 1 βήμα.
 
+---
+
+## 15. 🚀 Επόμενα Βήματα Εργονομίας, Αναζήτησης & Native Μετάβασης (`v1.2+` Roadmap)
+
+> [!IMPORTANT]
+> Προέκυψε από συγκριτική αξιολόγηση (21/11/2026) απέναντι στα κορυφαία apps σημειώσεων iPad & Android (**GoodNotes 6, Noteful, Notability, Samsung Notes, NoteIn, Flexcil, Noteshelf 3, ZoomNotes, Nebo**). Στόχος είναι να κλείσουμε τα ελάχιστα εργονομικά κενά διατηρώντας στο 100% τον **Κανόνα Μηδενικής Επιβράδυνσης (Zero-Slowdown Charter)** και την αισθητική **Warm Studio & Minimal Navy**.
+
+### 15.1 Internal Split-View (Διπλή Προβολή: PDF / Άσκηση Αριστερά + Τετράδιο Λύσης Δεξιά)
+*Έμπνευση: Flexcil / Notability / NoteIn — προσαρμοσμένο στη ροή διδασκαλίας Φυσικής & STEM.*
+
+* **Τι θα προσφέρει στον χρήστη:**
+  * Κουμπί toggle **`Split-View`** (μονόχρωμο εικονίδιο διπλού παραθύρου) στην επάνω σκούρα μπάρα (`#263961`), ώστε να ανοίγουν **2 ανοιχτές καρτέλες δίπλα-δίπλα** μέσα στο ίδιο παράθυρο (π.χ. Αριστερά: PDF βιβλίο / φυλλάδιο ασκήσεων ή παλιό τετράδιο θεωρίας, Δεξιά: το ενεργό τετράδιο λύσης).
+  * **Συρόμενο Κάθετο Διαχωριστικό (Draggable Divider):** Ομαλή αλλαγή αναλογίας πλάτους (`30%/70%`, `40%/60%`, `50%/50%`) με αποθήκευση προτίμησης στο `localStorage` και κουμπί γρήγορης εναλλαγής θέσης (`⇄ Swap`) ή κλεισίματος (`×`).
+  * **1-Κλικ Μεταφορά Αποσπάσματος (`→ Μεταφορά στο Τετράδιο`):**
+    * Επιλέγοντας με ορθογώνιο/ελεύθερο Λάσο ένα σχήμα ή εκφώνηση στο αριστερό PDF pane, εμφανίζεται διακριτικό Warm Studio κουμπί **`→ Μεταφορά στο Τετράδιο`**.
+    * Κόβει το επιλεγμένο τμήμα από την υψηλής ανάλυσης PDF σελίδα, εφαρμόζει προαιρετικά **1-click Transparent BG** (ώστε να φαίνονται τα τετραγωνάκια του τετραδίου από πίσω) και το τοποθετεί έτοιμο (επιλεγμένο για άμεση τοποθέτηση/resize) στην ενεργή σελίδα του δεξιού τετραδίου.
+* **Αρχιτεκτονική Υλοποίησης (Zero-Slowdown):**
+  * **Ανεξάρτητο Read/Annotate Reference Pane (`src/components/SplitViewReferencePane.tsx`):** Το αριστερό pane λειτουργεί σε ελαφριά λειτουργία ανάγνωσης/υπογράμμισης/κοπής (`isLightweightDocMode`) χωρίς να διπλασιάζει τις βαριές μηχανές Sim/OCR του κύριου καμβά — **0 RAF/sec** όταν δεν γίνεται scroll.
+  * **Ανεξάρτητο Scroll & Zoom:** Κάθε πλευρά διατηρεί το δικό της zoom/page position, ενώ τα υπάρχοντα εργαλεία (Pen, Highlighter, Lasso, Sim) δρουν κανονικά στο ενεργό δεξί τετράδιο (και με κλικ αριστερά επιτρέπουν highlight/clip στο PDF).
+
+### 15.2 Global Search & 3-Επίπεδη Αναζήτηση Χειρογράφων (Χωρίς Απεριόριστο Cloud OCR)
+*Στόχος: Να βρίσκεις ακαριαία οποιονδήποτε όρο (π.χ. «Νόμος Hooke», «αντίσταση», «κεκλιμένο») σε όλη τη Βιβλιοθήκη και να μεταβαίνεις στην ακριβή σελίδα — χωρίς ακριβά Cloud APIs.*
+
+* **Επίπεδο Α — Άμεση Ενιαία Αναζήτηση Δομημένου Περιεχομένου (`0` API Calls, `0€`, 100% Offline):**
+  * Δημιουργία ελαφρού τοπικού ευρετηρίου (`src/services/search/globalSearchIndex.ts`) που σαρώνει ακαριαία (με ελληνικό accent-insensitive normalization, π.χ. `δυναμη` = `Δύναμη`):
+    1. Τίτλους τετραδίων, ονόματα φακέλων & tags.
+    2. Όλα τα **`textOCR`** πλαίσια, **`MathOCR`** εξισώσεις (LaTeX/κείμενο) και **`ChemOCR`** αντιδράσεις.
+    3. Ονόματα και κατηγορίες προσομοιώσεων (**`Sim`**: κυκλώματα, ελατήρια, δυνάμεις, θερμότητα, άτομα).
+    4. Το ενσωματωμένο **`text layer` των εισαγόμενων PDF βιβλίων** (εξαγωγή on-demand μέσω `pdf.js` `page.getTextContent()` και cache στο IndexedDB).
+  * **UX Αποτελεσμάτων:** Ενιαία μπάρα αναζήτησης στη Βιβλιοθήκη (και shortcut `Cmd/Ctrl + K`) που επιστρέφει κάρτες αποτελεσμάτων με **Φάκελο / Αρχείο / Σελίδα / Απόσπασμα** και με 1 κλικ ανοίγει το τετράδιο και κάνει smooth scroll στο ακριβές σημείο.
+* **Επίπεδο Β — Έξυπνο Keyword-Index Χειρογράφων με Ελάχιστες Κλήσεις (Web/PWA):**
+  * Προσθήκη πεδίων `searchKeywords?: string[]` και `searchIndexHash?: string` σε κάθε `Page` (αποθηκευμένα σε IndexedDB & Firestore).
+  * Το `searchIndexHash` υπολογίζεται από το πλήθος και το checksum των strokes της σελίδας.
+  * Μόνο όταν μια σελίδα έχει **νέα χειρόγραφα** που δεν έχουν ευρετηριαστεί (με ρητή ενέργεια `🔍 Ευρετηρίαση Τετραδίου` ή προαιρετικό batch σε idle), στέλνεται **1 χαμηλής ανάλυσης snapshot ολόκληρης της σελίδας** (`1 API call / σελίδα` μία φορά για πάντα) για εξαγωγή `15–30` όρων-κλειδιών. Αν η σελίδα δεν αλλάξει, **δεν ξανακαλείται ποτέ API**.
+* **Επίπεδο Γ — 100% Offline, Απεριόριστο Handwriting Search (όπως Samsung Notes / Apple Notes):**
+  * Με τη μετάβαση στο Native Wrapper (Ενότητα 15.3):
+    * **iPadOS:** Χρήση του ενσωματωμένου **Apple Vision (`VNRecognizeTextRequest`)** με υποστήριξη Ελληνικών (`el-GR`), 100% offline, `0€`, απεριόριστες σελίδες.
+    * **Android:** Χρήση του **Google ML Kit Digital Ink Recognition (`el`)** που διαβάζει απευθείας τα διανυσματικά strokes $(x, y, t)$ (όπως το Samsung Notes / MyScript), 100% offline, `0€`, απεριόριστες σελίδες.
+
+### 15.3 Native iPadOS & Android Στρατηγική (Capacitor + Hybrid Native Wet-Ink Overlay)
+*Πώς αποκτάμε **Native Ink Latency (`0ms`)**, **Apple Pencil Pro Hardware Gestures (Squeeze + Haptics)** και **100% Offline Handwriting Search** χωρίς να ξαναγράψουμε την εφαρμογή:*
+
+1. **Φάση 1 — Native Shell με Capacitor (`npx cap add ios` / `android` — 0% ξαναγράψιμο κώδικα):**
+   * Τυλίγει αυτούσιο το React/TypeScript/Vite build του ExplainBoards σε native iPadOS & Android apps.
+   * **Τι ξεκλειδώνει άμεσα (με μικρά Swift/Kotlin plugins ~200 γραμμών):**
+     * **Apple Pencil Pro Squeeze & Haptics** (`UIPencilInteraction` → άνοιγμα κυκλικής παλέτας κάτω από τη μύτη με απτική δόνηση).
+     * **Samsung S-Pen Air Actions & Side Button** (άμεση εναλλαγή Pen ↔ Eraser/Lasso).
+     * **100% Offline Handwriting Search** (Apple Vision σε iPadOS / Google ML Kit Digital Ink σε Android).
+     * **Native File System & Share Sheet** (άμεσο άνοιγμα `.pdf` / `.goodnotes` από Files app).
+2. **Φάση 2 — Hybrid Native Wet-Ink Overlay (για πραγματικό `0ms` Apple Notes / Noteful feel):**
+   * Σε ένα απλό WebView, η ζωντανή γραφή εξακολουθεί να περνάει από HTML5 Canvas (`desynchronized: true` + `getCoalescedEvents()` — ήδη πολύ γρήγορο στα 120Hz, αλλά με ~15–25ms pipeline latency).
+   * Για **πραγματικό `0ms` Metal/PencilKit latency**, προστίθεται ένα διάφανο native overlay (`PKCanvasView` / Metal layer) **αποκλειστικά για το ενεργό stroke κατά τη διάρκεια που ακουμπάει η μύτη**. Μόλις σηκωθεί το Pencil (`pointerup`), το native layer στέλνει τα ακριβή vector points `(x, y, pressure, tilt)` στο ExplainBoards engine και καθαρίζει — δίνοντας 100% native αίσθηση γραφής ενώ διατηρούμε ανέπαφα όλα τα Simulations, Illustrator/Photoshop tools, OCR και Live TV!
+
+
 
 
 
