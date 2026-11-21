@@ -13573,14 +13573,10 @@ export default function App() {
           const isSelectedAttachedWeight =
             selImagesList.length === 0 &&
             selStrokesList.length > 0 &&
-            selStrokesList.some(
+            selStrokesList.every(
               (st) =>
-                st.shapeType === 'hooked-weight' ||
                 st.shapeType === 'spring-pointer' ||
-                Boolean(st.attachedToWeightId) ||
-                Boolean(st.attachedToSpringId) ||
-                (pageObj.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
-                pageObj.strokes.some((o) => o.attachedToWeightId === st.id)
+                Boolean(st.attachedToWeightId)
             );
 
           ctx.save();
@@ -41746,17 +41742,10 @@ export default function App() {
           selImagesList.length === 0 &&
           selTextsList.length === 0 &&
           selStrokesList.length > 0 &&
-          selStrokesList.some(
+          selStrokesList.every(
             (st) =>
-              st.shapeType === 'hooked-weight' ||
               st.shapeType === 'spring-pointer' ||
-              Boolean(st.attachedToWeightId) ||
-              Boolean(st.attachedToSpringId) ||
-              (st.shapeType === 'spring' &&
-                (Boolean(st.springSupport) ||
-                  (targetPage.springSims || []).some((sm) => sm.eqSpringStrokeId === st.id))) ||
-              (targetPage.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
-              targetPage.strokes.some((o) => o.attachedToWeightId === st.id)
+              Boolean(st.attachedToWeightId)
           );
 
         if (!isAdditiveSelect) {
