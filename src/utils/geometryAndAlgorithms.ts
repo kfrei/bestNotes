@@ -17505,6 +17505,238 @@ export function tryMatchShadowCornerOnBox(
   };
 }
 
+/**
+ * Detects a horizontal equator arc/line drawn across an existing circle/ellipse
+ * (left rim to right rim, gently curving down/up or straight) and upgrades that
+ * circle into a 3D shaded sketch 'sphere'.
+ */
+export function tryMatchSphereEquatorOnCircle(
+  rawPts: BezierPoint[],
+  candidateStrokes: StrokeObject[],
+  targetLayerId: string
+): StrokeObject | null {
+  if (rawPts.length < 3) return null;
+  const totalLen = measureStrokePathLen(rawPts);
+  if (totalLen < 18) return null;
+
+  const first = rawPts[0];
+  const last = rawPts[rawPts.length - 1];
+  const directDist = distance(first, last);
+  if (directDist < 16) return null;
+  // Must be a clean open horizontal arc/line (not a closed loop, scribble, or wave)
+  if (totalLen > directDist * 1.48) return null;
+
+  const leftEnd = first.x <= last.x ? first : last;
+  const rightEnd = first.x <= last.x ? last : first;
+  const horizSpan = rightEnd.x - leftEnd.x;
+  if (horizSpan < directDist * 0.72) return null;
+
+  let bestScore = Infinity;
+  let bestCircle: StrokeObject | null = null;
+
+  for (let i = candidateStrokes.length - 1; i >= 0; i--) {
+    const s = candidateStrokes[i];
+    if ((s.layerId || 'layer-1') !== targetLayerId) continue;
+    if (!s.isShape) continue;
+    if (s.shapeType !== 'circle' && s.shapeType !== 'ellipse') continue;
+    if (s.points.length < 4) continue;
+    if (s.attachedToWeightId) continue;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of s.points) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const rx = (maxX - minX) * 0.5;
+    const ry = (maxY - minY) * 0.5;
+    if (rx < 14 || ry < 14) continue;
+    const aspect = Math.min(rx, ry) / Math.max(rx, ry);
+    if (aspect < 0.72) continue;
+
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+
+    // Endpoints must lie near the left & right equator rims of the circle
+    const lnx = (leftEnd.x - cx) / rx;
+    const lny = (leftEnd.y - cy) / ry;
+    const rnx = (rightEnd.x - cx) / rx;
+    const rny = (rightEnd.y - cy) / ry;
+
+    if (lnx < -1.24 || lnx > -0.52) continue;
+    if (rnx < 0.52 || rnx > 1.24) continue;
+    if (Math.abs(lny) > 0.48 || Math.abs(rny) > 0.48) continue;
+    if (Math.abs(leftEnd.y - rightEnd.y) > ry * 0.52) continue;
+    if (horizSpan < rx * 1.12 || horizSpan > rx * 2.38) continue;
+
+    // All points must stay inside (or right on) the circle and in the middle equator band
+    let insideCount = 0;
+    let maxRadial = 0;
+    let maxAbsNy = 0;
+    for (const p of rawPts) {
+      const nx = (p.x - cx) / rx;
+      const ny = (p.y - cy) / ry;
+      const rad = Math.hypot(nx, ny);
+      if (rad <= 1.18) insideCount++;
+      if (rad > maxRadial) maxRadial = rad;
+      if (Math.abs(ny) > maxAbsNy) maxAbsNy = Math.abs(ny);
+    }
+    if (insideCount / rawPts.length < 0.85) continue;
+    if (maxRadial > 1.32) continue;
+    if (maxAbsNy > 0.68) continue;
+
+    const rimErr = Math.abs(Math.abs(lnx) - 1) + Math.abs(Math.abs(rnx) - 1);
+    const centerYErr = (Math.abs(lny) + Math.abs(rny)) * 0.5;
+    const score = rimErr + centerYErr;
+    if (score < bestScore) {
+      bestScore = score;
+      bestCircle = s;
+    }
+  }
+
+  if (!bestCircle) return null;
+
+  return {
+    ...bestCircle,
+    isShape: true,
+    shapeType: 'sphere',
+    fillStyle: 'gradient',
+    fillColor: bestCircle.color || '#64748b',
+    fillTransparency: 0,
+    keyNodeIndices: undefined,
+  };
+}
+
+/**
+ * Shared Canvas 2D renderer for 'sphere' shapes (used identically in Editor & PDF Export).
+ * Draws a crisp 3D shaded sketch sphere with soft specular highlight, crescent rim shadow,
+ * subtle contact ground shadow, and a clean outline matching the stroke color.
+ */
+export function drawShadedSphereStroke(
+  ctx: CanvasRenderingContext2D,
+  s: StrokeObject
+): boolean {
+  if (s.shapeType !== 'sphere' || s.points.length < 4) return false;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of s.points) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const rx = (maxX - minX) * 0.5;
+  const ry = (maxY - minY) * 0.5;
+  if (rx < 2 || ry < 2) return false;
+  const cx = (minX + maxX) * 0.5;
+  const cy = (minY + maxY) * 0.5;
+  const baseAlpha = s.opacity ?? 1;
+
+  // Parse stroke color to decide between pearl/silver-gray (for neutral ink) vs harmonious color tint
+  const hex = (s.color || '#64748b').trim();
+  let r = 100;
+  let g = 116;
+  let b = 139;
+  const m6 = /^#([0-9a-f]{6})$/i.exec(hex);
+  const m3 = /^#([0-9a-f]{3})$/i.exec(hex);
+  if (m6) {
+    r = parseInt(m6[1].slice(0, 2), 16);
+    g = parseInt(m6[1].slice(2, 4), 16);
+    b = parseInt(m6[1].slice(4, 6), 16);
+  } else if (m3) {
+    r = parseInt(m3[1][0] + m3[1][0], 16);
+    g = parseInt(m3[1][1] + m3[1][1], 16);
+    b = parseInt(m3[1][2] + m3[1][2], 16);
+  }
+  const maxC = Math.max(r, g, b);
+  const minC = Math.min(r, g, b);
+  const isNeutral = maxC - minC < 34;
+
+  const mixRgb = (
+    r1: number,
+    g1: number,
+    b1: number,
+    r2: number,
+    g2: number,
+    b2: number,
+    t: number
+  ) =>
+    `rgb(${Math.round(r1 + (r2 - r1) * t)}, ${Math.round(g1 + (g2 - g1) * t)}, ${Math.round(
+      b1 + (b2 - b1) * t
+    )})`;
+
+  const cSpec = isNeutral ? '#ffffff' : mixRgb(r, g, b, 255, 255, 255, 0.94);
+  const cLight = isNeutral ? '#f1f3f6' : mixRgb(r, g, b, 255, 255, 255, 0.72);
+  const cMid = isNeutral ? '#d4d9e1' : mixRgb(r, g, b, 255, 255, 255, 0.35);
+  const cShade = isNeutral ? '#9aa3b2' : mixRgb(r, g, b, 15, 23, 42, 0.22);
+  const cDeep = isNeutral ? '#7a8494' : mixRgb(r, g, b, 15, 23, 42, 0.44);
+
+  ctx.save();
+  ctx.setLineDash([]);
+
+  // 1. Soft elliptical ground contact shadow (slightly bottom-left, subtle & clean)
+  ctx.save();
+  ctx.translate(cx - rx * 0.16, cy + ry * 0.96);
+  ctx.scale(rx * 0.92, Math.max(2, ry * 0.2));
+  const shadowGrad = ctx.createRadialGradient(0, 0, 0.05, 0, 0, 1);
+  shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.22 * baseAlpha).toFixed(3)})`);
+  shadowGrad.addColorStop(0.55, `rgba(15, 23, 42, ${(0.09 * baseAlpha).toFixed(3)})`);
+  shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+  ctx.fillStyle = shadowGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 2. Sphere 3D shaded body (unit-circle transform so stretched ellipses shade cleanly too)
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+  ctx.translate(cx, cy);
+  ctx.scale(rx, ry);
+
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Primary radial shading (light source from top-right, deep crescent bottom-left)
+  const bodyGrad = ctx.createRadialGradient(0.32, -0.32, 0.04, 0.08, -0.06, 1.32);
+  bodyGrad.addColorStop(0, cSpec);
+  bodyGrad.addColorStop(0.24, cLight);
+  bodyGrad.addColorStop(0.56, cMid);
+  bodyGrad.addColorStop(0.84, cShade);
+  bodyGrad.addColorStop(1, cDeep);
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+
+  // Subtle reflected ambient bounce highlight along far bottom-left rim
+  const bounceGrad = ctx.createRadialGradient(-0.62, 0.62, 0.05, -0.55, 0.55, 0.65);
+  bounceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
+  bounceGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = bounceGrad;
+  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+  ctx.restore();
+
+  // 3. Subtle crisp sketch contour matching the stroke color
+  ctx.save();
+  ctx.globalAlpha = baseAlpha * 0.55;
+  ctx.strokeStyle = s.color || '#64748b';
+  ctx.lineWidth = Math.max(1, (s.width || 2) * 0.65);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
+  return true;
+}
+
 
 
 

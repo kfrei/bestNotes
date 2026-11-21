@@ -58,7 +58,8 @@ export type ShapePresetType =
   | 'wide-basin'
   | 'flask'
   | 'thermometer'
-  | 'title-box';
+  | 'title-box'
+  | 'sphere';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';

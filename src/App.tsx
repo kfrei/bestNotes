@@ -209,6 +209,8 @@ import {
   recognizeAndSnapShape,
   isScribbleEraseGesture,
   tryMatchShadowCornerOnBox,
+  tryMatchSphereEquatorOnCircle,
+  drawShadedSphereStroke,
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
   beautifyHandwritingStrokes,
@@ -9939,7 +9941,8 @@ export default function App() {
       s.shapeType === 'voltmeter' ||
       s.shapeType === 'voltmeter-needle' ||
       s.shapeType === 'voltmeter-label' ||
-      s.shapeType === 'title-box'
+      s.shapeType === 'title-box' ||
+      s.shapeType === 'sphere'
     );
   };
 
@@ -12180,6 +12183,11 @@ export default function App() {
         ctx.restore();
         return;
       }
+    }
+
+    // 0b2. 3D Shaded Sketch Sphere ('sphere'): radial shading, specular highlight & subtle contact shadow!
+    if (s.shapeType === 'sphere' && s.points.length >= 4) {
+      if (drawShadedSphereStroke(ctx, s)) return;
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
@@ -48558,6 +48566,26 @@ export default function App() {
               }));
               return;
             }
+            const sphereMatch = tryMatchSphereEquatorOnCircle(
+              ptsForSnap,
+              activePage.strokes,
+              activeLayerId
+            );
+            if (sphereMatch) {
+              isDrawingRef.current = false;
+              currentStrokePtsRef.current = [];
+              snappedCurrentStrokeRef.current = null;
+              holdAnchorPtRef.current = null;
+              lastCreatedShapeIdsRef.current = [sphereMatch.id];
+              clearActiveOverlay();
+              updateActivePage((page) => ({
+                ...page,
+                strokes: page.strokes.map((st) =>
+                  st.id === sphereMatch.id ? sphereMatch : st
+                ),
+              }));
+              return;
+            }
           }
           if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
             const manualArrow = tryMatchManualArrowheadOnLine(
@@ -49878,6 +49906,15 @@ export default function App() {
       if (shadowBoxMatch) {
         weldedIntoExistingStroke = shadowBoxMatch.updatedBox;
         weldedRemoveSecondaryId = shadowBoxMatch.removedCompanionStrokeId ?? null;
+      } else {
+        const sphereMatch = tryMatchSphereEquatorOnCircle(
+          rawPts,
+          activePage.strokes,
+          activeLayerId
+        );
+        if (sphereMatch) {
+          weldedIntoExistingStroke = sphereMatch;
+        }
       }
     }
 

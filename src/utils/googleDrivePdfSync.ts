@@ -23,6 +23,7 @@ import {
   analyzeCircuitForSimulation,
   convertPlainTextToMathLatex,
   splitAndCleanMathLatexLines,
+  drawShadedSphereStroke,
 } from './geometryAndAlgorithms';
 
 function getStrokeBounds(s: StrokeObject): { minX: number; maxX: number; minY: number; maxY: number } {
@@ -441,6 +442,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     }
     ctx.restore();
     return;
+  }
+
+  if (s.shapeType === 'sphere' && s.points.length >= 4) {
+    if (drawShadedSphereStroke(ctx, s)) return;
   }
 
   if (s.shapeType === 'title-box' && s.points.length >= 4) {
