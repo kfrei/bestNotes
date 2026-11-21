@@ -1878,6 +1878,7 @@ export default function App() {
   const paperTransformElRef = useRef<HTMLDivElement | null>(null);
   const activeTextFloatingBarRef = useRef<HTMLDivElement | null>(null);
   const lastTextBarDirectTapTimeRef = useRef<number>(0);
+  const fontStripScrollLeftRef = useRef<number>(0);
   const textBarDirectPointerActiveRef = useRef<boolean>(false);
   const suppressTrustedTextBarClickUntilRef = useRef<number>(0);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -61517,6 +61518,32 @@ export default function App() {
                           e.stopPropagation();
                           lastTextBarDirectTapTimeRef.current = performance.now();
                         }}
+                        ref={(el) => {
+                          if (!el || el.dataset.initScrollDone === '1') return;
+                          el.dataset.initScrollDone = '1';
+                          const savedScroll = fontStripScrollLeftRef.current;
+                          if (savedScroll > 0) {
+                            el.scrollLeft = savedScroll;
+                          }
+                          const activeBtn = el.querySelector('[aria-pressed="true"]') as HTMLElement | null;
+                          if (activeBtn && el.scrollWidth > el.clientWidth + 2) {
+                            const btnLeft = activeBtn.offsetLeft;
+                            const btnRight = btnLeft + activeBtn.offsetWidth;
+                            const viewLeft = el.scrollLeft;
+                            const viewRight = viewLeft + el.clientWidth;
+                            if (btnLeft < viewLeft + 2 || btnRight > viewRight - 2) {
+                              const targetScroll = Math.max(
+                                0,
+                                btnLeft - (el.clientWidth - activeBtn.offsetWidth) / 2
+                              );
+                              el.scrollLeft = targetScroll;
+                              fontStripScrollLeftRef.current = el.scrollLeft;
+                            }
+                          }
+                        }}
+                        onScroll={(e) => {
+                          fontStripScrollLeftRef.current = e.currentTarget.scrollLeft;
+                        }}
                         onMouseDown={(e) => {
                           // Prevent losing <textarea> focus while clicking/dragging font strip
                           e.preventDefault();
@@ -61594,8 +61621,8 @@ export default function App() {
                           touchAction: 'pan-x',
                           WebkitOverflowScrolling: 'touch',
                         }}
-                        className="relative flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden overscroll-contain touch-pan-x select-none shrink-0"
-                        title="Επιλογή γραμματοσειράς"
+                        className="relative flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-[266px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden overscroll-contain touch-pan-x select-none shrink-0"
+                        title="Σύρε για περισσότερες γραμματοσειρές"
                       >
                         {(
                           [
