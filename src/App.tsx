@@ -373,7 +373,6 @@ import {
   type MindMapSubject,
   type MindMapGrade,
 } from './data/mindMapsCatalog';
-import { VECTOR_DEMO_CATALOG } from './data/vectorDemoCatalog';
 import {
   PERIODIC_ELEMENTS_H_TO_RN,
   getPeriodicElementByZ,
@@ -1419,7 +1418,7 @@ export default function App() {
           simShowDarkWireTrack?: boolean;
           simSpeedMultiplier?: number;
           showShapeLibraryPanel?: boolean;
-          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom';
+          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'custom';
           librarySubjectFilter?: 'Όλα' | MindMapSubject;
           libraryGradeFilter?: 'Όλες' | MindMapGrade;
           stickerCategoryFilter?: StickerCategory;
@@ -2849,7 +2848,7 @@ export default function App() {
     origX: number;
     origY: number;
   } | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom'>(
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'custom'>(
     () => initialSession?.libraryTab || 'all'
   );
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>(
@@ -63853,17 +63852,6 @@ export default function App() {
                         Εικονίδια ({iconsTotal})
                       </button>
                       <button
-                        onClick={() => setLibraryTab('vectors')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
-                          libraryTab === 'vectors'
-                            ? 'bg-[#234978] text-white shadow-xs'
-                            : 'text-[#475569] hover:text-[#234978]'
-                        }`}
-                        title="Δοκιμαστική συλλογή καθαρών Vector (SVG) εικόνων — άπειρη ευκρίνεια σε κάθε μεγέθυνση"
-                      >
-                        Vector ({VECTOR_DEMO_CATALOG.length})
-                      </button>
-                      <button
                         onClick={() => setLibraryTab('custom')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'custom'
@@ -64572,75 +64560,6 @@ export default function App() {
                             )}
                           </div>
                         )}
-                      </div>
-                    );
-                  })()
-                ) : libraryTab === 'vectors' ? (
-                  (() => {
-                    const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
-                    const filteredVectors = qNorm
-                      ? VECTOR_DEMO_CATALOG.filter((item) => {
-                          const hay = normalizeGreekText(
-                            `${item.title} ${item.subject} ${item.tags.join(' ')}`
-                          );
-                          return hay.includes(qNorm);
-                        })
-                      : VECTOR_DEMO_CATALOG;
-
-                    return (
-                      <div key="tab-vectors" className="flex flex-col min-h-0 flex-1">
-                        <div className="flex items-center justify-between gap-2 px-2 py-1.5 mb-2 rounded-xl bg-[#efebe3]/80 border border-[#dfd8cb] text-[10px] text-[#475569] shrink-0">
-                          <span className="font-semibold text-[#234978]">
-                            ✨ Vector SVG (Δοκιμή) — άπειρη ευκρίνεια σε οποιαδήποτε μεγέθυνση
-                          </span>
-                          <span className="font-bold text-[#234978] shrink-0">
-                            {filteredVectors.length} SVG
-                          </span>
-                        </div>
-                        <div className="overflow-y-auto pr-1 grid grid-cols-2 gap-2 max-h-[50vh]">
-                          {filteredVectors.map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => {
-                                insertImageDataUrlOnPage(
-                                  item.url,
-                                  `✨ Προστέθηκε Vector SVG: «${item.title}»`
-                                );
-                              }}
-                              className="group flex flex-col justify-between p-2 rounded-xl border border-[#dfd8cb] bg-[#fdfbf7] hover:bg-[#efebe3]/70 hover:border-[#234978]/60 transition cursor-pointer shadow-2xs"
-                              title={`${item.title} (Vector SVG • ${item.pathsCount} paths • ${item.svgKb}KB)\nΚλικ για εισαγωγή στη σελίδα`}
-                            >
-                              <div>
-                                <div className="flex items-center justify-between gap-1 mb-1">
-                                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold border bg-[#234978]/10 text-[#234978] border-[#234978]/25">
-                                    SVG Vector
-                                  </span>
-                                  <span className="text-[9px] font-semibold text-[#64748b]">
-                                    {item.pathsCount} paths • {item.svgKb}KB
-                                  </span>
-                                </div>
-                                <div
-                                  className="w-full h-24 rounded-lg bg-slate-100/60 border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
-                                  style={{
-                                    backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
-                                    backgroundSize: '10px 10px',
-                                  }}
-                                >
-                                  <img
-                                    src={item.url}
-                                    alt={item.title}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
-                                  />
-                                </div>
-                                <div className="mt-1.5 text-[10.5px] font-bold text-[#2c3e50] leading-tight line-clamp-2">
-                                  {item.title}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                     );
                   })()
