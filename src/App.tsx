@@ -46786,6 +46786,64 @@ export default function App() {
             'cylinder',
           ];
 
+          // Spring-to-Ceiling/Floor/Wall Support Magnet (ONLY when dragged very close — <= 14px — to touching!)
+          if (draggedSt && draggedSt.shapeType === 'spring') {
+            const spInfo = getSpringTerminalsAndWidthVec(draggedSt);
+            const candTerms: { key: 'start' | 'end'; x: number; y: number }[] = [
+              { key: 'start', x: spInfo.startTerm.x + rawDx, y: spInfo.startTerm.y + rawDy },
+              { key: 'end', x: spInfo.endTerm.x + rawDx, y: spInfo.endTerm.y + rawDy },
+            ];
+            const SUPPORT_SNAP_RADIUS = 14;
+            for (const other of activePage.strokes) {
+              if (
+                other.id === draggedSt.id ||
+                hiddenOrLockedLayerIds.has(other.layerId) ||
+                other.attachedToSpringId === draggedSt.id ||
+                !other.isShape
+              ) {
+                continue;
+              }
+              const isSupportLine =
+                other.shapeType === 'line' &&
+                !other.arrowStart &&
+                !other.arrowEnd &&
+                other.points.length >= 2 &&
+                !other.groupId?.startsWith('math-graph-grp-') &&
+                !other.groupId?.startsWith('wave-axes-');
+              if (!isSupportLine) continue;
+              const p0 = other.points[0];
+              const p1 = other.points[other.points.length - 1];
+              const sdx = p1.x - p0.x;
+              const sdy = p1.y - p0.y;
+              const segLenSq = sdx * sdx + sdy * sdy;
+              if (segLenSq < 40 * 40) continue;
+              for (const term of candTerms) {
+                const tRaw = ((term.x - p0.x) * sdx + (term.y - p0.y) * sdy) / segLenSq;
+                if (tRaw < -0.04 || tRaw > 1.04) continue;
+                const tClamped = Math.max(0, Math.min(1, tRaw));
+                const projX = p0.x + tClamped * sdx;
+                const projY = p0.y + tClamped * sdy;
+                const d = Math.hypot(term.x - projX, term.y - projY);
+                if (
+                  d <= SUPPORT_SNAP_RADIUS &&
+                  (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)
+                ) {
+                  matchedPhysicsMagnet = {
+                    kind: 'spring-to-support',
+                    springStrokeId: draggedSt.id,
+                    supportStrokeId: other.id,
+                    fixedEnd: term.key,
+                    targetX: projX,
+                    targetY: projY,
+                    snapDx: projX - term.x,
+                    snapDy: projY - term.y,
+                    dist: d,
+                  };
+                }
+              }
+            }
+          }
+
           // STRICT EXPLICIT SIMULATIONS ONLY:
           // Never auto-create a Pendulum, Incline, Force Synthesis, or new Spring Sim while dragging static shapes!
           // Only allow hanging/detaching extra weights or ruler pointer on an ALREADY registered SpringSimConfig!
@@ -47239,6 +47297,17 @@ export default function App() {
                   );
                 } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
                   attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
+                } else if (
+                  physObj.kind === 'spring-to-support' &&
+                  physObj.supportStrokeId &&
+                  physObj.fixedEnd
+                ) {
+                  snapAndAttachSpringToSupport(
+                    physObj.springStrokeId,
+                    physObj.supportStrokeId,
+                    physObj.fixedEnd,
+                    { x: physObj.targetX, y: physObj.targetY }
+                  );
                 }
                 return;
               }
