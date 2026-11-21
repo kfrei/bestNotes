@@ -11,6 +11,19 @@ import {
   getSimExpandedStrokeSet,
 } from './circuitHelpers';
 
+export interface ExternalCircuitSimEntry {
+  notebookId: string;
+  notebookTitle: string;
+  notebookFolder: string;
+  pageId: string;
+  pageIdx: number;
+  simId: string;
+  simName: string;
+  switchClosed?: boolean;
+  flowDirection?: 'electrons' | 'conventional';
+  strokeIds?: string[];
+}
+
 export interface CircuitControlPanelProps {
   activeNotebook: Notebook;
   activePage: NotePage;
@@ -28,6 +41,8 @@ export interface CircuitControlPanelProps {
   onCommitSimName: (simPageId: string, simId: string, trimmedName: string) => void;
   onSelectSim: (entry: { pageId: string; pageIdx: number; sim: CircuitSimConfig }) => void;
   onRemoveSim: (entry: { pageId: string; pageIdx: number; sim: CircuitSimConfig }) => void;
+  otherNotebookSims?: ExternalCircuitSimEntry[];
+  onJumpToExternalSim?: (entry: ExternalCircuitSimEntry) => void;
   onRegisterFromLasso: () => void;
   onTogglePlayPause: () => void;
   onJoinAndAlign: () => void;
@@ -60,6 +75,8 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
   onCommitSimName,
   onSelectSim,
   onRemoveSim,
+  otherNotebookSims = [],
+  onJumpToExternalSim,
   onRegisterFromLasso,
   onTogglePlayPause,
   onJoinAndAlign,
@@ -143,7 +160,7 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
           <span>Νέο Κύκλωμα ({nextSimLabel})</span>
         </button>
 
-        {allNotebookSims.length > 0 ? (
+        {allNotebookSims.length > 0 || otherNotebookSims.length > 0 ? (
           <>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
@@ -249,6 +266,28 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                       ✕
                     </button>
                   </div>
+                );
+              })}
+              {otherNotebookSims.map((ext) => {
+                const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                return (
+                  <button
+                    key={`${ext.notebookId}:${ext.simId}`}
+                    type="button"
+                    onClick={() => onJumpToExternalSim?.(ext)}
+                    className="relative group inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70 transition cursor-pointer"
+                    title={`${extLocationLabel} — Άνοιγμα αρχείου & μετάβαση στο "${ext.simName}"`}
+                  >
+                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                      {extLocationLabel}
+                    </span>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 opacity-65 ${
+                        ext.switchClosed ? 'bg-[#16a34a]' : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>{ext.simName}</span>
+                  </button>
                 );
               })}
             </div>

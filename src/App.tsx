@@ -24144,6 +24144,282 @@ export default function App() {
     [activeNotebook.pages, getPageTopOffset, applyPaperTransformDirect]
   );
 
+  // Cross-notebook (and cross-page) Simulation Jump & Smooth Scroll Engine
+  type ExternalSimJumpTarget = {
+    notebookId: string;
+    notebookTitle: string;
+    notebookFolder: string;
+    pageId: string;
+    pageIdx: number;
+    simId: string;
+    simName: string;
+    category: 'circuits' | 'springs' | 'forces' | 'heat' | 'atoms';
+    switchClosed?: boolean;
+    flowDirection?: 'electrons' | 'conventional';
+    forceMode?: ForceSimConfig['mode'];
+    strokeIds?: string[];
+    centerY?: number;
+  };
+  const pendingExternalSimScrollRef = useRef<ExternalSimJumpTarget | null>(null);
+
+  const performScrollToSimOnActiveNotebook = useCallback(
+    (entry: ExternalSimJumpTarget) => {
+      const nb = activeNotebookLiveRef.current;
+      if (!nb || nb.id !== entry.notebookId) return;
+      const clampedIdx = Math.max(0, Math.min(nb.pages.length - 1, entry.pageIdx));
+      const targetPage = nb.pages[clampedIdx];
+      if (!targetPage) return;
+
+      setActivePageIndex(clampedIdx);
+      activeDrawingPageIndexRef.current = clampedIdx;
+      activePageIndexLiveRef.current = clampedIdx;
+
+      const pageTopY = getPageTopOffset(clampedIdx);
+      let minY = Infinity;
+      let maxY = -Infinity;
+      if (entry.strokeIds && entry.strokeIds.length > 0) {
+        const idSet = new Set(entry.strokeIds);
+        for (const s of targetPage.strokes) {
+          if (!idSet.has(s.id)) continue;
+          for (const p of s.points) {
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+      }
+      const simCenterY = Number.isFinite(minY)
+        ? (minY + maxY) / 2
+        : typeof entry.centerY === 'number' && Number.isFinite(entry.centerY)
+        ? entry.centerY
+        : getPageLogicalHeight(targetPage) * 0.45;
+      const docTargetY = pageTopY + simCenterY;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+      const targetPanY = Math.min(40, Math.round(wsHeight * 0.45 - docTargetY * zoomRef.current));
+      const startPanY = panRef.current.y;
+      const curPanX = panRef.current.x;
+
+      if (simScrollAnimRef.current !== null) {
+        cancelAnimationFrame(simScrollAnimRef.current);
+        simScrollAnimRef.current = null;
+      }
+      if (Math.abs(targetPanY - startPanY) < 3) {
+        applyPaperTransformDirect(zoomRef.current, curPanX, targetPanY, true, true);
+        return;
+      }
+      const startTime = performance.now();
+      const duration = 420;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - startTime) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        const curPanY = startPanY + (targetPanY - startPanY) * ease;
+        applyPaperTransformDirect(zoomRef.current, curPanX, curPanY, t >= 1, t >= 1);
+        if (t < 1) {
+          simScrollAnimRef.current = requestAnimationFrame(step);
+        } else {
+          simScrollAnimRef.current = null;
+        }
+      };
+      simScrollAnimRef.current = requestAnimationFrame(step);
+    },
+    [getPageTopOffset, applyPaperTransformDirect]
+  );
+
+  const jumpToExternalSim = useCallback(
+    (entry: ExternalSimJumpTarget) => {
+      const targetNb = notebooksRef.current.find((n) => n.id === entry.notebookId);
+      if (!targetNb) return;
+
+      // Activate the specific simulation on its page inside the target notebook
+      const nextNbs = notebooksRef.current.map((nb) => {
+        if (nb.id !== entry.notebookId) return nb;
+        return {
+          ...nb,
+          pages: nb.pages.map((p) => {
+            if (p.id !== entry.pageId) return p;
+            if (entry.category === 'circuits') return { ...p, activeCircuitSimId: entry.simId };
+            if (entry.category === 'springs') return { ...p, activeSpringSimId: entry.simId };
+            if (entry.category === 'forces') return { ...p, activeForceSimId: entry.simId };
+            if (entry.category === 'heat') return { ...p, activeHeatSimId: entry.simId };
+            if (entry.category === 'atoms') return { ...p, activeAtomSimId: entry.simId };
+            return p;
+          }),
+        };
+      });
+      notebooksRef.current = nextNbs;
+      const updatedTargetNb = nextNbs.find((n) => n.id === entry.notebookId);
+      if (updatedTargetNb) {
+        activeNotebookLiveRef.current = updatedTargetNb;
+      }
+      setNotebooks(nextNbs);
+      setSelectedStrokeIds([]);
+
+      if (entry.category === 'circuits') {
+        lastDetectedSimIdRef.current = entry.simId;
+        setSimCircuitSwitchClosed(Boolean(entry.switchClosed));
+      } else if (entry.category === 'forces' && entry.forceMode) {
+        setForceSimSubTab(entry.forceMode);
+      }
+
+      const isSameNotebook = activeNotebook.id === entry.notebookId;
+      setOpenNotebookIds((prev) =>
+        prev.includes(entry.notebookId) ? prev : [...prev, entry.notebookId]
+      );
+      setViewMode('editor');
+      setActiveNotebookId(entry.notebookId);
+      setActivePageIndex(entry.pageIdx);
+      activeDrawingPageIndexRef.current = entry.pageIdx;
+      activePageIndexLiveRef.current = entry.pageIdx;
+
+      if (isSameNotebook) {
+        window.requestAnimationFrame(() => {
+          performScrollToSimOnActiveNotebook(entry);
+        });
+      } else {
+        pendingExternalSimScrollRef.current = entry;
+      }
+      showToast(
+        `📂 Άνοιγμα: ${entry.notebookFolder || 'Γενικά'} / ${entry.notebookTitle} (Σελ. ${entry.pageIdx + 1}) → ${entry.simName}`
+      );
+    },
+    [activeNotebook.id, performScrollToSimOnActiveNotebook, showToast]
+  );
+
+  useEffect(() => {
+    const pending = pendingExternalSimScrollRef.current;
+    if (!pending || pending.notebookId !== activeNotebook.id) return;
+    pendingExternalSimScrollRef.current = null;
+    const rafId = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        performScrollToSimOnActiveNotebook(pending);
+      });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [activeNotebook.id, performScrollToSimOnActiveNotebook]);
+
+  // Zero-Slowdown Charter: only scan other notebooks for cross-file gray sim pills when Sim Panel is OPEN
+  const otherNotebookSims = useMemo(() => {
+    const empty = {
+      circuits: [] as ExternalSimJumpTarget[],
+      springs: [] as ExternalSimJumpTarget[],
+      forces: [] as ExternalSimJumpTarget[],
+      heat: [] as ExternalSimJumpTarget[],
+      atoms: [] as ExternalSimJumpTarget[],
+    };
+    if (!showSimulationPanel) return empty;
+    const curNbId = activeNotebook.id;
+    const curPageId = activePage.id;
+
+    for (const nb of notebooks) {
+      const isOtherNb = nb.id !== curNbId;
+      const nbFolder = nb.folder || 'Γενικά';
+      const nbTitle = nb.title || 'Σημείωση';
+      if (simActiveCategory === 'circuits' && isOtherNb) {
+        for (const entry of getAllNotebookCircuitSims(nb)) {
+          empty.circuits.push({
+            notebookId: nb.id,
+            notebookTitle: nbTitle,
+            notebookFolder: nbFolder,
+            pageId: entry.pageId,
+            pageIdx: entry.pageIdx,
+            simId: entry.sim.id,
+            simName: entry.sim.name,
+            category: 'circuits',
+            switchClosed: entry.sim.switchClosed,
+            flowDirection: entry.sim.flowDirection,
+            strokeIds: entry.sim.strokeIds,
+          });
+        }
+      } else if (simActiveCategory === 'springs' && isOtherNb) {
+        nb.pages.forEach((pg, pIdx) => {
+          const validIds = new Set(pg.strokes.map((s) => s.id));
+          for (const sp of pg.springSims || []) {
+            if (!validIds.has(sp.eqSpringStrokeId)) continue;
+            empty.springs.push({
+              notebookId: nb.id,
+              notebookTitle: nbTitle,
+              notebookFolder: nbFolder,
+              pageId: pg.id,
+              pageIdx: pIdx,
+              simId: sp.id,
+              simName: sp.name,
+              category: 'springs',
+              strokeIds: [
+                sp.eqSpringStrokeId,
+                sp.massStrokeId,
+                sp.naturalSpringStrokeId,
+                sp.supportStrokeId,
+              ].filter(Boolean) as string[],
+            });
+          }
+        });
+      } else if (simActiveCategory === 'forces') {
+        nb.pages.forEach((pg, pIdx) => {
+          if (!isOtherNb && pg.id === curPageId) return;
+          for (const fs of getValidForceSims(pg)) {
+            empty.forces.push({
+              notebookId: nb.id,
+              notebookTitle: nbTitle,
+              notebookFolder: nbFolder,
+              pageId: pg.id,
+              pageIdx: pIdx,
+              simId: fs.id,
+              simName: fs.name,
+              category: 'forces',
+              forceMode: fs.mode,
+              strokeIds: [fs.primaryStrokeId, fs.secondaryStrokeId].filter(Boolean) as string[],
+              centerY: fs.originY,
+            });
+          }
+        });
+      } else if (simActiveCategory === 'heat') {
+        nb.pages.forEach((pg, pIdx) => {
+          if (!isOtherNb && pg.id === curPageId) return;
+          for (const hs of pg.heatSims || []) {
+            if (!hs || ((hs.objects?.length || 0) === 0 && (hs.history?.length || 0) === 0)) continue;
+            const ys = (hs.objects || []).map((o) => o.y).filter((y) => Number.isFinite(y));
+            const avgY = ys.length > 0 ? ys.reduce((a, b) => a + b, 0) / ys.length : undefined;
+            empty.heat.push({
+              notebookId: nb.id,
+              notebookTitle: nbTitle,
+              notebookFolder: nbFolder,
+              pageId: pg.id,
+              pageIdx: pIdx,
+              simId: hs.id,
+              simName: hs.name || 'θερμότητα1',
+              category: 'heat',
+              centerY: avgY,
+            });
+          }
+        });
+      } else if (simActiveCategory === 'atoms') {
+        nb.pages.forEach((pg, pIdx) => {
+          if (!isOtherNb && pg.id === curPageId) return;
+          for (const asim of pg.atomSims || []) {
+            const label =
+              asim.showReactionEquation === false &&
+              asim.showAtomsBelowReaction === false &&
+              asim.reactionEquationText
+                ? asim.reactionEquationText
+                : asim.name;
+            const firstNodeY = asim.atoms?.[0]?.y;
+            empty.atoms.push({
+              notebookId: nb.id,
+              notebookTitle: nbTitle,
+              notebookFolder: nbFolder,
+              pageId: pg.id,
+              pageIdx: pIdx,
+              simId: asim.id,
+              simName: label || 'άτομο1',
+              category: 'atoms',
+              centerY: firstNodeY,
+            });
+          }
+        });
+      }
+    }
+    return empty;
+  }, [notebooks, activeNotebook.id, activePage.id, showSimulationPanel, simActiveCategory]);
+
   const getSpringTerminalsAndWidthVec = (springStroke: StrokeObject) => {
     const pts = springStroke.points;
     if (pts.length < 4) {
@@ -64968,6 +65244,10 @@ export default function App() {
                   <CircuitControlPanel
                     activeNotebook={activeNotebook}
                     activePage={activePage}
+                    otherNotebookSims={otherNotebookSims.circuits}
+                    onJumpToExternalSim={(ext) =>
+                      jumpToExternalSim({ ...ext, category: 'circuits' })
+                    }
                     selectedStrokeIds={selectedStrokeIds}
                     isSimulating={isSimulating}
                     simCircuitSwitchClosed={simCircuitSwitchClosed}
@@ -65395,7 +65675,7 @@ export default function App() {
                             <span>Νέο Ελατήριο ({nextSpringLabel})</span>
                           </button>
 
-                          {allSpringSims.length > 0 ? (
+                          {allSpringSims.length > 0 || otherNotebookSims.springs.length > 0 ? (
                             <>
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
@@ -65571,6 +65851,23 @@ export default function App() {
                                         ✕
                                       </button>
                                     </div>
+                                  );
+                                })}
+                                {otherNotebookSims.springs.map((ext) => {
+                                  const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                  return (
+                                    <button
+                                      key={`${ext.notebookId}:${ext.simId}`}
+                                      type="button"
+                                      onClick={() => jumpToExternalSim(ext)}
+                                      className="relative group inline-flex items-center px-2 py-1 rounded-lg border text-[11px] font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70 transition cursor-pointer"
+                                      title={`${extLocationLabel} — Άνοιγμα αρχείου & μετάβαση στο "${ext.simName}"`}
+                                    >
+                                      <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                                        {extLocationLabel}
+                                      </span>
+                                      <span>{ext.simName}</span>
+                                    </button>
                                   );
                                 })}
                               </div>
@@ -66150,7 +66447,7 @@ export default function App() {
                             <span>{newForceBtnLabel}</span>
                           </button>
 
-                          {validForceSims.length > 0 && (
+                          {(validForceSims.length > 0 || otherNotebookSims.forces.length > 0) && (
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                 Ενεργή Προσομοίωση:
@@ -66158,7 +66455,7 @@ export default function App() {
                             </div>
                           )}
 
-                          {validForceSims.length > 0 ? (
+                          {validForceSims.length > 0 || otherNotebookSims.forces.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {validForceSims.map((sim) => {
                                 const isCurrent = activeForce?.id === sim.id;
@@ -66217,6 +66514,28 @@ export default function App() {
                                       ✕
                                     </button>
                                   </div>
+                                );
+                              })}
+                              {otherNotebookSims.forces.map((ext) => {
+                                const isSameNb = ext.notebookId === activeNotebook.id;
+                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                return (
+                                  <button
+                                    key={`${ext.notebookId}:${ext.simId}`}
+                                    type="button"
+                                    onClick={() => jumpToExternalSim(ext)}
+                                    className={`relative group inline-flex items-center px-2 py-1 rounded-lg border text-[11px] transition cursor-pointer ${
+                                      isSameNb
+                                        ? 'font-bold bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
+                                        : 'font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70'
+                                    }`}
+                                    title={`${extLocationLabel} — Άνοιγμα & μετάβαση στο "${ext.simName}"`}
+                                  >
+                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                                      {extLocationLabel}
+                                    </span>
+                                    <span>{ext.simName}</span>
+                                  </button>
                                 );
                               })}
                             </div>
@@ -66780,7 +67099,7 @@ export default function App() {
                             )}
                           </div>
 
-                          {validAtomSims.length > 0 ? (
+                          {validAtomSims.length > 0 || otherNotebookSims.atoms.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {validAtomSims.map((sim) => {
                                 const isCurrent = activeAtomSim?.id === sim.id;
@@ -66856,6 +67175,28 @@ export default function App() {
                                       ✕
                                     </button>
                                   </div>
+                                );
+                              })}
+                              {otherNotebookSims.atoms.map((ext) => {
+                                const isSameNb = ext.notebookId === activeNotebook.id;
+                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                return (
+                                  <button
+                                    key={`${ext.notebookId}:${ext.simId}`}
+                                    type="button"
+                                    onClick={() => jumpToExternalSim(ext)}
+                                    className={`relative group inline-flex items-center px-2 py-1 rounded-lg border text-[11px] transition cursor-pointer ${
+                                      isSameNb
+                                        ? 'font-bold bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
+                                        : 'font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70'
+                                    }`}
+                                    title={`${extLocationLabel} — Άνοιγμα & μετάβαση στο "${ext.simName}"`}
+                                  >
+                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                                      {extLocationLabel}
+                                    </span>
+                                    <span>{ext.simName}</span>
+                                  </button>
                                 );
                               })}
                             </div>
@@ -67127,6 +67468,10 @@ export default function App() {
                   <HeatControlPanel
                     sim={heatSim.activeHeatSim}
                     locationLabel={`📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`}
+                    otherNotebookSims={otherNotebookSims.heat}
+                    onJumpToExternalSim={(ext) =>
+                      jumpToExternalSim({ ...ext, category: 'heat' })
+                    }
                     onToggleRun={() => {
                       const willRun = !heatSim.activeHeatSim?.isRunning;
                       if (willRun && !showHeatStopwatch) {

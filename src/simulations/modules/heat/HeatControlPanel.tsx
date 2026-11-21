@@ -4,9 +4,22 @@ import { SimulationObjectRibbon } from '../../ui/SimulationObjectRibbon';
 import { HEAT_SIMULATION_OBJECTS } from './HeatSimulationModule';
 import { HeatSimConfig, HeatObjectType } from './types';
 
+export interface ExternalHeatSimEntry {
+  notebookId: string;
+  notebookTitle: string;
+  notebookFolder: string;
+  pageId: string;
+  pageIdx: number;
+  simId: string;
+  simName: string;
+  centerY?: number;
+}
+
 export interface HeatControlPanelProps {
   sim: HeatSimConfig | null;
   locationLabel?: string;
+  otherNotebookSims?: ExternalHeatSimEntry[];
+  onJumpToExternalSim?: (entry: ExternalHeatSimEntry) => void;
   onToggleRun: () => void;
   onReset: () => void;
   onToggleGraph?: () => void;
@@ -25,6 +38,8 @@ export interface HeatControlPanelProps {
 export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
   sim,
   locationLabel,
+  otherNotebookSims = [],
+  onJumpToExternalSim,
   onToggleRun,
   onReset,
   showStopwatch = false,
@@ -45,22 +60,45 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
 
   return (
     <div className={`space-y-3 select-none text-[#2c3e50] ${className}`}>
-      {sim && (
-        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white/55 border border-[#dfd8cb] text-[11px]">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-            Ενεργή Προσομοίωση:
-          </span>
-          <span
-            className="relative group px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs cursor-default"
-            title={locationLabel ? `${locationLabel} — "${sim.name || 'θερμότητα1'}"` : undefined}
-          >
-            {locationLabel && (
-              <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute right-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
-                {locationLabel}
+      {(sim || otherNotebookSims.length > 0) && (
+        <div className="p-2.5 rounded-xl bg-white/55 border border-[#dfd8cb] text-[11px] space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+              Ενεργή Προσομοίωση:
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {sim && (
+              <span
+                className="relative group px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-500/60 text-emerald-700 font-bold shadow-2xs cursor-default"
+                title={locationLabel ? `${locationLabel} — "${sim.name || 'θερμότητα1'}"` : undefined}
+              >
+                {locationLabel && (
+                  <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                    {locationLabel}
+                  </span>
+                )}
+                {sim.name || 'θερμότητα1'}
               </span>
             )}
-            {sim.name || 'θερμότητα1'}
-          </span>
+            {otherNotebookSims.map((ext) => {
+              const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+              return (
+                <button
+                  key={`${ext.notebookId}:${ext.simId}`}
+                  type="button"
+                  onClick={() => onJumpToExternalSim?.(ext)}
+                  className="relative group inline-flex items-center px-2 py-0.5 rounded-lg border text-[11px] font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70 transition cursor-pointer"
+                  title={`${extLocationLabel} — Άνοιγμα αρχείου & μετάβαση στο "${ext.simName}"`}
+                >
+                  <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                    {extLocationLabel}
+                  </span>
+                  <span>{ext.simName}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
       {/* 1. Quick Controls Grid (Play / Pause / Reset & Stopwatch) */}
