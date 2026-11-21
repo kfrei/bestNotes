@@ -17696,6 +17696,16 @@ export function drawShaded3DShapeStroke(
   }
 
   const baseAlpha = s.opacity ?? 1;
+  const fillTrans = Math.max(0, Math.min(95, s.fillTransparency ?? 0));
+  // Respect Γεμάτο / Άδειο (fillStyle) & Διαφάνεια Γεμίσματος (0%..95%) for translucent glass-like 3D shading!
+  const fillFactor =
+    s.fillStyle === 'none'
+      ? 0.14
+      : Math.max(0.08, 1 - fillTrans / 100);
+  const bodyAlpha = baseAlpha * fillFactor;
+  const shadowFactor = 0.28 + 0.72 * fillFactor;
+  const highlightAlpha = baseAlpha * (0.35 + 0.65 * fillFactor);
+  const contourAlpha = baseAlpha * (0.36 + (1 - fillFactor) * 0.42);
   const { cSpec, cLight, cMid, cShade, cDeep } = buildShaded3DPalette(s.color);
   const contourColor = s.color || '#64748b';
   const contourWidth = Math.max(0.9, Math.min(1.8, (s.width || 2) * 0.5));
@@ -17707,8 +17717,8 @@ export function drawShaded3DShapeStroke(
     if (rot) ctx.rotate(rot);
     ctx.scale(Math.max(4, srx), Math.max(2.5, sry));
     const shadowGrad = ctx.createRadialGradient(0, 0, 0.06, 0, 0, 1);
-    shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.3 * baseAlpha).toFixed(3)})`);
-    shadowGrad.addColorStop(0.45, `rgba(15, 23, 42, ${(0.14 * baseAlpha).toFixed(3)})`);
+    shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.3 * baseAlpha * shadowFactor).toFixed(3)})`);
+    shadowGrad.addColorStop(0.45, `rgba(15, 23, 42, ${(0.14 * baseAlpha * shadowFactor).toFixed(3)})`);
     shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
     ctx.fillStyle = shadowGrad;
     ctx.beginPath();
@@ -17740,7 +17750,7 @@ export function drawShaded3DShapeStroke(
     drawGroundShadow(cx - rx * 0.22, cy + ry * 0.94, rx * 0.98, ry * 0.24);
 
     ctx.save();
-    ctx.globalAlpha = baseAlpha;
+    ctx.globalAlpha = bodyAlpha;
     ctx.translate(cx, cy);
     ctx.scale(rx, ry);
     ctx.beginPath();
@@ -17762,6 +17772,7 @@ export function drawShaded3DShapeStroke(
     ctx.fillStyle = bounceGrad;
     ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
 
+    ctx.globalAlpha = highlightAlpha;
     const specGrad = ctx.createRadialGradient(0.34, -0.34, 0.01, 0.34, -0.34, 0.34);
     specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
     specGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.28)');
@@ -17771,7 +17782,7 @@ export function drawShaded3DShapeStroke(
     ctx.restore();
 
     ctx.save();
-    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.globalAlpha = contourAlpha;
     ctx.strokeStyle = contourColor;
     ctx.lineWidth = contourWidth;
     ctx.beginPath();
@@ -17839,7 +17850,7 @@ export function drawShaded3DShapeStroke(
     drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.56, hLen * 0.14, quadAngle);
 
     ctx.save();
-    ctx.globalAlpha = baseAlpha;
+    ctx.globalAlpha = bodyAlpha;
 
     // Top face (brightest — catches top-right light)
     const topGrad = ctx.createLinearGradient(bTR.x, bTR.y, fTL.x, fTL.y);
@@ -17884,6 +17895,7 @@ export function drawShaded3DShapeStroke(
     ctx.fill();
 
     // Crisp specular edge highlight along lit bevels (fTL->fTR->bTR and fTR->fBR)
+    ctx.globalAlpha = highlightAlpha;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
     ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
     ctx.beginPath();
@@ -17895,7 +17907,7 @@ export function drawShaded3DShapeStroke(
     ctx.stroke();
 
     // Subtle crisp contour
-    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.globalAlpha = contourAlpha;
     ctx.strokeStyle = contourColor;
     ctx.lineWidth = contourWidth;
     ctx.beginPath();
@@ -17927,7 +17939,7 @@ export function drawShaded3DShapeStroke(
     const pRightMid = bilerp(1, 0.5);
 
     ctx.save();
-    ctx.globalAlpha = baseAlpha;
+    ctx.globalAlpha = bodyAlpha;
 
     // Cylindrical body with smooth left-to-right 3D highlight wrap
     const bodyGrad = ctx.createLinearGradient(pLeftMid.x, pLeftMid.y, pRightMid.x, pRightMid.y);
@@ -17958,6 +17970,7 @@ export function drawShaded3DShapeStroke(
     ctx.fill();
 
     // Specular rim highlight along front lip of top ellipse
+    ctx.globalAlpha = highlightAlpha;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
     ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
     ctx.beginPath();
@@ -17965,7 +17978,7 @@ export function drawShaded3DShapeStroke(
     ctx.stroke();
 
     // Subtle crisp contour
-    ctx.globalAlpha = baseAlpha * 0.36;
+    ctx.globalAlpha = contourAlpha;
     ctx.strokeStyle = contourColor;
     ctx.lineWidth = contourWidth;
     ctx.beginPath();
@@ -17995,7 +18008,7 @@ export function drawShaded3DShapeStroke(
   drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.54, hLen * 0.14, quadAngle);
 
   ctx.save();
-  ctx.globalAlpha = baseAlpha;
+  ctx.globalAlpha = bodyAlpha;
 
   // Left face (in shadow — rich 3D depth)
   const leftGrad = ctx.createLinearGradient(pApex.x, pApex.y, pLeft.x, pFront.y);
@@ -18024,6 +18037,7 @@ export function drawShaded3DShapeStroke(
   ctx.fill();
 
   // Crisp highlight along front central ridge (pApex -> pFront)
+  ctx.globalAlpha = highlightAlpha;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.68)';
   ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
   ctx.beginPath();
@@ -18032,7 +18046,7 @@ export function drawShaded3DShapeStroke(
   ctx.stroke();
 
   // Subtle crisp contour
-  ctx.globalAlpha = baseAlpha * 0.36;
+  ctx.globalAlpha = contourAlpha;
   ctx.strokeStyle = contourColor;
   ctx.lineWidth = contourWidth;
   ctx.beginPath();
