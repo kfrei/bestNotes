@@ -66404,8 +66404,8 @@ export default function App() {
 
                     return (
                       <div className="space-y-2">
-                        {/* 1. 4 Sub-Modes Grid (Ανάλυση, Σύνθεση, Κεκλιμένο, Εκκρεμές) */}
-                        <div className="grid grid-cols-2 gap-1 bg-[#efebe3] p-1 rounded-lg border border-[#dfd8cb]">
+                        {/* 1. 4 Sub-Modes Grid (Ανάλυση, Σύνθεση, Κεκλιμένο, Εκκρεμές) — Cool Gray sub-menu distinct from top beige tabs */}
+                        <div className="grid grid-cols-2 gap-1 bg-slate-200/75 p-1 rounded-xl border border-slate-300/80">
                           {(
                             [
                               { id: 'analysis', label: 'Ανάλυση F' },
@@ -66418,10 +66418,10 @@ export default function App() {
                               key={tab.id}
                               type="button"
                               onClick={() => createOrActivateForceSim(tab.id, false)}
-                              className={`py-1.5 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
+                              className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
                                 curMode === tab.id
-                                  ? 'bg-[#234978] text-white shadow-xs'
-                                  : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
+                                  ? 'bg-slate-700 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                               }`}
                             >
                               <span>{tab.label}</span>
