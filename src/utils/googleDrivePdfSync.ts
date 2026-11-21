@@ -444,7 +444,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     return;
   }
 
-  if (s.shapeType === 'sphere' && s.points.length >= 4) {
+  if (s.shapeType === 'shaded-sphere' && s.points.length >= 4) {
     if (drawShadedSphereStroke(ctx, s)) return;
   }
 

@@ -9942,7 +9942,7 @@ export default function App() {
       s.shapeType === 'voltmeter-needle' ||
       s.shapeType === 'voltmeter-label' ||
       s.shapeType === 'title-box' ||
-      s.shapeType === 'sphere'
+      s.shapeType === 'shaded-sphere'
     );
   };
 
@@ -12185,8 +12185,8 @@ export default function App() {
       }
     }
 
-    // 0b2. 3D Shaded Sketch Sphere ('sphere'): radial shading, specular highlight & subtle contact shadow!
-    if (s.shapeType === 'sphere' && s.points.length >= 4) {
+    // 0b2. 3D Shaded Sketch Sphere ('shaded-sphere'): radial shading, specular highlight & subtle contact shadow!
+    if (s.shapeType === 'shaded-sphere' && s.points.length >= 4) {
       if (drawShadedSphereStroke(ctx, s)) return;
     }
 
@@ -21121,7 +21121,7 @@ export default function App() {
       return false;
     }
 
-    const bobShapes = ['circle', 'ellipse', 'sphere'];
+    const bobShapes = ['circle', 'ellipse', 'sphere', 'shaded-sphere'];
     const inclineShapes = ['incline-wedge', 'inclined-plane', 'triangle'];
     const blockShapes = [
       'incline-block',
@@ -25897,7 +25897,7 @@ export default function App() {
     // Look for a mass block strictly inside the user's Lasso selection
     const sp = springsInSel[springsInSel.length - 1];
     const info = getSpringTerminalsAndWidthVec(sp);
-    const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere'];
+    const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere', 'shaded-sphere'];
     const mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
     const pointerInSel = selStrokes.find(
       (s) =>

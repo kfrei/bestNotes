@@ -17603,7 +17603,7 @@ export function tryMatchSphereEquatorOnCircle(
   return {
     ...bestCircle,
     isShape: true,
-    shapeType: 'sphere',
+    shapeType: 'shaded-sphere',
     fillStyle: 'gradient',
     fillColor: bestCircle.color || '#64748b',
     fillTransparency: 0,
@@ -17612,15 +17612,15 @@ export function tryMatchSphereEquatorOnCircle(
 }
 
 /**
- * Shared Canvas 2D renderer for 'sphere' shapes (used identically in Editor & PDF Export).
- * Draws a crisp 3D shaded sketch sphere with soft specular highlight, crescent rim shadow,
- * subtle contact ground shadow, and a clean outline matching the stroke color.
+ * Shared Canvas 2D renderer for 'shaded-sphere' shapes (used identically in Editor & PDF Export).
+ * Draws a rich 3D shaded sketch sphere with bright specular highlight, deep crescent shadow,
+ * reflected rim light, soft elliptical contact shadow, and subtle contour matching stroke color.
  */
 export function drawShadedSphereStroke(
   ctx: CanvasRenderingContext2D,
   s: StrokeObject
 ): boolean {
-  if (s.shapeType !== 'sphere' || s.points.length < 4) return false;
+  if (s.shapeType !== 'shaded-sphere' || s.points.length < 4) return false;
 
   let minX = Infinity;
   let maxX = -Infinity;
@@ -17672,22 +17672,22 @@ export function drawShadedSphereStroke(
       b1 + (b2 - b1) * t
     )})`;
 
-  const cSpec = isNeutral ? '#ffffff' : mixRgb(r, g, b, 255, 255, 255, 0.94);
-  const cLight = isNeutral ? '#f1f3f6' : mixRgb(r, g, b, 255, 255, 255, 0.72);
-  const cMid = isNeutral ? '#d4d9e1' : mixRgb(r, g, b, 255, 255, 255, 0.35);
-  const cShade = isNeutral ? '#9aa3b2' : mixRgb(r, g, b, 15, 23, 42, 0.22);
-  const cDeep = isNeutral ? '#7a8494' : mixRgb(r, g, b, 15, 23, 42, 0.44);
+  const cSpec = isNeutral ? '#ffffff' : mixRgb(r, g, b, 255, 255, 255, 0.96);
+  const cLight = isNeutral ? '#f3f5f8' : mixRgb(r, g, b, 255, 255, 255, 0.68);
+  const cMid = isNeutral ? '#c9d1dc' : mixRgb(r, g, b, 255, 255, 255, 0.22);
+  const cShade = isNeutral ? '#818c9e' : mixRgb(r, g, b, 10, 18, 36, 0.34);
+  const cDeep = isNeutral ? '#525c6d' : mixRgb(r, g, b, 6, 12, 26, 0.58);
 
   ctx.save();
   ctx.setLineDash([]);
 
-  // 1. Soft elliptical ground contact shadow (slightly bottom-left, subtle & clean)
+  // 1. Soft elliptical ground contact shadow (slightly bottom-left, grounding the 3D sphere)
   ctx.save();
-  ctx.translate(cx - rx * 0.16, cy + ry * 0.96);
-  ctx.scale(rx * 0.92, Math.max(2, ry * 0.2));
-  const shadowGrad = ctx.createRadialGradient(0, 0, 0.05, 0, 0, 1);
-  shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.22 * baseAlpha).toFixed(3)})`);
-  shadowGrad.addColorStop(0.55, `rgba(15, 23, 42, ${(0.09 * baseAlpha).toFixed(3)})`);
+  ctx.translate(cx - rx * 0.22, cy + ry * 0.94);
+  ctx.scale(rx * 0.98, Math.max(2.5, ry * 0.24));
+  const shadowGrad = ctx.createRadialGradient(0, 0, 0.06, 0, 0, 1);
+  shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.32 * baseAlpha).toFixed(3)})`);
+  shadowGrad.addColorStop(0.45, `rgba(15, 23, 42, ${(0.15 * baseAlpha).toFixed(3)})`);
   shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
   ctx.fillStyle = shadowGrad;
   ctx.beginPath();
@@ -17705,29 +17705,37 @@ export function drawShadedSphereStroke(
   ctx.arc(0, 0, 1, 0, Math.PI * 2);
   ctx.clip();
 
-  // Primary radial shading (light source from top-right, deep crescent bottom-left)
-  const bodyGrad = ctx.createRadialGradient(0.32, -0.32, 0.04, 0.08, -0.06, 1.32);
+  // Primary radial shading (light source from top-right, rich deep crescent bottom-left)
+  const bodyGrad = ctx.createRadialGradient(0.32, -0.32, 0.03, 0.1, -0.08, 1.26);
   bodyGrad.addColorStop(0, cSpec);
-  bodyGrad.addColorStop(0.24, cLight);
-  bodyGrad.addColorStop(0.56, cMid);
-  bodyGrad.addColorStop(0.84, cShade);
+  bodyGrad.addColorStop(0.2, cLight);
+  bodyGrad.addColorStop(0.52, cMid);
+  bodyGrad.addColorStop(0.8, cShade);
   bodyGrad.addColorStop(1, cDeep);
   ctx.fillStyle = bodyGrad;
   ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
 
   // Subtle reflected ambient bounce highlight along far bottom-left rim
-  const bounceGrad = ctx.createRadialGradient(-0.62, 0.62, 0.05, -0.55, 0.55, 0.65);
-  bounceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
+  const bounceGrad = ctx.createRadialGradient(-0.68, 0.68, 0.04, -0.58, 0.58, 0.58);
+  bounceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
   bounceGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = bounceGrad;
   ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
+
+  // Tight soft specular hotspot top-right for unmistakable 3D volume
+  const specGrad = ctx.createRadialGradient(0.34, -0.34, 0.01, 0.34, -0.34, 0.34);
+  specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+  specGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.28)');
+  specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = specGrad;
+  ctx.fillRect(-1.1, -1.1, 2.2, 2.2);
   ctx.restore();
 
-  // 3. Subtle crisp sketch contour matching the stroke color
+  // 3. Very subtle crisp sketch contour matching the stroke color
   ctx.save();
-  ctx.globalAlpha = baseAlpha * 0.55;
+  ctx.globalAlpha = baseAlpha * 0.36;
   ctx.strokeStyle = s.color || '#64748b';
-  ctx.lineWidth = Math.max(1, (s.width || 2) * 0.65);
+  ctx.lineWidth = Math.max(0.9, Math.min(1.8, (s.width || 2) * 0.5));
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
