@@ -65719,7 +65719,7 @@ export default function App() {
                                     setSyncStatus('dirty');
                                     setEditingSpringSimId(null);
                                   };
-                                  const simLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${spPageIdx + 1}`;
+                                  const simLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
                                   return (
                                     <div
                                       key={sim.id}
@@ -65854,7 +65854,7 @@ export default function App() {
                                   );
                                 })}
                                 {otherNotebookSims.springs.map((ext) => {
-                                  const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                  const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle}`;
                                   return (
                                     <button
                                       key={`${ext.notebookId}:${ext.simId}`}
@@ -66459,7 +66459,7 @@ export default function App() {
                             <div className="flex flex-wrap gap-1">
                               {validForceSims.map((sim) => {
                                 const isCurrent = activeForce?.id === sim.id;
-                                const forceLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`;
+                                const forceLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
                                 return (
                                   <div
                                     key={sim.id}
@@ -66518,7 +66518,7 @@ export default function App() {
                               })}
                               {otherNotebookSims.forces.map((ext) => {
                                 const isSameNb = ext.notebookId === activeNotebook.id;
-                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle}`;
                                 return (
                                   <button
                                     key={`${ext.notebookId}:${ext.simId}`}
@@ -67103,7 +67103,7 @@ export default function App() {
                             <div className="flex flex-wrap gap-1">
                               {validAtomSims.map((sim) => {
                                 const isCurrent = activeAtomSim?.id === sim.id;
-                                const atomLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`;
+                                const atomLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
                                 return (
                                   <div
                                     key={sim.id}
@@ -67179,7 +67179,7 @@ export default function App() {
                               })}
                               {otherNotebookSims.atoms.map((ext) => {
                                 const isSameNb = ext.notebookId === activeNotebook.id;
-                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle}`;
                                 return (
                                   <button
                                     key={`${ext.notebookId}:${ext.simId}`}
@@ -67467,7 +67467,7 @@ export default function App() {
                 ) : simActiveCategory === 'heat' ? (
                   <HeatControlPanel
                     sim={heatSim.activeHeatSim}
-                    locationLabel={`📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${activePageIndex + 1}`}
+                    locationLabel={`📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`}
                     otherNotebookSims={otherNotebookSims.heat}
                     onJumpToExternalSim={(ext) =>
                       jumpToExternalSim({ ...ext, category: 'heat' })

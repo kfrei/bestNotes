@@ -82,7 +82,7 @@ export const HeatControlPanel: React.FC<HeatControlPanelProps> = ({
               </span>
             )}
             {otherNotebookSims.map((ext) => {
-              const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+              const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle}`;
               return (
                 <button
                   key={`${ext.notebookId}:${ext.simId}`}

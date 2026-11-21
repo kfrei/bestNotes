@@ -172,7 +172,7 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                 const { sim, pageId: simPageId, pageIdx: simPageIdx } = entry;
                 const isCurrent = simPageId === activePage.id && activeSim?.id === sim.id;
                 const isEditingThis = editingSimId === sim.id;
-                const circuitLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title} • Σελ. ${simPageIdx + 1}`;
+                const circuitLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
                 const commitSimName = () => {
                   const trimmed = editingSimName.trim() || sim.name;
                   onCommitSimName(simPageId, sim.id, trimmed);
@@ -269,7 +269,7 @@ export const CircuitControlPanel: React.FC<CircuitControlPanelProps> = ({
                 );
               })}
               {otherNotebookSims.map((ext) => {
-                const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle} • Σελ. ${ext.pageIdx + 1}`;
+                const extLocationLabel = `📁 ${ext.notebookFolder || 'Γενικά'} / ${ext.notebookTitle}`;
                 return (
                   <button
                     key={`${ext.notebookId}:${ext.simId}`}
