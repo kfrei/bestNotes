@@ -66447,103 +66447,117 @@ export default function App() {
                             <span>{newForceBtnLabel}</span>
                           </button>
 
-                          {(validForceSims.length > 0 || otherNotebookSims.forces.length > 0) && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-                                Ενεργή Προσομοίωση:
-                              </span>
-                            </div>
-                          )}
-
-                          {validForceSims.length > 0 || otherNotebookSims.forces.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {validForceSims.map((sim) => {
-                                const isCurrent = activeForce?.id === sim.id;
-                                const forceLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
-                                return (
-                                  <div
-                                    key={sim.id}
-                                    className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
-                                      isCurrent
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
-                                        : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
-                                    }`}
-                                  >
-                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
-                                      {forceLocationLabel}
+                          {(() => {
+                            const subTabForceSims = validForceSims.filter(
+                              (s) => s.mode === forceSimSubTab
+                            );
+                            const subTabExternalForceSims = otherNotebookSims.forces.filter(
+                              (ext) => ext.forceMode === forceSimSubTab
+                            );
+                            const hasAnySubTabSims =
+                              subTabForceSims.length > 0 || subTabExternalForceSims.length > 0;
+                            return (
+                              <>
+                                {hasAnySubTabSims && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
+                                      Ενεργή Προσομοίωση:
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setForceSimSubTab(sim.mode);
-                                        updateActivePage(
-                                          (p) => ({ ...p, activeForceSimId: sim.id }),
-                                          false
-                                        );
-                                      }}
-                                      className="px-2.5 py-1 flex items-center cursor-pointer"
-                                      title={`${forceLocationLabel} — "${sim.name}"`}
-                                    >
-                                      <span>{sim.name}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateActivePage((p) => {
-                                          const rem = (p.forceSims || []).filter(
-                                            (x) => x.id !== sim.id
-                                          );
-                                          return {
-                                            ...p,
-                                            forceSims: rem,
-                                            activeForceSimId:
-                                              p.activeForceSimId === sim.id
-                                                ? rem[0]?.id
-                                                : p.activeForceSimId,
-                                          };
-                                        });
-                                      }}
-                                      className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
-                                        isCurrent
-                                          ? 'text-emerald-700/80 hover:text-[#b91c1c]'
-                                          : 'text-slate-500 hover:text-[#b91c1c]'
-                                      }`}
-                                      title={`Αφαίρεση προσομοίωσης "${sim.name}" (τα σχήματα παραμένουν στη σελίδα)`}
-                                    >
-                                      ✕
-                                    </button>
                                   </div>
-                                );
-                              })}
-                              {otherNotebookSims.forces.map((ext) => {
-                                const isSameNb = ext.notebookId === activeNotebook.id;
-                                const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle}`;
-                                return (
-                                  <button
-                                    key={`${ext.notebookId}:${ext.simId}`}
-                                    type="button"
-                                    onClick={() => jumpToExternalSim(ext)}
-                                    className={`relative group inline-flex items-center px-2 py-1 rounded-lg border text-[11px] transition cursor-pointer ${
-                                      isSameNb
-                                        ? 'font-bold bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
-                                        : 'font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70'
-                                    }`}
-                                    title={`${extLocationLabel} — Άνοιγμα & μετάβαση στο "${ext.simName}"`}
-                                  >
-                                    <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
-                                      {extLocationLabel}
-                                    </span>
-                                    <span>{ext.simName}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
-                              {emptyForceHint}
-                            </p>
-                          )}
+                                )}
+
+                                {hasAnySubTabSims ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {subTabForceSims.map((sim) => {
+                                      const isCurrent = activeForce?.id === sim.id;
+                                      const forceLocationLabel = `📁 ${activeNotebook.folder || 'Γενικά'} / ${activeNotebook.title}`;
+                                      return (
+                                        <div
+                                          key={sim.id}
+                                          className={`relative group inline-flex items-center rounded-lg border text-[11px] font-bold transition ${
+                                            isCurrent
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-500/60 shadow-2xs'
+                                              : 'bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
+                                          }`}
+                                        >
+                                          <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words">
+                                            {forceLocationLabel}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setForceSimSubTab(sim.mode);
+                                              updateActivePage(
+                                                (p) => ({ ...p, activeForceSimId: sim.id }),
+                                                false
+                                              );
+                                            }}
+                                            className="px-2.5 py-1 flex items-center cursor-pointer"
+                                            title={`${forceLocationLabel} — "${sim.name}"`}
+                                          >
+                                            <span>{sim.name}</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updateActivePage((p) => {
+                                                const rem = (p.forceSims || []).filter(
+                                                  (x) => x.id !== sim.id
+                                                );
+                                                return {
+                                                  ...p,
+                                                  forceSims: rem,
+                                                  activeForceSimId:
+                                                    p.activeForceSimId === sim.id
+                                                      ? rem[0]?.id
+                                                      : p.activeForceSimId,
+                                                };
+                                              });
+                                            }}
+                                            className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
+                                              isCurrent
+                                                ? 'text-emerald-700/80 hover:text-[#b91c1c]'
+                                                : 'text-slate-500 hover:text-[#b91c1c]'
+                                            }`}
+                                            title={`Αφαίρεση προσομοίωσης "${sim.name}" (τα σχήματα παραμένουν στη σελίδα)`}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                    {subTabExternalForceSims.map((ext) => {
+                                      const isSameNb = ext.notebookId === activeNotebook.id;
+                                      const extLocationLabel = `📁 ${ext.notebookFolder} / ${ext.notebookTitle}`;
+                                      return (
+                                        <button
+                                          key={`${ext.notebookId}:${ext.simId}`}
+                                          type="button"
+                                          onClick={() => jumpToExternalSim(ext)}
+                                          className={`relative group inline-flex items-center px-2 py-1 rounded-lg border text-[11px] transition cursor-pointer ${
+                                            isSameNb
+                                              ? 'font-bold bg-[#fdfbf7] text-slate-900 border-[#dfd8cb] hover:bg-[#efebe3]'
+                                              : 'font-semibold bg-slate-100/90 text-slate-500 border-slate-300/80 hover:bg-slate-200/80 hover:text-slate-800 hover:border-slate-400/70'
+                                          }`}
+                                          title={`${extLocationLabel} — Άνοιγμα & μετάβαση στο "${ext.simName}"`}
+                                        >
+                                          <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-1.5 z-50 w-max max-w-[215px] px-2 py-1 rounded-lg bg-[#1b2a4a] text-white text-[10px] font-medium shadow-md leading-snug whitespace-normal break-words text-left">
+                                            {extLocationLabel}
+                                          </span>
+                                          <span>{ext.simName}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10.5px] text-[#64748b] text-center py-1 leading-snug">
+                                    {emptyForceHint}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
 
                         {/* 3. Mode-Specific Interactive Controls */}
