@@ -34,6 +34,51 @@ export function getMonotonicIsoTimestamp(...candidates: (string | undefined)[]):
   return new Date(maxMs).toISOString();
 }
 
+const utf8Encoder = new TextEncoder();
+
+export function getUtf8ByteLength(str: string): number {
+  return utf8Encoder.encode(str).length;
+}
+
+/**
+ * Splits a string into chunks whose UTF-8 byte length never exceeds maxBytes,
+ * without ever splitting UTF-16 surrogate pairs (emojis / math symbols).
+ */
+export function splitStringByUtf8Bytes(str: string, maxBytes: number): string[] {
+  if (getUtf8ByteLength(str) <= maxBytes) return [str];
+  const chunks: string[] = [];
+  let chunkStart = 0;
+  let byteCount = 0;
+  let i = 0;
+  while (i < str.length) {
+    const code = str.charCodeAt(i);
+    let charLen = 1;
+    let charBytes = 1;
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      // Surrogate pair -> 4 UTF-8 bytes
+      charLen = 2;
+      charBytes = 4;
+    } else if (code < 0x80) {
+      charBytes = 1;
+    } else if (code < 0x800) {
+      charBytes = 2;
+    } else {
+      charBytes = 3;
+    }
+    if (byteCount + charBytes > maxBytes && i > chunkStart) {
+      chunks.push(str.slice(chunkStart, i));
+      chunkStart = i;
+      byteCount = 0;
+    }
+    byteCount += charBytes;
+    i += charLen;
+  }
+  if (chunkStart < str.length) {
+    chunks.push(str.slice(chunkStart));
+  }
+  return chunks;
+}
+
 export async function saveNotebookToFirestoreChunked(
   uid: string,
   nb: Notebook,
@@ -87,7 +132,9 @@ export async function saveNotebookToFirestoreChunked(
     // Offline or transient network error -> proceed
   }
 
-  if (dataJson.length <= FIRESTORE_SINGLE_DOC_LIMIT) {
+  const dataByteLen = getUtf8ByteLength(dataJson);
+
+  if (dataByteLen <= FIRESTORE_SINGLE_DOC_LIMIT) {
     if (prevChunkCount > 0) {
       const batch = writeBatch(db);
       batch.set(
@@ -123,19 +170,25 @@ export async function saveNotebookToFirestoreChunked(
     return true;
   }
 
-  // Multi-chunk storage for large notebooks (>750 KB, e.g. 1-6 MB with multiple cropped high-res images)
-  const chunks: string[] = [];
-  for (let i = 0; i < dataJson.length; i += FIRESTORE_CHUNK_SIZE) {
-    chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
-  }
+  // Multi-chunk storage for large notebooks (>750 KB UTF-8 bytes, e.g. Greek text or cropped high-res images)
+  const chunks = splitStringByUtf8Bytes(dataJson, FIRESTORE_CHUNK_SIZE);
 
-  const manifestJson = JSON.stringify({
+  let manifestJson = JSON.stringify({
     __chunked: true,
     chunkCount: chunks.length,
     totalLength: dataJson.length,
     version: updatedAt,
     chunk0: chunks[0],
   });
+  // Guard against JSON escaping pushing manifestJson+chunk0 over Firestore's 1 MiB UTF-8 doc limit
+  if (getUtf8ByteLength(manifestJson) > 900000) {
+    manifestJson = JSON.stringify({
+      __chunked: true,
+      chunkCount: chunks.length,
+      totalLength: dataJson.length,
+      version: updatedAt,
+    });
+  }
 
   // Commit all chunks (0..N-1) AND the primary manifest doc in a SINGLE atomic writeBatch whenever possible!
   if (chunks.length <= 14) {

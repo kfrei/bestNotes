@@ -4892,13 +4892,14 @@ export default function App() {
   const lastSeenRemoteJsonMapRef = useRef<Map<string, string>>(new Map());
   const remoteUpdatedAtMapRef = useRef<Map<string, string>>(new Map());
   const inFlightSavesMapRef = useRef<Map<string, number>>(new Map());
+  const failedSyncRetryTimersRef = useRef<Map<string, number>>(new Map());
   const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
   const notebooksRef = useRef<Notebook[]>(notebooks);
   notebooksRef.current = notebooks;
   const customFoldersRef = useRef<CustomFolderMeta[]>(customFolders);
   customFoldersRef.current = customFolders;
 
-  const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
+  const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string, retryAttempt = 0) => {
     try {
       if (sessionDeletedNotebookIds.has(nb.id)) {
         return;
@@ -4907,25 +4908,51 @@ export default function App() {
       if (remoteTime && (nb.updatedAt || '') < remoteTime && !sessionRestoredNotebookIds.has(nb.id)) {
         return;
       }
+      const existingRetryTimer = failedSyncRetryTimersRef.current.get(nb.id);
+      if (existingRetryTimer !== undefined) {
+        window.clearTimeout(existingRetryTimer);
+        failedSyncRetryTimersRef.current.delete(nb.id);
+      }
       const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
       lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-      if (nb.updatedAt && nb.updatedAt > remoteTime) {
-        remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
-      }
       inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
+      setSyncStatus('syncing');
       saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
         .then((didWrite) => {
           if (didWrite) {
             lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
             if (nb.updatedAt) {
-              remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+              const curRem = remoteUpdatedAtMapRef.current.get(nb.id) || '';
+              if (!curRem || nb.updatedAt >= curRem) {
+                remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+              }
             }
           } else {
-            lastSyncedJsonMapRef.current.delete(nb.id);
+            // Only clear if no newer write replaced this dataJson in the meantime
+            if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) {
+              lastSyncedJsonMapRef.current.delete(nb.id);
+            }
           }
         })
         .catch((err) => {
           console.error('Firestore notebook sync error:', err);
+          // CRITICAL: Roll back optimistic synced state so failed writes are NEVER silently dropped
+          if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) {
+            lastSyncedJsonMapRef.current.delete(nb.id);
+          }
+          setIsDirty(true);
+          setSyncStatus('dirty');
+          if (retryAttempt < 3 && typeof navigator !== 'undefined' && navigator.onLine !== false) {
+            const delayMs = 4000 * (retryAttempt + 1);
+            const t = window.setTimeout(() => {
+              failedSyncRetryTimersRef.current.delete(nb.id);
+              const latestNb = notebooksRef.current.find((n) => n.id === nb.id);
+              if (latestNb && !sessionDeletedNotebookIds.has(nb.id)) {
+                pushNotebookToCloudTracked(uid, latestNb, undefined, retryAttempt + 1);
+              }
+            }, delayMs);
+            failedSyncRetryTimersRef.current.set(nb.id, t);
+          }
         })
         .finally(() => {
           const count = inFlightSavesMapRef.current.get(nb.id) || 1;
@@ -4933,6 +4960,29 @@ export default function App() {
             inFlightSavesMapRef.current.delete(nb.id);
           } else {
             inFlightSavesMapRef.current.set(nb.id, count - 1);
+          }
+          if (inFlightSavesMapRef.current.size === 0) {
+            // Confirm 'synced' ONLY when all edited notebooks match lastSyncedJsonMapRef
+            let stillUnsynced = false;
+            for (const curNb of notebooksRef.current) {
+              if (!userEditedInSessionRef.current.has(curNb.id)) continue;
+              try {
+                const curJson = serializeNotebookForFirestore(curNb);
+                if (lastSyncedJsonMapRef.current.get(curNb.id) !== curJson) {
+                  stillUnsynced = true;
+                  break;
+                }
+              } catch {
+                // ignore
+              }
+            }
+            if (!stillUnsynced) {
+              setIsDirty(false);
+              setSyncStatus('synced');
+            } else {
+              setIsDirty(true);
+              setSyncStatus('dirty');
+            }
           }
         });
     } catch {
@@ -5516,6 +5566,10 @@ export default function App() {
       lastSyncedJsonMapRef.current.clear();
       lastSeenRemoteJsonMapRef.current.clear();
       inFlightSavesMapRef.current.clear();
+      for (const t of failedSyncRetryTimersRef.current.values()) {
+        window.clearTimeout(t);
+      }
+      failedSyncRetryTimersRef.current.clear();
       remoteDriveSyncMetaUpdatedAtRef.current = '';
       lastPushedDriveSyncJsonRef.current = '';
       return;
@@ -5867,7 +5921,14 @@ export default function App() {
               remoteDeletedIds.add(data.id);
             }
             if (typeof data.updatedAt === 'string' && data.updatedAt.length > 0) {
-              remoteUpdatedAtMapRef.current.set(data.id, data.updatedAt);
+              const curRemoteTs = remoteUpdatedAtMapRef.current.get(data.id) || '';
+              if (
+                (inFlightSavesMapRef.current.get(data.id) || 0) === 0 &&
+                (!isFromCache || !curRemoteTs) &&
+                data.updatedAt >= curRemoteTs
+              ) {
+                remoteUpdatedAtMapRef.current.set(data.id, data.updatedAt);
+              }
             }
           }
         });
@@ -6051,7 +6112,50 @@ export default function App() {
         }
         setDeletedCloudNotebooks(Array.from(mergedBinMap.values()));
 
+        // Compute notebooks that are strictly newer locally (or unsynced local-only) SYNCHRONOUSLY from notebooksRef.current!
+        // Never populate this inside setNotebooks(prev => ...) because React 18/19 defers state updaters asynchronously.
         const notebooksToPushBack: Notebook[] = [];
+        if (!isFromCache) {
+          const currentLocalMap = new Map<string, Notebook>();
+          for (const rawLocalNb of notebooksRef.current) {
+            const { nb: localNb } = repairNotebookPagesAndMetrisiMazas(rawLocalNb);
+            currentLocalMap.set(localNb.id, localNb);
+          }
+          for (const [id, rem] of remoteMap.entries()) {
+            const localNb = currentLocalMap.get(id);
+            if (!localNb || rem.deleted || sessionDeletedNotebookIds.has(id) || !rem.nb || !rem.dataJson) {
+              continue;
+            }
+            if ((inFlightSavesMapRef.current.get(id) || 0) > 0) {
+              continue;
+            }
+            const localJson = serializeNotebookForFirestore(localNb);
+            if (localJson === rem.dataJson) {
+              continue;
+            }
+            const localUpdatedAt = localNb.updatedAt || '';
+            const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
+            if (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt) {
+              userEditedInSessionRef.current.add(id);
+              saveUserEditedSessionIds(userEditedInSessionRef.current);
+              notebooksToPushBack.push(localNb);
+            } else if (
+              (!remoteUpdatedAt || localUpdatedAt === remoteUpdatedAt) &&
+              userEditedInSessionRef.current.has(id)
+            ) {
+              notebooksToPushBack.push(localNb);
+            }
+          }
+          for (const localNb of currentLocalMap.values()) {
+            if (
+              !allRemotePrimaryIds.has(localNb.id) &&
+              userEditedInSessionRef.current.has(localNb.id) &&
+              (inFlightSavesMapRef.current.get(localNb.id) || 0) === 0
+            ) {
+              notebooksToPushBack.push(localNb);
+            }
+          }
+        }
 
         setNotebooks((prevLocal) => {
           const mergedMap = new Map<string, Notebook>();
@@ -6116,12 +6220,6 @@ export default function App() {
             if (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt) {
               userEditedInSessionRef.current.add(id);
               saveUserEditedSessionIds(userEditedInSessionRef.current);
-              if (
-                !isFromCache &&
-                (inFlightSavesMapRef.current.get(id) || 0) === 0
-              ) {
-                notebooksToPushBack.push(localNb);
-              }
               continue;
             }
 
@@ -6154,12 +6252,6 @@ export default function App() {
 
             // 3. Timestamps are equal or remoteUpdatedAt is missing:
             if (userEditedInSessionRef.current.has(id)) {
-              if (
-                !isFromCache &&
-                (inFlightSavesMapRef.current.get(id) || 0) === 0
-              ) {
-                notebooksToPushBack.push(localNb);
-              }
               continue;
             }
             const localScore = getNotebookContentScore(localNb);
@@ -6174,19 +6266,6 @@ export default function App() {
             continue;
           }
 
-          // Only push local notebooks that genuinely do not exist in Firestore at all (when snapshot is from live server, not local cache!)
-          if (!isFromCache) {
-            for (const localNb of prevLocal) {
-              if (
-                !allRemotePrimaryIds.has(localNb.id) &&
-                userEditedInSessionRef.current.has(localNb.id) &&
-                (inFlightSavesMapRef.current.get(localNb.id) || 0) === 0
-              ) {
-                notebooksToPushBack.push(localNb);
-              }
-            }
-          }
-
           if (!anyChanged) return prevLocal;
           const nextList = Array.from(mergedMap.values());
           if (nextList.length === 0) {
@@ -6196,7 +6275,7 @@ export default function App() {
           return nextList;
         });
 
-        if (!isFromCache) {
+        if (!isFromCache && notebooksToPushBack.length > 0) {
           for (const nbToPush of notebooksToPushBack) {
             pushNotebookToCloudTracked(uid, nbToPush);
           }
@@ -6436,10 +6515,8 @@ export default function App() {
         setIsDirty(true);
         setSyncStatus('dirty');
         fastCloudTimer = window.setTimeout(() => {
-          if (performCloudFirestoreSyncNow()) {
-            setIsDirty(false);
-            setSyncStatus('synced');
-          }
+          // Do NOT prematurely mark synced here; pushNotebookToCloudTracked marks 'synced' ONLY after Firestore confirms the write!
+          performCloudFirestoreSyncNow();
         }, 1500);
       }
     }, 250);
@@ -6475,13 +6552,18 @@ export default function App() {
         commitUserFoldersChange(customFoldersRef.current);
       }
     };
+    const flushOnOnline = () => {
+      performCloudFirestoreSyncNow();
+    };
     document.addEventListener('visibilitychange', flushOnHide);
     window.addEventListener('pagehide', flushOnPageHide);
     window.addEventListener('beforeunload', flushOnPageHide);
+    window.addEventListener('online', flushOnOnline);
     return () => {
       document.removeEventListener('visibilitychange', flushOnHide);
       window.removeEventListener('pagehide', flushOnPageHide);
       window.removeEventListener('beforeunload', flushOnPageHide);
+      window.removeEventListener('online', flushOnOnline);
     };
   }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange, pushDriveSyncMetaToCloud]);
 
