@@ -10870,9 +10870,9 @@ export default function App() {
         return true;
       // Check 4 corner handles and 4 mid-side stretch handles on the selection frame
       if (
-        Math.hypot(Math.abs(localX) - hw, Math.abs(localY) - hh) <= 14 ||
-        (Math.abs(localX) <= 14 && Math.abs(Math.abs(localY) - hh) <= 14) ||
-        (Math.abs(localY) <= 14 && Math.abs(Math.abs(localX) - hw) <= 14)
+        Math.hypot(Math.abs(localX) - hw, Math.abs(localY) - hh) <= 18 ||
+        (Math.abs(localX) <= 18 && Math.abs(Math.abs(localY) - hh) <= 18) ||
+        (Math.abs(localY) <= 18 && Math.abs(Math.abs(localX) - hw) <= 18)
       ) {
         return true;
       }
@@ -41796,13 +41796,13 @@ export default function App() {
           }
 
           // Inner Core Move Priority: if clicking strictly inside the inner core of the object (away from the outer pad=8 frame),
-          // prioritize Move over corner/side resize handles so tiny objects can always be dragged from their center!
-          const innerMoveHw = Math.max(6, selBounds.hw - 2.5);
-          const innerMoveHh = Math.max(6, selBounds.hh - 2.5);
+          // prioritize Move over corner/side resize handles, while keeping a generous grab ring for narrow shapes like springs!
+          const innerMoveHw = Math.max(4, selBounds.hw - 5);
+          const innerMoveHh = Math.max(4, selBounds.hh - 5);
           const isInsideInnerMoveCore =
             Math.abs(localX) <= innerMoveHw && Math.abs(localY) <= innerMoveHh;
-          const adaptiveCornerHitR = Math.min(18, Math.max(9.5, Math.min(hw, hh) * 0.46));
-          const adaptiveSideHitR = Math.min(20, Math.max(8.5, Math.min(hw, hh) * 0.40));
+          const adaptiveCornerHitR = Math.min(18, Math.max(13, Math.min(hw, hh) * 0.5));
+          const adaptiveSideHitR = Math.min(20, Math.max(13, Math.min(hw, hh) * 0.48));
 
           if (!isInsideInnerMoveCore) {
           // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #234978 dots)
@@ -46357,7 +46357,7 @@ export default function App() {
                   trySnapY(candMaxY, curBox.maxY, pH, PAGE_EDGE_SNAP);
                 }
 
-                if (snappedScaleY !== null && refBoxes.length > 0) {
+                if (snappedScaleY === null && refBoxes.length > 0) {
                   for (const ref of refBoxes) {
                     for (const refY of [ref.minY, ref.maxY]) {
                       trySnapY(candMinY, curBox.minY, refY);
