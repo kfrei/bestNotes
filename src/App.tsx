@@ -69715,8 +69715,8 @@ export default function App() {
                             selectedLassoTextIds.includes(txt.id)
                               ? 'z-10 pointer-events-none border border-transparent'
                               : isEditingTxt
-                              ? 'z-25 border border-transparent bg-white/20'
-                              : 'z-12 border border-transparent bg-white/20 cursor-grab active:cursor-grabbing'
+                              ? 'z-[45] border border-transparent bg-white/20'
+                              : 'z-[45] border border-transparent bg-white/20 cursor-grab active:cursor-grabbing'
                           }`}
                         >
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (compact side pills + small corner circles) */}
@@ -69961,7 +69961,7 @@ export default function App() {
                                     letterSpacing: 'normal',
                                     WebkitTextStroke: '0px',
                                   }}
-                                  className="absolute flex items-center gap-1 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 ring-1 ring-black/5 text-[#2c3e50] px-2.5 py-1.5 rounded-2xl shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                                  className="absolute flex items-center gap-1 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 ring-1 ring-black/5 text-[#2c3e50] px-2.5 py-1.5 rounded-2xl shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] text-[11.5px] leading-none font-normal whitespace-nowrap z-[60] cursor-grab active:cursor-grabbing"
                                 >
                                   <span
                                     className="px-1 py-0.5 text-[#333333]/75 text-[12.5px] font-normal select-none"
@@ -71488,7 +71488,7 @@ export default function App() {
                               top: pillY,
                               touchAction: 'manipulation',
                             }}
-                            className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5"
+                            className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5"
                           >
                             <button
                               type="button"
