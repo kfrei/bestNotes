@@ -114,7 +114,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-premium-planet-earth-monochrome-sketch',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_planet_earth_monochrome_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_planet_earth_monochrome_sketch.webp:#5a3015',
     title: 'Πλανήτης Γη — Μονόχρωμο Δικτυωτό Σκίτσο Υδρογείου',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1293,7 +1293,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   // =========================================================================
   {
     id: 'sk-davinci-portrait',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.webp:#5a3015',
     title: "Λεονάρντο ντα Βίντσι — Πορτρέτο & Άνθρωπος του Βιτρούβιου",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1301,7 +1301,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-vitruvian',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_vitruvian_man_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_vitruvian_man_blue_sketch.webp:#5a3015',
     title: "Άνθρωπος του Βιτρούβιου — Αναλογίες Ανθρώπινου Σώματος",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1309,7 +1309,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-villa',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.webp:#5a3015',
     title: "Γενέτειρα Λεονάρντο ντα Βίντσι στο Ανκιάνο (Φλωρεντία)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1317,7 +1317,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-italy-map',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.webp:#5a3015',
     title: "Χάρτης Ιταλίας — Φλωρεντία & Ανκιάνο (Βίντσι)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1325,7 +1325,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-mona-lisa',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.webp:#5a3015',
     title: "Μόνα Λίζα (Τζοκόντα) — Λεονάρντο ντα Βίντσι",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1333,7 +1333,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-anatomy-full',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.webp:#5a3015',
     title: "Ανατομικές Μελέτες Ανθρώπινου Σώματος (Μύες, Θώρακας, Κρανίο, Καρδιά)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1341,7 +1341,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-skull-heart',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_anatomy_skull_heart_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_anatomy_skull_heart_blue_sketch.webp:#5a3015',
     title: "Ανατομική Μελέτη Ανθρώπινου Κρανίου & Καρδιάς (Ντα Βίντσι)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1349,7 +1349,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-botany-horse',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.webp:#5a3015',
     title: "Βοτανικές & Ζωολογικές Μελέτες της Φύσης (Φυτό & Άλογο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1357,7 +1357,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-water-flow',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.webp:#5a3015',
     title: "Υδραυλική & Ρευστομηχανική — Ροή Νερού, Ρεύματα & Δίνες",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1365,7 +1365,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-optics-eye',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.webp:#5a3015',
     title: "Οπτική — Πορεία Φωτός, Συγκλίνων Φακός & Ανθρώπινο Μάτι",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1373,7 +1373,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-geology-cube',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.webp:#5a3015',
     title: "Γεωλογία — Στρώματα Πετρωμάτων, Ρήγματα & Απολιθώματα",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1381,7 +1381,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-aerial-screw',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.webp:#5a3015',
     title: "Εναέριος Κοχλίας (Πρόδρομος Ελικοπτέρου — Λεονάρντο ντα Βίντσι)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1389,7 +1389,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-davinci-inventions-trio',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.webp:#5a3015',
     title: "Μηχανικές Εφευρέσεις Ντα Βίντσι (Εναέριος Κοχλίας, Θωρακισμένο Όχημα, Γέφυρα)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1397,7 +1397,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-portrait',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_portrait_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_portrait_blue_sketch.webp:#5a3015',
     title: "Ισαάκ Νεύτων (1642–1727) — Φυσικός, Μαθηματικός & Αστρονόμος",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1405,7 +1405,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-cradle',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_cradle_laws_of_motion_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_cradle_laws_of_motion_blue_sketch.webp:#5a3015',
     title: "Εκκρεμές του Νεύτωνα — Τρεις Νόμοι της Κίνησης & Διατήρηση Ορμής",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1413,7 +1413,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-falling-apple',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_falling_apple_gravity_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_falling_apple_gravity_blue_sketch.webp:#5a3015',
     title: "Το Μήλο του Νεύτωνα — Νόμος της Παγκόσμιας Έλξης (Βαρύτητα)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1421,7 +1421,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-calculus-book',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_calculus_book_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_calculus_book_blue_sketch.webp:#5a3015',
     title: "Απειροστικός Λογισμός & Μαθηματική Ανάλυση — Παράγωγος & Ολοκλήρωμα",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1429,7 +1429,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-prism-spectrum',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_prism_light_spectrum_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_prism_light_spectrum_blue_sketch.webp:#5a3015',
     title: "Πρίσμα του Νεύτωνα — Ανάλυση Λευκού Φωτός στο Φάσμα Χρωμάτων",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1437,7 +1437,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-principia',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_principia_book_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_principia_book_blue_sketch.webp:#5a3015',
     title: "Principia Mathematica (1687) — Το Θεμελιώδες Έργο του Ισαάκ Νεύτωνα",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1445,7 +1445,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-newton-planetary-orbit',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_planetary_orbit_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_newton_planetary_orbit_blue_sketch.webp:#5a3015',
     title: "Πλανητική Τροχιά & Βαρυτική Έλξη — Αστρονομία & Κληρονομιά Νεύτωνα",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1453,7 +1453,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-portrait',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.webp:#5a3015',
     title: "Άλμπερτ Αϊνστάιν (1879–1955) — Θεωρητικός Φυσικός",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1461,7 +1461,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-spacetime',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.webp:#5a3015',
     title: "Γενική Θεωρία της Σχετικότητας — Καμπύλωση Χωροχρόνου από Μάζα",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1469,7 +1469,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-emc2',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.webp:#5a3015',
     title: "Εξίσωση Ισοδυναμίας Μάζας–Ενέργειας E = mc² (Άλμπερτ Αϊνστάιν)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1477,7 +1477,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-photoelectric',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.webp:#5a3015',
     title: "Φωτοηλεκτρικό Φαινόμενο — Φωτόνια & Εκπομπή Ηλεκτρονίων (Νόμπελ 1921)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1485,7 +1485,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-peace-dove',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.webp:#5a3015',
     title: "Περιστέρι της Ειρήνης με Κλαδί Ελιάς",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1493,7 +1493,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-curiosity',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.webp:#5a3015',
     title: "Συννεφάκι Σκέψης & Επιστημονικής Περιέργειας (???)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1501,7 +1501,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-einstein-cosmos',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.webp:#5a3015',
     title: "Παγκόσμια Κληρονομιά — Σύμπαν, Γη & Κοσμικές Τροχιές",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1509,7 +1509,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-portrait',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_portrait_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_portrait_blue_sketch.webp:#5a3015',
     title: "Μαρί Κιουρί (1867–1934) — Φυσικός & Χημικός, Πρωτοπόρος Ραδιενέργειας",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1517,7 +1517,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-nobel-medal',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_nobel_medal_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_nobel_medal_blue_sketch.webp:#5a3015',
     title: "Μετάλλιο Βραβείου Νόμπελ (Άλφρεντ Νόμπελ — Φυσική & Χημεία)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1525,7 +1525,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-polonium-radium',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_polonium_radium_ores_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_polonium_radium_ores_blue_sketch.webp:#5a3015',
     title: "Ανακάλυψη Πολωνίου (84 Po) & Ραδίου (88 Ra) — Ορυκτά & Στοιχεία",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1533,7 +1533,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-chemistry-apparatus',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_chemistry_apparatus_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_chemistry_apparatus_blue_sketch.webp:#5a3015',
     title: "Χημική Συσκευή Απόσταξης, Κωνική Φιάλη & Ποτήρι Ζέσεως",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1541,7 +1541,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-electrometer',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_electrometer_apparatus_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_electrometer_apparatus_blue_sketch.webp:#5a3015',
     title: "Πιεζοηλεκτρικό Ηλεκτρόμετρο Κιουρί — Μέτρηση Ιονισμού & Ραδιενέργειας",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1549,7 +1549,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-xray-radiology',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_xray_radiology_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_xray_radiology_blue_sketch.webp:#5a3015',
     title: "Ακτινογραφία & Κινητή Μονάδα Ακτίνων Χ (Μαρί Κιουρί — Ιατρική Φυσική)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1557,7 +1557,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-curie-radiation-symbol',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_radiation_symbol_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_curie_radiation_symbol_blue_sketch.webp:#5a3015',
     title: "Σύμβολο Ραδιενέργειας & Πυρηνικής Ενέργειας",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1565,7 +1565,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-archimedes',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_archimedes_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_archimedes_blue_sketch.webp:#5a3015',
     title: "Αρχιμήδης ο Συρακούσιος (287–212 π.Χ.) — Φυσικός & Μαθηματικός (Άνωση, Μοχλοί)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1573,7 +1573,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-galileo-galilei',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_galileo_galilei_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_galileo_galilei_blue_sketch.webp:#5a3015',
     title: "Γαλιλαίος Γαλιλέι (1564–1642) — Φυσικός & Αστρονόμος (Ελεύθερη Πτώση, Τηλεσκόπιο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1581,7 +1581,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-johannes-kepler',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_johannes_kepler_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_johannes_kepler_blue_sketch.webp:#5a3015',
     title: "Γιοχάνες Κέπλερ (1571–1630) — Αστρονόμος & Φυσικός (Νόμοι Πλανητικής Κίνησης)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1589,7 +1589,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-blaise-pascal',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_blaise_pascal_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_blaise_pascal_blue_sketch.webp:#5a3015',
     title: "Μπλεζ Πασκάλ (1623–1662) — Φυσικός & Μαθηματικός (Υδροστατική Πίεση Pa)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1597,7 +1597,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-robert-hooke',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_robert_hooke_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_robert_hooke_blue_sketch.webp:#5a3015',
     title: "Ρόμπερτ Χουκ (1635–1703) — Φυσικός & Βιολόγος (Νόμος Ελαστικότητας & Κύτταρο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1605,7 +1605,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-christiaan-huygens',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_christiaan_huygens_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_christiaan_huygens_blue_sketch.webp:#5a3015',
     title: "Κρίστιαν Χόιχενς (1629–1695) — Φυσικός (Κυματική Θεωρία Φωτός & Εκκρεμές)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1613,7 +1613,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-charles-coulomb',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_charles_coulomb_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_charles_coulomb_blue_sketch.webp:#5a3015',
     title: "Σαρλ-Ωγκυστέν ντε Κουλόμπ (1736–1806) — Φυσικός (Νόμος του Κουλόμπ & Ηλεκτρικό Φορτίο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1621,7 +1621,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-alessandro-volta',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_alessandro_volta_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_alessandro_volta_blue_sketch.webp:#5a3015',
     title: "Αλεσάντρο Βόλτα (1745–1827) — Φυσικός (Ηλεκτρική Στήλη & Τάση Volt)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1629,7 +1629,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-andre-marie-ampere',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_andre_marie_ampere_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_andre_marie_ampere_blue_sketch.webp:#5a3015',
     title: "Αντρέ-Μαρί Αμπέρ (1775–1836) — Φυσικός (Ηλεκτρικό Ρεύμα Ampere & Ηλεκτρομαγνητισμός)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1637,7 +1637,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-georg-ohm',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_georg_ohm_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_georg_ohm_blue_sketch.webp:#5a3015',
     title: "Γκέοργκ Σίμον Ωμ (1789–1854) — Φυσικός (Νόμος του Ωμ & Ηλεκτρική Αντίσταση)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1645,7 +1645,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-michael-faraday',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_michael_faraday_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_michael_faraday_blue_sketch.webp:#5a3015',
     title: "Μάικλ Φαραντέι (1791–1867) — Φυσικός & Χημικός (Ηλεκτρομαγνητική Επαγωγή & Πεδία)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1653,7 +1653,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-james-prescott-joule',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_james_prescott_joule_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_james_prescott_joule_blue_sketch.webp:#5a3015',
     title: "Τζέιμς Πρέσκοτ Τζάουλ (1818–1889) — Φυσικός (Έργο, Ενέργεια Joule & Θερμότητα)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1661,7 +1661,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-lord-kelvin',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_lord_kelvin_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_lord_kelvin_blue_sketch.webp:#5a3015',
     title: "Λόρδος Κέλβιν (Ουίλιαμ Τόμσον, 1824–1907) — Φυσικός (Απόλυτη Θερμοκρασία Kelvin & Θερμοδυναμική)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1669,7 +1669,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-james-clerk-maxwell',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_james_clerk_maxwell_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_james_clerk_maxwell_blue_sketch.webp:#5a3015',
     title: "Τζέιμς Κλερκ Μάξγουελ (1831–1879) — Φυσικός (Εξισώσεις Μάξγουελ & Ηλεκτρομαγνητικά Κύματα)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1677,7 +1677,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-heinrich-hertz',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_heinrich_hertz_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_heinrich_hertz_blue_sketch.webp:#5a3015',
     title: "Χάινριχ Χερτζ (1857–1894) — Φυσικός (Ηλεκτρομαγνητικά Κύματα & Συχνότητα Hz)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1685,7 +1685,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-nikola-tesla',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_nikola_tesla_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_nikola_tesla_blue_sketch.webp:#5a3015',
     title: "Νίκολα Τέσλα (1856–1943) — Φυσικός & Εφευρέτης (Εναλλασσόμενο Ρεύμα & Μαγνητικό Πεδίο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1693,7 +1693,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-wilhelm-roentgen',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_wilhelm_roentgen_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_wilhelm_roentgen_blue_sketch.webp:#5a3015',
     title: "Βίλχελμ Κόνραντ Ρέντγκεν (1845–1923) — Φυσικός (Ανακάλυψη Ακτίνων Χ, Νόμπελ 1901)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1701,7 +1701,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-henri-becquerel',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_henri_becquerel_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_henri_becquerel_blue_sketch.webp:#5a3015',
     title: "Ανρί Μπεκερέλ (1852–1908) — Φυσικός (Ανακάλυψη Φυσικής Ραδιενέργειας Bq)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1709,7 +1709,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-jj-thomson',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_jj_thomson_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_jj_thomson_blue_sketch.webp:#5a3015',
     title: "Τζόζεφ Τζον Τόμσον (1856–1940) — Φυσικός (Ανακάλυψη του Ηλεκτρονίου)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1717,7 +1717,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-ernest-rutherford',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_ernest_rutherford_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_ernest_rutherford_blue_sketch.webp:#5a3015',
     title: "Έρνεστ Ράδερφορντ (1871–1937) — Φυσικός (Πυρηνικό Πρότυπο του Ατόμου & Πρωτόνιο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1725,7 +1725,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-max-planck',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_max_planck_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_max_planck_blue_sketch.webp:#5a3015',
     title: "Μαξ Πλανκ (1858–1947) — Φυσικός (Πατέρας της Κβαντικής Θεωρίας & Σταθερά h)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1733,7 +1733,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-niels-bohr',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_niels_bohr_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_niels_bohr_blue_sketch.webp:#5a3015',
     title: "Νιλς Μπορ (1885–1962) — Φυσικός (Ατομικό Πρότυπο του Μπορ & Κβαντικές Τροχιές)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1741,7 +1741,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-erwin-schrodinger',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_erwin_schrodinger_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_erwin_schrodinger_blue_sketch.webp:#5a3015',
     title: "Έρβιν Σρέντινγκερ (1887–1961) — Φυσικός (Κυματική Εξίσωση Κβαντομηχανικής)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1749,7 +1749,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-werner-heisenberg',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_werner_heisenberg_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_werner_heisenberg_blue_sketch.webp:#5a3015',
     title: "Βέρνερ Χάιζενμπεργκ (1901–1976) — Φυσικός (Αρχή της Αβεβαιότητας & Κβαντομηχανική)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1757,7 +1757,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-paul-dirac',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_paul_dirac_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_paul_dirac_blue_sketch.webp:#5a3015',
     title: "Πολ Ντιράκ (1902–1984) — Φυσικός (Σχετικιστική Κβαντομηχανική & Αντιύλη)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1765,7 +1765,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-wolfgang-pauli',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_wolfgang_pauli_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_wolfgang_pauli_blue_sketch.webp:#5a3015',
     title: "Βόλφγκανγκ Πάουλι (1900–1958) — Φυσικός (Απαγορευτική Αρχή του Πάουλι & Σπιν)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1773,7 +1773,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-enrico-fermi',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_enrico_fermi_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_enrico_fermi_blue_sketch.webp:#5a3015',
     title: "Ενρίκο Φέρμι (1901–1954) — Φυσικός (Πυρηνική Φυσική & Αλυσιδωτή Αντίδραση)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1781,7 +1781,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-lise-meitner',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_lise_meitner_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_lise_meitner_blue_sketch.webp:#5a3015',
     title: "Λίζε Μάιτνερ (1878–1968) — Φυσικός (Ερμηνεία της Πυρηνικής Σχάσης)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1789,7 +1789,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-richard-feynman',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_richard_feynman_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_richard_feynman_blue_sketch.webp:#5a3015',
     title: "Ρίτσαρντ Φάινμαν (1918–1988) — Φυσικός (Κβαντική Ηλεκτροδυναμική & Διαγράμματα Φάινμαν)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1797,7 +1797,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-stephen-hawking',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_stephen_hawking_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_stephen_hawking_blue_sketch.webp:#5a3015',
     title: "Στίβεν Χόκινγκ (1942–2018) — Θεωρητικός Φυσικός & Κοσμολόγος (Μαύρες Τρύπες & Σύμπαν)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1805,7 +1805,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-peter-higgs',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_peter_higgs_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_peter_higgs_blue_sketch.webp:#5a3015',
     title: "Πίτερ Χιγκς (1929–2024) — Θεωρητικός Φυσικός (Σωματίδιο Μποζόνιο Χιγκς & Μάζα)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1813,7 +1813,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-christian-doppler',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_christian_doppler_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_christian_doppler_blue_sketch.webp:#5a3015',
     title: "Κρίστιαν Ντόπλερ (1803–1853) — Φυσικός (Φαινόμενο Ντόπλερ στα Κύματα & τον Ήχο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1821,7 +1821,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-pythagoras',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_pythagoras_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_pythagoras_blue_sketch.webp:#5a3015',
     title: "Πυθαγόρας ο Σάμιος (580–496 π.Χ.) — Μαθηματικός & Φιλόσοφος (Πυθαγόρειο Θεώρημα & Αρμονία)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1829,7 +1829,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-euclid',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_euclid_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_euclid_blue_sketch.webp:#5a3015',
     title: "Ευκλείδης ο Αλεξανδρεύς (325–265 π.Χ.) — Μαθηματικός (Πατέρας της Ευκλείδειας Γεωμετρίας, «Στοιχεία»)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1837,7 +1837,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-carl-friedrich-gauss',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_carl_friedrich_gauss_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_carl_friedrich_gauss_blue_sketch.webp:#5a3015',
     title: "Καρλ Φρίντριχ Γκάους (1777–1855) — Μαθηματικός & Φυσικός (Θεωρία Αριθμών, Νόμος του Γκάους)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1845,7 +1845,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-leonhard-euler',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_leonhard_euler_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_leonhard_euler_blue_sketch.webp:#5a3015',
     title: "Λέοναρντ Όιλερ (1707–1783) — Μαθηματικός & Φυσικός (Συναρτήσεις, Αριθμός e, Ανάλυση & Μηχανική)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1853,7 +1853,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-antoine-lavoisier',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_antoine_lavoisier_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_antoine_lavoisier_blue_sketch.webp:#5a3015',
     title: "Αντουάν Λαβουαζιέ (1743–1794) — Χημικός (Πατέρας της Σύγχρονης Χημείας, Αρχή Διατήρησης της Μάζας)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1861,7 +1861,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-dmitri-mendeleev',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_dmitri_mendeleev_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_dmitri_mendeleev_blue_sketch.webp:#5a3015',
     title: "Ντμίτρι Μεντελέγιεφ (1834–1907) — Χημικός (Δημιουργός του Περιοδικού Πίνακα των Στοιχείων)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1869,7 +1869,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-amedeo-avogadro',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_amedeo_avogadro_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_amedeo_avogadro_blue_sketch.webp:#5a3015',
     title: "Αμεντέο Αβογκάντρο (1776–1856) — Χημικός & Φυσικός (Αριθμός Αβογκάντρο NA & Νόμος των Αερίων)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1877,7 +1877,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-linus-pauling',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_linus_pauling_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_linus_pauling_blue_sketch.webp:#5a3015',
     title: "Λάινους Πόλινγκ (1901–1994) — Χημικός (Φύση του Χημικού Δεσμού & Κλίμακα Ηλεκτραρνητικότητας)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1885,7 +1885,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-charles-darwin',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_charles_darwin_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_charles_darwin_blue_sketch.webp:#5a3015',
     title: "Κάρολος Δαρβίνος (1809–1882) — Βιολόγος & Φυσιοδίφης (Θεωρία της Εξέλιξης & Φυσική Επιλογή)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1893,7 +1893,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-gregor-mendel',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_gregor_mendel_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_gregor_mendel_blue_sketch.webp:#5a3015',
     title: "Γκρέγκορ Μέντελ (1822–1884) — Βιολόγος (Πατέρας της Γενετικής & Νόμοι της Κληρονομικότητας)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1901,7 +1901,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-louis-pasteur',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_louis_pasteur_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_louis_pasteur_blue_sketch.webp:#5a3015',
     title: "Λουί Παστέρ (1822–1895) — Βιολόγος & Χημικός (Πατέρας της Μικροβιολογίας, Εμβόλια & Παστερίωση)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1909,7 +1909,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-scientist-rosalind-franklin',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_rosalind_franklin_blue_sketch.png:#5a3015',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_rosalind_franklin_blue_sketch.webp:#5a3015',
     title: "Ρόζαλιντ Φράνκλιν (1920–1958) — Βιολόγος & Βιοφυσικός (Κρυσταλλογραφία Ακτίνων Χ & Διπλή Έλικα DNA)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1917,7 +1917,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-mass-balance-scale-apple',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_scale_apple.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_scale_apple.webp:#1d4ed8',
     title: 'Ζυγός Ισορροπίας με Μήλο & Βάρη (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1925,7 +1925,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-mass-balance-3stages',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_3stages.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_3stages.webp:#1d4ed8',
     title: '3 Στάδια Μέτρησης με Ζυγό Ισορροπίας (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1933,7 +1933,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-mass-balance-step1',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_step1_100g.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_step1_100g.webp:#1d4ed8',
     title: 'Ζυγός Ισορροπίας με Μήλο & 100g (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1941,7 +1941,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-mass-balance-equilibrium',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_equilibrium.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_balance_equilibrium.webp:#1d4ed8',
     title: 'Ζυγός Ισορροπίας σε Ισορροπία 175g (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1949,7 +1949,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-mass-digital-scale',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_digital_scale_apple.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_mass_digital_scale_apple.webp:#1d4ed8',
     title: 'Ηλεκτρονική Ζυγαριά Ακριβείας 185.4g (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1957,7 +1957,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-earth-dynamometer',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_earth_dynamometer.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_earth_dynamometer.webp:#1d4ed8',
     title: 'Γη & Δυναμόμετρο — Μέτρηση Βάρους (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1965,7 +1965,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-dynamometer-isolated',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_isolated.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_isolated.webp:#1d4ed8',
     title: 'Δυναμόμετρο με Κρεμασμένο Σώμα (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1973,7 +1973,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-dynamometer-3stages',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_3stages.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_3stages.webp:#1d4ed8',
     title: '3 Βήματα Μέτρησης Βάρους με Δυναμόμετρο (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1981,7 +1981,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-dynamometer-zoom',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_zoom_scale.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_dynamometer_zoom_scale.webp:#1d4ed8',
     title: 'Κλίμακα Δυναμομέτρου σε Μεγέθυνση (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1989,7 +1989,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-altitude-earth',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_altitude_earth_gravity.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_altitude_earth_gravity.webp:#1d4ed8',
     title: 'Μεταβολή Βάρους με το Ύψος από τη Γη (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -1997,7 +1997,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-weight-earth-globe',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_earth_globe_sketch.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_weight_earth_globe_sketch.webp:#1d4ed8',
     title: 'Πλανήτης Γη — Υδρόγειος (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2005,7 +2005,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volume-rectangular-prism',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_rectangular_prism.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_rectangular_prism.webp:#1d4ed8',
     title: 'Ορθογώνιο Παραλληλεπίπεδο V = l·b·h (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2013,7 +2013,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volume-cube',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_cube_isolated.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_cube_isolated.webp:#1d4ed8',
     title: 'Κύβος V = a³ (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2021,7 +2021,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volume-cylinder',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_cylinder_isolated.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_cylinder_isolated.webp:#1d4ed8',
     title: 'Κύλινδρος V = π·r²·h (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2029,7 +2029,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volume-displacement-3cylinders',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_displacement_3cylinders.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_displacement_3cylinders.webp:#1d4ed8',
     title: 'Μέτρηση Όγκου με Ογκομετρικό Κύλινδρο V₂-V₁ (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2037,7 +2037,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volume-graduated-cylinder-stone',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_graduated_cylinder_stone.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volume_graduated_cylinder_stone.webp:#1d4ed8',
     title: 'Ογκομετρικός Κύλινδρος με Πέτρα (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2045,7 +2045,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-density-balance-comparison',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_balance_comparison.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_balance_comparison.webp:#1d4ed8',
     title: 'Ζυγός Σύγκρισης Πυκνότητας (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2053,7 +2053,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-density-regular-solid',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_regular_solid_method.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_regular_solid_method.webp:#1d4ed8',
     title: 'Μέτρηση Πυκνότητας Κανονικού Στερεού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2061,7 +2061,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-density-irregular-solid',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_irregular_solid_method.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_density_irregular_solid_method.webp:#1d4ed8',
     title: 'Μέτρηση Πυκνότητας Ακανόνιστου Σώματος (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2069,7 +2069,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-boiling-water-pot',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_water_pot_stove.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_water_pot_stove.webp:#1d4ed8',
     title: 'Βρασμός Νερού σε Κατσαρόλα 100°C (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2077,7 +2077,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-boiling-water-4beakers',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_water_4beakers.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_water_4beakers.webp:#1d4ed8',
     title: 'Τα 4 Στάδια Βρασμού σε Ποτήρια Ζέσεως (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2085,7 +2085,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-boiling-beaker-warm',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_beaker_stage1_warm.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_beaker_stage1_warm.webp:#1d4ed8',
     title: 'Ποτήρι Ζέσεως με Νερό (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2093,7 +2093,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-boiling-beaker-bubbles',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_beaker_bubbles.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_boiling_beaker_bubbles.webp:#1d4ed8',
     title: 'Ποτήρι Ζέσεως σε Βρασμό με Φυσαλίδες (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2101,7 +2101,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-ocean-liner-buoyancy',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_ocean_liner_buoyancy.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_ocean_liner_buoyancy.webp:#1d4ed8',
     title: 'Υπερωκεάνιο Πλοίο — Άνωση & Πλεύση (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2109,7 +2109,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-ocean-liner-4stages',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_ocean_liner_4stages_flotation.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_ocean_liner_4stages_flotation.webp:#1d4ed8',
     title: 'Τα 4 Στάδια Πλεύσης & Άνωσης Πλοίου (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2117,7 +2117,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-rain-cloud-precipitation',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_rain_cloud_precipitation_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_rain_cloud_precipitation_blue_sketch.webp:#18181b',
     title: 'Σύννεφο Βροχής & Κατακρήμνιση — Κύκλος Νερού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2125,7 +2125,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-condensation-cloud',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_condensation_cloud_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_condensation_cloud_blue_sketch.webp:#18181b',
     title: 'Σύννεφο Συμπύκνωσης Υδρατμών — Κύκλος Νερού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2133,7 +2133,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-sun-solar-heating',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_sun_solar_heating_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_sun_solar_heating_blue_sketch.webp:#18181b',
     title: 'Ήλιος — Κύκλος Νερού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2141,7 +2141,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-drought-cracked-earth',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_cracked_earth_full_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_cracked_earth_full_blue_sketch.webp:#18181b',
     title: 'Ξηρό Σκασμένο Έδαφος με Ξερό Δέντρο & Λίμνη — Ξηρασία (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2149,7 +2149,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-drought-barren-tree',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_barren_tree_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_barren_tree_blue_sketch.webp:#18181b',
     title: 'Ξερό Δέντρο — Ξηρασία (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2157,7 +2157,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-drought-shrinking-pond',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_shrinking_pond_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_shrinking_pond_blue_sketch.webp:#18181b',
     title: 'Στεγνωμένη Λίμνη σε Ξηρό Έδαφος — Ξηρασία (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2165,7 +2165,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-drought-weak-rain-cloud',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_weak_rain_cloud_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_weak_rain_cloud_blue_sketch.webp:#18181b',
     title: 'Σύννεφο Μειωμένης Βροχόπτωσης — Ξηρασία (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2173,7 +2173,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-drought-heat-waves',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_heat_waves_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_drought_heat_waves_blue_sketch.webp:#18181b',
     title: 'Ανοδικά Κύματα Ζέστης & Εξάτμισης — Ξηρασία (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2181,7 +2181,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volcano-eruption-plume',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_eruption_ash_plume_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_eruption_ash_plume_blue_sketch.webp:#18181b',
     title: 'Ηφαιστειακή Έκρηξη & Νέφος Τέφρας (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2189,7 +2189,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-water-cycle-evaporation-arrows',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_water_cycle_evaporation_arrows_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_water_cycle_evaporation_arrows_blue_sketch.webp:#18181b',
     title: 'Βέλη Εξάτμισης που Ανεβαίνουν — Κύκλος Νερού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2197,7 +2197,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-water-cycle-mountain-river',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_water_cycle_mountain_river_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_water_cycle_mountain_river_blue_sketch.webp:#18181b',
     title: 'Βουνά, Ποτάμι & Θάλασσα — Κύκλος Νερού (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2205,7 +2205,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volcano-formation-full',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_formation_cross_section_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_formation_cross_section_blue_sketch.webp:#18181b',
     title: 'Δημιουργία Ηφαιστείου — Πλήρης Τομή (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2213,7 +2213,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volcano-cone-layers',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_cone_layers_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_cone_layers_blue_sketch.webp:#18181b',
     title: 'Ηφαιστειακός Κώνος & Γεωλογικά Στρώματα (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2221,7 +2221,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-volcano-magma-chamber',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_magma_chamber_blue_sketch.png:#18181b',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_volcano_magma_chamber_blue_sketch.webp:#18181b',
     title: 'Μαγματικός Θάλαμος στο Εσωτερικό της Γης (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2229,7 +2229,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sk-chitin-chemical-structure',
-    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_chitin_chemical_structure_blue_sketch.png:#1d4ed8',
+    iconifyId: 'sketch-png:/mind_maps/premium_pdf/premium_chitin_chemical_structure_blue_sketch.webp:#1d4ed8',
     title: 'Χημική Δομή Χιτίνης — Πολυσακχαρίτης (Σκίτσο)',
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
@@ -2237,7 +2237,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-hero-vinegar-yogurt-hcl-fruits',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_hero_vinegar_yogurt_hcl_fruits.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_hero_vinegar_yogurt_hcl_fruits.webp',
     title: "Τα Οξέα στην Καθημερινή Ζωή & στο Εργαστήριο — Ξύδι (CH3COOH), Γιαούρτι, Υδροχλωρικό Οξύ (HCl), Λεμόνι, Σταφύλι & Ντομάτα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2245,7 +2245,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-flask-bubbles',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_flask_bubbles.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_flask_bubbles.webp',
     title: "Κωνική Φιάλη Ερλενμάγιερ με Υδατικό Διάλυμα Οξέος & Φυσαλίδες",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2253,7 +2253,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-molecule-ionization',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_molecule_ionization.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_molecule_ionization.webp',
     title: "Μοριακό Μοντέλο Οξέος & Ιοντισμός (Κατιόντα Υδρογόνου H+)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2261,7 +2261,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-sour-tongue-litmus',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_sour_tongue_litmus.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_sour_tongue_litmus.webp',
     title: "Ιδιότητες Οξέων — Ξινή Γεύση & Κόκκινο Χρώμα σε Πεχαχαρτο (Δείκτες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2269,7 +2269,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-zinc-h2-testtube-shield',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_zinc_h2_testtube_shield.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_zinc_h2_testtube_shield.webp',
     title: "Δοκιμαστικός Σωλήνας Αντίδρασης Οξέος με Μέταλλο (Έκλυση H2) & Διαβρωτικότητα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2277,7 +2277,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-inorganic-test-tubes-rack',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_inorganic_test_tubes_rack.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_inorganic_test_tubes_rack.webp',
     title: "Ανόργανα Οξέα σε Στατώ Δοκιμαστικών Σωλήνων (HCl, H2SO4, HNO3)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2285,7 +2285,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-organic-molecule-model',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_organic_molecule_model.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_organic_molecule_model.webp',
     title: "Οργανικά Οξέα (με Άνθρακα) — 3D Μοριακό Μοντέλο (CH3COOH, Κιτρικό, Γαλακτικό)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2293,7 +2293,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-strong-weak-lightning-scale',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_strong_weak_lightning_scale.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_strong_weak_lightning_scale.webp',
     title: "Ισχυρά Οξέα (Πλήρης Ιοντισμός) & Ασθενή Οξέα (Μερικός Ιοντισμός / Ισορροπία)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2301,7 +2301,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-litmus-beakers-trio',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_litmus_beakers_trio.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_litmus_beakers_trio.webp',
     title: "Δείκτες Οξέων – Βάσεων: Πεχαχαρτο (Ήλιος) σε Όξινο, Ουδέτερο & Βασικό Διάλυμα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2309,7 +2309,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-metal-zn-hcl-h2-reaction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_metal_zn_hcl_h2_reaction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_metal_zn_hcl_h2_reaction.webp',
     title: "Αντίδραση Οξέων με Μέταλλα: Ψευδάργυρος (Zn) + Υδροχλωρικό Οξύ (HCl) → ZnCl2 + Αέριο Υδρογόνο (H2↑)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2317,7 +2317,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-neutralization-4flasks',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_neutralization_4flasks.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_neutralization_4flasks.webp',
     title: "Εξουδετέρωση (Αντίδραση με Βάσεις): Οξύ (HCl) + Βάση (NaOH) → Άλας (NaCl) + Νερό (H2O)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2325,7 +2325,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-ph-scale-spectrum',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_ph_scale_spectrum.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_ph_scale_spectrum.webp',
     title: "Κλίμακα pH (0 έως 14) — Όξινο (pH < 7), Ουδέτερο (pH = 7) & Βασικό Διάλυμα (pH > 7)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2333,7 +2333,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-water-drop-ph',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_water_drop_ph.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_water_drop_ph.webp',
     title: "Σταγόνα Καθαρού Νερού (Ουδέτερο pH = 7)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2341,7 +2341,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-stomach-digestion',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_stomach_digestion.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_stomach_digestion.webp',
     title: "Υδροχλωρικό Οξύ (HCl) στο Στομάχι — Γαστρικό Υγρό & Πέψη των Τροφών",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2349,7 +2349,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-cleaner-spray-bottle',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_cleaner_spray_bottle.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_cleaner_spray_bottle.webp',
     title: "Υγρά Καθαριστικά & Απολυμαντικά (Χρήσεις Υδροχλωρικού Οξέος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2357,7 +2357,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-chemical-factory',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_chemical_factory.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_chemical_factory.webp',
     title: "Χημική Βιομηχανία — Παραγωγή Λιπασμάτων, Χημικών & Πλαστικών (H2SO4, HNO3)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2365,7 +2365,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-pickles-jar-preservation',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_pickles_jar_preservation.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_pickles_jar_preservation.webp',
     title: "Συντήρηση Τροφίμων & Μαγειρική με Ξύδι (Οξικό Οξύ) και Κιτρικό Οξύ",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2373,7 +2373,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-car-battery-h2so4',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_car_battery_h2so4.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_car_battery_h2so4.webp',
     title: "Μπαταρία Αυτοκινήτου (Συσσωρευτής Μολύβδου με Θειικό Οξύ H2SO4)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2381,7 +2381,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-acids-safety-goggles-gloves',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_safety_goggles_gloves.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_acids_safety_goggles_gloves.webp',
     title: "Κανόνες Ασφαλείας στο Χημικό Εργαστήριο — Προστατευτικά Γυαλιά & Γάντια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2389,7 +2389,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-hero-naoh-nh3-caoh2-soap',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_hero_naoh_nh3_caoh2_soap.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_hero_naoh_nh3_caoh2_soap.webp',
     title: "Οι Βάσεις στην Καθημερινή Ζωή & στο Εργαστήριο — Υδροξείδιο Νατρίου (NaOH), Αμμωνία (NH3), Υδροξείδιο Ασβεστίου Ca(OH)2 & Σαπούνι",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2397,7 +2397,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-bitter-tongue',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_bitter_tongue.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_bitter_tongue.webp',
     title: "Ιδιότητες Βάσεων — Πικρή Γεύση (Προσοχή: Δεν Δοκιμάζουμε Χημικές Ουσίες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2405,7 +2405,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-soapy-hands',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soapy_hands.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soapy_hands.webp',
     title: "Ιδιότητες Βάσεων — Γλιστερή Υφή (Αίσθηση Σαπουνιού στα Χέρια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2413,7 +2413,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-litmus-test-tube-shield',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_litmus_test_tube_shield.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_litmus_test_tube_shield.webp',
     title: "Δοκιμαστικός Σωλήνας Βασικού Διαλύματος & Ασπίδα Διαβρωτικότητας",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2421,7 +2421,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-oh-ion-dissociation',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_oh_ion_dissociation.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_oh_ion_dissociation.webp',
     title: "Διάσταση / Ιοντισμός Βάσεων — Απελευθέρωση Ανιόντων Υδροξυλίου (OH-)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2429,7 +2429,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-soap-bar-bubbles',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soap_bar_bubbles.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soap_bar_bubbles.webp',
     title: "Πλάκα Σαπουνιού με Φυσαλίδες (Παρασκευή Σαπουνιού με NaOH / KOH)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2437,7 +2437,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-strong-test-tubes-rack',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_strong_test_tubes_rack.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_strong_test_tubes_rack.webp',
     title: "Ισχυρές Βάσεις σε Στατώ Δοκιμαστικών Σωλήνων (NaOH, KOH, Ba(OH)2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2445,7 +2445,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-weak-nh3-molecule',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_weak_nh3_molecule.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_weak_nh3_molecule.webp',
     title: "Ασθενείς Βάσεις — 3D Μοριακό Μοντέλο Αμμωνίας (NH3)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2453,7 +2453,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-soluble-beaker-stirring',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soluble_beaker_stirring.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_soluble_beaker_stirring.webp',
     title: "Διαλυτές Βάσεις στο Νερό (NaOH, KOH, Ca(OH)2) — Ποτήρι Ζέσεως με Ράβδο Ανάδευσης",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2461,7 +2461,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-insoluble-precipitate-bowl',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_insoluble_precipitate_bowl.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_insoluble_precipitate_bowl.webp',
     title: "Αδιάλυτες Βάσεις στο Νερό — Υδροξείδιο του Χαλκού Cu(OH)2 & Υδροξείδιο του Σιδήρου Fe(OH)3",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2469,7 +2469,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-indicators-7tubes-spectrum',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_indicators_7tubes_spectrum.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_indicators_7tubes_spectrum.webp',
     title: "Χρωματική Κλίμακα Δεικτών σε 7 Δοκιμαστικούς Σωλήνες (Αύξηση Βασικότητας / pH)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2477,7 +2477,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-neutralization-naoh-hcl',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_neutralization_naoh_hcl.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_neutralization_naoh_hcl.webp',
     title: "Εξουδετέρωση Βάσης με Οξύ: Βάση (NaOH) + Οξύ (HCl) → Άλας (NaCl) + Νερό (H2O)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2485,7 +2485,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-oxide-co2-reaction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_oxide_co2_reaction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_oxide_co2_reaction.webp',
     title: "Αντίδραση Βάσεων με Οξείδια Αμετάλλων: CO2 + Ca(OH)2 → CaCO3↓ + H2O (Θόλωμα Ασβεστόνερου)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2493,7 +2493,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-uses-icons-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_uses_icons_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_uses_icons_column.webp',
     title: "Εφαρμογές & Χρήσεις των Βάσεων (Καθαριστικά, Αντιόξινα Φάρμακα, Τρόφιμα, Βιομηχανία, Επεξεργασία Νερού)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2501,7 +2501,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-safety-washing-hands-faucet',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_safety_washing_hands_faucet.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_safety_washing_hands_faucet.webp',
     title: "Προφυλάξεις στις Βάσεις — Γυαλιά, Γάντια & Άμεσο Ξέπλυμα με Άφθονο Νερό",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2509,7 +2509,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-drain-pipe-siphon',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_drain_pipe_siphon.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_drain_pipe_siphon.webp',
     title: "Αποφρακτικά Σωλήνων & Σιφωνιών (Υδροξείδιο του Νατρίου / Καυστική Σόδα NaOH)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2517,7 +2517,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-liquid-soap-detergent',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_liquid_soap_detergent.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_liquid_soap_detergent.webp',
     title: "Υγρό Σαπούνι & Απορρυπαντικά (Χρήσεις Βάσεων στην Καθημερινή Υγιεινή)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2525,7 +2525,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-bases-baking-soda-box',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_baking_soda_box.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_bases_baking_soda_box.webp',
     title: "Μαγειρική Σόδα (NaHCO3) — Ασθενής Βασική Συμπεριφορά σε Τρόφιμα & Αντιόξινα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2533,7 +2533,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-hero-nacl-nahco3-caco3-crystals',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_hero_nacl_nahco3_caco3_crystals.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_hero_nacl_nahco3_caco3_crystals.webp',
     title: "Τα Άλατα στη Ζωή & στη Φύση — Χλωριούχο Νάτριο (NaCl), Μαγειρική Σόδα (NaHCO3), Ασβεστόλιθος (CaCO3) & Κρύσταλλοι",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2541,7 +2541,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-purple-crystal-cluster',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_purple_crystal_cluster.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_purple_crystal_cluster.webp',
     title: "Κρυσταλλική Δομή Αλάτων — Σύμπλεγμα Ιοντικών Κρυστάλλων",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2549,7 +2549,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-ionic-neutralization-spheres',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_ionic_neutralization_spheres.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_ionic_neutralization_spheres.webp',
     title: "Σχηματισμός Άλατος με Εξουδετέρωση: H+ + Cl- + Na+ + OH- → Na+ + Cl- + H2O",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2557,7 +2557,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-crystal-lattice-conductivity',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_crystal_lattice_conductivity.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_crystal_lattice_conductivity.webp',
     title: "Ιδιότητες Αλάτων — Κρυσταλλικό Πλέγμα Ιόντων & Ηλεκτρική Αγωγιμότητα Υδατικού Διαλύματος",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2565,7 +2565,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-4crystal-types-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_4crystal_types_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_4crystal_types_column.webp',
     title: "Κατηγορίες Αλάτων — Ουδέτερα (NaCl), Όξινα (NaHCO3), Βασικά & Διπλά Άλατα (Στυπτηρία)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2573,7 +2573,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-flame-test-colors-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_flame_test_colors_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_flame_test_colors_column.webp',
     title: "Πυροχημική Ανίχνευση Μετάλλων — Χρώματα Φλόγας Κατιόντων (Li+, Na+, K+, Ca2+, Ba2+, Cu2+)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2581,7 +2581,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-precipitate-4tubes-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_precipitate_4tubes_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_precipitate_4tubes_column.webp',
     title: "Ανίχνευση Ανιόντων & Σχηματισμός Ιζημάτων (AgCl, BaSO4, CO2↑, Ag3PO4)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2589,7 +2589,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-solubility-beaker',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_solubility_beaker.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_solubility_beaker.webp',
     title: "Διαλυτότητα Αλάτων στο Νερό — Ευδιάλυτα & Δυσδιάλυτα Άλατα (Ιζήματα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2597,7 +2597,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-5common-salts-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_5common_salts_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_5common_salts_column.webp',
     title: "Σημαντικά Άλατα: Μαγειρικό Αλάτι (NaCl), Ασβεστόλιθος (CaCO3), Σόδα (NaHCO3), Γαλαζόπετρα (CuSO4·5H2O) & Νιτραλάπι (KNO3)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2605,7 +2605,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-nature-sea-rocks-landscape',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_nature_sea_rocks_landscape.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_nature_sea_rocks_landscape.webp',
     title: "Τα Άλατα στη Φύση — Θαλασσινό Νερό, Αλυκές, Ασβεστολιθικά Πετρώματα & Ορυκτά Κοιτάσματα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2613,7 +2613,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-everyday-uses-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_everyday_uses_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_everyday_uses_column.webp',
     title: "Χρήσεις Αλάτων — Αλατιέρα, Λιπάσματα Γεωργίας, Βιομηχανία, Ιατρικός Ορός & Καθαρισμός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2621,7 +2621,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-salts-overview-5icons-row',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_overview_5icons_row.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_salts_overview_5icons_row.webp',
     title: "Οι 5 Βασικοί Τομείς Χρήσης των Αλάτων: Διατροφή, Γεωργία, Βιομηχανία, Ιατρική & Καθημερινή Ζωή",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2629,7 +2629,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-hero-structure-protein-jar',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hero_structure_protein_jar.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hero_structure_protein_jar.webp',
     title: "Τα Αμινοξέα & οι Πρωτεΐνες — Γενική Μοριακή Δομή (Αμινομάδα -NH2, Καρβοξυλομάδα -COOH, Ομάδα R)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2637,7 +2637,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-3d-ball-stick-model',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_3d_ball_stick_model.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_3d_ball_stick_model.webp',
     title: "3D Μοριακό Μοντέλο Αμινοξέος (Σφαιρικό Πρότυπο με Ομάδα R)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2645,7 +2645,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-amphoteric-balance-scale',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_amphoteric_balance_scale.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_amphoteric_balance_scale.webp',
     title: "Αμφοτερικός Χαρακτήρας Αμινοξέων & Ζουίτερ Ιόν (Διπολικό Ιόν σε Ουδέτερο pH)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2653,7 +2653,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-meat-fish-eggs-dairy-jar',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_meat_fish_eggs_dairy_jar.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_meat_fish_eggs_dairy_jar.webp',
     title: "Πηγές Ουσιωδών (Απαραίτητων) Αμινοξέων στη Διατροφή — Κρέας, Ψάρι, Αυγά, Γάλα & Όσπρια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2661,7 +2661,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-protein-4-structure-levels',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_protein_4_structure_levels.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_protein_4_structure_levels.webp',
     title: "Τα 4 Επίπεδα Οργάνωσης & Δομής των Πρωτεϊνών (Πρωτογενής, Δευτερογενής α-Έλικα, Τριτογενής & Τεταρτογενής Δομή)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2669,7 +2669,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-collagen-bone-structure',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_collagen_bone_structure.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_collagen_bone_structure.webp',
     title: "Δομικές Πρωτεΐνες (Κολλαγόνο, Κερατίνη, Ελαστίνη) — Στήριξη & Αντοχή Οστών και Ιστών",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2677,7 +2677,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-enzyme-substrate-catalysis',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_enzyme_substrate_catalysis.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_enzyme_substrate_catalysis.webp',
     title: "Καταλυτική Λειτουργία Πρωτεϊνών — Ένζυμο & Υπόστρωμα (E + S → ES → E + P)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2685,7 +2685,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-hemoglobin-red-blood-cell',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hemoglobin_red_blood_cell.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hemoglobin_red_blood_cell.webp',
     title: "Μεταφορική Λειτουργία Πρωτεϊνών — Αιμοσφαιρίνη στα Ερυθρά Αιμοσφαίρια (Μεταφορά Οξυγόνου O2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2693,7 +2693,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-antibodies-immune-defense',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_antibodies_immune_defense.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_antibodies_immune_defense.webp',
     title: "Αμυντική Λειτουργία Πρωτεϊνών — Αντισώματα (Ανοσοσφαιρίνες) κατά Παθογόνων Μικροοργανισμών",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2701,7 +2701,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-hormones-insulin-key',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hormones_insulin_key.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_hormones_insulin_key.webp',
     title: "Ρυθμιστική Λειτουργία Πρωτεϊνών — Πεπτιδικές Ορμόνες (π.χ. Ινσουλίνη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2709,7 +2709,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-protein-foods-4groups',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_protein_foods_4groups.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_protein_foods_4groups.webp',
     title: "Τροφές Πλούσιες σε Πρωτεΐνες & Αμινοξέα (Κρέας/Αυγά, Γαλακτοκομικά, Όσπρια/Ξηροί Καρποί, Σόγια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2717,7 +2717,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-deficiency-tired-boy',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_deficiency_tired_boy.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_deficiency_tired_boy.webp',
     title: "Έλλειψη Απαραίτητων Αμινοξέων — Κόπωση, Μυϊκή Αδυναμία & Μειωμένη Άμυνα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2725,7 +2725,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-amino-strong-bicep-arm',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_strong_bicep_arm.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_amino_strong_bicep_arm.webp',
     title: "Μυϊκή Ανάπτυξη & Δύναμη μέσω Πρωτεϊνών (Ακτίνη & Μυοσίνη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2733,7 +2733,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-hero-chemical-structure',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_hero_chemical_structure.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_hero_chemical_structure.webp',
     title: "Το Νουκλεοτίδιο — Χημική Δομή (Αζωτούχα Βάση, Σάκχαρο Πεντόζη & Φωσφορική Ομάδα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2741,7 +2741,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-3puzzle-pieces',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_3puzzle_pieces.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_3puzzle_pieces.webp',
     title: "Τα 3 Δομικά Μέρη του Νουκλεοτιδίου (Σύνδεση σαν Κομμάτια Παζλ)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2749,7 +2749,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-3parts-decomposition',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_3parts_decomposition.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_3parts_decomposition.webp',
     title: "Ανάλυση των 3 Μερών ενός Νουκλεοτιδίου: Αζωτούχα Βάση + Σάκχαρο Πεντόζης + Φωσφορική Ομάδα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2757,7 +2757,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-purines-pyrimidines-5bases',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_purines_pyrimidines_5bases.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_purines_pyrimidines_5bases.webp',
     title: "Οι 5 Αζωτούχες Βάσεις: Πουρίνες (Αδενίνη A, Γουανίνη G) & Πυριμιδίνες (Κυτοσίνη C, Θυμίνη T, Ουρακίλη U)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2765,7 +2765,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-ribose-deoxyribose-pair',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_ribose_deoxyribose_pair.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_ribose_deoxyribose_pair.webp',
     title: "Τα Σάκχαρα Πεντόζης: Ριβόζη (στο RNA με -OH στον 2' C) vs Δεοξυριβόζη (στο DNA με -H στον 2' C)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2773,7 +2773,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-rna-dna-8examples',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_rna_dna_8examples.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_rna_dna_8examples.webp',
     title: "Ριβονουκλεοτίδια RNA (AMP, GMP, CMP, UMP) & Δεοξυριβονουκλεοτίδια DNA (dAMP, dGMP, dCMP, dTMP)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2781,7 +2781,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-phosphodiester-chain-3-5',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_phosphodiester_chain_3_5.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_phosphodiester_chain_3_5.webp',
     title: "Σύνδεση Νουκλεοτιδίων με 3'-5' Φωσφοδιεστερικό Δεσμό & Πολυμερική Αλυσίδα (5' → 3')",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2789,7 +2789,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-vs-nucleoside-comparison',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_vs_nucleoside_comparison.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_vs_nucleoside_comparison.webp',
     title: "Σύγκριση: Νουκλεοτίδιο (με Φωσφορική Ομάδα) vs Νουκλεοσίδιο (Αζωτούχα Βάση + Πεντόζη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2797,7 +2797,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-dna-rna-atp-icons',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_dna_rna_atp_icons.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_dna_rna_atp_icons.webp',
     title: "Ρόλος των Νουκλεοτιδίων — Διπλή Έλικα DNA, Μονόκλωνο RNA & Ενεργειακό Νόμισμα ATP",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2805,7 +2805,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-eukaryotic-cell-dna-rna-atp',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_eukaryotic_cell_dna_rna_atp.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_eukaryotic_cell_dna_rna_atp.webp',
     title: "Ευκαρυωτικό Κύτταρο — Εντοπισμός DNA (στον Πυρήνα), RNA (Πυρήνας & Κυτταρόπλασμα) & ATP (Μιτοχόνδρια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2813,7 +2813,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-food-atp-pharma-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_food_atp_pharma_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_food_atp_pharma_column.webp',
     title: "Τα Νουκλεοτίδια στη Ζωή μας — Τροφές, Κυτταρική Ενέργεια (ATP) & Βιοτεχνολογία",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2821,7 +2821,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-nucleotide-pill-vaccine-vial',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_pill_vaccine_vial.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_nucleotide_pill_vaccine_vial.webp',
     title: "Νουκλεοτίδια & mRNA στη Φαρμακευτική, στη Βιοτεχνολογία & στα Εμβόλια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2829,7 +2829,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-scientists-hooke-schleiden-schwann-virchow',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.webp',
     title: "Ανακάλυψη του Κυττάρου & Κυτταρική Θεωρία — Ρόμπερτ Χουκ (1665), Σλάιντεν (1838), Σβαν (1839) & Βίρχοφ (1855)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2837,7 +2837,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-prokaryotic-vs-eukaryotic',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_prokaryotic_vs_eukaryotic.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_prokaryotic_vs_eukaryotic.webp',
     title: "Σύγκριση Κυττάρων: Προκαρυωτικό Κύτταρο (Βακτήριο) vs Ευκαρυωτικό Κύτταρο",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2845,7 +2845,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-theory-3circles',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_theory_3circles.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_theory_3circles.webp',
     title: "Οι 3 Θεμελιώδεις Αρχές της Κυτταρικής Θεωρίας (Δομική Μονάδα & Κυτταρική Διαίρεση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2853,7 +2853,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-plant-eukaryotic-labeled',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_labeled.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_labeled.webp',
     title: "Φυτικό Ευκαρυωτικό Κύτταρο (Πλήρες Διάγραμμα με Ονομασίες Οργανιδίων)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2861,7 +2861,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-plant-eukaryotic-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.webp',
     title: "Φυτικό Ευκαρυωτικό Κύτταρο (Υψηλής Ανάλυσης Τομή χωρίς Ετικέτες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2869,7 +2869,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-organelles-8icons-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_organelles_8icons_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_organelles_8icons_column.webp',
     title: "Τα 8 Κυτταρικά Οργανίδια (Πυρήνας, Μιτοχόνδριο, Ριβοσώματα, ΕΔ, Golgi, Λυσοσώματα, Χυμοτόπιο, Χλωροπλάστης)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2877,7 +2877,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-animal-eukaryotic-labeled',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_labeled.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_labeled.webp',
     title: "Ζωικό Ευκαρυωτικό Κύτταρο (Πλήρες Διάγραμμα με Ονομασίες Οργανιδίων)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2885,7 +2885,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-animal-eukaryotic-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.webp',
     title: "Ζωικό Ευκαρυωτικό Κύτταρο (Υψηλής Ανάλυσης Τομή χωρίς Ετικέτες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2893,7 +2893,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-size-comparison-1-10-100um',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_size_comparison_1_10_100um.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_size_comparison_1_10_100um.webp',
     title: "Σύγκριση Μεγέθους Κυττάρων: Προκαρυωτικά (1–10 μm) vs Ευκαρυωτικά Κύτταρα (10–100 μm)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2901,7 +2901,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-optical-microscope',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_optical_microscope.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_optical_microscope.webp',
     title: "Οπτικό Μικροσκόπιο Εργαστηρίου Βιολογίας",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2909,7 +2909,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-motor-neuron-1meter',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_motor_neuron_1meter.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_motor_neuron_1meter.webp',
     title: "Νευρικό Κύτταρο (Νευρώνας με Δενδρίτες, Κυτταρικό Σώμα & Νευράξονα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2917,7 +2917,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-pathway-4stages',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_pathway_4stages.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_pathway_4stages.webp',
     title: "Η Πορεία της Κυτταρικής Διαφοροποίησης (Αρχέγονο Βλαστικό Κύτταρο → Πολλαπλασιασμός → Δέσμευση → Εξειδικευμένο Κύτταρο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2925,7 +2925,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-dna-double-helix-gene-expression',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_dna_double_helix_gene_expression.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_dna_double_helix_gene_expression.webp',
     title: "Διπλή Έλικα DNA & Επιλεκτική Έκφραση Γονιδίων στη Διαφοροποίηση",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2933,7 +2933,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-stem-cells-5types-diagram',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_stem_cells_5types_diagram.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_stem_cells_5types_diagram.webp',
     title: "Βλαστικά Κύτταρα & Διαφοροποίηση σε Νευρικό, Μυϊκό, Επιθηλιακό, Αιμοσφαίριο & Οστικό Κύτταρο",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2941,7 +2941,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-epithelial-cells-layer',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_epithelial_cells_layer.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_epithelial_cells_layer.webp',
     title: "Επιθηλιακά Κύτταρα — Πυκνή Διάταξη πάνω σε Βασική Μεμβράνη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2949,7 +2949,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-connective-cells-osteocyte-adipocyte-fibroblast',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_connective_cells_osteocyte_adipocyte_fibroblast.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_connective_cells_osteocyte_adipocyte_fibroblast.webp',
     title: "Συνδετικά Κύτταρα: Οστικό Κύτταρο (Οστεοκύτταρο), Λιποκύτταρο & Ινοβλάστης",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2957,7 +2957,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-muscle-cells-3types',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_muscle_cells_3types.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_muscle_cells_3types.webp',
     title: "Τα 3 Είδη Μυϊκών Κυττάρων (Σκελετικά Γραμμωτά, Καρδιακά & Λεία Μυϊκά Κύτταρα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2965,7 +2965,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-nerve-cells-neuron-glia',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_nerve_cells_neuron_glia.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_nerve_cells_neuron_glia.webp',
     title: "Νευρικά Κύτταρα — Νευρώνας (Δενδρίτες, Άξονας) & Κύτταρα Νευρογλοίας",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2973,7 +2973,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-blood-cells-rbc-wbc-platelets',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_blood_cells_rbc_wbc_platelets.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_blood_cells_rbc_wbc_platelets.webp',
     title: "Αιμοποιητικά Κύτταρα Αίματος: Ερυθρά Αιμοσφαίρια, Λευκά Αιμοσφαίρια & Αιμοπετάλια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2981,7 +2981,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-stem-cell-summary-tree',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_stem_cell_summary_tree.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_stem_cell_summary_tree.webp',
     title: "Δέντρο Κυτταρικής Διαφοροποίησης από Αρχέγονο Κύτταρο στις Κύριες Ομάδες Κυττάρων",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2989,7 +2989,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-diff-embryo-fetus-development',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_embryo_fetus_development.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_diff_embryo_fetus_development.webp',
     title: "Εμβρυϊκή Ανάπτυξη του Ανθρώπου από Αρχέγονα Βλαστικά Κύτταρα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -2997,7 +2997,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-cell-division-cluster',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_cell_division_cluster.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_cell_division_cluster.webp',
     title: "Σχηματισμός Ιστού από Ομάδα Κυττάρων με Παρόμοια Δομή και Λειτουργία",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3005,7 +3005,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-human-body-4tissues-overview',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_human_body_4tissues_overview.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_human_body_4tissues_overview.webp',
     title: "Οι 4 Βασικοί Τύποι Ιστών στον Άνθρωπο (Επιθηλιακός, Συνδετικός, Μυϊκός & Νευρικός Ιστός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3013,7 +3013,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-epithelial-structure',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_epithelial_structure.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_epithelial_structure.webp',
     title: "Επιθηλιακός Ιστός — Δομή Κυττάρων, Πολικότητα & Βασική Μεμβράνη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3021,7 +3021,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-exocrine-gland',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_exocrine_gland.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_exocrine_gland.webp',
     title: "Εξωκρινής Αδένας (Ιδρωτοποιός / Σιελογόνος Αδένας από Αδενικό Επιθήλιο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3029,7 +3029,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-connective-fibers-matrix',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_connective_fibers_matrix.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_connective_fibers_matrix.webp',
     title: "Συνδετικός Ιστός — Διάσπαρτα Κύτταρα, Θεμέλια Μεσοκυττάρια Ουσία & Ινίδια Κολλαγόνου/Ελαστίνης",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3037,7 +3037,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-connective-bone-blood-fat',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_connective_bone_blood_fat.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_connective_bone_blood_fat.webp',
     title: "Είδη Συνδετικού Ιστού: Οστίτης Ιστός (Οστό), Αίμα & Λιπώδης Ιστός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3045,7 +3045,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-muscle-striated-smooth-cardiac',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_muscle_striated_smooth_cardiac.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_muscle_striated_smooth_cardiac.webp',
     title: "Μυϊκός Ιστός: 1. Γραμμωτός Σκελετικός (Εκούσιος), 2. Λείος (Ακούσιος) & 3. Καρδιακός Μυϊκός Ιστός (Μυοκάρδιο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3053,7 +3053,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-nervous-neuron-synapse',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_nervous_neuron_synapse.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_nervous_neuron_synapse.webp',
     title: "Νευρικός Ιστός — Νευρώνας & Νευρογλοιακά Κύτταρα (Διεγερσιμότητα & Αγωγιμότητα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3061,7 +3061,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-brain-spinal-cord-organ',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_brain_spinal_cord_organ.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_brain_spinal_cord_organ.webp',
     title: "Εγκέφαλος (Κεντρικό Νευρικό Σύστημα & Νευρικός Ιστός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3069,7 +3069,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-hierarchy-cell-to-organism',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_hierarchy_cell_to_organism.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_hierarchy_cell_to_organism.webp',
     title: "Η Ιεραρχία της Βιολογικής Οργάνωσης: Κύτταρο → Ιστός → Όργανο → Σύστημα Οργάνων → Οργανισμός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3077,7 +3077,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-tissues-skin-regeneration-vs-neuron',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_skin_regeneration_vs_neuron.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_tissues_skin_regeneration_vs_neuron.webp',
     title: "Ικανότητα Αναγέννησης Ιστών: Διαρκής Ανανέωση Επιδερμίδας vs Περιορισμένη Αναγέννηση Νευρώνων",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3085,7 +3085,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-tissues-to-stomach-diagram',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_tissues_to_stomach_diagram.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_tissues_to_stomach_diagram.webp',
     title: "Σχηματισμός Οργάνου (Στομάχι) από τη Συνεργασία και των 4 Τύπων Ιστών",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3093,7 +3093,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-8examples-collection',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_8examples_collection.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_8examples_collection.webp',
     title: "Συλλογή Οργάνων του Ανθρώπινου Σώματος (Καρδιά, Πνεύμονες, Στομάχι, Ήπαρ, Νεφρά, Εγκέφαλος, Μάτι, Οστό)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3101,7 +3101,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-heart-anatomy',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_heart_anatomy.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_heart_anatomy.webp',
     title: "Καρδιά — Μυώδες Όργανο Άντλησης Αίματος με Αορτή, Κοίλες Φλέβες & Πνευμονικά Αγγεία",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3109,7 +3109,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-lungs-respiration',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_lungs_respiration.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_lungs_respiration.webp',
     title: "Πνεύμονες & Τραχεία — Ανταλλαγή Αερίων (Πρόσληψη O2 & Αποβολή CO2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3117,7 +3117,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-stomach-digestion',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_stomach_digestion.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_stomach_digestion.webp',
     title: "Στομάχι — Μηχανική και Χημική Πέψη της Τροφής με Γαστρικούς Χυμούς",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3125,7 +3125,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-liver-metabolism',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_liver_metabolism.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_liver_metabolism.webp',
     title: "Ήπαρ (Συκώτι) — Παραγωγή Χολής, Αποθήκευση Γλυκογόνου, Αποτοξίνωση & Μεταβολισμός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3133,7 +3133,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-kidneys-filtration',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_kidneys_filtration.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_kidneys_filtration.webp',
     title: "Νεφρά (Δεξιός & Αριστερός Νεφρός με Νεφρική Αρτηρία, Φλέβα & Ουρητήρες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3141,7 +3141,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-brain-control',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_brain_control.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_brain_control.webp',
     title: "Εγκέφαλος — Έλεγχος & Συντονισμός Λειτουργιών, Σκέψης, Συναισθημάτων & Μνήμης",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3149,7 +3149,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-skin-layers-hair',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_skin_layers_hair.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_skin_layers_hair.webp',
     title: "Ανατομική Τομή Δέρματος (Επιδερμίδα, Χόριο, Υποδόριος Ιστός, Τρίχες & Αδένες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3157,7 +3157,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-eye-vision',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_eye_vision.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_eye_vision.webp',
     title: "Οφθαλμός (Μάτι) — Αισθητήριο Όργανο της Όρασης (Κόρη, Ίριδα, Κερατοειδής)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3165,7 +3165,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-ribcage-bones',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_ribcage_bones.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_ribcage_bones.webp',
     title: "Θωρακικός Κλωβός (Στέρνο, Πλευρές & Σπονδυλική Στήλη — Προστασία Καρδιάς & Πνευμόνων)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3173,7 +3173,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-skeletal-muscle',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_skeletal_muscle.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_skeletal_muscle.webp',
     title: "Γραμμωτός Σκελετικός Μυς με Τένοντες (Σύσπαση, Χαλάρωση & Κίνηση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3181,7 +3181,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-5systems-cooperation-cards',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_5systems_cooperation_cards.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_5systems_cooperation_cards.webp',
     title: "Συνεργασία Οργάνων σε 5 Συστήματα (Κυκλοφορικό, Αναπνευστικό, Πεπτικό, Νευρικό & Ουροποιητικό)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3189,7 +3189,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organs-vertical-hierarchy-5levels',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_vertical_hierarchy_5levels.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organs_vertical_hierarchy_5levels.webp',
     title: "Κάθετο Διάγραμμα Εππέδων Οργάνωσης (Κύτταρο → Ιστός → Όργανο → Σύστημα Οργάνων → Οργανισμός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3197,7 +3197,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-human-anatomy-body',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_human_anatomy_body.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_human_anatomy_body.webp',
     title: "Ο Ανθρώπινος Οργανισμός & τα Εσωτερικά Όργανα σε Ανατομική Προβολή",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3205,7 +3205,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-digestive-system',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_digestive_system.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_digestive_system.webp',
     title: "Πεπτικό Σύστημα (Οισοφάγος, Στομάχι, Λεπτό & Παχύ Έντερο — Διάσπαση Τροφών & Απορρόφηση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3213,7 +3213,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-respiratory-system',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_respiratory_system.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_respiratory_system.webp',
     title: "Αναπνευστικό Σύστημα (Λάρυγγας, Τραχεία, Βρόγχοι, Βρογχιόλια & Πνεύμονες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3221,7 +3221,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-circulatory-heart',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_circulatory_heart.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_circulatory_heart.webp',
     title: "Κυκλοφορικό Σύστημα — Καρδιά, Αορτή, Κοίλες Φλέβες & Στεφανιαία Αγγεία",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3229,7 +3229,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-urinary-system',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_urinary_system.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_urinary_system.webp',
     title: "Ουροποιητικό Σύστημα (Νεφρά, Ουρητήρες, Ουροδόχος Κύστη & Ουρήθρα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3237,7 +3237,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-nervous-brain-cord',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_nervous_brain_cord.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_nervous_brain_cord.webp',
     title: "Νευρικό Σύστημα (Εγκέφαλος, Παρεγκεφαλίδα, Εγκεφαλικό Στέλεχος & Νωτιαίος Μυελός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3245,7 +3245,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-endocrine-glands',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_endocrine_glands.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_endocrine_glands.webp',
     title: "Ενδοκρινικό Σύστημα — Ενδοκρινείς Αδένες (Υπόφυση, Θυρεοειδής, Επινεφρίδια, Πάγκρεας, Γονάδες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3253,7 +3253,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-muscular-body',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_muscular_body.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_muscular_body.webp',
     title: "Μυϊκό Σύστημα του Ανθρώπου (Σκελετικοί Μύες Κορμού & Άκρων)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3261,7 +3261,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-skeletal-body',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_skeletal_body.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_skeletal_body.webp',
     title: "Σκελετικό Σύστημα του Ανθρώπου (Κρανίο, Θώρακας, Σπονδυλική Στήλη, Λεκάνη & Οστά Άκρων)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3269,7 +3269,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-environment-interaction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_environment_interaction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_environment_interaction.webp',
     title: "Αλληλεπίδραση Οργανισμού με το Περιβάλλον (Θερμοκρασία, Νερό, Τροφή, Αέρας, Φως & Μικροοργανισμοί)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3277,7 +3277,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-organism-homeostasis-balance',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_homeostasis_balance.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_organism_homeostasis_balance.webp',
     title: "Ομοιόσταση — Διατήρηση Σταθερού Εσωτερικού Περιβάλλοντος (Θερμοκρασία 36,6°C, pH, Γλυκόζη, Αρτηριακή Πίεση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3285,7 +3285,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-6way-cooperation-hub',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_6way_cooperation_hub.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_6way_cooperation_hub.webp',
     title: "Διάγραμμα Συνεργασίας των Συστημάτων Οργάνων του Ανθρώπου (Νευρικό, Κυκλοφορικό, Αναπνευστικό, Πεπτικό, Ουροποιητικό, Μυϊκό)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3293,7 +3293,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-3gears-mechanism',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_3gears_mechanism.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_3gears_mechanism.webp',
     title: "Συστήματα Οργάνων σε Αρμονική Συνεργασία (Συμπλεκόμενα Γρανάζια Λειτουργιών)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3301,7 +3301,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-reproductive-male-female',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_reproductive_male_female.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_reproductive_male_female.webp',
     title: "Αναπαραγωγικό Σύστημα Ανθρώπου — Γυναικείο (Ωοθήκες, Σάλπιγγες, Μήτρα) & Ανδρικό (Όρχεις, Σπερματικοί Πόροι)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3309,7 +3309,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-sensory-organs-5senses',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_sensory_organs_5senses.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_sensory_organs_5senses.webp',
     title: "Τα 5 Αισθητήρια Όργανα (Μάτι/Όραση, Αυτί/Ακοή, Μύτη/Όσφρηση, Γλώσσα/Γεύση, Δέρμα/Αφή)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3317,7 +3317,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-lymphatic-immune-cells',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_lymphatic_immune_cells.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_lymphatic_immune_cells.webp',
     title: "Λεμφικό & Ανοσοποιητικό Σύστημα — Λευκά Αιμοσφαίρια, Λεμφοκύτταρα & Άμυνα κατά Παθογόνων Μικροβίων",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3325,7 +3325,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-integumentary-skin-section',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_integumentary_skin_section.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_integumentary_skin_section.webp',
     title: "Επιδερμιδικό (Καλυπτήριο) Σύστημα — Δέρμα, Τρίχες, Ιδρωτοποιοί Αδένες & Αισθητήριοι Υποδοχείς",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3333,7 +3333,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-systems-runner-cooperation',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_runner_cooperation.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_systems_runner_cooperation.webp',
     title: "Συνεργασία όλων των Συστημάτων Οργάνων κατά το Τρέξιμο και τη Σωματική Άσκηση",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3341,7 +3341,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-pond-biotic-abiotic-scene',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_pond_biotic_abiotic_scene.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_pond_biotic_abiotic_scene.webp',
     title: "Το Οικοσύστημα — Αλληλεπίδραση Βιοτικών Παραγόντων (Φυτά, Ζώα) και Αβιοτικών Παραγόντων (Ήλιος, Νερό, Αέρας, Έδαφος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3349,7 +3349,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-producers-consumers-decomposers-cycle',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_producers_consumers_decomposers_cycle.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_producers_consumers_decomposers_cycle.webp',
     title: "Οι Βιοτικοί Παράγοντες του Οικοσυστήματος: Παραγωγοί (Φυτά), Καταναλωτές (Ζώα) & Αποικοδομητές (Μύκητες, Βακτήρια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3357,7 +3357,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-abiotic-sun-water-wind-soil',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_abiotic_sun_water_wind_soil.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_abiotic_sun_water_wind_soil.webp',
     title: "Αβιοτικοί Παράγοντες Οικοσυστήματος (Ηλιακή Ακτινοβολία/Θερμοκρασία, Νερό/Υγρασία, Άνεμος & Έδαφος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3365,7 +3365,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-natural-forest-lake-ecosystem',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_natural_forest_lake_ecosystem.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_natural_forest_lake_ecosystem.webp',
     title: "Φυσικό Οικοσύστημα (Δάσος, Βουνά, Ποτάμι & Λίμνη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3373,7 +3373,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-artificial-farm-ecosystem',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_artificial_farm_ecosystem.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_artificial_farm_ecosystem.webp',
     title: "Τεχνητό / Αγροτικό Οικοσύστημα (Αγρόκτημα & Καλλιέργειες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3381,7 +3381,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-competition-two-trees',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_competition_two_trees.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_competition_two_trees.webp',
     title: "Ανταγωνισμός μεταξύ Οργανισμών (Δύο Δέντρα που Ανταγωνίζονται για το Φως, το Νερό & τα Θρεπτικά Συστατικά)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3389,7 +3389,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-predation-wolf-hare',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_predation_wolf_hare.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_predation_wolf_hare.webp',
     title: "Σχέση Θήρας – Θηρευτή (Λύκος Θηρευτής & Λαγός Θήραμα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3397,7 +3397,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-parasitism-dog-tick',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_parasitism_dog_tick.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_parasitism_dog_tick.webp',
     title: "Παρασιτισμός — Παράσιτο (Τσιμπούρι) και Ξενιστής (Σκύλος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3405,7 +3405,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-symbiosis-bee-flower',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_symbiosis_bee_flower.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_symbiosis_bee_flower.webp',
     title: "Συμβίωση / Αμοιβαιότητα — Μέλισσα & Λουλούδι (Νέκταρ & Επικονίαση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3413,7 +3413,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-commensalism-orchid-tree',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_commensalism_orchid_tree.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_commensalism_orchid_tree.webp',
     title: "Κομμενσαλισμός (Ομοσιτισμός) — Επίφυτη Ορχιδέα πάνω σε Κορμό Δέντρου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3421,7 +3421,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-food-chain-5levels',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_food_chain_5levels.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_food_chain_5levels.webp',
     title: "Τροφική Αλυσίδα 5 Τροφικών Επιπέδων: Χόρτο → Ακρίδα → Βάτραχος → Φίδι → Αετός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3429,7 +3429,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-food-web-network',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_food_web_network.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_food_web_network.webp',
     title: "Τροφικό Πλέγμα Χερσαίου Οικοσυστήματος (Διαπλεκόμενες Τροφικές Αλυσίδες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3437,7 +3437,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-energy-flow-vertical',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_energy_flow_vertical.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_energy_flow_vertical.webp',
     title: "Μονόδρομη Ροή Ενέργειας στο Οικοσύστημα (Ήλιος → Παραγωγοί → Καταναλωτές → Αποικοδομητές)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3445,7 +3445,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-matter-cycle-circular',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_matter_cycle_circular.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_matter_cycle_circular.webp',
     title: "Αέναος Κύκλος Υλικών στο Οικοσύστημα (Ατμόσφαιρα CO2/O2, Παραγωγοί, Καταναλωτές, Αποικοδομητές & Έδαφος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3453,7 +3453,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-natural-disturbances-fire-flood',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_natural_disturbances_fire_flood.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_natural_disturbances_fire_flood.webp',
     title: "Φυσικές Διαταραχές της Οικολογικής Ισορροπίας (Δασικές Πυρκαγιές & Πλημμύρες)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3461,7 +3461,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-human-disturbances-pollution',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_human_disturbances_pollution.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_human_disturbances_pollution.webp',
     title: "Ανθρωπογενείς Διαταραχές Οικοσυστημάτων (Ρύπανση, Αποψίλωση Δασών & Υπεραλίευση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3469,7 +3469,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-eco-earth-biodiversity-globe',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_earth_biodiversity_globe.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_eco_earth_biodiversity_globe.webp',
     title: "Βιόσφαιρα, Βιοποικιλότητα & Προστασία του Πλανήτη Γη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3477,7 +3477,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-plant-sun-co2-h2o-o2-glucose',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_plant_sun_co2_h2o_o2_glucose.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_plant_sun_co2_h2o_o2_glucose.webp',
     title: "Η Διαδικασία της Φωτοσύνθεσης — CO2 + H2O + Ηλιακό Φως → Γλυκόζη (C6H12O6) + Οξυγόνο (O2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3485,7 +3485,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-chloroplast-labeled-anatomy',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_chloroplast_labeled_anatomy.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_chloroplast_labeled_anatomy.webp',
     title: "Δομή Χλωροπλάστη (Εξωτερική & Εσωτερική Μεμβράνη, Στρώμα, Θυλακοειδή / Κοκκία, Grana)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3493,7 +3493,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-chloroplast-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_chloroplast_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_chloroplast_isolated.webp',
     title: "Χλωροπλάστης — 3D Εσωτερική Ανατομική Τομή Υψηλής Ανάλυσης (Grana & Στρώμα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3501,7 +3501,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-leaf-to-plant-cell-zoom',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_leaf_to_plant_cell_zoom.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_leaf_to_plant_cell_zoom.webp',
     title: "Πού Γίνεται η Φωτοσύνθεση: Από το Πράσινο Φύλλο στο Φυτικό Κύτταρο & στους Χλωροπλάστες",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3509,7 +3509,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-light-phase-thylakoids',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_light_phase_thylakoids.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_light_phase_thylakoids.webp',
     title: "Α. Φωτεινή (Φωτοχημική) Φάση της Φωτοσύνθεσης στα Θυλακοειδή (Φωτόλυση H2O → O2, Παραγωγή ATP & NADPH)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3517,7 +3517,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-dark-phase-calvin-cycle',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_dark_phase_calvin_cycle.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_dark_phase_calvin_cycle.webp',
     title: "Β. Σκοτεινή Φάση της Φωτοσύνθεσης (Κύκλος Calvin στο Στρώμα: Δέσμευση CO2 → Γλυκόζη C6H12O6)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3525,7 +3525,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-5factors-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_5factors_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_5factors_column.webp',
     title: "Παράγοντες που Επηρεάζουν την Ένταση της Φωτοσύνθεσης (Φως, CO2, Θερμοκρασία, Νερό, Χλωροφύλλη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3533,7 +3533,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-products-leaf-o2',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_products_leaf_o2.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_products_leaf_o2.webp',
     title: "Προϊόντα της Φωτοσύνθεσης: Γλυκόζη (Τροφή στο Φύλλο) + Αέριο Οξυγόνο (O2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3541,7 +3541,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-tree-co2-o2-exchange',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_tree_co2_o2_exchange.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_tree_co2_o2_exchange.webp',
     title: "Σημασία της Φωτοσύνθεσης — Δέσμευση CO2 από τα Δέντρα & Απελευθέρωση O2 στην Ατμόσφαιρα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3549,7 +3549,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-organisms-plants-algae-cyanobacteria',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_organisms_plants_algae_cyanobacteria.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_organisms_plants_algae_cyanobacteria.webp',
     title: "Φωτοσυνθετικοί (Αυτότροφοι) Οργανισμοί: Πράσινα Φυτά, Φύκη & Κυανοβακτήρια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3557,7 +3557,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-c3-vs-c4-plants',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_c3_vs_c4_plants.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_c3_vs_c4_plants.webp',
     title: "Φυτά C3 (Σιτάρι, Ρύζι, Δέντρα) vs Φυτά C4 Προσαρμοσμένα στη Ζέστη (Καλαμπόκι, Ζαχαροκάλαμο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3565,7 +3565,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-photo-earth-globe-oxygen-life',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_earth_globe_oxygen_life.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_photo_earth_globe_oxygen_life.webp',
     title: "Η Φωτοσύνθεση ως Βάση της Ζωής και του Οξυγόνου στον Πλανήτη Γη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3573,7 +3573,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-plant-cell-mitochondrion-labeled',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_plant_cell_mitochondrion_labeled.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_plant_cell_mitochondrion_labeled.webp',
     title: "Πού Γίνεται η Κυτταρική Αναπνοή του Φυτού — Φυτικό Κύτταρο & Μιτοχόνδριο (Παραγωγή Ενέργειας ATP)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3581,7 +3581,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-mitochondrion-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_mitochondrion_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_mitochondrion_isolated.webp',
     title: "Μιτοχόνδριο — 3D Ανατομική Τομή (Εξωτερική Μεμβράνη, Αναδιπλώσεις Cristae & Μήτρα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3589,7 +3589,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-stomata-leaf-gas-exchange',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_stomata_leaf_gas_exchange.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_stomata_leaf_gas_exchange.webp',
     title: "Ανταλλαγή Αερίων στα Φύλλα μέσω των Στομάτων (Είσοδος O2 για Αναπνοή & Έξοδος CO2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3597,7 +3597,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-stoma-guard-cells-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_stoma_guard_cells_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_stoma_guard_cells_isolated.webp',
     title: "Στόμα Επιδερμίδας Φύλλου (Δύο Καταφρακτικά Κύτταρα με Χλωροπλάστες & Στοματικό Άνοιγμα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3605,7 +3605,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-lenticels-stem-gas-exchange',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_lenticels_stem_gas_exchange.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_lenticels_stem_gas_exchange.webp',
     title: "Ανταλλαγή Αερίων στους Ξυλώδεις Βλαστούς μέσω των Φακιδίων (Είσοδος O2 & Έξοδος CO2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3613,7 +3613,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-4factors-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_4factors_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_4factors_column.webp',
     title: "Παράγοντες που Επηρεάζουν την Αναπνοή του Φυτού (Θερμοκρασία, Οξυγόνο O2, Γλυκόζη, Νερό)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3621,7 +3621,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-products-plant-o2-co2-atp',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_products_plant_o2_co2_atp.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_products_plant_o2_co2_atp.webp',
     title: "Αναπνοή Φυτού όλο το 24ωρο: Είσοδος O2 → Έξοδος CO2 + H2O + Ενέργεια (ATP)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3629,7 +3629,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-active-organs-seed-root-flower-fruit',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_active_organs_seed_root_flower_fruit.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_active_organs_seed_root_flower_fruit.webp',
     title: "Όργανα Φυτού με Έντονη Αναπνοή: Σπόρος σε Βλάστηση, Νεαρές Ρίζες, Άνθος & Καρπός",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3637,7 +3637,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resp-apples-crate-storage-co2',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_apples_crate_storage_co2.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resp_apples_crate_storage_co2.webp',
     title: "Συνέχιση της Αναπνοής σε Αποθηκευμένα Φρούτα & Λαχανικά (Κατανάλωση O2 & Παραγωγή CO2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3645,7 +3645,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-without-vs-with-support-sunflower',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_without_vs_with_support_sunflower.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_without_vs_with_support_sunflower.webp',
     title: "Η Σημασία της Στήριξης στο Φυτό — Μαραμένο Φυτό χωρίς Στήριξη vs Όρθιο Ηλιοτρόπιο με Στήριξη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3653,7 +3653,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-tissues-collenchyma-sclerenchyma-xylem',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_tissues_collenchyma_sclerenchyma_xylem.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_tissues_collenchyma_sclerenchyma_xylem.webp',
     title: "Οι Ιστοί Στήριξης των Φυτών: Κολέγχυμα (Ζωντανός Ιστός), Σκληρέγχυμα & Ξύλωμα (Ξυλώδεις Ιστοί)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3661,7 +3661,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-stem-cross-section-labeled',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_stem_cross_section_labeled.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_stem_cross_section_labeled.webp',
     title: "Εγκάρσια Τομή Στελέχους / Βλαστού (Επιδερμίδα, Φλοιός/Κολέγχυμα, Αγγεία Ξυλώματος, Ηθμοί Σωλήνες/Φλοίωμα, Μυελός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3669,7 +3669,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-leaf-veins-magnified',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_leaf_veins_magnified.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_leaf_veins_magnified.webp',
     title: "Στήριξη στα Φύλλα — Δίκτυο Νευρώσεων (Αγγεία Ξυλώματος & Μηχανικοί Ιστοί στο Έλασμα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3677,7 +3677,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-upright-stems-sunflower-oak-wheat',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_upright_stems_sunflower_oak_wheat.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_upright_stems_sunflower_oak_wheat.webp',
     title: "Α. Φυτά με Όρθια Στελέχη (Ηλιοτρόπιο, Κορμός Βελανιδιάς & Σιτάρι)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3685,7 +3685,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-climbing-plants-ivy-vine',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_climbing_plants_ivy_vine.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_climbing_plants_ivy_vine.webp',
     title: "Β. Αναρριχώμενα Φυτά (Κισσός, Αμπέλι, Μπιζέλι)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3693,7 +3693,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-twining-stems-bougainvillea',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_twining_stems_bougainvillea.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_twining_stems_bougainvillea.webp',
     title: "Γ. Φυτά με Πλεκόμενους Βλαστούς (Μπουκαμβίλια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3701,7 +3701,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-thorns-tendrils-rose-cucumber',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_thorns_tendrils_rose_cucumber.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_thorns_tendrils_rose_cucumber.webp',
     title: "Δ. Ειδικά Όργανα Στήριξης Φυτών — Αγκάθια (Τριαντάφυλλο) & Έλικες / Παράφυα (Αγγούρι)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3709,7 +3709,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-underground-roots-rhizomes',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_underground_roots_rhizomes.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_underground_roots_rhizomes.webp',
     title: "Ε. Υπόγεια Όργανα Στήριξης & Αγκύρωσης στο Έδαφος (Ριζικό Σύστημα Δέντρων & Ριζώματα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3717,7 +3717,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-4factors-column',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_4factors_column.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_4factors_column.webp',
     title: "Παράγοντες που Επηρεάζουν τη Στήριξη των Φυτών (Φως, Νερό, Θρεπτικές Ουσίες Ca/Si, Άνεμος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3725,7 +3725,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-bean-stake-experiment',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_bean_stake_experiment.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_bean_stake_experiment.webp',
     title: "Πείραμα Στήριξης Φυτού (Φασολιά με Στήριγμα vs Φασολιά χωρίς Στήριγμα)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3733,7 +3733,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-support-adaptations-bamboo-ivy-shrub',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_adaptations_bamboo_ivy_shrub.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_support_adaptations_bamboo_ivy_shrub.webp',
     title: "Προσαρμογές Φυτών για Στήριξη (Ευλύγιστα Καλάμια, Προσκολλητικές Ρίζες & Χαμηλή Ανάπτυξη στον Άνεμο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3741,7 +3741,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-h2o-polar-molecule-labeled',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_h2o_polar_molecule_labeled.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_h2o_polar_molecule_labeled.webp',
     title: "Μόριο Νερού (H2O) — Πολικό Μόριο με Αρνητικό Πόλο στο Οξυγόνο (δ-) και Θετικό Πόλο στα Υδρογόνα (δ+)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3749,7 +3749,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-floating-cube-density-hero',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_floating_cube_density_hero.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_floating_cube_density_hero.webp',
     title: "Γιατί ο Πάγος Επιπλέει στο Νερό — Μικρότερη Πυκνότητα Πάγου (≈0,92 g/cm³) έναντι Υγρού Νερού (≈1,00 g/cm³)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3757,7 +3757,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-liquid-water-molecules-dense',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_liquid_water_molecules_dense.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_liquid_water_molecules_dense.webp',
     title: "Μοριακή Δομή Υγρού Νερού — Μόρια Κοντά Μεταξύ τους σε Διαρκή Κίνηση",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3765,7 +3765,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-hexagonal-crystal-lattice',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hexagonal_crystal_lattice.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hexagonal_crystal_lattice.webp',
     title: "Μοριακή Δομή Πάγου — Ανοικτό Εξαγωνικό Κρυσταλλικό Πλέγμα Δεσμών Υδρογόνου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3773,7 +3773,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-hydrogen-bond-attraction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hydrogen_bond_attraction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hydrogen_bond_attraction.webp',
     title: "Ηλεκτροστατική Έλξη Μεταξύ Πολικών Μορίων Νερού (Δεσμός Υδρογόνου δ+ ··· δ-)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3781,7 +3781,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-hydrogen-bonds-tetramer',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hydrogen_bonds_tetramer.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hydrogen_bonds_tetramer.webp',
     title: "Δίκτυο Δεσμών Υδρογόνου Μεταξύ Γειτονικών Μορίων Νερού (H2O)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3789,7 +3789,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-hexagonal-ring-icon',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hexagonal_ring_icon.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_hexagonal_ring_icon.webp',
     title: "Εξαγωνικός Κρυσταλλικός Δακτύλιος 6 Μορίων Νερού στον Πάγο",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3797,7 +3797,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-cube-open-voids',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_cube_open_voids.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_cube_open_voids.webp',
     title: "Κύβος Πάγου με Ανοικτά Κενά (Αύξηση Όγκου κατά την Πήξη του Νερού)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3805,7 +3805,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-cube-in-beaker',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_cube_in_beaker.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_cube_in_beaker.webp',
     title: "Παγάκι που Επιπλέει στην Επιφάνεια Ποτηριού με Υγρό Νερό",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3813,7 +3813,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-ice-freezing-6stages-flowchart',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_freezing_6stages_flowchart.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_ice_freezing_6stages_flowchart.webp',
     title: "Τα 6 Στάδια Πήξης & Επίπλευσης του Πάγου (Ψύξη → Επιβράδυνση → Κλείδωμα Δεσμών → Πλέγμα → Μείωση Πυκνότητας → Επίπλευση)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3821,7 +3821,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-phases-top-3icons-ice-drop-steam',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_top_3icons_ice_drop_steam.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_top_3icons_ice_drop_steam.webp',
     title: "Οι Τρεις Φυσικές Καταστάσεις (Φάσεις) του Νερού: Στερεή (Πάγος), Υγρή (Νερό) & Αέρια (Υδρατμός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3829,7 +3829,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-phases-3molecular-states-comparison',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_3molecular_states_comparison.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_3molecular_states_comparison.webp',
     title: "Μικροσκοπική Σύγκριση Μορίων Νερού στις 3 Φάσεις: 1. Στερεό (Πάγος), 2. Υγρό (Νερό), 3. Αέριο (Υδρατμός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3837,7 +3837,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-phases-transitions-6changes-diagram',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_transitions_6changes_diagram.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_phases_transitions_6changes_diagram.webp',
     title: "Διάγραμμα Αλλαγών Φάσεων του Νερού: Τήξη, Πήξη, Εξάτμιση, Συμπύκνωση, Εξάχνωση & Απόθεση",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3845,7 +3845,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-boiling-pot-molecular-zoom-hero',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_pot_molecular_zoom_hero.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_pot_molecular_zoom_hero.webp',
     title: "Ο Βρασμός του Νερού — Σχηματισμός Φυσαλίδων Υδρατμού σε Όλη τη Μάζα του Υγρού (100°C)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3853,7 +3853,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-boiling-3stages-molecular-columns',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_3stages_molecular_columns.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_3stages_molecular_columns.webp',
     title: "Μοριακή Εξέλιξη του Βρασμού: 1. Αύξηση Κίνησης Μορίων, 2. Σχηματισμός Φυσαλίδων στο Σημείο Βρασμού, 3. Διαφυγή Ατμού",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3861,7 +3861,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-boiling-conditions-altitude-pressure-purity',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_conditions_altitude_pressure_purity.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_conditions_altitude_pressure_purity.webp',
     title: "Παράγοντες που Επηρεάζουν το Σημείο Βρασμού: Υψόμετρο, Εξωτερική Πίεση & Καθαρότητα Υγρού",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3869,7 +3869,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-boiling-process-6steps-sequence',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_process_6steps_sequence.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_process_6steps_sequence.webp',
     title: "Η Διαδικασία του Βρασμού σε 6 Βήματα (Θέρμανση → Επιτάχυνση Μορίων → Μικρές Φυσαλίδες → Άνοδος → Διάρρηξη → Υδρατμός)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3877,7 +3877,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-boiling-bottom-5summary-icons',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_bottom_5summary_icons.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_boiling_bottom_5summary_icons.webp',
     title: "Τα 5 Κλειδιά του Βρασμού: Παροχή Θερμότητας, Κινητική Ενέργεια Μορίων, Θραύση Δεσμών, Φυσαλίδες & Σταθερή Θερμοκρασία",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3885,7 +3885,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-atm-earth-atmosphere-molecular-zoom',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_earth_atmosphere_molecular_zoom.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_earth_atmosphere_molecular_zoom.webp',
     title: "Η Ατμόσφαιρα της Γης & τα Μόρια του Αέρα (N2, O2) που Ασκούν Ατμοσφαιρική Πίεση",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3893,7 +3893,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-atm-3columns-weight-gravity-omnidirectional',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_3columns_weight_gravity_omnidirectional.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_3columns_weight_gravity_omnidirectional.webp',
     title: "Πώς Προκύπτει η Ατμοσφαιρική Πίεση: Βάρος Αέρα, Βαρυτική Έλξη της Γης & Πίεση προς Όλες τις Κατευθύνσεις",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3901,7 +3901,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-atm-torricelli-experiment-5steps',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_torricelli_experiment_5steps.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_torricelli_experiment_5steps.webp',
     title: "Το Πείραμα του Torricelli σε 5 Στάδια — Σωλήνας Υδραργύρου 76 cm Hg & Κενό Torricelli (1 atm = 1013 hPa)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3909,7 +3909,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-atm-effects-straw-lungs-cooker-house',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_effects_straw_lungs_cooker_house.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_effects_straw_lungs_cooker_house.webp',
     title: "Εφαρμογές & Επιδράσεις της Ατμοσφαιρικής Πίεσης: Καλαμάκι Ροφήματος, Αναπνοή στους Πνεύμονες, Χύτρα Ταχύτητας & Κτίρια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3917,7 +3917,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-atm-variations-altitude-weather-isobars-barometer',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_variations_altitude_weather_isobars_barometer.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_atm_variations_altitude_weather_isobars_barometer.webp',
     title: "Μεταβολές Ατμοσφαιρικής Πίεσης: Υψόμετρο, Καιρός, Χαμηλό/Υψηλό Βαρομετρικό, Ισοβαρείς Χάρτες & Βαρόμετρο",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3925,7 +3925,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-atom-tetrahedral-bonds',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_atom_tetrahedral_bonds.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_atom_tetrahedral_bonds.webp',
     title: "Άτομο Άνθρακα (C) — Τετραεδρική Διάταξη 4 Ομοιοπολικών Δεσμών",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3933,7 +3933,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-hero-coal-diamond-graphite-graphene',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_hero_coal_diamond_graphite_graphene.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_hero_coal_diamond_graphite_graphene.webp',
     title: "Ο Άνθρακας στη Φύση & στην Τεχνολογία: Γαιάνθρακας, Διαμάντι, Μολύβι Γραφίτη & Πλέγμα Γραφενίου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3941,7 +3941,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-bohr-model-6protons-6neutrons',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_bohr_model_6protons_6neutrons.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_bohr_model_6protons_6neutrons.webp',
     title: "Ατομικό Πρότυπο Bohr του Άνθρακα (Z=6, 6p+, 6n0, Ηλεκτρονιακή Δομή K=2, L=4)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3949,7 +3949,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-periodic-table-tile',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_periodic_table_tile.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_periodic_table_tile.webp',
     title: "Ο Άνθρακας στον Περιοδικό Πίνακα (6 C, Ατομικό Βάρος 12.01, Ομάδα 14 IVA, Περίοδος 2)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3957,7 +3957,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-4covalent-bonds-model',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_4covalent_bonds_model.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_4covalent_bonds_model.webp',
     title: "Σχηματισμός 4 Ομοιοπολικών Δεσμών από το Άτομο του Άνθρακα (1s² 2s² 2p²)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3965,7 +3965,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-allotropes-diamond-graphite-graphene-fullerene',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_allotropes_diamond_graphite_graphene_fullerene.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_allotropes_diamond_graphite_graphene_fullerene.webp',
     title: "Οι 4 Αλλοτροπικές Μορφές του Άνθρακα: Διαμάντι, Γραφίτης, Γραφένιο & Φουλερένια (C60)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3973,7 +3973,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-diamond-crystal-structure',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_diamond_crystal_structure.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_diamond_crystal_structure.webp',
     title: "Διαμάντι & το Τετραεδρικό Κρυσταλλικό Πλέγμα Ατόμων Άνθρακα",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3981,7 +3981,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-graphite-layered-structure',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_graphite_layered_structure.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_graphite_layered_structure.webp',
     title: "Γραφίτης — Επίπεδα Εξαγωνικά Στρώματα Ατόμων Άνθρακα (Αγωγός του Ηλεκτρισμού)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3989,7 +3989,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-cycle-ecosystem-diagram',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_cycle_ecosystem_diagram.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_cycle_ecosystem_diagram.webp',
     title: "Ο Κύκλος του Άνθρακα στη Φύση (Ατμοσφαιρικό CO2, Φωτοσύνθεση, Αναπνοή, Ηφαίστεια, Ορυκτά Καύσιμα & Ωκεανοί)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -3997,7 +3997,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-carbon-bottom-7summary-icons',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_bottom_7summary_icons.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_carbon_bottom_7summary_icons.webp',
     title: "Σύνοψη Ιδιοτήτων του Άνθρακα: Άτομο C, Δεσμοί C–C, Αλυσίδες & Δακτύλιοι, Αλλοτροπίες, Κύκλος στη Φύση & Εφαρμογές",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4005,7 +4005,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-methane-ch4-3d-molecule',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_methane_ch4_3d_molecule.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_methane_ch4_3d_molecule.webp',
     title: "Μόριο Μεθανίου (CH4) — Το Απλούστερο Αλκάνιο σε 3D Τετραεδρική Δομή",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4013,7 +4013,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-hero-barrel-burner-gas-cylinder',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_hero_barrel_burner_gas_cylinder.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_hero_barrel_burner_gas_cylinder.webp',
     title: "Τα Αλκάνια ως Καύσιμα & Πρώτες Ύλες: Βαρέλι Πετρελαίου, Καυστήρας Φυσικού Αερίου & Φιάλη Υγραερίου (Προπάνιο/Βουτάνιο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4021,7 +4021,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-ethane-tetrahedral-geometry',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_ethane_tetrahedral_geometry.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_ethane_tetrahedral_geometry.webp',
     title: "Συντακτικός Τύπος Αιθανίου (C2H6) & Τετραεδρική Γεωμετρία Απλών Ομοιοπολικών Δεσμών σ (109,5°)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4029,7 +4029,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-states-gas-liquid-solid',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_states_gas_liquid_solid.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_states_gas_liquid_solid.webp',
     title: "Φυσική Κατάσταση Αλκανίων ανά Αριθμό Ατόμων Άνθρακα: C1–C4 Αέρια, C5–C17 Υγρά, ≥C18 Στερεά (Παραφίνη)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4037,7 +4037,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-combustion-ch4-reaction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_combustion_ch4_reaction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_combustion_ch4_reaction.webp',
     title: "Τέλεια Καύση Μεθανίου: CH4 + 2O2 → CO2 + 2H2O + Θερμική Ενέργεια",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4045,7 +4045,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-natural-sources-oil-gas-extraction',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_natural_sources_oil_gas_extraction.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_natural_sources_oil_gas_extraction.webp',
     title: "Φυσικές Πηγές Αλκανίων — Θαλάσσια Πλατφόρμα Άντλησης, Γεωλογικά Κοιτάσματα Αργού Πετρελαίου & Φυσικού Αερίου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4053,7 +4053,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-fractional-distillation-tower',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_fractional_distillation_tower.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_fractional_distillation_tower.webp',
     title: "Κλασματική Απόσταξη Αργού Πετρελαίου — Αποστακτική Στήλη & Κλάσματα (Υγραέριο, Βενζίνη, Κηροζίνη, Ντίζελ, Μαζούτ/Άσφαλτος)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4061,7 +4061,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-alkanes-everyday-uses-7icons-row',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_everyday_uses_7icons_row.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_alkanes_everyday_uses_7icons_row.webp',
     title: "Τα Αλκάνια στην Καθημερινή Ζωή: Μαγείρεμα/Θέρμανση, Καύσιμα Οχημάτων, Κεριά, Λιπαντικά, Πλαστικά, Απορρυπαντικά & Αεροσκάφη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4069,7 +4069,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resistance-electric-field-electrons',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_electric_field_electrons.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_electric_field_electrons.webp',
     title: "Ηλεκτρικό Πεδίο & Επιτάχυνση Ελεύθερων Ηλεκτρονίων ανάμεσα στα Ιόντα Μεταλλικού Αγωγού",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4077,7 +4077,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resistance-copper-wire-cross-section',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_copper_wire_cross_section.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_copper_wire_cross_section.webp',
     title: "Τομή Χάλκινου Καλωδίου (Αγωγού) — Μικροσκοπικές Συγκρούσεις Ελεύθερων Ηλεκτρονίων με τα Ιόντα του Μετάλλου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4085,7 +4085,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-resistance-electron-ion-collisions',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_electron_ion_collisions.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_resistance_electron_ion_collisions.webp',
     title: "Ηλεκτρική Αντίσταση: Επιβράδυνση & Εκτροπή Ηλεκτρονίων λόγω Συγκρούσεων με τα Ιόντα του Μετάλλου",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4093,7 +4093,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-plant-eukaryotic-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.webp',
     title: "Φυτικό Ευκαρυωτικό Κύτταρο (Κυτταρικό Τείχος, Χλωροπλάστες, Χυμοτόπιο, Πυρήνας & Οργανίδια)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4101,7 +4101,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-animal-eukaryotic-isolated',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.webp',
     title: "Ζωικό Ευκαρυωτικό Κύτταρο (Κυτταρική Μεμβράνη, Πυρήνας, Μιτοχόνδρια, Ενδοπλασματικό Δίκτυο & Golgi)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4109,7 +4109,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-cell-prokaryotic-clean',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.webp',
     title: "Προκαρυωτικό Κύτταρο (Βακτήριο — Νουκλεοειδές, Ριβοσώματα, Κυτταρικό Τείχος & Μαστίγιο)",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4117,7 +4117,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-closed-bulb-lit',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_closed_bulb_lit.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_closed_bulb_lit.webp',
     title: "Κλειστό Ηλεκτρικό Κύκλωμα — Ροή Ελεύθερων Ηλεκτρονίων, Κλειστός Διακόπτης & Φωτοβόλος Λαμπτήρας",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4125,7 +4125,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-open-bulb-off',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_open_bulb_off.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_open_bulb_off.webp',
     title: "Ανοιχτό Ηλεκτρικό Κύκλωμα — Ανοιχτός Διακόπτης, Διακοπή Ροής Ηλεκτρονίων & Σβηστός Λαμπτήρας",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4133,7 +4133,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-source-battery-chemical',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_battery_chemical.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_battery_chemical.webp',
     title: "Ηλεκτρική Πηγή: Μπαταρία (Ηλεκτρικό Στοιχείο) — Μετατροπή Χημικής Ενέργειας σε Ηλεκτρική",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4141,7 +4141,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-source-generator-kinetic',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_generator_kinetic.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_generator_kinetic.webp',
     title: "Ηλεκτρική Πηγή: Γεννήτρια (Τουρμπίνα & Πηνίο) — Μετατροπή Κινητικής (Μηχανικής) Ενέργειας σε Ηλεκτρική",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4149,7 +4149,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-source-solar-photovoltaic',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_solar_photovoltaic.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_solar_photovoltaic.webp',
     title: "Ηλεκτρική Πηγή: Φωτοστοιχείο (Φωτοβολταϊκό Πάνελ) — Μετατροπή Φωτεινής Ενέργειας (Ακτινοβολίας) σε Ηλεκτρική",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4157,7 +4157,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-circuit-source-thermocouple-thermal',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_thermocouple_thermal.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_circuit_source_thermocouple_thermal.webp',
     title: "Ηλεκτρική Πηγή: Θερμοστοιχείο (Θερμοζεύγος) — Μετατροπή Θερμικής Ενέργειας σε Ηλεκτρική",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4165,7 +4165,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-conductors-vs-insulators-cylinder',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_conductors_vs_insulators_cylinder.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_conductors_vs_insulators_cylinder.webp',
     title: "Αγωγοί vs. Μονωτές — Σύγκριση Ελεύθερων Ηλεκτρονίων σε Μεταλλικό Αγωγό (Χαλκός) & Δέσμιων Ηλεκτρονίων σε Μονωτή",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4173,7 +4173,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-current-random-thermal-motion',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_random_thermal_motion.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_random_thermal_motion.webp',
     title: "Χωρίς Ηλεκτρική Πηγή: Άτακτη (Τυχαία Θερμική) Κίνηση Ελεύθερων Ηλεκτρονίων σε Μεταλλικό Αγωγό",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4181,7 +4181,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-current-battery-directed-flow',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_battery_directed_flow.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_battery_directed_flow.webp',
     title: "Με Ηλεκτρική Πηγή (Μπαταρία): Προσανατολισμένη Κίνηση Ελεύθερων Ηλεκτρονίων & Γέννηση Ηλεκτρικού Ρεύματος",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',
@@ -4189,7 +4189,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'col-premium-current-resistor-flow-result',
-    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_resistor_flow_result.png',
+    iconifyId: 'local-png:/mind_maps/premium_pdf/premium_current_resistor_flow_result.webp',
     title: "Αποτέλεσμα: Ηλεκτρικό Ρεύμα σε Μεταλλικό Αγωγό & Διέλευση από Αντιστάτη",
     category: "Σχολικά & Εργαστήριο",
     colorStyle: 'multicolor',

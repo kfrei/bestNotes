@@ -13,7 +13,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 314,
     "height": 263,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/01_life_water.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/01_life_water.webp",
     "zOrder": 13,
     "naturalWidth": 309,
     "naturalHeight": 259
@@ -52,7 +52,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 80,
     "height": 70,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/02_earth_water.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/02_earth_water.webp",
     "zOrder": 16,
     "naturalWidth": 291,
     "naturalHeight": 255
@@ -78,7 +78,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 122,
     "height": 96,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_2/water_molecule.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_2/water_molecule.webp",
     "zOrder": 18,
     "naturalWidth": 400,
     "naturalHeight": 315
@@ -91,7 +91,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 98,
     "height": 81,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/03_water_cycle.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/03_water_cycle.webp",
     "zOrder": 19,
     "naturalWidth": 347,
     "naturalHeight": 287
@@ -104,7 +104,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 82,
     "height": 84,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/04_plant_water.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/04_plant_water.webp",
     "zOrder": 20,
     "naturalWidth": 341,
     "naturalHeight": 350
@@ -117,7 +117,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 52,
     "height": 88,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_1.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_1.webp",
     "zOrder": 21,
     "naturalWidth": 209,
     "naturalHeight": 355
@@ -130,7 +130,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 73,
     "height": 88,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_2/solvent_solute.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_2/solvent_solute.webp",
     "zOrder": 22,
     "naturalWidth": 347,
     "naturalHeight": 420
@@ -143,7 +143,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 90,
     "height": 78,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/06_irrigation.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/06_irrigation.webp",
     "zOrder": 23,
     "naturalWidth": 208,
     "naturalHeight": 181
@@ -156,7 +156,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 100,
     "height": 44,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/07_city_water.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/07_city_water.webp",
     "zOrder": 24,
     "naturalWidth": 400,
     "naturalHeight": 176
@@ -169,7 +169,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 90,
     "height": 65,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_1.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_1.webp",
     "zOrder": 25,
     "naturalWidth": 211,
     "naturalHeight": 153
@@ -182,7 +182,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 90,
     "height": 66,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_2.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_2.webp",
     "zOrder": 26,
     "naturalWidth": 215,
     "naturalHeight": 157
@@ -195,7 +195,7 @@ export function buildWaterChemistryNotebook(folder = 'Γενικά'): Notebook {
     "width": 92,
     "height": 201,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_4/01_water_electrolysis_hofmann.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/2_4/01_water_electrolysis_hofmann.webp",
     "zOrder": 27,
     "naturalWidth": 256,
     "naturalHeight": 560

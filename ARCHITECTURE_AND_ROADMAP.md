@@ -747,6 +747,17 @@ sequenceDiagram
    * Σε ένα απλό WebView, η ζωντανή γραφή περνάει από HTML5 Canvas (`desynchronized: true` + `getCoalescedEvents()` — ήδη πολύ γρήγορο στα 120Hz, αλλά με ~15–25ms pipeline latency).
    * Βάζουμε ένα διάφανο native **`PKCanvasView` / Metal layer μόνο για τη ζωντανή γραμμή όσο ακουμπάει η μύτη (`0ms` latency)**. Μόλις σηκωθεί το Pencil (`pointerup`), το native layer παραδίδει τα ακριβή vector points `(x, y, pressure, tilt)` στη δική μας μηχανή ExplainBoards και καθαρίζει — δίνοντας **100% native αίσθηση γραφής** κρατώντας ανέπαφα όλα τα Simulations, Illustrator/Photoshop tools, OCR και Live TV!
 
+---
+
+## 16. 🎨 Υποχρεωτικός Κανόνας Ποιότητας Εικόνων & Σκίτσων Συλλογής (Vector / HD WebP Standard)
+
+> [!IMPORTANT]
+> **Κανόνας Προσθήκης Νέων Σκίτσων & Σχημάτων στη Συλλογή (από 21/11/2026 και εξής):**
+> * **Απαγορεύονται τα χαμηλής ανάλυσης θολά `.png` (`< 700px`).**
+> * **Για νέα διαγράμματα, γεωμετρικά/φυσικά σχήματα & εικονίδια:** Φτιάχνουμε **μόνο καθαρά, όμορφα Native Vector (`.svg`)** (ή καθαρό Canvas vector κώδικα όπως τα 4 φωτοσκιασμένα 3D σώματα), τα οποία διατηρούνται 100% ανέπαφα ως vector κατά την εισαγωγή (`insertImageDataUrlOnPage` παρακάμπτει το rasterization για `.svg`).
+> * **Για καλλιτεχνικές εικονογραφήσεις / ακουαρέλες:** Χρησιμοποιούμε αποκλειστικά **HD `.webp` (αναβαθμισμένα 3×–4× με `Real-ESRGAN x4plus-anime` + halo-free white-bg composite & clean alpha**, `maxDim ≤ 1024px`, `quality = 84–88`, διαφανές φόντο).
+> * **Μαζική Αναβάθμιση Υπάρχουσας Συλλογής (`public/mind_maps/`):** Και τα `1.154` παλιά `.png` αναβαθμίστηκαν σε καθαρό **HD `.webp`** μέσω `scripts/upgrade_mindmaps_hd_webp.py` και τα παλιά `.png` αφαιρέθηκαν, με αυτόματο legacy fallback (`/mind_maps/...png` → `.webp`) σε Editor & PDF Export ώστε να μη σπάσει ποτέ καμία παλιά σημείωση!
+
 
 
 

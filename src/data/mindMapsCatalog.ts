@@ -18,7 +18,7 @@ export interface MindMapLibraryItem {
 export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   {
     "id": "mm-1054",
-    "url": "/mind_maps/premium_pdf/premium_planet_earth_3d_relief.png",
+    "url": "/mind_maps/premium_pdf/premium_planet_earth_3d_relief.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -47,7 +47,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-001",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/02_nutrition_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/02_nutrition_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -69,7 +69,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-002",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/02_nutrition_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/02_nutrition_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -89,7 +89,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-003",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/03_respiration_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/03_respiration_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -109,7 +109,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-004",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/03_respiration_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/03_respiration_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -129,7 +129,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-005",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -148,7 +148,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-006",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -167,7 +167,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-007",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_3.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/05_growth_3.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -187,7 +187,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-008",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/06_reproduction_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/06_reproduction_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -207,7 +207,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-009",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/06_reproduction_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/06_reproduction_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -227,7 +227,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-010",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -247,7 +247,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-011",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -266,7 +266,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-012",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_3.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/07_response_3.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -286,7 +286,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-013",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/09_excretion.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/09_excretion.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -305,7 +305,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-014",
-    "url": "/mind_maps/biology_a_gymnasio/1_1/10_evolution.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_1/10_evolution.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -322,7 +322,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-015",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/01_cells_everywhere.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/01_cells_everywhere.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -340,7 +340,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-016",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -360,7 +360,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-017",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -380,7 +380,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-018",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_3.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/02_one_many_cells_3.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -400,7 +400,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-019",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/03_animal_cell.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/03_animal_cell.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -420,7 +420,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-020",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/04_plant_cell.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/04_plant_cell.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -439,7 +439,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-021",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/05_organization.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/05_organization.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -456,7 +456,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-022",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/06_genetic_material.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/06_genetic_material.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -478,7 +478,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-023",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/07_cytoplasm.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/07_cytoplasm.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -496,7 +496,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-024",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -518,7 +518,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-025",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -540,7 +540,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-026",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_3.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/08_specialised_cells_3.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -563,7 +563,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-027",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/09_plasma_membrane.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/09_plasma_membrane.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -582,7 +582,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-028",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/10_mitochondrion.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/10_mitochondrion.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -601,7 +601,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-029",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/11_chloroplast.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/11_chloroplast.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -621,7 +621,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-030",
-    "url": "/mind_maps/biology_a_gymnasio/1_2/12_vacuole.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_2/12_vacuole.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -640,7 +640,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-031",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/01_cell.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/01_cell.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -658,7 +658,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-032",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/02_muscle_tissue.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/02_muscle_tissue.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -677,7 +677,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-033",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/03_heart_organ.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/03_heart_organ.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -763,7 +763,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-034",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/04_circulatory_system.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/04_circulatory_system.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -848,7 +848,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-035",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/05_organism.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/05_organism.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -865,7 +865,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-036",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/06_community.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/06_community.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -882,7 +882,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-037",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/07_food_chain.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/07_food_chain.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -900,7 +900,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-038",
-    "url": "/mind_maps/biology_a_gymnasio/1_3/08_organization_levels.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_3/08_organization_levels.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -918,7 +918,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-039",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/01_meadow_interactions.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/01_meadow_interactions.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -939,7 +939,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-040",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/02_plant_environment.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/02_plant_environment.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -960,7 +960,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-041",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/03_chameleon.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/03_chameleon.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -978,7 +978,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-042",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/04_arctic_fox.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/04_arctic_fox.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -999,7 +999,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-043",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/05_cactus.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/05_cactus.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -1017,7 +1017,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-044",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/06_duck_feet.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/06_duck_feet.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -1039,7 +1039,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-045",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/07_beaks_food.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/07_beaks_food.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -1060,7 +1060,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-046",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/08_camouflage_survival_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/08_camouflage_survival_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -1082,7 +1082,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-047",
-    "url": "/mind_maps/biology_a_gymnasio/1_4/08_camouflage_survival_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/1_4/08_camouflage_survival_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -1105,7 +1105,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-048",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/01_autotrophs.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/01_autotrophs.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1124,7 +1124,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-049",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/02_leaves.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/02_leaves.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1143,7 +1143,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-050",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/03_chlorophyll.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/03_chlorophyll.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1163,7 +1163,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-051",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/04_water_co2.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/04_water_co2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1188,7 +1188,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-052",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/05_glucose.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/05_glucose.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1210,7 +1210,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-053",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/06_oxygen.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/06_oxygen.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1231,7 +1231,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-054",
-    "url": "/mind_maps/biology_a_gymnasio/2_1/07_equation.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_1/07_equation.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -1253,7 +1253,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-055",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/01_heterotrophs.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/01_heterotrophs.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1272,7 +1272,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-056",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/02_pseudopods.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/02_pseudopods.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1292,7 +1292,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-057",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/03_cilia.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/03_cilia.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1312,7 +1312,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-058",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/04_vacuole.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/04_vacuole.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1332,7 +1332,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-059",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/05_intracellular.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/05_intracellular.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1351,7 +1351,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-060",
-    "url": "/mind_maps/biology_a_gymnasio/2_2/06_excretion.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_2/06_excretion.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -1372,7 +1372,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-061",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_1.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_1.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1394,7 +1394,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-062",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_2.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1416,7 +1416,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-063",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_3.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/01_animal_diets_3.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1437,7 +1437,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-064",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/02_adaptations.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/02_adaptations.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1459,7 +1459,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-065",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/03_extracellular.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/03_extracellular.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1478,7 +1478,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-066",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/04_digestive_tract.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/04_digestive_tract.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1501,7 +1501,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-067",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/05_stomach.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/05_stomach.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1523,7 +1523,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-068",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/06_absorption.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/06_absorption.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1546,7 +1546,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-069",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/07_excretion.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/07_excretion.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1568,7 +1568,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-070",
-    "url": "/mind_maps/biology_a_gymnasio/2_3/08_simple_animals.png",
+    "url": "/mind_maps/biology_a_gymnasio/2_3/08_simple_animals.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -1591,7 +1591,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-071",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/03_elements_assemble.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/03_elements_assemble.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1612,7 +1612,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-072",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/04_chon_atoms.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/04_chon_atoms.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1635,7 +1635,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-073",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/05_water_in_body.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/05_water_in_body.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1657,7 +1657,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-074",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/06_water_solvent.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/06_water_solvent.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1678,7 +1678,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-075",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/07_molecules_to_cell.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/07_molecules_to_cell.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1699,7 +1699,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-076",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/08_organic_molecules.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/08_organic_molecules.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1724,7 +1724,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-077",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/09_molecules_energy.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/09_molecules_energy.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1748,7 +1748,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-078",
-    "url": "/mind_maps/biology_b_gymnasio/1_1/10_shape_and_role.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_1/10_shape_and_role.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -1770,7 +1770,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-079",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/03_single_cell.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/03_single_cell.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1789,7 +1789,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-080",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/04_cells_to_organism.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/04_cells_to_organism.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1809,7 +1809,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-081",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/05_cell_membrane.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/05_cell_membrane.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1828,7 +1828,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-082",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/06_genetic_material.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/06_genetic_material.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1851,7 +1851,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-083",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/07_plant_and_animal_1.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/07_plant_and_animal_1.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1874,7 +1874,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-084",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/07_plant_and_animal_2.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/07_plant_and_animal_2.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1897,7 +1897,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-085",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/08_animal_cell.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/08_animal_cell.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1915,7 +1915,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-086",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/09_specialised_cells.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/09_specialised_cells.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1933,7 +1933,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-087",
-    "url": "/mind_maps/biology_b_gymnasio/1_2/10_cells_cooperate.png",
+    "url": "/mind_maps/biology_b_gymnasio/1_2/10_cells_cooperate.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -1952,7 +1952,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-088",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_1.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_1.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -1974,7 +1974,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-089",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_2.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_2.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -1996,7 +1996,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-090",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_3.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/01_movement_purpose_3.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2019,7 +2019,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-091",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/02_hydra_stationary.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/02_hydra_stationary.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2040,7 +2040,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-092",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/03_cell_wall.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/03_cell_wall.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2064,7 +2064,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-093",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/04_food_pseudopods.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/04_food_pseudopods.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2086,7 +2086,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-094",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/05_pseudopods.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/05_pseudopods.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2107,7 +2107,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-095",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/06_flagellum.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/06_flagellum.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2127,7 +2127,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-096",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/07_cilia.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/07_cilia.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2147,7 +2147,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-097",
-    "url": "/mind_maps/biology_b_gymnasio/5_1/08_mechanisms_compare.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_1/08_mechanisms_compare.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -2169,7 +2169,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-098",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/phototropism_tendrils.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/phototropism_tendrils.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2190,7 +2190,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-099",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/plant_cell_wall.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/plant_cell_wall.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2212,7 +2212,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-100",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/plant_support_tissue.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/plant_support_tissue.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2235,7 +2235,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-101",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/roots_holding_soil.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/roots_holding_soil.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2257,7 +2257,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-102",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/stem_leaves_structure.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/stem_leaves_structure.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2280,7 +2280,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-103",
-    "url": "/mind_maps/biology_b_gymnasio/5_2/turgor_pressure.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_2/turgor_pressure.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -2303,7 +2303,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-104",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/animal_muscles_bones_1.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/animal_muscles_bones_1.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -2428,7 +2428,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-105",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/animal_muscles_bones_2.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/animal_muscles_bones_2.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -2552,7 +2552,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-106",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/flagella_cilia.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/flagella_cilia.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -2676,7 +2676,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-107",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/hydrostatic_skeleton.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/hydrostatic_skeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -2799,7 +2799,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-108",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/invertebrate_exoskeleton.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/invertebrate_exoskeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -2925,7 +2925,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-109",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/joint_articulation.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/joint_articulation.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -3047,7 +3047,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-110",
-    "url": "/mind_maps/biology_b_gymnasio/5_3/vertebrate_endoskeleton.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_3/vertebrate_endoskeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -3173,7 +3173,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-111",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/bone_structure_spongy.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/bone_structure_spongy.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3298,7 +3298,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-112",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/human_arm_leg_bones_1.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/human_arm_leg_bones_1.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3419,7 +3419,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-113",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/human_arm_leg_bones_2.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/human_arm_leg_bones_2.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3540,7 +3540,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-114",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/human_skeleton_overview.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/human_skeleton_overview.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3660,7 +3660,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-115",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/rib_cage_protection.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/rib_cage_protection.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3783,7 +3783,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-116",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/skeletal_muscles.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/skeletal_muscles.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -3905,7 +3905,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-117",
-    "url": "/mind_maps/biology_b_gymnasio/5_4/skull_spine.png",
+    "url": "/mind_maps/biology_b_gymnasio/5_4/skull_spine.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -4027,7 +4027,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-118",
-    "url": "/mind_maps/biology_b_gymnasio/6_1/01_asexual.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_1/01_asexual.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.1",
@@ -4047,7 +4047,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-119",
-    "url": "/mind_maps/biology_b_gymnasio/6_1/02_binary_fission.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_1/02_binary_fission.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.1",
@@ -4070,7 +4070,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-120",
-    "url": "/mind_maps/biology_b_gymnasio/6_1/03_budding.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_1/03_budding.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.1",
@@ -4093,7 +4093,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-121",
-    "url": "/mind_maps/biology_b_gymnasio/6_2/01_flower.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_2/01_flower.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.2",
@@ -4116,7 +4116,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-122",
-    "url": "/mind_maps/biology_b_gymnasio/6_2/02_pollination.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_2/02_pollination.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.2",
@@ -4136,7 +4136,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-123",
-    "url": "/mind_maps/biology_b_gymnasio/6_2/03_fruit_1.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_2/03_fruit_1.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.2",
@@ -4155,7 +4155,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-124",
-    "url": "/mind_maps/biology_b_gymnasio/6_2/03_fruit_2.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_2/03_fruit_2.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.2",
@@ -4178,7 +4178,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-125",
-    "url": "/mind_maps/biology_b_gymnasio/6_2/04_vegetative.png",
+    "url": "/mind_maps/biology_b_gymnasio/6_2/04_vegetative.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.2",
@@ -4198,7 +4198,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-126",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/01_elements.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/01_elements.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4217,7 +4217,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-127",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/02_water_1.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/02_water_1.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4241,7 +4241,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-128",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/02_water_2.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/02_water_2.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4264,7 +4264,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-129",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/03_transport.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/03_transport.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4285,7 +4285,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-130",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/04_salts_1.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/04_salts_1.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4309,7 +4309,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-131",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/04_salts_2.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/04_salts_2.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4434,7 +4434,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-132",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/05_carbohydrates.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/05_carbohydrates.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4455,7 +4455,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-133",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_1.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_1.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4477,7 +4477,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-134",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_2.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_2.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4501,7 +4501,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-135",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_3.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/06_proteins_3.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4524,7 +4524,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-136",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/07_lipids.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/07_lipids.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4547,7 +4547,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-137",
-    "url": "/mind_maps/biology_g_gymnasio/1_1/08_nucleic_acids.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_1/08_nucleic_acids.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -4570,7 +4570,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-138",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/01_cell_theory.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/01_cell_theory.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4588,7 +4588,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-139",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/02_cell_types_1.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/02_cell_types_1.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4609,7 +4609,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-140",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/02_cell_types_2.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/02_cell_types_2.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4630,7 +4630,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-141",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/03_membrane.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/03_membrane.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4651,7 +4651,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-142",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/04_nucleus_dna.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/04_nucleus_dna.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4672,7 +4672,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-143",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/05_er_ribosomes.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/05_er_ribosomes.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4693,7 +4693,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-144",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/06_mitochondria.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/06_mitochondria.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4712,7 +4712,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-145",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/07_chloroplast.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/07_chloroplast.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4732,7 +4732,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-146",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/08_plant_cell.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/08_plant_cell.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4752,7 +4752,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-147",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/09_cytoplasm_organelles.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/09_cytoplasm_organelles.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4771,7 +4771,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-148",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/10_single_multicellular_1.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/10_single_multicellular_1.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4794,7 +4794,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-149",
-    "url": "/mind_maps/biology_g_gymnasio/1_2/10_single_multicellular_2.png",
+    "url": "/mind_maps/biology_g_gymnasio/1_2/10_single_multicellular_2.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -4815,7 +4815,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-150",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/01_adaptation_frog.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/01_adaptation_frog.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4836,7 +4836,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-151",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/02_root_response.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/02_root_response.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4858,7 +4858,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-152",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/03_social_cooperation.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/03_social_cooperation.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4880,7 +4880,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-153",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/04_predator_prey.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/04_predator_prey.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4902,7 +4902,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-154",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/05_mutualism.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/05_mutualism.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4923,7 +4923,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-155",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/06_competition.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/06_competition.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4942,7 +4942,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-156",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/07_parasitism.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/07_parasitism.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4960,7 +4960,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-157",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/08_seed_mouse_cycle.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/08_seed_mouse_cycle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -4983,7 +4983,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-158",
-    "url": "/mind_maps/biology_g_gymnasio/2_1/09_balance_feedback.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_1/09_balance_feedback.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -5005,7 +5005,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-159",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/01_producers_photosynthesis.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/01_producers_photosynthesis.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5028,7 +5028,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-160",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/02_consumers_chain.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/02_consumers_chain.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5051,7 +5051,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-161",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/03_decomposers.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/03_decomposers.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5073,7 +5073,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-162",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/04_food_web.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/04_food_web.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5096,7 +5096,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-163",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/05_trophic_levels.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/05_trophic_levels.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5119,7 +5119,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-164",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/06_energy_pyramid.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/06_energy_pyramid.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5140,7 +5140,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-165",
-    "url": "/mind_maps/biology_g_gymnasio/2_2/07_sun_energy_flow.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_2/07_sun_energy_flow.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -5164,7 +5164,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-166",
-    "url": "/mind_maps/biology_g_gymnasio/2_3/01_matter_recycle.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_3/01_matter_recycle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -5189,7 +5189,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-167",
-    "url": "/mind_maps/biology_g_gymnasio/2_3/02_carbon_cycle.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_3/02_carbon_cycle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -5212,7 +5212,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-168",
-    "url": "/mind_maps/biology_g_gymnasio/2_3/03_nitrogen_cycle.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_3/03_nitrogen_cycle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -5233,7 +5233,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-169",
-    "url": "/mind_maps/biology_g_gymnasio/2_3/04_bacteria_roots.png",
+    "url": "/mind_maps/biology_g_gymnasio/2_3/04_bacteria_roots.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -5257,7 +5257,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-170",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_1.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_1.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5277,7 +5277,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-171",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_2.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_2.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5297,7 +5297,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-172",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_3.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_3.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5317,7 +5317,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-173",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_4.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_4.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5338,7 +5338,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-174",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_5.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_5.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5356,7 +5356,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-175",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_6.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/01_materials_6.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5479,7 +5479,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-176",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/02_natural_human.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/02_natural_human.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5496,7 +5496,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-177",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/03_raw_to_product.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/03_raw_to_product.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5518,7 +5518,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-178",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/04_scientist.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/04_scientist.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5536,7 +5536,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-179",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/05_health.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/05_health.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5554,7 +5554,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-180",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/06_recycle.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/06_recycle.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5571,7 +5571,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-181",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/07_responsible_production.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/07_responsible_production.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5591,7 +5591,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-182",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_1/08_transformations.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_1/08_transformations.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -5609,7 +5609,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-183",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/01_states_conditions.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/01_states_conditions.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5632,7 +5632,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-184",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/02_solid.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/02_solid.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5654,7 +5654,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-185",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_1.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_1.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5676,7 +5676,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-186",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_2.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_2.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5698,7 +5698,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-187",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/04_gas.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/04_gas.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5720,7 +5720,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-188",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/05_phase_symbols.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/05_phase_symbols.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5740,7 +5740,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-189",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/06_melting.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/06_melting.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5761,7 +5761,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-190",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/07_freezing.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/07_freezing.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5783,7 +5783,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-191",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5805,7 +5805,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-192",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/09_condensation.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/09_condensation.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5826,7 +5826,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-193",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/10_melting_point.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/10_melting_point.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5846,7 +5846,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-194",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/11_boiling_point.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/11_boiling_point.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5866,7 +5866,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-195",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_2/12_temperature_ranges.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_2/12_temperature_ranges.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -5887,7 +5887,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-196",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/conductivity.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/conductivity.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -5908,7 +5908,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-197",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/density_scale.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/density_scale.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -5929,7 +5929,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-198",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/hardness_elasticity_1.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/hardness_elasticity_1.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -5950,7 +5950,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-199",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/hardness_elasticity_2.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/hardness_elasticity_2.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -5972,7 +5972,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-200",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/matter_states.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/matter_states.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -5995,7 +5995,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-201",
-    "url": "/mind_maps/chemistry_b_gymnasio/1_3/melting_boiling.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/1_3/melting_boiling.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -6017,7 +6017,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-202",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/01_life_water.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/01_life_water.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6038,7 +6038,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-203",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/02_earth_water.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/02_earth_water.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6061,7 +6061,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-204",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/03_water_cycle.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/03_water_cycle.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6082,7 +6082,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-205",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/04_plant_water.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/04_plant_water.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6104,7 +6104,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-206",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_1.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_1.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6127,7 +6127,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-207",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_2.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/05_body_water_2.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6150,7 +6150,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-208",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/06_irrigation.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/06_irrigation.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6173,7 +6173,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-209",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/07_city_water.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/07_city_water.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6196,7 +6196,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-210",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_1.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_1.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6218,7 +6218,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-211",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_2.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_1/08_conservation_2.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -6241,7 +6241,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-212",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_2/general_mixture.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_2/general_mixture.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -6260,7 +6260,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-213",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_2/heterogeneous_mixture.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_2/heterogeneous_mixture.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -6283,7 +6283,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-214",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_2/homogeneous_mixture.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_2/homogeneous_mixture.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -6303,7 +6303,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-215",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_2/solvent_solute.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_2/solvent_solute.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -6324,7 +6324,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-216",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_2/water_molecule.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_2/water_molecule.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -6348,7 +6348,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-217",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/01_solution_components.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/01_solution_components.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.1",
@@ -6371,7 +6371,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-218",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/02_mass_conservation.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/02_mass_conservation.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.1",
@@ -6392,7 +6392,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-219",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/03_definition_ww.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/03_definition_ww.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.1",
@@ -6412,7 +6412,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-220",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/04_formula_ww.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/04_formula_ww.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.1",
@@ -6433,7 +6433,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-221",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/01_definition_wv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/01_definition_wv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.2",
@@ -6454,7 +6454,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-222",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/02_explanation_wv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/02_explanation_wv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.2",
@@ -6476,7 +6476,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-223",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/03_example_wv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/03_example_wv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.2",
@@ -6498,7 +6498,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-224",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/04_formula_wv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_2/04_formula_wv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.2",
@@ -6519,7 +6519,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-225",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/01_definition_vv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/01_definition_vv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.3",
@@ -6541,7 +6541,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-226",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/02_explanation_vv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/02_explanation_vv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.3",
@@ -6560,7 +6560,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-227",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/03_example_vv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/03_example_vv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.3",
@@ -6582,7 +6582,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-228",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/04_formula_vv.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3_3/04_formula_vv.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3.3",
@@ -6603,7 +6603,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-229",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/01_food_acids.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/01_food_acids.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6627,7 +6627,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-230",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/02_safety_1.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/02_safety_1.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6649,7 +6649,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-231",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/02_safety_2.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/02_safety_2.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6673,7 +6673,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-232",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_1.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_1.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6697,7 +6697,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-233",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_2.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_2.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6720,7 +6720,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-234",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_3.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_3.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6743,7 +6743,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-235",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_4.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/03_indicator_4.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6765,7 +6765,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-236",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/04_carbonate_reaction.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/04_carbonate_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6790,7 +6790,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-237",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_1/05_metal_reaction.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_1/05_metal_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -6814,7 +6814,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-238",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_2/01_ionisation.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_2/01_ionisation.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -6837,7 +6837,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-239",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_2/02_hcl.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_2/02_hcl.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -6860,7 +6860,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-240",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_2/03_h2so4.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_2/03_h2so4.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -6883,7 +6883,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-241",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_2/04_hno3.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_2/04_hno3.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -6905,7 +6905,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-242",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_2/05_common_acids.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_2/05_common_acids.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -6928,7 +6928,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-243",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/01_hydrogen_ions.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/01_hydrogen_ions.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -6952,7 +6952,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-244",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/03_concentration_compare.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/03_concentration_compare.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -6974,7 +6974,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-245",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/04_ph_examples.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/04_ph_examples.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -6996,7 +6996,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-246",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/05_color_scale.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/05_color_scale.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -7018,7 +7018,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-247",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/06_measurable_acidity.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/06_measurable_acidity.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -7041,7 +7041,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-248",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_3/07_many_hydrogen_ions.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_3/07_many_hydrogen_ions.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -7065,7 +7065,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-249",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_4/01_water_autoionization.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_4/01_water_autoionization.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -7086,7 +7086,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-250",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_4/02_rare_event.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_4/02_rare_event.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -7109,7 +7109,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-251",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_4/03_ion_balance.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_4/03_ion_balance.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -7132,7 +7132,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-252",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_4/04_ph7_thermometer.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_4/04_ph7_thermometer.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -7153,7 +7153,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-253",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_4/05_neutral_on_scale.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_4/05_neutral_on_scale.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -7175,7 +7175,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-254",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_5/01_ion_imbalance.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_5/01_ion_imbalance.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -7199,7 +7199,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-255",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_5/02_acid_scale.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_5/02_acid_scale.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -7221,7 +7221,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-256",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_5/03_dilution.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_5/03_dilution.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -7243,7 +7243,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-257",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/01_ph_meter.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/01_ph_meter.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7263,7 +7263,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-258",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/02_ph_paper.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/02_ph_paper.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7284,7 +7284,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-259",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/03_watch_glass.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/03_watch_glass.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7307,7 +7307,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-260",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/04_rinse_glass_rod.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/04_rinse_glass_rod.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7330,7 +7330,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-261",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/05_lemon_sample.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/05_lemon_sample.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7350,7 +7350,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-262",
-    "url": "/mind_maps/chemistry_g_gymnasio/1_6/06_compare_colour.png",
+    "url": "/mind_maps/chemistry_g_gymnasio/1_6/06_compare_colour.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -7370,7 +7370,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-263",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/01_parallels.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/01_parallels.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7390,7 +7390,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-264",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/02_equator.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/02_equator.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7410,7 +7410,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-265",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/03_meridians.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/03_meridians.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7429,7 +7429,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-266",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/04_prime_meridian.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/04_prime_meridian.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7449,7 +7449,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-267",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/05_grid_point.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/05_grid_point.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7469,7 +7469,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-268",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/06_compass.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/06_compass.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7487,7 +7487,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-269",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/07_lat_long_order.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/07_lat_long_order.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7509,7 +7509,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-270",
-    "url": "/mind_maps/geography_a_gymnasio/a1_1/08_map_intersection.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_1/08_map_intersection.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -7530,7 +7530,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-271",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/01_equator_sun.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/01_equator_sun.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7553,7 +7553,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-272",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/02_slant_sun.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/02_slant_sun.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7576,7 +7576,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-273",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/03_thermal_zones.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/03_thermal_zones.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7597,7 +7597,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-274",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/04_time_zones.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/04_time_zones.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7620,7 +7620,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-275",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/05_east_west_time.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/05_east_west_time.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7643,7 +7643,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-276",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/06_projection_distortion.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/06_projection_distortion.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7666,7 +7666,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-277",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/07_projection_types.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/07_projection_types.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7688,7 +7688,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-278",
-    "url": "/mind_maps/geography_a_gymnasio/a1_2/08_gps.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_2/08_gps.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -7708,7 +7708,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-279",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/01_choose_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/01_choose_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7726,7 +7726,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-280",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/02_scale_detail.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/02_scale_detail.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7747,7 +7747,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-281",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/03_legend_symbols.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/03_legend_symbols.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7767,7 +7767,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-282",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/04_map_subject.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/04_map_subject.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7787,7 +7787,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-283",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/05_orientation_1.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/05_orientation_1.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7807,7 +7807,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-284",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/05_orientation_2.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/05_orientation_2.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7827,7 +7827,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-285",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/06_hiker_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/06_hiker_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7848,7 +7848,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-286",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/07_car_route.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/07_car_route.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7869,7 +7869,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-287",
-    "url": "/mind_maps/geography_a_gymnasio/a1_3/08_phone_navigation.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_3/08_phone_navigation.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.3",
@@ -7892,7 +7892,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-288",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/01_general_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/01_general_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -7912,7 +7912,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-289",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/02_thematic_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/02_thematic_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -7931,7 +7931,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-290",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/03_map_layers.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/03_map_layers.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -7953,7 +7953,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-291",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/04_choose_for_task.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/04_choose_for_task.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -7973,7 +7973,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-292",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/05_choose_topic.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/05_choose_topic.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -7992,7 +7992,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-293",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/06_select_data.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/06_select_data.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -8011,7 +8011,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-294",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/07_symbols_on_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/07_symbols_on_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -8030,7 +8030,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-295",
-    "url": "/mind_maps/geography_a_gymnasio/a1_4/08_complete_map.png",
+    "url": "/mind_maps/geography_a_gymnasio/a1_4/08_complete_map.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.4",
@@ -8052,7 +8052,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-296",
-    "url": "/mind_maps/geography_b_gymnasio/1/01_grid_position.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/01_grid_position.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8073,7 +8073,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-297",
-    "url": "/mind_maps/geography_b_gymnasio/1/02_coordinates.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/02_coordinates.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8090,7 +8090,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-298",
-    "url": "/mind_maps/geography_b_gymnasio/1/03_relative_landmarks.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/03_relative_landmarks.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8109,7 +8109,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-299",
-    "url": "/mind_maps/geography_b_gymnasio/1/04_distance_reference.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/04_distance_reference.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8130,7 +8130,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-300",
-    "url": "/mind_maps/geography_b_gymnasio/1/05_game_grid.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/05_game_grid.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8151,7 +8151,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-301",
-    "url": "/mind_maps/geography_b_gymnasio/1/06_gps.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/06_gps.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8169,7 +8169,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-302",
-    "url": "/mind_maps/geography_b_gymnasio/1/07_compare_positions.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/07_compare_positions.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8187,7 +8187,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-303",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_1.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_1.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8208,7 +8208,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-304",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_2.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_2.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8231,7 +8231,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-305",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_3.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_3.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8253,7 +8253,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-306",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_4.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_4.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8275,7 +8275,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-307",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_5.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_5.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8296,7 +8296,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-308",
-    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_6.png",
+    "url": "/mind_maps/geography_b_gymnasio/1/08_directions_6.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -8317,7 +8317,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-309",
-    "url": "/mind_maps/geography_b_gymnasio/2/01_coastal_town.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/01_coastal_town.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8337,7 +8337,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-310",
-    "url": "/mind_maps/geography_b_gymnasio/2/02_greece_crossroads.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/02_greece_crossroads.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8357,7 +8357,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-311",
-    "url": "/mind_maps/geography_b_gymnasio/2/03_home_nearby.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/03_home_nearby.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8377,7 +8377,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-312",
-    "url": "/mind_maps/geography_b_gymnasio/2/04_tourism_location.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/04_tourism_location.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8397,7 +8397,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-313",
-    "url": "/mind_maps/geography_b_gymnasio/2/05_pharmacy_hospital_1.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/05_pharmacy_hospital_1.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8418,7 +8418,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-314",
-    "url": "/mind_maps/geography_b_gymnasio/2/05_pharmacy_hospital_2.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/05_pharmacy_hospital_2.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8439,7 +8439,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-315",
-    "url": "/mind_maps/geography_b_gymnasio/2/06_gas_station_road.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/06_gas_station_road.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8462,7 +8462,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-316",
-    "url": "/mind_maps/geography_b_gymnasio/2/07_river_market.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/07_river_market.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8483,7 +8483,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-317",
-    "url": "/mind_maps/geography_b_gymnasio/2/08_transport_hub.png",
+    "url": "/mind_maps/geography_b_gymnasio/2/08_transport_hub.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 2",
@@ -8505,7 +8505,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-318",
-    "url": "/mind_maps/geography_b_gymnasio/3/01_europe_globe.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/01_europe_globe.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8526,7 +8526,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-319",
-    "url": "/mind_maps/geography_b_gymnasio/3/02_world_grid.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/02_world_grid.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8546,7 +8546,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-320",
-    "url": "/mind_maps/geography_b_gymnasio/3/03_coordinates.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/03_coordinates.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8565,7 +8565,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-321",
-    "url": "/mind_maps/geography_b_gymnasio/3/04_asia_continuation.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/04_asia_continuation.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8585,7 +8585,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-322",
-    "url": "/mind_maps/geography_b_gymnasio/3/05_africa_mediterranean.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/05_africa_mediterranean.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8606,7 +8606,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-323",
-    "url": "/mind_maps/geography_b_gymnasio/3/06_asia_boundary.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/06_asia_boundary.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8629,7 +8629,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-324",
-    "url": "/mind_maps/geography_b_gymnasio/3/07_atlantic_seas.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/07_atlantic_seas.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8651,7 +8651,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-325",
-    "url": "/mind_maps/geography_b_gymnasio/3/08_temperate_zone.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/08_temperate_zone.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8673,7 +8673,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-326",
-    "url": "/mind_maps/geography_b_gymnasio/3/09_crossroads.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/09_crossroads.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8692,7 +8692,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-327",
-    "url": "/mind_maps/geography_b_gymnasio/3/10_small_extent.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/10_small_extent.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8711,7 +8711,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-328",
-    "url": "/mind_maps/geography_b_gymnasio/3/11_distance_sea.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/11_distance_sea.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8732,7 +8732,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-329",
-    "url": "/mind_maps/geography_b_gymnasio/3/12_map_types.png",
+    "url": "/mind_maps/geography_b_gymnasio/3/12_map_types.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -8754,7 +8754,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-330",
-    "url": "/mind_maps/geography_b_gymnasio/4/01_eurasia.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/01_eurasia.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8773,7 +8773,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-331",
-    "url": "/mind_maps/geography_b_gymnasio/4/02_oceans.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/02_oceans.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8793,7 +8793,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-332",
-    "url": "/mind_maps/geography_b_gymnasio/4/03_peninsulas.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/03_peninsulas.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8812,7 +8812,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-333",
-    "url": "/mind_maps/geography_b_gymnasio/4/04_islands.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/04_islands.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8830,7 +8830,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-334",
-    "url": "/mind_maps/geography_b_gymnasio/4/05_plains.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/05_plains.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8850,7 +8850,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-335",
-    "url": "/mind_maps/geography_b_gymnasio/4/06_mountains.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/06_mountains.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8871,7 +8871,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-336",
-    "url": "/mind_maps/geography_b_gymnasio/4/07_northern_mountains.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/07_northern_mountains.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8894,7 +8894,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-337",
-    "url": "/mind_maps/geography_b_gymnasio/4/08_rivers.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/08_rivers.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8913,7 +8913,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-338",
-    "url": "/mind_maps/geography_b_gymnasio/4/09_lakes.png",
+    "url": "/mind_maps/geography_b_gymnasio/4/09_lakes.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -8932,7 +8932,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-339",
-    "url": "/mind_maps/geography_b_gymnasio/5/01_population_density.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/01_population_density.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -8952,7 +8952,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-340",
-    "url": "/mind_maps/geography_b_gymnasio/5/02_many_countries.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/02_many_countries.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -8973,7 +8973,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-341",
-    "url": "/mind_maps/geography_b_gymnasio/5/03_human_impact.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/03_human_impact.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -8994,7 +8994,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-342",
-    "url": "/mind_maps/geography_b_gymnasio/5/04_cities_industry.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/04_cities_industry.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9016,7 +9016,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-343",
-    "url": "/mind_maps/geography_b_gymnasio/5/05_sea_factor.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/05_sea_factor.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9037,7 +9037,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-344",
-    "url": "/mind_maps/geography_b_gymnasio/5/06_what_where_why.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/06_what_where_why.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9055,7 +9055,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-345",
-    "url": "/mind_maps/geography_b_gymnasio/5/07_how_phenomenon.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/07_how_phenomenon.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9073,7 +9073,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-346",
-    "url": "/mind_maps/geography_b_gymnasio/5/08_information.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/08_information.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9091,7 +9091,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-347",
-    "url": "/mind_maps/geography_b_gymnasio/5/09_decision_making.png",
+    "url": "/mind_maps/geography_b_gymnasio/5/09_decision_making.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -9108,7 +9108,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-348",
-    "url": "/mind_maps/geography_b_gymnasio/6/01_tectonic_plates.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/01_tectonic_plates.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9129,7 +9129,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-349",
-    "url": "/mind_maps/geography_b_gymnasio/6/02_eurasian_plate.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/02_eurasian_plate.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9152,7 +9152,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-350",
-    "url": "/mind_maps/geography_b_gymnasio/6/03_orogenesis.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/03_orogenesis.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9171,7 +9171,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-351",
-    "url": "/mind_maps/geography_b_gymnasio/6/04_alps_collision.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/04_alps_collision.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9193,7 +9193,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-352",
-    "url": "/mind_maps/geography_b_gymnasio/6/05_alpine_folding.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/05_alpine_folding.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9216,7 +9216,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-353",
-    "url": "/mind_maps/geography_b_gymnasio/6/06_older_mountains_1.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/06_older_mountains_1.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9239,7 +9239,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-354",
-    "url": "/mind_maps/geography_b_gymnasio/6/06_older_mountains_2.png",
+    "url": "/mind_maps/geography_b_gymnasio/6/06_older_mountains_2.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -9262,7 +9262,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-355",
-    "url": "/mind_maps/geography_b_gymnasio/7/01_endogenous.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/01_endogenous.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9285,7 +9285,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-356",
-    "url": "/mind_maps/geography_b_gymnasio/7/02_south_europe.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/02_south_europe.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9309,7 +9309,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-357",
-    "url": "/mind_maps/geography_b_gymnasio/7/03_erosion.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/03_erosion.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9332,7 +9332,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-358",
-    "url": "/mind_maps/geography_b_gymnasio/7/04_mountain_age.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/04_mountain_age.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9353,7 +9353,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-359",
-    "url": "/mind_maps/geography_b_gymnasio/7/05_glaciers.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/05_glaciers.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9374,7 +9374,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-360",
-    "url": "/mind_maps/geography_b_gymnasio/7/06_fjords_lakes.png",
+    "url": "/mind_maps/geography_b_gymnasio/7/06_fjords_lakes.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -9396,7 +9396,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-361",
-    "url": "/mind_maps/geography_b_gymnasio/8/01_tethys_sea.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/01_tethys_sea.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9418,7 +9418,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-362",
-    "url": "/mind_maps/geography_b_gymnasio/8/02_sediments.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/02_sediments.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9439,7 +9439,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-363",
-    "url": "/mind_maps/geography_b_gymnasio/8/03_emergence.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/03_emergence.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9460,7 +9460,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-364",
-    "url": "/mind_maps/geography_b_gymnasio/8/04_pindos.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/04_pindos.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9480,7 +9480,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-365",
-    "url": "/mind_maps/geography_b_gymnasio/8/05_aegis.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/05_aegis.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9501,7 +9501,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-366",
-    "url": "/mind_maps/geography_b_gymnasio/8/06_aegean_sea.png",
+    "url": "/mind_maps/geography_b_gymnasio/8/06_aegean_sea.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 8",
@@ -9524,7 +9524,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-367",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/01_ruler_pencil.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/01_ruler_pencil.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9544,7 +9544,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-368",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/02_tape_desk.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/02_tape_desk.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9564,7 +9564,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-369",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/03_eye_scale.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/03_eye_scale.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9587,7 +9587,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-370",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/04_repeat_measurements.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/04_repeat_measurements.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9606,7 +9606,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-371",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/05_mean_value.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/05_mean_value.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9626,7 +9626,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-372",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/06_measurement_spread.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/06_measurement_spread.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9647,7 +9647,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-373",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/07_choose_tool.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/07_choose_tool.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9665,7 +9665,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-374",
-    "url": "/mind_maps/physics_a_gymnasio/1_1/08_record_unit.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_1/08_record_unit.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -9688,7 +9688,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-375",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/01_stopwatch_zero.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/01_stopwatch_zero.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9710,7 +9710,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-376",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/02_start_pendulum.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/02_start_pendulum.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9732,7 +9732,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-377",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/03_repeated_swings.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/03_repeated_swings.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9753,7 +9753,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-378",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/04_reading_variation.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/04_reading_variation.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9775,7 +9775,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-379",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/05_short_event.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/05_short_event.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9795,7 +9795,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-380",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/06_long_event.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/06_long_event.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9816,7 +9816,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-381",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/07_scale_precision.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/07_scale_precision.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9839,7 +9839,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-382",
-    "url": "/mind_maps/physics_a_gymnasio/1_2/08_time_table.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_2/08_time_table.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -9860,7 +9860,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-383",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/01_apple_balance.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/01_apple_balance.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9882,7 +9882,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-384",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/02_digital_scale.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/02_digital_scale.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9904,7 +9904,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-385",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/03_zero_scale.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/03_zero_scale.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9926,7 +9926,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-386",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/04_center_object.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/04_center_object.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9948,7 +9948,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-387",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/05_equal_balance.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/05_equal_balance.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9971,7 +9971,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-388",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/06_tipped_balance.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/06_tipped_balance.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -9994,7 +9994,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-389",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/07_add_masses.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/07_add_masses.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -10016,7 +10016,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-390",
-    "url": "/mind_maps/physics_a_gymnasio/1_3/08_mass_table.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_3/08_mass_table.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.3",
@@ -10037,7 +10037,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-391",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/01_estimate_temperature.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/01_estimate_temperature.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10059,7 +10059,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-392",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/02_thermometer_beaker.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/02_thermometer_beaker.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10079,7 +10079,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-393",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/03_analog_digital.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/03_analog_digital.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10101,7 +10101,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-394",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/04_ice_hot_reference_1.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/04_ice_hot_reference_1.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10124,7 +10124,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-395",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/04_ice_hot_reference_2.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/04_ice_hot_reference_2.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10145,7 +10145,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-396",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/05_calibration_steps.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/05_calibration_steps.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10165,7 +10165,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-397",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/06_correct_position.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/06_correct_position.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10188,7 +10188,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-398",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/07_wait_to_settle.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/07_wait_to_settle.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10210,7 +10210,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-399",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_1.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_1.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10231,7 +10231,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-400",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_2.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_2.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10253,7 +10253,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-401",
-    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_3.png",
+    "url": "/mind_maps/physics_a_gymnasio/1_4/08_temperature_uses_3.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -10275,7 +10275,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-402",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10298,7 +10298,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-403",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10320,7 +10320,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-404",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10340,7 +10340,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-405",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_4.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_4.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10362,7 +10362,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-406",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_5.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/01_natural_phenomena_5.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10383,7 +10383,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-407",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/02_melting_snow_erosion.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/02_melting_snow_erosion.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10404,7 +10404,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-408",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/03_natural_sciences_branches.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/03_natural_sciences_branches.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10424,7 +10424,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-409",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/04_observation_logic_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/04_observation_logic_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10446,7 +10446,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-410",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/04_observation_logic_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/04_observation_logic_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10469,7 +10469,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-411",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/05_understanding_mechanisms.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/05_understanding_mechanisms.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10489,7 +10489,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-412",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/06_physics_scope_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/06_physics_scope_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10511,7 +10511,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-413",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/06_physics_scope_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/06_physics_scope_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10533,7 +10533,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-414",
-    "url": "/mind_maps/physics_b_gymnasio/1_1/07_physics_laws.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_1/07_physics_laws.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -10554,7 +10554,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-415",
-    "url": "/mind_maps/physics_b_gymnasio/1_2/01_observation.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_2/01_observation.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -10573,7 +10573,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-416",
-    "url": "/mind_maps/physics_b_gymnasio/1_2/02_experiment.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_2/02_experiment.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -10593,7 +10593,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-417",
-    "url": "/mind_maps/physics_b_gymnasio/1_2/03_measure_record.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_2/03_measure_record.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -10613,7 +10613,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-418",
-    "url": "/mind_maps/physics_b_gymnasio/1_2/04_result.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_2/04_result.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -10632,7 +10632,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-419",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10654,7 +10654,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-420",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10677,7 +10677,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-421",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10698,7 +10698,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-422",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_4.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/01_measurement_tools_4.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10721,7 +10721,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-423",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10741,7 +10741,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-424",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10762,7 +10762,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-425",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/02_measurable_quantity_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10782,7 +10782,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-426",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10803,7 +10803,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-427",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10823,7 +10823,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-428",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/03_basic_quantities_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10845,7 +10845,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-429",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/04_reading_scale.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/04_reading_scale.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10867,7 +10867,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-430",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/05_number_and_unit.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/05_number_and_unit.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10887,7 +10887,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-431",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/06_area_and_volume.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/06_area_and_volume.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10908,7 +10908,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-432",
-    "url": "/mind_maps/physics_b_gymnasio/1_3/07_derived_quantities.png",
+    "url": "/mind_maps/physics_b_gymnasio/1_3/07_derived_quantities.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -10928,7 +10928,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-433",
-    "url": "/mind_maps/physics_b_gymnasio/2_1/01_position.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_1/01_position.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -10950,7 +10950,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-434",
-    "url": "/mind_maps/physics_b_gymnasio/2_1/02_trajectory.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_1/02_trajectory.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -10969,7 +10969,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-435",
-    "url": "/mind_maps/physics_b_gymnasio/2_1/03_displacement.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_1/03_displacement.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -10990,7 +10990,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-436",
-    "url": "/mind_maps/physics_b_gymnasio/2_1/04_distance.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_1/04_distance.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -11012,7 +11012,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-437",
-    "url": "/mind_maps/physics_b_gymnasio/2_2/01_speed_concept.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_2/01_speed_concept.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -11030,7 +11030,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-438",
-    "url": "/mind_maps/physics_b_gymnasio/2_2/02_speed_units.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_2/02_speed_units.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -11050,7 +11050,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-439",
-    "url": "/mind_maps/physics_b_gymnasio/2_2/03_speedometer.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_2/03_speedometer.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -11070,7 +11070,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-440",
-    "url": "/mind_maps/physics_b_gymnasio/2_2/04_average_speed.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_2/04_average_speed.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -11090,7 +11090,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-441",
-    "url": "/mind_maps/physics_b_gymnasio/2_3/01_eok_definition.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_3/01_eok_definition.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -11110,7 +11110,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-442",
-    "url": "/mind_maps/physics_b_gymnasio/2_3/02_equation.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_3/02_equation.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -11132,7 +11132,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-443",
-    "url": "/mind_maps/physics_b_gymnasio/2_3/03_vt_graph.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_3/03_vt_graph.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -11155,7 +11155,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-444",
-    "url": "/mind_maps/physics_b_gymnasio/2_3/04_xt_graph.png",
+    "url": "/mind_maps/physics_b_gymnasio/2_3/04_xt_graph.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -11178,7 +11178,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-445",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/car_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/car_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11200,7 +11200,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-446",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/car_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/car_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11222,7 +11222,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-447",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/car_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/car_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11244,7 +11244,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-448",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/car_4.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/car_4.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11265,7 +11265,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-449",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/components.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/components.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11288,7 +11288,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-450",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11311,7 +11311,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-451",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11333,7 +11333,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-452",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_4.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_4.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11356,7 +11356,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-453",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_plane.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/inclined_plane.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11378,7 +11378,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-454",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/scale.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/scale.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11398,7 +11398,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-455",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_1.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_1.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11417,7 +11417,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-456",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_2.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_2.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11435,7 +11435,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-457",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_3.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_3.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11458,7 +11458,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-458",
-    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_4.png",
+    "url": "/mind_maps/physics_b_gymnasio/3_3/steps_4.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.3",
@@ -11478,7 +11478,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-459",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/01_amber_attraction.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/01_amber_attraction.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11502,7 +11502,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-460",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/02_ruler_paper.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/02_ruler_paper.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11526,7 +11526,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-461",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/03_electric_pendulum.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/03_electric_pendulum.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11546,7 +11546,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-462",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/04_distance_force.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/04_distance_force.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11567,7 +11567,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-463",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/05_magnet_difference.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/05_magnet_difference.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11590,7 +11590,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-464",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/06_same_repulsion.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/06_same_repulsion.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11613,7 +11613,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-465",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/07_different_attraction.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/07_different_attraction.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11636,7 +11636,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-466",
-    "url": "/mind_maps/physics_g_gymnasio/1_1/08_charge_rules.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_1/08_charge_rules.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -11659,7 +11659,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-467",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/01_pendulum_test.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/01_pendulum_test.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11682,7 +11682,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-468",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/02_more_rubbing.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/02_more_rubbing.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11703,7 +11703,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-469",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/03_force_comparison.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/03_force_comparison.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11724,7 +11724,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-470",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/04_spark_transfer.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/04_spark_transfer.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11745,7 +11745,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-471",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/05_glass_positive.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/05_glass_positive.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11768,7 +11768,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-472",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/06_plastic_negative.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/06_plastic_negative.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11790,7 +11790,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-473",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/07_charge_sum.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/07_charge_sum.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11812,7 +11812,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-474",
-    "url": "/mind_maps/physics_g_gymnasio/1_2/08_neutral_after_spark.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_2/08_neutral_after_spark.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -11834,7 +11834,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-475",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/01_atoms_matter.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/01_atoms_matter.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11857,7 +11857,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-476",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/02_nucleus_electrons.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/02_nucleus_electrons.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11879,7 +11879,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-477",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/03_protons_neutrons.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/03_protons_neutrons.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11902,7 +11902,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-478",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/04_identical_electrons.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/04_identical_electrons.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11923,7 +11923,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-479",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/05_equal_opposite_charge.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/05_equal_opposite_charge.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11945,7 +11945,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-480",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/06_neutral_atom.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/06_neutral_atom.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11968,7 +11968,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-481",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/07_negative_ion.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/07_negative_ion.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -11990,7 +11990,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-482",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/08_positive_ion.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/08_positive_ion.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -12013,7 +12013,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-483",
-    "url": "/mind_maps/physics_g_gymnasio/1_3/09_electron_transfer.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_3/09_electron_transfer.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -12033,7 +12033,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-484",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/01_friction_rods.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/01_friction_rods.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12055,7 +12055,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-485",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/02_triboelectric_series.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/02_triboelectric_series.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12077,7 +12077,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-486",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/03_contact_charge.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/03_contact_charge.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12098,7 +12098,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-487",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/04_electroscope.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/04_electroscope.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12118,7 +12118,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-488",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/05_induction_bar.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/05_induction_bar.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12139,7 +12139,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-489",
-    "url": "/mind_maps/physics_g_gymnasio/1_4/06_polarized_atoms.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_4/06_polarized_atoms.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.4",
@@ -12163,7 +12163,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-490",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/00_formula.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/00_formula.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12181,7 +12181,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-491",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/01_torsion_balance.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/01_torsion_balance.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12202,7 +12202,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-492",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/02_inverse_square.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/02_inverse_square.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12224,7 +12224,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-493",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/03_charge_interaction.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/03_charge_interaction.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12247,7 +12247,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-494",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/04_newton_third.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/04_newton_third.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12270,7 +12270,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-495",
-    "url": "/mind_maps/physics_g_gymnasio/1_5/05_induction_attract.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_5/05_induction_attract.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.5",
@@ -12293,7 +12293,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-496",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/01_force_at_distance.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/01_force_at_distance.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12315,7 +12315,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-497",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/02_no_material_medium.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/02_no_material_medium.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12335,7 +12335,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-498",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/03_charged_body_source.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/03_charged_body_source.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12358,7 +12358,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-499",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/04_field_around_body.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/04_field_around_body.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12379,7 +12379,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-500",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/05_test_charge_force.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/05_test_charge_force.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12401,7 +12401,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-501",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/06_field_region.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/06_field_region.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12421,7 +12421,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-502",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/07_interaction_two_steps.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/07_interaction_two_steps.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12444,7 +12444,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-503",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/08_mutual_interaction.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/08_mutual_interaction.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12465,7 +12465,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-504",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/09_charged_pendulums.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/09_charged_pendulums.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12486,7 +12486,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-505",
-    "url": "/mind_maps/physics_g_gymnasio/1_6/10_pendulum_probe.png",
+    "url": "/mind_maps/physics_g_gymnasio/1_6/10_pendulum_probe.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.6",
@@ -12506,7 +12506,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-506",
-    "url": "/mind_maps/physics_g_gymnasio/2_1/ammeter.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_1/ammeter.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -12527,7 +12527,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-507",
-    "url": "/mind_maps/physics_g_gymnasio/2_1/current_concept.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_1/current_concept.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -12549,7 +12549,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-508",
-    "url": "/mind_maps/physics_g_gymnasio/2_1/current_direction.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_1/current_direction.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -12572,7 +12572,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-509",
-    "url": "/mind_maps/physics_g_gymnasio/2_2/battery_pump.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_2/battery_pump.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -12592,7 +12592,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-510",
-    "url": "/mind_maps/physics_g_gymnasio/2_2/circuit_symbols.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_2/circuit_symbols.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -12615,7 +12615,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-511",
-    "url": "/mind_maps/physics_g_gymnasio/2_2/consumers.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_2/consumers.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -12638,7 +12638,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-512",
-    "url": "/mind_maps/physics_g_gymnasio/2_2/simple_circuit.png",
+    "url": "/mind_maps/physics_g_gymnasio/2_2/simple_circuit.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -12660,7 +12660,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-513",
-    "url": "/mind_maps/physics_b_gymnasio/4_3/01_archimedes_buoyancy.png",
+    "url": "/mind_maps/physics_b_gymnasio/4_3/01_archimedes_buoyancy.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.3",
@@ -12683,7 +12683,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-514",
-    "url": "/mind_maps/physics_c_gymnasio/3_2/01_electromagnet_iron_core.png",
+    "url": "/mind_maps/physics_c_gymnasio/3_2/01_electromagnet_iron_core.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -12705,7 +12705,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-515",
-    "url": "/mind_maps/physics_c_gymnasio/5_3/01_light_dispersion_prism.png",
+    "url": "/mind_maps/physics_c_gymnasio/5_3/01_light_dispersion_prism.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.3",
@@ -12728,7 +12728,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-516",
-    "url": "/mind_maps/physics_a_lykeio/2_2/01_inclined_plane_pulley.png",
+    "url": "/mind_maps/physics_a_lykeio/2_2/01_inclined_plane_pulley.webp",
     "subject": "Φυσική",
     "grade": "Α' Λυκείου",
     "chapter": "2.2",
@@ -12751,7 +12751,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-517",
-    "url": "/mind_maps/physics_b_lykeio/3_2/01_elastic_collision_spheres.png",
+    "url": "/mind_maps/physics_b_lykeio/3_2/01_elastic_collision_spheres.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -12774,7 +12774,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-518",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/01_distillation_apparatus.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/01_distillation_apparatus.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -12797,7 +12797,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-519",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_3/02_filtration_funnel.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_3/02_filtration_funnel.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -12820,7 +12820,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-520",
-    "url": "/mind_maps/chemistry_c_lykeio/4_2/01_titration_burette.png",
+    "url": "/mind_maps/chemistry_c_lykeio/4_2/01_titration_burette.webp",
     "subject": "Χημεία",
     "grade": "Γ' Λυκείου",
     "chapter": "4.2",
@@ -12844,7 +12844,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-521",
-    "url": "/mind_maps/chemistry_b_gymnasio/2_4/01_water_electrolysis_hofmann.png",
+    "url": "/mind_maps/chemistry_b_gymnasio/2_4/01_water_electrolysis_hofmann.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.4",
@@ -12867,7 +12867,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-522",
-    "url": "/mind_maps/chemistry_c_lykeio/1_3/01_daniell_galvanic_cell.png",
+    "url": "/mind_maps/chemistry_c_lykeio/1_3/01_daniell_galvanic_cell.webp",
     "subject": "Χημεία",
     "grade": "Γ' Λυκείου",
     "chapter": "1.3",
@@ -12890,7 +12890,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-523",
-    "url": "/mind_maps/biology_c_gymnasio/5_1/01_dna_double_helix.png",
+    "url": "/mind_maps/biology_c_gymnasio/5_1/01_dna_double_helix.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -12914,7 +12914,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-524",
-    "url": "/mind_maps/biology_a_lykeio/3_1/01_human_heart_anatomy.png",
+    "url": "/mind_maps/biology_a_lykeio/3_1/01_human_heart_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -13000,7 +13000,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-525",
-    "url": "/mind_maps/biology_a_lykeio/9_1/01_neuron_structure.png",
+    "url": "/mind_maps/biology_a_lykeio/9_1/01_neuron_structure.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.1",
@@ -13023,7 +13023,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-526",
-    "url": "/mind_maps/biology_a_lykeio/10_1/01_human_eye_anatomy.png",
+    "url": "/mind_maps/biology_a_lykeio/10_1/01_human_eye_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "10.1",
@@ -13046,7 +13046,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-527",
-    "url": "/mind_maps/biology_c_lykeio/1_2/01_bacteriophage_virus.png",
+    "url": "/mind_maps/biology_c_lykeio/1_2/01_bacteriophage_virus.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "1.2",
@@ -13069,7 +13069,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-528",
-    "url": "/mind_maps/geography_a_gymnasio/b1_1/01_earth_internal_layers.png",
+    "url": "/mind_maps/geography_a_gymnasio/b1_1/01_earth_internal_layers.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.1",
@@ -13094,7 +13094,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-529",
-    "url": "/mind_maps/geography_a_gymnasio/b1_3/01_seismograph.png",
+    "url": "/mind_maps/geography_a_gymnasio/b1_3/01_seismograph.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -13118,7 +13118,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-530",
-    "url": "/mind_maps/geography_b_gymnasio/1_4/01_limestone_cave_stalactites.png",
+    "url": "/mind_maps/geography_b_gymnasio/1_4/01_limestone_cave_stalactites.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.4",
@@ -13140,7 +13140,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-531",
-    "url": "/mind_maps/geography_a_gymnasio/b3_2/01_river_delta_landform.png",
+    "url": "/mind_maps/geography_a_gymnasio/b3_2/01_river_delta_landform.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.2",
@@ -13163,7 +13163,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-532",
-    "url": "/mind_maps/geography_a_gymnasio/b2_2/01_anemometer_wind_vane.png",
+    "url": "/mind_maps/geography_a_gymnasio/b2_2/01_anemometer_wind_vane.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β2.2",
@@ -13186,7 +13186,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-533",
-    "url": "/mind_maps/physics_extra/mm_533_copper_wire_conductor.png",
+    "url": "/mind_maps/physics_extra/mm_533_copper_wire_conductor.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -13207,7 +13207,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-540",
-    "url": "/mind_maps/physics_extra/mm_540_sliding_rheostat.png",
+    "url": "/mind_maps/physics_extra/mm_540_sliding_rheostat.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -13334,7 +13334,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-541",
-    "url": "/mind_maps/physics_extra/mm_541_incandescent_bulb_filament.png",
+    "url": "/mind_maps/physics_extra/mm_541_incandescent_bulb_filament.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -13356,7 +13356,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-542",
-    "url": "/mind_maps/physics_extra/mm_542_led_diode.png",
+    "url": "/mind_maps/physics_extra/mm_542_led_diode.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -13379,7 +13379,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-543",
-    "url": "/mind_maps/physics_extra/mm_543_parallel_plate_capacitor.png",
+    "url": "/mind_maps/physics_extra/mm_543_parallel_plate_capacitor.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "1.4",
@@ -13401,7 +13401,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-547",
-    "url": "/mind_maps/physics_extra/mm_547_ac_generator.png",
+    "url": "/mind_maps/physics_extra/mm_547_ac_generator.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "3.3",
@@ -13423,7 +13423,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-568",
-    "url": "/mind_maps/physics_extra/mm_568_laboratory_calorimeter.png",
+    "url": "/mind_maps/physics_extra/mm_568_laboratory_calorimeter.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.2",
@@ -13445,7 +13445,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-569",
-    "url": "/mind_maps/physics_extra/mm_569_bimetallic_strip_thermal_expansion.png",
+    "url": "/mind_maps/physics_extra/mm_569_bimetallic_strip_thermal_expansion.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -13571,7 +13571,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-570",
-    "url": "/mind_maps/physics_extra/mm_570_convection_currents_beaker.png",
+    "url": "/mind_maps/physics_extra/mm_570_convection_currents_beaker.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -13697,7 +13697,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-571",
-    "url": "/mind_maps/physics_extra/mm_571_heat_engine_piston_cylinder.png",
+    "url": "/mind_maps/physics_extra/mm_571_heat_engine_piston_cylinder.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "2.4",
@@ -13719,7 +13719,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-572",
-    "url": "/mind_maps/physics_extra/mm_572_specular_reflection_plane_mirror.png",
+    "url": "/mind_maps/physics_extra/mm_572_specular_reflection_plane_mirror.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.2",
@@ -13741,7 +13741,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-575",
-    "url": "/mind_maps/chemistry_extra/bohr_atomic_model.png",
+    "url": "/mind_maps/chemistry_extra/bohr_atomic_model.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.1",
@@ -13763,7 +13763,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-576",
-    "url": "/mind_maps/chemistry_extra/atomic_orbitals_s_p.png",
+    "url": "/mind_maps/chemistry_extra/atomic_orbitals_s_p.webp",
     "subject": "Χημεία",
     "grade": "Γ' Λυκείου",
     "chapter": "2.1",
@@ -13785,7 +13785,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-577",
-    "url": "/mind_maps/chemistry_extra/water_molecule_h2o.png",
+    "url": "/mind_maps/chemistry_extra/water_molecule_h2o.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.6",
@@ -13809,7 +13809,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-578",
-    "url": "/mind_maps/chemistry_extra/ammonia_molecule_nh3.png",
+    "url": "/mind_maps/chemistry_extra/ammonia_molecule_nh3.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -13833,7 +13833,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-581",
-    "url": "/mind_maps/chemistry_extra/oxygen_diatomic_molecule.png",
+    "url": "/mind_maps/chemistry_extra/oxygen_diatomic_molecule.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -13857,7 +13857,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-582",
-    "url": "/mind_maps/chemistry_extra/nitrogen_diatomic_molecule.png",
+    "url": "/mind_maps/chemistry_extra/nitrogen_diatomic_molecule.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -13881,7 +13881,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-583",
-    "url": "/mind_maps/chemistry_extra/sodium_chloride_crystal_lattice.png",
+    "url": "/mind_maps/chemistry_extra/sodium_chloride_crystal_lattice.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -13906,7 +13906,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-587",
-    "url": "/mind_maps/chemistry_extra/gas_compression_piston.png",
+    "url": "/mind_maps/chemistry_extra/gas_compression_piston.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "3.2",
@@ -13928,7 +13928,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-588",
-    "url": "/mind_maps/chemistry_extra/iodine_sublimation_beaker.png",
+    "url": "/mind_maps/chemistry_extra/iodine_sublimation_beaker.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -13950,7 +13950,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-593",
-    "url": "/mind_maps/chemistry_extra/volumetric_flask_meniscus.png",
+    "url": "/mind_maps/chemistry_extra/volumetric_flask_meniscus.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "4.2",
@@ -13972,7 +13972,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-594",
-    "url": "/mind_maps/chemistry_extra/volumetric_pipette_transfer.png",
+    "url": "/mind_maps/chemistry_extra/volumetric_pipette_transfer.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "4.2",
@@ -13994,7 +13994,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-595",
-    "url": "/mind_maps/chemistry_extra/erlenmeyer_conical_flask.png",
+    "url": "/mind_maps/chemistry_extra/erlenmeyer_conical_flask.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -14016,7 +14016,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-596",
-    "url": "/mind_maps/chemistry_extra/mortar_and_pestle_crystals.png",
+    "url": "/mind_maps/chemistry_extra/mortar_and_pestle_crystals.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -14039,7 +14039,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-599",
-    "url": "/mind_maps/chemistry_extra/watch_glass_copper_sulfate.png",
+    "url": "/mind_maps/chemistry_extra/watch_glass_copper_sulfate.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -14062,7 +14062,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-600",
-    "url": "/mind_maps/chemistry_extra/digital_ph_meter_electrode.png",
+    "url": "/mind_maps/chemistry_extra/digital_ph_meter_electrode.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -14085,7 +14085,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-601",
-    "url": "/mind_maps/chemistry_extra/alkali_sodium_water_reaction.png",
+    "url": "/mind_maps/chemistry_extra/alkali_sodium_water_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -14108,7 +14108,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-602",
-    "url": "/mind_maps/chemistry_extra/halogens_chlorine_bromine_iodine.png",
+    "url": "/mind_maps/chemistry_extra/halogens_chlorine_bromine_iodine.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -14130,7 +14130,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-605",
-    "url": "/mind_maps/chemistry_extra/fullerene_buckyball_c60.png",
+    "url": "/mind_maps/chemistry_extra/fullerene_buckyball_c60.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.5",
@@ -14153,7 +14153,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-606",
-    "url": "/mind_maps/chemistry_extra/iron_rusting_oxidation.png",
+    "url": "/mind_maps/chemistry_extra/iron_rusting_oxidation.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -14176,7 +14176,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-607",
-    "url": "/mind_maps/chemistry_extra/exothermic_reaction_heat_release.png",
+    "url": "/mind_maps/chemistry_extra/exothermic_reaction_heat_release.webp",
     "subject": "Χημεία",
     "grade": "Β' Λυκείου",
     "chapter": "3.1",
@@ -14268,7 +14268,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-608",
-    "url": "/mind_maps/chemistry_extra/endothermic_reaction_heat_absorption.png",
+    "url": "/mind_maps/chemistry_extra/endothermic_reaction_heat_absorption.webp",
     "subject": "Χημεία",
     "grade": "Β' Λυκείου",
     "chapter": "3.1",
@@ -14361,7 +14361,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-609",
-    "url": "/mind_maps/chemistry_extra/catalyst_surface_reaction_mechanism.png",
+    "url": "/mind_maps/chemistry_extra/catalyst_surface_reaction_mechanism.webp",
     "subject": "Χημεία",
     "grade": "Γ' Λυκείου",
     "chapter": "3.2",
@@ -14384,7 +14384,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-617",
-    "url": "/mind_maps/biology_extra/mm617_mitochondrion_cross_section.png",
+    "url": "/mind_maps/biology_extra/mm617_mitochondrion_cross_section.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -14407,7 +14407,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-618",
-    "url": "/mind_maps/biology_extra/mm618_chloroplast_cross_section.png",
+    "url": "/mind_maps/biology_extra/mm618_chloroplast_cross_section.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -14430,7 +14430,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-619",
-    "url": "/mind_maps/biology_extra/mm619_golgi_apparatus_vesicles.png",
+    "url": "/mind_maps/biology_extra/mm619_golgi_apparatus_vesicles.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "2.2",
@@ -14454,7 +14454,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-624",
-    "url": "/mind_maps/biology_extra/mm624_mitosis_metaphase_anaphase_spindle.png",
+    "url": "/mind_maps/biology_extra/mm624_mitosis_metaphase_anaphase_spindle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.5",
@@ -14477,7 +14477,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-625",
-    "url": "/mind_maps/biology_extra/mm625_meiosis_crossing_over_chiasma.png",
+    "url": "/mind_maps/biology_extra/mm625_meiosis_crossing_over_chiasma.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "5.2",
@@ -14500,7 +14500,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-626",
-    "url": "/mind_maps/biology_extra/mm626_dna_replication_fork.png",
+    "url": "/mind_maps/biology_extra/mm626_dna_replication_fork.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "2.1",
@@ -14524,7 +14524,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-627",
-    "url": "/mind_maps/biology_extra/mm627_mrna_translation_ribosome.png",
+    "url": "/mind_maps/biology_extra/mm627_mrna_translation_ribosome.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "2.3",
@@ -14548,7 +14548,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-631",
-    "url": "/mind_maps/biology_extra/mm631_chemical_synapse_neurotransmitters.png",
+    "url": "/mind_maps/biology_extra/mm631_chemical_synapse_neurotransmitters.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.2",
@@ -14571,7 +14571,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-632",
-    "url": "/mind_maps/biology_extra/mm632_reflex_arc_spinal_cord.png",
+    "url": "/mind_maps/biology_extra/mm632_reflex_arc_spinal_cord.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.2",
@@ -14594,7 +14594,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-633",
-    "url": "/mind_maps/biology_extra/mm633_human_ear_anatomy_cochlea.png",
+    "url": "/mind_maps/biology_extra/mm633_human_ear_anatomy_cochlea.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "10.2",
@@ -14720,7 +14720,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-634",
-    "url": "/mind_maps/biology_extra/mm634_thyroid_gland_larynx_endocrine.png",
+    "url": "/mind_maps/biology_extra/mm634_thyroid_gland_larynx_endocrine.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "11.1",
@@ -14743,7 +14743,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-638",
-    "url": "/mind_maps/biology_extra/mm638_artery_vein_valves_capillaries.png",
+    "url": "/mind_maps/biology_extra/mm638_artery_vein_valves_capillaries.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -14828,7 +14828,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-639",
-    "url": "/mind_maps/biology_extra/mm639_human_kidney_cross_section.png",
+    "url": "/mind_maps/biology_extra/mm639_human_kidney_cross_section.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "6.1",
@@ -14851,7 +14851,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-640",
-    "url": "/mind_maps/biology_extra/mm640_nephron_bowman_capsule_glomerulus.png",
+    "url": "/mind_maps/biology_extra/mm640_nephron_bowman_capsule_glomerulus.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "6.1",
@@ -14874,7 +14874,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-645",
-    "url": "/mind_maps/biology_extra/mm645_fertilization_ovum_sperm.png",
+    "url": "/mind_maps/biology_extra/mm645_fertilization_ovum_sperm.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "12.2",
@@ -14897,7 +14897,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-646",
-    "url": "/mind_maps/biology_extra/mm646_fetus_amniotic_sac_placenta.png",
+    "url": "/mind_maps/biology_extra/mm646_fetus_amniotic_sac_placenta.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "12.3",
@@ -14920,7 +14920,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-647",
-    "url": "/mind_maps/biology_extra/mm647_plant_leaf_cross_section_anatomy.png",
+    "url": "/mind_maps/biology_extra/mm647_plant_leaf_cross_section_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -14943,7 +14943,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-648",
-    "url": "/mind_maps/biology_extra/mm648_leaf_stomata_open_closed_guard_cells.png",
+    "url": "/mind_maps/biology_extra/mm648_leaf_stomata_open_closed_guard_cells.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -14966,7 +14966,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-649",
-    "url": "/mind_maps/biology_extra/mm649_hermaphrodite_flower_anatomy_section.png",
+    "url": "/mind_maps/biology_extra/mm649_hermaphrodite_flower_anatomy_section.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "5.2",
@@ -14989,7 +14989,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-652",
-    "url": "/mind_maps/biology_extra/mm652_nitrogen_fixing_root_nodules_legume.png",
+    "url": "/mind_maps/biology_extra/mm652_nitrogen_fixing_root_nodules_legume.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.3",
@@ -15014,7 +15014,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-653",
-    "url": "/mind_maps/biology_extra/mm653_prokaryotic_bacterium_cell_anatomy.png",
+    "url": "/mind_maps/biology_extra/mm653_prokaryotic_bacterium_cell_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -15037,7 +15037,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-654",
-    "url": "/mind_maps/biology_extra/mm654_fungus_hyphae_mycelium_sporangium.png",
+    "url": "/mind_maps/biology_extra/mm654_fungus_hyphae_mycelium_sporangium.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -15060,7 +15060,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-659",
-    "url": "/mind_maps/geography_extra/mm_659_volcano_cross_section.png",
+    "url": "/mind_maps/geography_extra/mm_659_volcano_cross_section.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -15083,7 +15083,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-660",
-    "url": "/mind_maps/geography_extra/mm_660_water_cycle.png",
+    "url": "/mind_maps/geography_extra/mm_660_water_cycle.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -15106,7 +15106,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-661",
-    "url": "/mind_maps/geography_extra/mm_661_earthquake_fault_waves.png",
+    "url": "/mind_maps/geography_extra/mm_661_earthquake_fault_waves.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -15130,7 +15130,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-666",
-    "url": "/mind_maps/geography_extra/mm_666_normal_reverse_faults.png",
+    "url": "/mind_maps/geography_extra/mm_666_normal_reverse_faults.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -15153,7 +15153,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-667",
-    "url": "/mind_maps/geography_extra/mm_667_rock_cycle_diagram.png",
+    "url": "/mind_maps/geography_extra/mm_667_rock_cycle_diagram.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.4",
@@ -15177,7 +15177,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-673",
-    "url": "/mind_maps/geography_extra/mm_673_alpine_glacier_valley.png",
+    "url": "/mind_maps/geography_extra/mm_673_alpine_glacier_valley.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.4",
@@ -15200,7 +15200,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-674",
-    "url": "/mind_maps/geography_extra/mm_674_wind_erosion_desert_dunes.png",
+    "url": "/mind_maps/geography_extra/mm_674_wind_erosion_desert_dunes.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.4",
@@ -15223,7 +15223,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-675",
-    "url": "/mind_maps/geography_extra/mm_675_coastal_landforms_block.png",
+    "url": "/mind_maps/geography_extra/mm_675_coastal_landforms_block.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.2",
@@ -15246,7 +15246,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-676",
-    "url": "/mind_maps/geography_extra/mm_676_coral_reef_atoll.png",
+    "url": "/mind_maps/geography_extra/mm_676_coral_reef_atoll.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.3",
@@ -15269,7 +15269,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-680",
-    "url": "/mind_maps/geography_extra/mm_680_acid_rain_cycle.png",
+    "url": "/mind_maps/geography_extra/mm_680_acid_rain_cycle.webp",
     "subject": "Γεωγραφία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -15396,7 +15396,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-681",
-    "url": "/mind_maps/geography_extra/mm_681_sea_breeze_circulation.png",
+    "url": "/mind_maps/geography_extra/mm_681_sea_breeze_circulation.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β2.2",
@@ -15489,7 +15489,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-687",
-    "url": "/mind_maps/geography_extra/mm_687_solar_system_planets.png",
+    "url": "/mind_maps/geography_extra/mm_687_solar_system_planets.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -15512,7 +15512,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-688",
-    "url": "/mind_maps/geography_extra/mm_688_moon_phases_cycle.png",
+    "url": "/mind_maps/geography_extra/mm_688_moon_phases_cycle.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -15535,7 +15535,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-689",
-    "url": "/mind_maps/geography_extra/mm_689_solar_eclipse_geometry.png",
+    "url": "/mind_maps/geography_extra/mm_689_solar_eclipse_geometry.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -15558,7 +15558,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-690",
-    "url": "/mind_maps/geography_extra/mm_690_lunar_eclipse_geometry.png",
+    "url": "/mind_maps/geography_extra/mm_690_lunar_eclipse_geometry.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -15581,7 +15581,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-691",
-    "url": "/mind_maps/geography_extra/mm_691_earth_rotation_day_night.png",
+    "url": "/mind_maps/geography_extra/mm_691_earth_rotation_day_night.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.2",
@@ -15604,7 +15604,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-604",
-    "url": "/mind_maps/premium_pdf/premium_vessel_artery_tube.png",
+    "url": "/mind_maps/premium_pdf/premium_vessel_artery_tube.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -15689,7 +15689,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-605",
-    "url": "/mind_maps/premium_pdf/premium_vessel_vein_tube.png",
+    "url": "/mind_maps/premium_pdf/premium_vessel_vein_tube.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -15773,7 +15773,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-606",
-    "url": "/mind_maps/premium_pdf/premium_vessel_capillary_mesh.png",
+    "url": "/mind_maps/premium_pdf/premium_vessel_capillary_mesh.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -15858,7 +15858,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-607",
-    "url": "/mind_maps/premium_pdf/premium_circulation_closed_network.png",
+    "url": "/mind_maps/premium_pdf/premium_circulation_closed_network.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -15943,7 +15943,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-608",
-    "url": "/mind_maps/premium_pdf/premium_capillary_tissue_exchange.png",
+    "url": "/mind_maps/premium_pdf/premium_capillary_tissue_exchange.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16029,7 +16029,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-609",
-    "url": "/mind_maps/premium_pdf/premium_venous_return_valves.png",
+    "url": "/mind_maps/premium_pdf/premium_venous_return_valves.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16113,7 +16113,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-610",
-    "url": "/mind_maps/premium_pdf/premium_calf_muscle_pump.png",
+    "url": "/mind_maps/premium_pdf/premium_calf_muscle_pump.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16203,7 +16203,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-611",
-    "url": "/mind_maps/premium_pdf/premium_artery_cross_section.png",
+    "url": "/mind_maps/premium_pdf/premium_artery_cross_section.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16291,7 +16291,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-612",
-    "url": "/mind_maps/premium_pdf/premium_capillary_cross_section.png",
+    "url": "/mind_maps/premium_pdf/premium_capillary_cross_section.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16377,7 +16377,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-613",
-    "url": "/mind_maps/premium_pdf/premium_vein_cross_section_valves.png",
+    "url": "/mind_maps/premium_pdf/premium_vein_cross_section_valves.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16465,7 +16465,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-614",
-    "url": "/mind_maps/premium_pdf/premium_vasoconstriction.png",
+    "url": "/mind_maps/premium_pdf/premium_vasoconstriction.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16551,7 +16551,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-615",
-    "url": "/mind_maps/premium_pdf/premium_vasodilation.png",
+    "url": "/mind_maps/premium_pdf/premium_vasodilation.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16637,7 +16637,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-616",
-    "url": "/mind_maps/premium_pdf/premium_heart_pump_anatomy.png",
+    "url": "/mind_maps/premium_pdf/premium_heart_pump_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16723,7 +16723,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-617",
-    "url": "/mind_maps/premium_pdf/premium_liver_torso_location.png",
+    "url": "/mind_maps/premium_pdf/premium_liver_torso_location.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -16797,7 +16797,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-618",
-    "url": "/mind_maps/premium_pdf/premium_portal_vein_branch.png",
+    "url": "/mind_maps/premium_pdf/premium_portal_vein_branch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -16918,7 +16918,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-619",
-    "url": "/mind_maps/premium_pdf/premium_hepatic_artery_branch.png",
+    "url": "/mind_maps/premium_pdf/premium_hepatic_artery_branch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -17039,7 +17039,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-620",
-    "url": "/mind_maps/premium_pdf/premium_hepatic_veins_branch.png",
+    "url": "/mind_maps/premium_pdf/premium_hepatic_veins_branch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -17158,7 +17158,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-621",
-    "url": "/mind_maps/premium_pdf/premium_liver_full_anatomy.png",
+    "url": "/mind_maps/premium_pdf/premium_liver_full_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17278,7 +17278,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-622",
-    "url": "/mind_maps/premium_pdf/premium_hepatic_lobule_magnified.png",
+    "url": "/mind_maps/premium_pdf/premium_hepatic_lobule_magnified.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17351,7 +17351,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-623",
-    "url": "/mind_maps/premium_pdf/premium_liver_organ_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_liver_organ_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17406,7 +17406,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-624",
-    "url": "/mind_maps/premium_pdf/premium_bile_ducts_tree.png",
+    "url": "/mind_maps/premium_pdf/premium_bile_ducts_tree.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17460,7 +17460,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-625",
-    "url": "/mind_maps/premium_pdf/premium_gallbladder_organ.png",
+    "url": "/mind_maps/premium_pdf/premium_gallbladder_organ.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17515,7 +17515,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-626",
-    "url": "/mind_maps/premium_pdf/premium_duodenum_bile_duct.png",
+    "url": "/mind_maps/premium_pdf/premium_duodenum_bile_duct.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17569,7 +17569,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-627",
-    "url": "/mind_maps/premium_pdf/premium_bile_production_pathway.png",
+    "url": "/mind_maps/premium_pdf/premium_bile_production_pathway.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17624,7 +17624,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-628",
-    "url": "/mind_maps/premium_pdf/premium_liver_nutrient_processing.png",
+    "url": "/mind_maps/premium_pdf/premium_liver_nutrient_processing.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17682,7 +17682,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-629",
-    "url": "/mind_maps/premium_pdf/premium_liver_detox_shield.png",
+    "url": "/mind_maps/premium_pdf/premium_liver_detox_shield.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17738,7 +17738,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-630",
-    "url": "/mind_maps/premium_pdf/premium_glycogen_storage_chain.png",
+    "url": "/mind_maps/premium_pdf/premium_glycogen_storage_chain.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -17796,7 +17796,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-631",
-    "url": "/mind_maps/premium_pdf/premium_protein_synthesis_fold.png",
+    "url": "/mind_maps/premium_pdf/premium_protein_synthesis_fold.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -17854,7 +17854,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-632",
-    "url": "/mind_maps/premium_pdf/premium_vitamin_b12_minerals_storage.png",
+    "url": "/mind_maps/premium_pdf/premium_vitamin_b12_minerals_storage.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -17911,7 +17911,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-633",
-    "url": "/mind_maps/premium_pdf/premium_immune_defense_cell.png",
+    "url": "/mind_maps/premium_pdf/premium_immune_defense_cell.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -17970,7 +17970,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-634",
-    "url": "/mind_maps/premium_pdf/premium_intestines_absorption.png",
+    "url": "/mind_maps/premium_pdf/premium_intestines_absorption.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -18027,7 +18027,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-635",
-    "url": "/mind_maps/premium_pdf/premium_human_body_circulation.png",
+    "url": "/mind_maps/premium_pdf/premium_human_body_circulation.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -18112,7 +18112,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-636",
-    "url": "/mind_maps/premium_pdf/premium_skeleton_muscle_arm_flex.png",
+    "url": "/mind_maps/premium_pdf/premium_skeleton_muscle_arm_flex.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18233,7 +18233,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-637",
-    "url": "/mind_maps/premium_pdf/premium_bone_marrow_rbc_production.png",
+    "url": "/mind_maps/premium_pdf/premium_bone_marrow_rbc_production.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18354,7 +18354,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-638",
-    "url": "/mind_maps/premium_pdf/premium_bone_mineral_fat_storage.png",
+    "url": "/mind_maps/premium_pdf/premium_bone_mineral_fat_storage.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18475,7 +18475,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-639",
-    "url": "/mind_maps/premium_pdf/premium_skeleton_full_axial_appendicular.png",
+    "url": "/mind_maps/premium_pdf/premium_skeleton_full_axial_appendicular.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18595,7 +18595,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-640",
-    "url": "/mind_maps/premium_pdf/premium_skeleton_labeled_overview.png",
+    "url": "/mind_maps/premium_pdf/premium_skeleton_labeled_overview.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18714,7 +18714,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-641",
-    "url": "/mind_maps/premium_pdf/premium_bones_long_femur_humerus.png",
+    "url": "/mind_maps/premium_pdf/premium_bones_long_femur_humerus.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18835,7 +18835,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-642",
-    "url": "/mind_maps/premium_pdf/premium_bones_short_carpal.png",
+    "url": "/mind_maps/premium_pdf/premium_bones_short_carpal.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -18953,7 +18953,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-643",
-    "url": "/mind_maps/premium_pdf/premium_bones_flat_scapula.png",
+    "url": "/mind_maps/premium_pdf/premium_bones_flat_scapula.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19071,7 +19071,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-644",
-    "url": "/mind_maps/premium_pdf/premium_bones_irregular_vertebra.png",
+    "url": "/mind_maps/premium_pdf/premium_bones_irregular_vertebra.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19189,7 +19189,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-645",
-    "url": "/mind_maps/premium_pdf/premium_skull_cranium_22_bones.png",
+    "url": "/mind_maps/premium_pdf/premium_skull_cranium_22_bones.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19308,7 +19308,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-646",
-    "url": "/mind_maps/premium_pdf/premium_vertebral_column_spine.png",
+    "url": "/mind_maps/premium_pdf/premium_vertebral_column_spine.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19430,7 +19430,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-647",
-    "url": "/mind_maps/premium_pdf/premium_thoracic_rib_cage_sternum.png",
+    "url": "/mind_maps/premium_pdf/premium_thoracic_rib_cage_sternum.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19548,7 +19548,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-648",
-    "url": "/mind_maps/premium_pdf/premium_shoulder_girdle_clavicle_scapula.png",
+    "url": "/mind_maps/premium_pdf/premium_shoulder_girdle_clavicle_scapula.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19667,7 +19667,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-649",
-    "url": "/mind_maps/premium_pdf/premium_upper_limb_arm_bones.png",
+    "url": "/mind_maps/premium_pdf/premium_upper_limb_arm_bones.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19786,7 +19786,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-650",
-    "url": "/mind_maps/premium_pdf/premium_pelvic_girdle_pelvis.png",
+    "url": "/mind_maps/premium_pdf/premium_pelvic_girdle_pelvis.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -19904,7 +19904,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-651",
-    "url": "/mind_maps/premium_pdf/premium_lower_limb_leg_bones.png",
+    "url": "/mind_maps/premium_pdf/premium_lower_limb_leg_bones.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20023,7 +20023,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-652",
-    "url": "/mind_maps/premium_pdf/premium_bone_internal_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_bone_internal_structure.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20143,7 +20143,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-653",
-    "url": "/mind_maps/premium_pdf/premium_joint_immovable_skull_sutures.png",
+    "url": "/mind_maps/premium_pdf/premium_joint_immovable_skull_sutures.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20264,7 +20264,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-654",
-    "url": "/mind_maps/premium_pdf/premium_joint_semi_movable_vertebrae.png",
+    "url": "/mind_maps/premium_pdf/premium_joint_semi_movable_vertebrae.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20383,7 +20383,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-655",
-    "url": "/mind_maps/premium_pdf/premium_joint_movable_knee.png",
+    "url": "/mind_maps/premium_pdf/premium_joint_movable_knee.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20503,7 +20503,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-656",
-    "url": "/mind_maps/premium_pdf/premium_muscle_tendon_bone_elbow.png",
+    "url": "/mind_maps/premium_pdf/premium_muscle_tendon_bone_elbow.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.4",
@@ -20623,7 +20623,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-657",
-    "url": "/mind_maps/premium_pdf/premium_stapes_ear_ossicle.png",
+    "url": "/mind_maps/premium_pdf/premium_stapes_ear_ossicle.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "10.2",
@@ -20744,7 +20744,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-658",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_jointed_leg.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_jointed_leg.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -20803,7 +20803,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-659",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_chitin_plates.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_chitin_plates.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -20861,7 +20861,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-660",
-    "url": "/mind_maps/premium_pdf/premium_insect_anatomy_grasshopper.png",
+    "url": "/mind_maps/premium_pdf/premium_insect_anatomy_grasshopper.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -20921,7 +20921,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-661",
-    "url": "/mind_maps/premium_pdf/premium_insect_mouthparts_comparison.png",
+    "url": "/mind_maps/premium_pdf/premium_insect_mouthparts_comparison.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -20981,7 +20981,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-662",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_butterfly.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_butterfly.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21041,7 +21041,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-663",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_lobster.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_lobster.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21101,7 +21101,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-664",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_spider_top.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_spider_top.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21160,7 +21160,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-665",
-    "url": "/mind_maps/premium_pdf/premium_insect_bee_anatomy.png",
+    "url": "/mind_maps/premium_pdf/premium_insect_bee_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21219,7 +21219,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-666",
-    "url": "/mind_maps/premium_pdf/premium_crustacean_crab.png",
+    "url": "/mind_maps/premium_pdf/premium_crustacean_crab.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21279,7 +21279,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-667",
-    "url": "/mind_maps/premium_pdf/premium_arachnid_spider_scorpion.png",
+    "url": "/mind_maps/premium_pdf/premium_arachnid_spider_scorpion.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21337,7 +21337,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-668",
-    "url": "/mind_maps/premium_pdf/premium_myriapod_millipede_centipede.png",
+    "url": "/mind_maps/premium_pdf/premium_myriapod_millipede_centipede.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21395,7 +21395,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-669",
-    "url": "/mind_maps/premium_pdf/premium_arthropod_molting_3stages.png",
+    "url": "/mind_maps/premium_pdf/premium_arthropod_molting_3stages.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21454,7 +21454,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-670",
-    "url": "/mind_maps/premium_pdf/premium_insect_tracheal_respiration.png",
+    "url": "/mind_maps/premium_pdf/premium_insect_tracheal_respiration.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21513,7 +21513,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-671",
-    "url": "/mind_maps/premium_pdf/premium_exoskeleton_internal_body_grasshopper.png",
+    "url": "/mind_maps/premium_pdf/premium_exoskeleton_internal_body_grasshopper.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21573,7 +21573,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-672",
-    "url": "/mind_maps/premium_pdf/premium_chitin_chemical_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_chitin_chemical_structure.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -21637,7 +21637,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-673",
-    "url": "/mind_maps/premium_pdf/premium_beetle_hard_exoskeleton.png",
+    "url": "/mind_maps/premium_pdf/premium_beetle_hard_exoskeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21697,7 +21697,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-674",
-    "url": "/mind_maps/premium_pdf/premium_grasshopper_light_exoskeleton.png",
+    "url": "/mind_maps/premium_pdf/premium_grasshopper_light_exoskeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21758,7 +21758,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-675",
-    "url": "/mind_maps/premium_pdf/premium_exoskeleton_jointed_limb.png",
+    "url": "/mind_maps/premium_pdf/premium_exoskeleton_jointed_limb.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21820,7 +21820,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-676",
-    "url": "/mind_maps/premium_pdf/premium_cicada_molting_renewal.png",
+    "url": "/mind_maps/premium_pdf/premium_cicada_molting_renewal.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21881,7 +21881,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-677",
-    "url": "/mind_maps/premium_pdf/premium_scorpion_waterproof_exoskeleton.png",
+    "url": "/mind_maps/premium_pdf/premium_scorpion_waterproof_exoskeleton.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -21942,7 +21942,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-678",
-    "url": "/mind_maps/premium_pdf/premium_exoskeleton_internal_muscles_joint.png",
+    "url": "/mind_maps/premium_pdf/premium_exoskeleton_internal_muscles_joint.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.3",
@@ -22005,7 +22005,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-679",
-    "url": "/mind_maps/premium_pdf/premium_unicellular_movement_comparison.png",
+    "url": "/mind_maps/premium_pdf/premium_unicellular_movement_comparison.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22045,7 +22045,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-680",
-    "url": "/mind_maps/premium_pdf/premium_flagellum_euglena_horizontal.png",
+    "url": "/mind_maps/premium_pdf/premium_flagellum_euglena_horizontal.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22086,7 +22086,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-681",
-    "url": "/mind_maps/premium_pdf/premium_cilia_paramecium_horizontal.png",
+    "url": "/mind_maps/premium_pdf/premium_cilia_paramecium_horizontal.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22127,7 +22127,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-682",
-    "url": "/mind_maps/premium_pdf/premium_pseudopodia_amoeba_horizontal.png",
+    "url": "/mind_maps/premium_pdf/premium_pseudopodia_amoeba_horizontal.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22168,7 +22168,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-683",
-    "url": "/mind_maps/premium_pdf/premium_flagellum_propulsion_mechanism.png",
+    "url": "/mind_maps/premium_pdf/premium_flagellum_propulsion_mechanism.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22210,7 +22210,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-684",
-    "url": "/mind_maps/premium_pdf/premium_cilia_propulsion_mechanism.png",
+    "url": "/mind_maps/premium_pdf/premium_cilia_propulsion_mechanism.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22252,7 +22252,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-685",
-    "url": "/mind_maps/premium_pdf/premium_pseudopodia_propulsion_3steps.png",
+    "url": "/mind_maps/premium_pdf/premium_pseudopodia_propulsion_3steps.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22293,7 +22293,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-686",
-    "url": "/mind_maps/premium_pdf/premium_chemotaxis_unicellular.png",
+    "url": "/mind_maps/premium_pdf/premium_chemotaxis_unicellular.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22336,7 +22336,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-687",
-    "url": "/mind_maps/premium_pdf/premium_phototaxis_unicellular.png",
+    "url": "/mind_maps/premium_pdf/premium_phototaxis_unicellular.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22379,7 +22379,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-688",
-    "url": "/mind_maps/premium_pdf/premium_euglena_vertical_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_euglena_vertical_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22420,7 +22420,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-689",
-    "url": "/mind_maps/premium_pdf/premium_paramecium_vertical_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_paramecium_vertical_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22460,7 +22460,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-690",
-    "url": "/mind_maps/premium_pdf/premium_amoeba_vertical_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_amoeba_vertical_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -22500,7 +22500,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-691",
-    "url": "/mind_maps/premium_pdf/premium_bacteria_ecoli_flagella.png",
+    "url": "/mind_maps/premium_pdf/premium_bacteria_ecoli_flagella.webp",
     "subject": "Βιολογία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -22541,7 +22541,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-693",
-    "url": "/mind_maps/premium_pdf/premium_rain_cloud_precipitation_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_rain_cloud_precipitation_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -22565,7 +22565,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-694",
-    "url": "/mind_maps/premium_pdf/premium_condensation_cloud_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_condensation_cloud_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -22588,7 +22588,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-695",
-    "url": "/mind_maps/premium_pdf/premium_sun_solar_heating_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_sun_solar_heating_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -22610,7 +22610,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-696",
-    "url": "/mind_maps/premium_pdf/premium_drought_cracked_earth_full_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_drought_cracked_earth_full_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -22636,7 +22636,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-697",
-    "url": "/mind_maps/premium_pdf/premium_drought_barren_tree_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_drought_barren_tree_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β3.1",
@@ -22659,7 +22659,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-698",
-    "url": "/mind_maps/premium_pdf/premium_volcano_formation_cross_section.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_volcano_formation_cross_section.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -22685,7 +22685,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-699",
-    "url": "/mind_maps/premium_pdf/premium_volcano_magma_chamber.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_volcano_magma_chamber.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -22708,7 +22708,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-700",
-    "url": "/mind_maps/premium_pdf/premium_volcano_eruption_ash_plume.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_volcano_eruption_ash_plume.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Β1.3",
@@ -22730,7 +22730,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-701",
-    "url": "/mind_maps/premium_pdf/premium_mass_balance_scale_apple.png",
+    "url": "/mind_maps/premium_pdf/premium_mass_balance_scale_apple.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -22757,7 +22757,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-702",
-    "url": "/mind_maps/premium_pdf/premium_mass_balance_3stages.png",
+    "url": "/mind_maps/premium_pdf/premium_mass_balance_3stages.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -22780,7 +22780,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-703",
-    "url": "/mind_maps/premium_pdf/premium_mass_balance_step1_100g.png",
+    "url": "/mind_maps/premium_pdf/premium_mass_balance_step1_100g.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -22802,7 +22802,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-704",
-    "url": "/mind_maps/premium_pdf/premium_mass_balance_equilibrium.png",
+    "url": "/mind_maps/premium_pdf/premium_mass_balance_equilibrium.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -22824,7 +22824,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-705",
-    "url": "/mind_maps/premium_pdf/premium_mass_digital_scale_apple.png",
+    "url": "/mind_maps/premium_pdf/premium_mass_digital_scale_apple.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -22847,7 +22847,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-706",
-    "url": "/mind_maps/premium_pdf/premium_weight_earth_dynamometer.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_earth_dynamometer.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -22872,7 +22872,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-707",
-    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_isolated.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -22896,7 +22896,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-708",
-    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_3stages.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_3stages.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -22918,7 +22918,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-709",
-    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_zoom_scale.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_dynamometer_zoom_scale.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -22939,7 +22939,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-710",
-    "url": "/mind_maps/premium_pdf/premium_weight_altitude_earth_gravity.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_altitude_earth_gravity.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -22962,7 +22962,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-711",
-    "url": "/mind_maps/premium_pdf/premium_weight_earth_globe_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_weight_earth_globe_sketch.webp",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Α1.1",
@@ -22984,7 +22984,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-712",
-    "url": "/mind_maps/premium_pdf/premium_volume_rectangular_prism.png",
+    "url": "/mind_maps/premium_pdf/premium_volume_rectangular_prism.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23008,7 +23008,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-713",
-    "url": "/mind_maps/premium_pdf/premium_volume_cube_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_volume_cube_isolated.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23029,7 +23029,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-714",
-    "url": "/mind_maps/premium_pdf/premium_volume_cylinder_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_volume_cylinder_isolated.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23050,7 +23050,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-715",
-    "url": "/mind_maps/premium_pdf/premium_volume_displacement_3cylinders.png",
+    "url": "/mind_maps/premium_pdf/premium_volume_displacement_3cylinders.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23074,7 +23074,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-716",
-    "url": "/mind_maps/premium_pdf/premium_volume_graduated_cylinder_stone.png",
+    "url": "/mind_maps/premium_pdf/premium_volume_graduated_cylinder_stone.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23096,7 +23096,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-717",
-    "url": "/mind_maps/premium_pdf/premium_density_balance_comparison.png",
+    "url": "/mind_maps/premium_pdf/premium_density_balance_comparison.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23120,7 +23120,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-718",
-    "url": "/mind_maps/premium_pdf/premium_density_regular_solid_method.png",
+    "url": "/mind_maps/premium_pdf/premium_density_regular_solid_method.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23142,7 +23142,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-719",
-    "url": "/mind_maps/premium_pdf/premium_density_irregular_solid_method.png",
+    "url": "/mind_maps/premium_pdf/premium_density_irregular_solid_method.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.3",
@@ -23164,7 +23164,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-720",
-    "url": "/mind_maps/premium_pdf/premium_boiling_water_pot_stove.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_water_pot_stove.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -23191,7 +23191,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-721",
-    "url": "/mind_maps/premium_pdf/premium_boiling_water_4beakers.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_water_4beakers.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -23214,7 +23214,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-722",
-    "url": "/mind_maps/premium_pdf/premium_boiling_beaker_stage1_warm.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_beaker_stage1_warm.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -23236,7 +23236,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-723",
-    "url": "/mind_maps/premium_pdf/premium_boiling_beaker_bubbles.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_beaker_bubbles.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -23259,7 +23259,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-724",
-    "url": "/mind_maps/premium_pdf/premium_ocean_liner_buoyancy.png",
+    "url": "/mind_maps/premium_pdf/premium_ocean_liner_buoyancy.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.4",
@@ -23285,7 +23285,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-725",
-    "url": "/mind_maps/premium_pdf/premium_ocean_liner_4stages_flotation.png",
+    "url": "/mind_maps/premium_pdf/premium_ocean_liner_4stages_flotation.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.4",
@@ -23308,7 +23308,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-726",
-    "url": "/mind_maps/premium_pdf/premium_water_cycle_evaporation_arrows_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_water_cycle_evaporation_arrows_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Γ3",
@@ -23331,7 +23331,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-727",
-    "url": "/mind_maps/premium_pdf/premium_water_cycle_mountain_river_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_water_cycle_mountain_river_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Γ3",
@@ -23356,7 +23356,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-728",
-    "url": "/mind_maps/premium_pdf/premium_drought_weak_rain_cloud_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_drought_weak_rain_cloud_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Γ4",
@@ -23378,7 +23378,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-729",
-    "url": "/mind_maps/premium_pdf/premium_drought_shrinking_pond_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_drought_shrinking_pond_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Γ4",
@@ -23400,7 +23400,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-729b",
-    "url": "/mind_maps/premium_pdf/premium_drought_heat_waves_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_drought_heat_waves_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Γ4",
@@ -23421,7 +23421,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-730",
-    "url": "/mind_maps/premium_pdf/premium_volcano_cone_layers_blue_sketch.png?v=vintage7",
+    "url": "/mind_maps/premium_pdf/premium_volcano_cone_layers_blue_sketch.webp?v=vintage7",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -23443,7 +23443,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-731",
-    "url": "/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -23465,7 +23465,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-732",
-    "url": "/mind_maps/premium_pdf/premium_davinci_vitruvian_man_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_vitruvian_man_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -23486,7 +23486,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-733",
-    "url": "/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -23507,7 +23507,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-734",
-    "url": "/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -23528,7 +23528,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-735",
-    "url": "/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.1",
@@ -23548,7 +23548,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-736",
-    "url": "/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -23572,7 +23572,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-737",
-    "url": "/mind_maps/premium_pdf/premium_davinci_anatomy_skull_heart_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_anatomy_skull_heart_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 3",
@@ -23593,7 +23593,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-738",
-    "url": "/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -23615,7 +23615,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-739",
-    "url": "/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.1",
@@ -23637,7 +23637,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-740",
-    "url": "/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.3",
@@ -23661,7 +23661,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-741",
-    "url": "/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 6",
@@ -23683,7 +23683,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-742",
-    "url": "/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.4",
@@ -23704,7 +23704,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-743",
-    "url": "/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.4",
@@ -23725,7 +23725,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-744",
-    "url": "/mind_maps/premium_pdf/premium_newton_portrait_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_portrait_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -23749,7 +23749,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-745",
-    "url": "/mind_maps/premium_pdf/premium_newton_cradle_laws_of_motion_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_cradle_laws_of_motion_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -23771,7 +23771,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-746",
-    "url": "/mind_maps/premium_pdf/premium_newton_falling_apple_gravity_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_falling_apple_gravity_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.1",
@@ -23793,7 +23793,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-747",
-    "url": "/mind_maps/premium_pdf/premium_newton_calculus_book_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_calculus_book_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "1.1",
@@ -23815,7 +23815,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-748",
-    "url": "/mind_maps/premium_pdf/premium_newton_prism_light_spectrum_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_prism_light_spectrum_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.2",
@@ -23838,7 +23838,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-749",
-    "url": "/mind_maps/premium_pdf/premium_newton_principia_book_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_principia_book_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "3.2",
@@ -23858,7 +23858,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-750",
-    "url": "/mind_maps/premium_pdf/premium_newton_planetary_orbit_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_newton_planetary_orbit_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "3.3",
@@ -23880,7 +23880,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-751",
-    "url": "/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.1",
@@ -23902,7 +23902,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-752",
-    "url": "/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.1",
@@ -23924,7 +23924,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-753",
-    "url": "/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.2",
@@ -23946,7 +23946,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-754",
-    "url": "/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -23968,7 +23968,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-755",
-    "url": "/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.webp",
     "subject": "Γεωγραφία",
     "grade": "Β' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -23987,7 +23987,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-756",
-    "url": "/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.1",
@@ -24006,7 +24006,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-757",
-    "url": "/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "3.3",
@@ -24027,7 +24027,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-758",
-    "url": "/mind_maps/premium_pdf/premium_curie_portrait_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_portrait_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -24053,7 +24053,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-759",
-    "url": "/mind_maps/premium_pdf/premium_curie_nobel_medal_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_nobel_medal_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -24074,7 +24074,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-760",
-    "url": "/mind_maps/premium_pdf/premium_curie_polonium_radium_ores_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_polonium_radium_ores_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -24099,7 +24099,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-761",
-    "url": "/mind_maps/premium_pdf/premium_curie_chemistry_apparatus_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_chemistry_apparatus_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -24120,7 +24120,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-762",
-    "url": "/mind_maps/premium_pdf/premium_curie_electrometer_apparatus_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_electrometer_apparatus_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24141,7 +24141,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-763",
-    "url": "/mind_maps/premium_pdf/premium_curie_xray_radiology_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_xray_radiology_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -24162,7 +24162,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-764",
-    "url": "/mind_maps/premium_pdf/premium_curie_radiation_symbol_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/premium_curie_radiation_symbol_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24183,7 +24183,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-765",
-    "url": "/mind_maps/premium_pdf/scientist_archimedes_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_archimedes_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.4",
@@ -24206,7 +24206,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-766",
-    "url": "/mind_maps/premium_pdf/scientist_galileo_galilei_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_galileo_galilei_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.1",
@@ -24230,7 +24230,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-767",
-    "url": "/mind_maps/premium_pdf/scientist_johannes_kepler_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_johannes_kepler_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Λυκείου",
     "chapter": "3.3",
@@ -24253,7 +24253,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-768",
-    "url": "/mind_maps/premium_pdf/scientist_blaise_pascal_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_blaise_pascal_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "4.2",
@@ -24276,7 +24276,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-769",
-    "url": "/mind_maps/premium_pdf/scientist_robert_hooke_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_robert_hooke_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.4",
@@ -24300,7 +24300,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-770",
-    "url": "/mind_maps/premium_pdf/scientist_christiaan_huygens_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_christiaan_huygens_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "4.2",
@@ -24323,7 +24323,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-771",
-    "url": "/mind_maps/premium_pdf/scientist_charles_coulomb_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_charles_coulomb_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -24345,7 +24345,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-772",
-    "url": "/mind_maps/premium_pdf/scientist_alessandro_volta_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_alessandro_volta_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -24368,7 +24368,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-773",
-    "url": "/mind_maps/premium_pdf/scientist_andre_marie_ampere_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_andre_marie_ampere_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -24390,7 +24390,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-774",
-    "url": "/mind_maps/premium_pdf/scientist_georg_ohm_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_georg_ohm_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -24413,7 +24413,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-775",
-    "url": "/mind_maps/premium_pdf/scientist_michael_faraday_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_michael_faraday_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -24436,7 +24436,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-776",
-    "url": "/mind_maps/premium_pdf/scientist_james_prescott_joule_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_james_prescott_joule_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "5.1",
@@ -24459,7 +24459,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-777",
-    "url": "/mind_maps/premium_pdf/scientist_lord_kelvin_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_lord_kelvin_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "6.1",
@@ -24482,7 +24482,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-778",
-    "url": "/mind_maps/premium_pdf/scientist_james_clerk_maxwell_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_james_clerk_maxwell_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -24504,7 +24504,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-779",
-    "url": "/mind_maps/premium_pdf/scientist_heinrich_hertz_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_heinrich_hertz_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "4.1",
@@ -24528,7 +24528,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-780",
-    "url": "/mind_maps/premium_pdf/scientist_nikola_tesla_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_nikola_tesla_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "2.3",
@@ -24552,7 +24552,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-781",
-    "url": "/mind_maps/premium_pdf/scientist_wilhelm_roentgen_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_wilhelm_roentgen_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -24575,7 +24575,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-782",
-    "url": "/mind_maps/premium_pdf/scientist_henri_becquerel_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_henri_becquerel_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24597,7 +24597,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-783",
-    "url": "/mind_maps/premium_pdf/scientist_jj_thomson_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_jj_thomson_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.1",
@@ -24620,7 +24620,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-784",
-    "url": "/mind_maps/premium_pdf/scientist_ernest_rutherford_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_ernest_rutherford_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24644,7 +24644,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-785",
-    "url": "/mind_maps/premium_pdf/scientist_max_planck_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_max_planck_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24668,7 +24668,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-786",
-    "url": "/mind_maps/premium_pdf/scientist_niels_bohr_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_niels_bohr_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24693,7 +24693,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-787",
-    "url": "/mind_maps/premium_pdf/scientist_erwin_schrodinger_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_erwin_schrodinger_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24717,7 +24717,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-788",
-    "url": "/mind_maps/premium_pdf/scientist_werner_heisenberg_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_werner_heisenberg_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24739,7 +24739,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-789",
-    "url": "/mind_maps/premium_pdf/scientist_paul_dirac_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_paul_dirac_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24762,7 +24762,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-790",
-    "url": "/mind_maps/premium_pdf/scientist_wolfgang_pauli_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_wolfgang_pauli_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.1",
@@ -24786,7 +24786,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-791",
-    "url": "/mind_maps/premium_pdf/scientist_enrico_fermi_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_enrico_fermi_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24808,7 +24808,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-792",
-    "url": "/mind_maps/premium_pdf/scientist_lise_meitner_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_lise_meitner_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24831,7 +24831,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-793",
-    "url": "/mind_maps/premium_pdf/scientist_richard_feynman_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_richard_feynman_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.3",
@@ -24853,7 +24853,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-794",
-    "url": "/mind_maps/premium_pdf/scientist_stephen_hawking_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_stephen_hawking_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.1",
@@ -24877,7 +24877,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-795",
-    "url": "/mind_maps/premium_pdf/scientist_peter_higgs_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_peter_higgs_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "6.4",
@@ -24900,7 +24900,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-796",
-    "url": "/mind_maps/premium_pdf/scientist_christian_doppler_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_christian_doppler_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "4.3",
@@ -24924,7 +24924,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-797",
-    "url": "/mind_maps/premium_pdf/scientist_pythagoras_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_pythagoras_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -24948,7 +24948,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-798",
-    "url": "/mind_maps/premium_pdf/scientist_euclid_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_euclid_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "1.2",
@@ -24972,7 +24972,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-799",
-    "url": "/mind_maps/premium_pdf/scientist_carl_friedrich_gauss_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_carl_friedrich_gauss_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "2.1",
@@ -24997,7 +24997,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-800",
-    "url": "/mind_maps/premium_pdf/scientist_leonhard_euler_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_leonhard_euler_blue_sketch.webp",
     "subject": "Φυσική",
     "grade": "Γ' Λυκείου",
     "chapter": "1.1",
@@ -25021,7 +25021,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-801",
-    "url": "/mind_maps/premium_pdf/scientist_antoine_lavoisier_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_antoine_lavoisier_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.7",
@@ -25044,7 +25044,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-802",
-    "url": "/mind_maps/premium_pdf/scientist_dmitri_mendeleev_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_dmitri_mendeleev_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "1.2",
@@ -25066,7 +25066,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-803",
-    "url": "/mind_maps/premium_pdf/scientist_amedeo_avogadro_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_amedeo_avogadro_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -25091,7 +25091,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-804",
-    "url": "/mind_maps/premium_pdf/scientist_linus_pauling_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_linus_pauling_blue_sketch.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -25116,7 +25116,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-805",
-    "url": "/mind_maps/premium_pdf/scientist_charles_darwin_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_charles_darwin_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 7",
@@ -25140,7 +25140,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-806",
-    "url": "/mind_maps/premium_pdf/scientist_gregor_mendel_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_gregor_mendel_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -25164,7 +25164,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-807",
-    "url": "/mind_maps/premium_pdf/scientist_louis_pasteur_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_louis_pasteur_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 4",
@@ -25190,7 +25190,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-808",
-    "url": "/mind_maps/premium_pdf/scientist_rosalind_franklin_blue_sketch.png",
+    "url": "/mind_maps/premium_pdf/scientist_rosalind_franklin_blue_sketch.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 5",
@@ -25214,7 +25214,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-809",
-    "url": "/mind_maps/premium_pdf/premium_acids_hero_vinegar_yogurt_hcl_fruits.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_hero_vinegar_yogurt_hcl_fruits.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25257,7 +25257,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-810",
-    "url": "/mind_maps/premium_pdf/premium_acids_flask_bubbles.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_flask_bubbles.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25302,7 +25302,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-811",
-    "url": "/mind_maps/premium_pdf/premium_acids_molecule_ionization.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_molecule_ionization.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25346,7 +25346,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-812",
-    "url": "/mind_maps/premium_pdf/premium_acids_sour_tongue_litmus.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_sour_tongue_litmus.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25390,7 +25390,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-813",
-    "url": "/mind_maps/premium_pdf/premium_acids_zinc_h2_testtube_shield.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_zinc_h2_testtube_shield.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25436,7 +25436,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-814",
-    "url": "/mind_maps/premium_pdf/premium_acids_inorganic_test_tubes_rack.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_inorganic_test_tubes_rack.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25479,7 +25479,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-815",
-    "url": "/mind_maps/premium_pdf/premium_acids_organic_molecule_model.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_organic_molecule_model.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25523,7 +25523,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-816",
-    "url": "/mind_maps/premium_pdf/premium_acids_strong_weak_lightning_scale.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_strong_weak_lightning_scale.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25569,7 +25569,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-817",
-    "url": "/mind_maps/premium_pdf/premium_acids_litmus_beakers_trio.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_litmus_beakers_trio.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25615,7 +25615,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-818",
-    "url": "/mind_maps/premium_pdf/premium_acids_metal_zn_hcl_h2_reaction.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_metal_zn_hcl_h2_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25662,7 +25662,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-819",
-    "url": "/mind_maps/premium_pdf/premium_acids_neutralization_4flasks.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_neutralization_4flasks.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25709,7 +25709,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-820",
-    "url": "/mind_maps/premium_pdf/premium_acids_ph_scale_spectrum.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_ph_scale_spectrum.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25754,7 +25754,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-821",
-    "url": "/mind_maps/premium_pdf/premium_acids_water_drop_ph.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_water_drop_ph.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25800,7 +25800,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-822",
-    "url": "/mind_maps/premium_pdf/premium_acids_stomach_digestion.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_stomach_digestion.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25845,7 +25845,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-823",
-    "url": "/mind_maps/premium_pdf/premium_acids_cleaner_spray_bottle.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_cleaner_spray_bottle.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25890,7 +25890,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-824",
-    "url": "/mind_maps/premium_pdf/premium_acids_chemical_factory.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_chemical_factory.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25933,7 +25933,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-825",
-    "url": "/mind_maps/premium_pdf/premium_acids_pickles_jar_preservation.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_pickles_jar_preservation.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -25977,7 +25977,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-826",
-    "url": "/mind_maps/premium_pdf/premium_acids_car_battery_h2so4.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_car_battery_h2so4.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26021,7 +26021,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-827",
-    "url": "/mind_maps/premium_pdf/premium_acids_safety_goggles_gloves.png",
+    "url": "/mind_maps/premium_pdf/premium_acids_safety_goggles_gloves.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26067,7 +26067,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-828",
-    "url": "/mind_maps/premium_pdf/premium_bases_hero_naoh_nh3_caoh2_soap.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_hero_naoh_nh3_caoh2_soap.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26111,7 +26111,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-829",
-    "url": "/mind_maps/premium_pdf/premium_bases_bitter_tongue.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_bitter_tongue.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26155,7 +26155,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-830",
-    "url": "/mind_maps/premium_pdf/premium_bases_soapy_hands.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_soapy_hands.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26200,7 +26200,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-831",
-    "url": "/mind_maps/premium_pdf/premium_bases_litmus_test_tube_shield.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_litmus_test_tube_shield.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26245,7 +26245,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-832",
-    "url": "/mind_maps/premium_pdf/premium_bases_oh_ion_dissociation.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_oh_ion_dissociation.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26290,7 +26290,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-833",
-    "url": "/mind_maps/premium_pdf/premium_bases_soap_bar_bubbles.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_soap_bar_bubbles.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26334,7 +26334,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-834",
-    "url": "/mind_maps/premium_pdf/premium_bases_strong_test_tubes_rack.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_strong_test_tubes_rack.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26379,7 +26379,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-835",
-    "url": "/mind_maps/premium_pdf/premium_bases_weak_nh3_molecule.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_weak_nh3_molecule.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26424,7 +26424,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-836",
-    "url": "/mind_maps/premium_pdf/premium_bases_soluble_beaker_stirring.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_soluble_beaker_stirring.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26470,7 +26470,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-837",
-    "url": "/mind_maps/premium_pdf/premium_bases_insoluble_precipitate_bowl.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_insoluble_precipitate_bowl.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26517,7 +26517,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-838",
-    "url": "/mind_maps/premium_pdf/premium_bases_indicators_7tubes_spectrum.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_indicators_7tubes_spectrum.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26562,7 +26562,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-839",
-    "url": "/mind_maps/premium_pdf/premium_bases_neutralization_naoh_hcl.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_neutralization_naoh_hcl.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26609,7 +26609,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-840",
-    "url": "/mind_maps/premium_pdf/premium_bases_oxide_co2_reaction.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_oxide_co2_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26655,7 +26655,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-841",
-    "url": "/mind_maps/premium_pdf/premium_bases_uses_icons_column.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_uses_icons_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26702,7 +26702,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-842",
-    "url": "/mind_maps/premium_pdf/premium_bases_safety_washing_hands_faucet.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_safety_washing_hands_faucet.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26749,7 +26749,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-843",
-    "url": "/mind_maps/premium_pdf/premium_bases_drain_pipe_siphon.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_drain_pipe_siphon.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26794,7 +26794,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-844",
-    "url": "/mind_maps/premium_pdf/premium_bases_liquid_soap_detergent.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_liquid_soap_detergent.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26839,7 +26839,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-845",
-    "url": "/mind_maps/premium_pdf/premium_bases_baking_soda_box.png",
+    "url": "/mind_maps/premium_pdf/premium_bases_baking_soda_box.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26886,7 +26886,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-846",
-    "url": "/mind_maps/premium_pdf/premium_salts_hero_nacl_nahco3_caco3_crystals.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_hero_nacl_nahco3_caco3_crystals.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26928,7 +26928,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-847",
-    "url": "/mind_maps/premium_pdf/premium_salts_purple_crystal_cluster.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_purple_crystal_cluster.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -26972,7 +26972,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-848",
-    "url": "/mind_maps/premium_pdf/premium_salts_ionic_neutralization_spheres.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_ionic_neutralization_spheres.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27017,7 +27017,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-849",
-    "url": "/mind_maps/premium_pdf/premium_salts_crystal_lattice_conductivity.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_crystal_lattice_conductivity.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27063,7 +27063,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-850",
-    "url": "/mind_maps/premium_pdf/premium_salts_4crystal_types_column.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_4crystal_types_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27111,7 +27111,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-851",
-    "url": "/mind_maps/premium_pdf/premium_salts_flame_test_colors_column.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_flame_test_colors_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27160,7 +27160,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-852",
-    "url": "/mind_maps/premium_pdf/premium_salts_precipitate_4tubes_column.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_precipitate_4tubes_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27208,7 +27208,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-853",
-    "url": "/mind_maps/premium_pdf/premium_salts_solubility_beaker.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_solubility_beaker.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27253,7 +27253,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-854",
-    "url": "/mind_maps/premium_pdf/premium_salts_5common_salts_column.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_5common_salts_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27297,7 +27297,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-855",
-    "url": "/mind_maps/premium_pdf/premium_salts_nature_sea_rocks_landscape.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_nature_sea_rocks_landscape.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27344,7 +27344,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-856",
-    "url": "/mind_maps/premium_pdf/premium_salts_everyday_uses_column.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_everyday_uses_column.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27391,7 +27391,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-857",
-    "url": "/mind_maps/premium_pdf/premium_salts_overview_5icons_row.png",
+    "url": "/mind_maps/premium_pdf/premium_salts_overview_5icons_row.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -27439,7 +27439,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-858",
-    "url": "/mind_maps/premium_pdf/premium_amino_hero_structure_protein_jar.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_hero_structure_protein_jar.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27484,7 +27484,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-859",
-    "url": "/mind_maps/premium_pdf/premium_amino_3d_ball_stick_model.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_3d_ball_stick_model.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27529,7 +27529,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-860",
-    "url": "/mind_maps/premium_pdf/premium_amino_amphoteric_balance_scale.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_amphoteric_balance_scale.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27575,7 +27575,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-861",
-    "url": "/mind_maps/premium_pdf/premium_amino_meat_fish_eggs_dairy_jar.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_meat_fish_eggs_dairy_jar.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27624,7 +27624,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-862",
-    "url": "/mind_maps/premium_pdf/premium_amino_protein_4_structure_levels.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_protein_4_structure_levels.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -27671,7 +27671,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-863",
-    "url": "/mind_maps/premium_pdf/premium_amino_collagen_bone_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_collagen_bone_structure.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27719,7 +27719,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-864",
-    "url": "/mind_maps/premium_pdf/premium_amino_enzyme_substrate_catalysis.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_enzyme_substrate_catalysis.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27768,7 +27768,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-865",
-    "url": "/mind_maps/premium_pdf/premium_amino_hemoglobin_red_blood_cell.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_hemoglobin_red_blood_cell.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27814,7 +27814,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-866",
-    "url": "/mind_maps/premium_pdf/premium_amino_antibodies_immune_defense.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_antibodies_immune_defense.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27861,7 +27861,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-867",
-    "url": "/mind_maps/premium_pdf/premium_amino_hormones_insulin_key.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_hormones_insulin_key.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27908,7 +27908,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-868",
-    "url": "/mind_maps/premium_pdf/premium_amino_protein_foods_4groups.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_protein_foods_4groups.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -27958,7 +27958,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-869",
-    "url": "/mind_maps/premium_pdf/premium_amino_deficiency_tired_boy.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_deficiency_tired_boy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -28006,7 +28006,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-870",
-    "url": "/mind_maps/premium_pdf/premium_amino_strong_bicep_arm.png",
+    "url": "/mind_maps/premium_pdf/premium_amino_strong_bicep_arm.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "Εν. 2",
@@ -28053,7 +28053,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-871",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_hero_chemical_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_hero_chemical_structure.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28098,7 +28098,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-872",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_3puzzle_pieces.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_3puzzle_pieces.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28145,7 +28145,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-873",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_3parts_decomposition.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_3parts_decomposition.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28191,7 +28191,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-874",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_purines_pyrimidines_5bases.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_purines_pyrimidines_5bases.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -28236,7 +28236,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-875",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_ribose_deoxyribose_pair.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_ribose_deoxyribose_pair.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -28281,7 +28281,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-876",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_rna_dna_8examples.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_rna_dna_8examples.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -28335,7 +28335,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-877",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_phosphodiester_chain_3_5.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_phosphodiester_chain_3_5.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -28384,7 +28384,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-878",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_vs_nucleoside_comparison.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_vs_nucleoside_comparison.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Λυκείου",
     "chapter": "Κεφ. 1",
@@ -28429,7 +28429,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-879",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_dna_rna_atp_icons.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_dna_rna_atp_icons.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28478,7 +28478,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-880",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_eukaryotic_cell_dna_rna_atp.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_eukaryotic_cell_dna_rna_atp.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28527,7 +28527,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-881",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_food_atp_pharma_column.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_food_atp_pharma_column.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28576,7 +28576,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-882",
-    "url": "/mind_maps/premium_pdf/premium_nucleotide_pill_vaccine_vial.png",
+    "url": "/mind_maps/premium_pdf/premium_nucleotide_pill_vaccine_vial.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.1",
@@ -28624,7 +28624,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-883",
-    "url": "/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28669,7 +28669,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-884",
-    "url": "/mind_maps/premium_pdf/premium_cell_prokaryotic_vs_eukaryotic.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_prokaryotic_vs_eukaryotic.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.2",
@@ -28708,7 +28708,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-885",
-    "url": "/mind_maps/premium_pdf/premium_cell_theory_3circles.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_theory_3circles.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28747,7 +28747,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-886",
-    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28785,7 +28785,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-887",
-    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28822,7 +28822,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-888",
-    "url": "/mind_maps/premium_pdf/premium_cell_organelles_8icons_column.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_organelles_8icons_column.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.2",
@@ -28859,7 +28859,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-889",
-    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28899,7 +28899,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-890",
-    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -28936,7 +28936,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-891",
-    "url": "/mind_maps/premium_pdf/premium_cell_size_comparison_1_10_100um.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_size_comparison_1_10_100um.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.2",
@@ -28977,7 +28977,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-892",
-    "url": "/mind_maps/premium_pdf/premium_cell_optical_microscope.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_optical_microscope.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "Εν. 1",
@@ -29016,7 +29016,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-893",
-    "url": "/mind_maps/premium_pdf/premium_cell_motor_neuron_1meter.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_motor_neuron_1meter.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29067,7 +29067,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-894",
-    "url": "/mind_maps/premium_pdf/premium_diff_pathway_4stages.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_pathway_4stages.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29117,7 +29117,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-895",
-    "url": "/mind_maps/premium_pdf/premium_diff_dna_double_helix_gene_expression.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_dna_double_helix_gene_expression.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "5.2",
@@ -29168,7 +29168,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-896",
-    "url": "/mind_maps/premium_pdf/premium_diff_stem_cells_5types_diagram.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_stem_cells_5types_diagram.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29246,7 +29246,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-897",
-    "url": "/mind_maps/premium_pdf/premium_diff_epithelial_cells_layer.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_epithelial_cells_layer.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29295,7 +29295,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-898",
-    "url": "/mind_maps/premium_pdf/premium_diff_connective_cells_osteocyte_adipocyte_fibroblast.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_connective_cells_osteocyte_adipocyte_fibroblast.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29372,7 +29372,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-899",
-    "url": "/mind_maps/premium_pdf/premium_diff_muscle_cells_3types.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_muscle_cells_3types.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29423,7 +29423,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-900",
-    "url": "/mind_maps/premium_pdf/premium_diff_nerve_cells_neuron_glia.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_nerve_cells_neuron_glia.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29473,7 +29473,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-901",
-    "url": "/mind_maps/premium_pdf/premium_diff_blood_cells_rbc_wbc_platelets.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_blood_cells_rbc_wbc_platelets.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -29536,7 +29536,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-902",
-    "url": "/mind_maps/premium_pdf/premium_diff_stem_cell_summary_tree.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_stem_cell_summary_tree.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29585,7 +29585,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-903",
-    "url": "/mind_maps/premium_pdf/premium_diff_embryo_fetus_development.png",
+    "url": "/mind_maps/premium_pdf/premium_diff_embryo_fetus_development.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "12.1",
@@ -29635,7 +29635,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-904",
-    "url": "/mind_maps/premium_pdf/premium_tissues_cell_division_cluster.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_cell_division_cluster.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29684,7 +29684,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-905",
-    "url": "/mind_maps/premium_pdf/premium_tissues_human_body_4tissues_overview.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_human_body_4tissues_overview.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29757,7 +29757,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-906",
-    "url": "/mind_maps/premium_pdf/premium_tissues_epithelial_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_epithelial_structure.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29808,7 +29808,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-907",
-    "url": "/mind_maps/premium_pdf/premium_tissues_exocrine_gland.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_exocrine_gland.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29859,7 +29859,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-908",
-    "url": "/mind_maps/premium_pdf/premium_tissues_connective_fibers_matrix.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_connective_fibers_matrix.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29910,7 +29910,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-909",
-    "url": "/mind_maps/premium_pdf/premium_tissues_connective_bone_blood_fat.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_connective_bone_blood_fat.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -29999,7 +29999,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-910",
-    "url": "/mind_maps/premium_pdf/premium_tissues_muscle_striated_smooth_cardiac.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_muscle_striated_smooth_cardiac.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30050,7 +30050,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-911",
-    "url": "/mind_maps/premium_pdf/premium_tissues_nervous_neuron_synapse.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_nervous_neuron_synapse.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30100,7 +30100,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-912",
-    "url": "/mind_maps/premium_pdf/premium_tissues_brain_spinal_cord_organ.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_brain_spinal_cord_organ.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.1",
@@ -30149,7 +30149,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-913",
-    "url": "/mind_maps/premium_pdf/premium_tissues_hierarchy_cell_to_organism.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_hierarchy_cell_to_organism.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30199,7 +30199,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-914",
-    "url": "/mind_maps/premium_pdf/premium_tissues_skin_regeneration_vs_neuron.png",
+    "url": "/mind_maps/premium_pdf/premium_tissues_skin_regeneration_vs_neuron.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30249,7 +30249,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-915",
-    "url": "/mind_maps/premium_pdf/premium_organs_tissues_to_stomach_diagram.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_tissues_to_stomach_diagram.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30297,7 +30297,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-916",
-    "url": "/mind_maps/premium_pdf/premium_organs_8examples_collection.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_8examples_collection.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30384,7 +30384,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-917",
-    "url": "/mind_maps/premium_pdf/premium_organs_heart_anatomy.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_heart_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -30448,7 +30448,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-918",
-    "url": "/mind_maps/premium_pdf/premium_organs_lungs_respiration.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_lungs_respiration.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "5.1",
@@ -30499,7 +30499,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-919",
-    "url": "/mind_maps/premium_pdf/premium_organs_stomach_digestion.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_stomach_digestion.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "4.1",
@@ -30550,7 +30550,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-920",
-    "url": "/mind_maps/premium_pdf/premium_organs_liver_metabolism.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_liver_metabolism.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "4.1",
@@ -30601,7 +30601,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-921",
-    "url": "/mind_maps/premium_pdf/premium_organs_kidneys_filtration.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_kidneys_filtration.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "6.1",
@@ -30666,7 +30666,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-922",
-    "url": "/mind_maps/premium_pdf/premium_organs_brain_control.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_brain_control.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.1",
@@ -30717,7 +30717,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-923",
-    "url": "/mind_maps/premium_pdf/premium_organs_skin_layers_hair.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_skin_layers_hair.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -30768,7 +30768,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-924",
-    "url": "/mind_maps/premium_pdf/premium_organs_eye_vision.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_eye_vision.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.2",
@@ -30820,7 +30820,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-925",
-    "url": "/mind_maps/premium_pdf/premium_organs_ribcage_bones.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_ribcage_bones.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "7.1",
@@ -30892,7 +30892,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-926",
-    "url": "/mind_maps/premium_pdf/premium_organs_skeletal_muscle.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_skeletal_muscle.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "7.2",
@@ -30968,7 +30968,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-927",
-    "url": "/mind_maps/premium_pdf/premium_organs_5systems_cooperation_cards.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_5systems_cooperation_cards.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31020,7 +31020,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-928",
-    "url": "/mind_maps/premium_pdf/premium_organs_vertical_hierarchy_5levels.png",
+    "url": "/mind_maps/premium_pdf/premium_organs_vertical_hierarchy_5levels.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31070,7 +31070,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-929",
-    "url": "/mind_maps/premium_pdf/premium_organism_human_anatomy_body.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_human_anatomy_body.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31120,7 +31120,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-930",
-    "url": "/mind_maps/premium_pdf/premium_organism_digestive_system.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_digestive_system.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "4.1",
@@ -31171,7 +31171,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-931",
-    "url": "/mind_maps/premium_pdf/premium_organism_respiratory_system.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_respiratory_system.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "5.1",
@@ -31221,7 +31221,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-932",
-    "url": "/mind_maps/premium_pdf/premium_organism_circulatory_heart.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_circulatory_heart.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "3.1",
@@ -31281,7 +31281,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-933",
-    "url": "/mind_maps/premium_pdf/premium_organism_urinary_system.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_urinary_system.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "6.1",
@@ -31332,7 +31332,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-934",
-    "url": "/mind_maps/premium_pdf/premium_organism_nervous_brain_cord.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_nervous_brain_cord.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.1",
@@ -31381,7 +31381,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-935",
-    "url": "/mind_maps/premium_pdf/premium_organism_endocrine_glands.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_endocrine_glands.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "11.1",
@@ -31434,7 +31434,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-936",
-    "url": "/mind_maps/premium_pdf/premium_organism_muscular_body.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_muscular_body.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "7.2",
@@ -31484,7 +31484,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-937",
-    "url": "/mind_maps/premium_pdf/premium_organism_skeletal_body.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_skeletal_body.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "7.1",
@@ -31558,7 +31558,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-938",
-    "url": "/mind_maps/premium_pdf/premium_organism_environment_interaction.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_environment_interaction.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31608,7 +31608,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-939",
-    "url": "/mind_maps/premium_pdf/premium_organism_homeostasis_balance.png",
+    "url": "/mind_maps/premium_pdf/premium_organism_homeostasis_balance.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31659,7 +31659,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-940",
-    "url": "/mind_maps/premium_pdf/premium_systems_6way_cooperation_hub.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_6way_cooperation_hub.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31708,7 +31708,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-941",
-    "url": "/mind_maps/premium_pdf/premium_systems_3gears_mechanism.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_3gears_mechanism.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31757,7 +31757,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-942",
-    "url": "/mind_maps/premium_pdf/premium_systems_reproductive_male_female.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_reproductive_male_female.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "12.1",
@@ -31811,7 +31811,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-943",
-    "url": "/mind_maps/premium_pdf/premium_systems_sensory_organs_5senses.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_sensory_organs_5senses.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "9.2",
@@ -31867,7 +31867,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-944",
-    "url": "/mind_maps/premium_pdf/premium_systems_lymphatic_immune_cells.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_lymphatic_immune_cells.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "4.3",
@@ -31919,7 +31919,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-945",
-    "url": "/mind_maps/premium_pdf/premium_systems_integumentary_skin_section.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_integumentary_skin_section.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -31970,7 +31970,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-946",
-    "url": "/mind_maps/premium_pdf/premium_systems_runner_cooperation.png",
+    "url": "/mind_maps/premium_pdf/premium_systems_runner_cooperation.webp",
     "subject": "Βιολογία",
     "grade": "Α' Λυκείου",
     "chapter": "1.3",
@@ -32022,7 +32022,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-947",
-    "url": "/mind_maps/premium_pdf/premium_eco_pond_biotic_abiotic_scene.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_pond_biotic_abiotic_scene.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -32061,7 +32061,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-948",
-    "url": "/mind_maps/premium_pdf/premium_eco_producers_consumers_decomposers_cycle.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_producers_consumers_decomposers_cycle.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -32102,7 +32102,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-949",
-    "url": "/mind_maps/premium_pdf/premium_eco_abiotic_sun_water_wind_soil.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_abiotic_sun_water_wind_soil.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -32145,7 +32145,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-950",
-    "url": "/mind_maps/premium_pdf/premium_eco_natural_forest_lake_ecosystem.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_natural_forest_lake_ecosystem.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -32188,7 +32188,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-951",
-    "url": "/mind_maps/premium_pdf/premium_eco_artificial_farm_ecosystem.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_artificial_farm_ecosystem.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -32229,7 +32229,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-952",
-    "url": "/mind_maps/premium_pdf/premium_eco_competition_two_trees.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_competition_two_trees.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32270,7 +32270,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-953",
-    "url": "/mind_maps/premium_pdf/premium_eco_predation_wolf_hare.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_predation_wolf_hare.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32311,7 +32311,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-954",
-    "url": "/mind_maps/premium_pdf/premium_eco_parasitism_dog_tick.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_parasitism_dog_tick.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32352,7 +32352,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-955",
-    "url": "/mind_maps/premium_pdf/premium_eco_symbiosis_bee_flower.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_symbiosis_bee_flower.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32392,7 +32392,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-956",
-    "url": "/mind_maps/premium_pdf/premium_eco_commensalism_orchid_tree.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_commensalism_orchid_tree.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32433,7 +32433,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-957",
-    "url": "/mind_maps/premium_pdf/premium_eco_food_chain_5levels.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_food_chain_5levels.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32476,7 +32476,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-958",
-    "url": "/mind_maps/premium_pdf/premium_eco_food_web_network.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_food_web_network.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -32519,7 +32519,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-959",
-    "url": "/mind_maps/premium_pdf/premium_eco_energy_flow_vertical.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_energy_flow_vertical.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -32560,7 +32560,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-960",
-    "url": "/mind_maps/premium_pdf/premium_eco_matter_cycle_circular.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_matter_cycle_circular.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.3",
@@ -32600,7 +32600,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-961",
-    "url": "/mind_maps/premium_pdf/premium_eco_natural_disturbances_fire_flood.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_natural_disturbances_fire_flood.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -32641,7 +32641,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-962",
-    "url": "/mind_maps/premium_pdf/premium_eco_human_disturbances_pollution.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_human_disturbances_pollution.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -32683,7 +32683,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-963",
-    "url": "/mind_maps/premium_pdf/premium_eco_earth_biodiversity_globe.png",
+    "url": "/mind_maps/premium_pdf/premium_eco_earth_biodiversity_globe.webp",
     "subject": "Βιολογία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.4",
@@ -32724,7 +32724,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-964",
-    "url": "/mind_maps/premium_pdf/premium_photo_plant_sun_co2_h2o_o2_glucose.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_plant_sun_co2_h2o_o2_glucose.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -32769,7 +32769,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-965",
-    "url": "/mind_maps/premium_pdf/premium_photo_chloroplast_labeled_anatomy.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_chloroplast_labeled_anatomy.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -32814,7 +32814,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-966",
-    "url": "/mind_maps/premium_pdf/premium_photo_chloroplast_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_chloroplast_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -32859,7 +32859,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-967",
-    "url": "/mind_maps/premium_pdf/premium_photo_leaf_to_plant_cell_zoom.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_leaf_to_plant_cell_zoom.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -32905,7 +32905,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-968",
-    "url": "/mind_maps/premium_pdf/premium_photo_light_phase_thylakoids.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_light_phase_thylakoids.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -32949,7 +32949,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-969",
-    "url": "/mind_maps/premium_pdf/premium_photo_dark_phase_calvin_cycle.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_dark_phase_calvin_cycle.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -32996,7 +32996,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-970",
-    "url": "/mind_maps/premium_pdf/premium_photo_5factors_column.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_5factors_column.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -33043,7 +33043,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-971",
-    "url": "/mind_maps/premium_pdf/premium_photo_products_leaf_o2.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_products_leaf_o2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -33087,7 +33087,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-972",
-    "url": "/mind_maps/premium_pdf/premium_photo_tree_co2_o2_exchange.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_tree_co2_o2_exchange.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -33134,7 +33134,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-973",
-    "url": "/mind_maps/premium_pdf/premium_photo_organisms_plants_algae_cyanobacteria.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_organisms_plants_algae_cyanobacteria.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -33182,7 +33182,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-974",
-    "url": "/mind_maps/premium_pdf/premium_photo_c3_vs_c4_plants.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_c3_vs_c4_plants.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.2",
@@ -33230,7 +33230,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-975",
-    "url": "/mind_maps/premium_pdf/premium_photo_earth_globe_oxygen_life.png",
+    "url": "/mind_maps/premium_pdf/premium_photo_earth_globe_oxygen_life.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.1",
@@ -33276,7 +33276,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-976",
-    "url": "/mind_maps/premium_pdf/premium_resp_plant_cell_mitochondrion_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_plant_cell_mitochondrion_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33319,7 +33319,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-977",
-    "url": "/mind_maps/premium_pdf/premium_resp_mitochondrion_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_mitochondrion_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Β' Λυκείου",
     "chapter": "3.1",
@@ -33363,7 +33363,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-978",
-    "url": "/mind_maps/premium_pdf/premium_resp_stomata_leaf_gas_exchange.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_stomata_leaf_gas_exchange.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33408,7 +33408,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-979",
-    "url": "/mind_maps/premium_pdf/premium_resp_stoma_guard_cells_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_stoma_guard_cells_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33452,7 +33452,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-980",
-    "url": "/mind_maps/premium_pdf/premium_resp_lenticels_stem_gas_exchange.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_lenticels_stem_gas_exchange.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33494,7 +33494,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-981",
-    "url": "/mind_maps/premium_pdf/premium_resp_4factors_column.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_4factors_column.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33537,7 +33537,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-982",
-    "url": "/mind_maps/premium_pdf/premium_resp_products_plant_o2_co2_atp.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_products_plant_o2_co2_atp.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33581,7 +33581,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-983",
-    "url": "/mind_maps/premium_pdf/premium_resp_active_organs_seed_root_flower_fruit.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_active_organs_seed_root_flower_fruit.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33628,7 +33628,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-984",
-    "url": "/mind_maps/premium_pdf/premium_resp_apples_crate_storage_co2.png",
+    "url": "/mind_maps/premium_pdf/premium_resp_apples_crate_storage_co2.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.2",
@@ -33673,7 +33673,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-985",
-    "url": "/mind_maps/premium_pdf/premium_support_without_vs_with_support_sunflower.png",
+    "url": "/mind_maps/premium_pdf/premium_support_without_vs_with_support_sunflower.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33717,7 +33717,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-986",
-    "url": "/mind_maps/premium_pdf/premium_support_tissues_collenchyma_sclerenchyma_xylem.png",
+    "url": "/mind_maps/premium_pdf/premium_support_tissues_collenchyma_sclerenchyma_xylem.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33758,7 +33758,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-987",
-    "url": "/mind_maps/premium_pdf/premium_support_stem_cross_section_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_support_stem_cross_section_labeled.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33802,7 +33802,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-988",
-    "url": "/mind_maps/premium_pdf/premium_support_leaf_veins_magnified.png",
+    "url": "/mind_maps/premium_pdf/premium_support_leaf_veins_magnified.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33846,7 +33846,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-989",
-    "url": "/mind_maps/premium_pdf/premium_support_upright_stems_sunflower_oak_wheat.png",
+    "url": "/mind_maps/premium_pdf/premium_support_upright_stems_sunflower_oak_wheat.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33892,7 +33892,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-990",
-    "url": "/mind_maps/premium_pdf/premium_support_climbing_plants_ivy_vine.png",
+    "url": "/mind_maps/premium_pdf/premium_support_climbing_plants_ivy_vine.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33936,7 +33936,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-991",
-    "url": "/mind_maps/premium_pdf/premium_support_twining_stems_bougainvillea.png",
+    "url": "/mind_maps/premium_pdf/premium_support_twining_stems_bougainvillea.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -33980,7 +33980,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-992",
-    "url": "/mind_maps/premium_pdf/premium_support_thorns_tendrils_rose_cucumber.png",
+    "url": "/mind_maps/premium_pdf/premium_support_thorns_tendrils_rose_cucumber.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -34024,7 +34024,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-993",
-    "url": "/mind_maps/premium_pdf/premium_support_underground_roots_rhizomes.png",
+    "url": "/mind_maps/premium_pdf/premium_support_underground_roots_rhizomes.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -34068,7 +34068,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-994",
-    "url": "/mind_maps/premium_pdf/premium_support_4factors_column.png",
+    "url": "/mind_maps/premium_pdf/premium_support_4factors_column.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -34113,7 +34113,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-995",
-    "url": "/mind_maps/premium_pdf/premium_support_bean_stake_experiment.png",
+    "url": "/mind_maps/premium_pdf/premium_support_bean_stake_experiment.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -34158,7 +34158,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-996",
-    "url": "/mind_maps/premium_pdf/premium_support_adaptations_bamboo_ivy_shrub.png",
+    "url": "/mind_maps/premium_pdf/premium_support_adaptations_bamboo_ivy_shrub.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "2.3",
@@ -34203,7 +34203,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-997",
-    "url": "/mind_maps/premium_pdf/premium_ice_h2o_polar_molecule_labeled.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_h2o_polar_molecule_labeled.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -34259,7 +34259,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-998",
-    "url": "/mind_maps/premium_pdf/premium_ice_floating_cube_density_hero.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_floating_cube_density_hero.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.4",
@@ -34317,7 +34317,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-999",
-    "url": "/mind_maps/premium_pdf/premium_ice_liquid_water_molecules_dense.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_liquid_water_molecules_dense.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -34371,7 +34371,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1000",
-    "url": "/mind_maps/premium_pdf/premium_ice_hexagonal_crystal_lattice.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_hexagonal_crystal_lattice.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -34425,7 +34425,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1001",
-    "url": "/mind_maps/premium_pdf/premium_ice_hydrogen_bond_attraction.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_hydrogen_bond_attraction.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -34480,7 +34480,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1002",
-    "url": "/mind_maps/premium_pdf/premium_ice_hydrogen_bonds_tetramer.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_hydrogen_bonds_tetramer.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "2.3",
@@ -34534,7 +34534,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1003",
-    "url": "/mind_maps/premium_pdf/premium_ice_hexagonal_ring_icon.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_hexagonal_ring_icon.webp",
     "subject": "Χημεία",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.2",
@@ -34588,7 +34588,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1004",
-    "url": "/mind_maps/premium_pdf/premium_ice_cube_open_voids.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_cube_open_voids.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.2",
@@ -34644,7 +34644,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1005",
-    "url": "/mind_maps/premium_pdf/premium_ice_cube_in_beaker.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_cube_in_beaker.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.4",
@@ -34698,7 +34698,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1006",
-    "url": "/mind_maps/premium_pdf/premium_ice_freezing_6stages_flowchart.png",
+    "url": "/mind_maps/premium_pdf/premium_ice_freezing_6stages_flowchart.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.3",
@@ -34754,7 +34754,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1007",
-    "url": "/mind_maps/premium_pdf/premium_phases_top_3icons_ice_drop_steam.png",
+    "url": "/mind_maps/premium_pdf/premium_phases_top_3icons_ice_drop_steam.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.3",
@@ -34807,7 +34807,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1008",
-    "url": "/mind_maps/premium_pdf/premium_phases_3molecular_states_comparison.png",
+    "url": "/mind_maps/premium_pdf/premium_phases_3molecular_states_comparison.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.3",
@@ -34861,7 +34861,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1009",
-    "url": "/mind_maps/premium_pdf/premium_phases_transitions_6changes_diagram.png",
+    "url": "/mind_maps/premium_pdf/premium_phases_transitions_6changes_diagram.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.3",
@@ -34914,7 +34914,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1010",
-    "url": "/mind_maps/premium_pdf/premium_boiling_pot_molecular_zoom_hero.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_pot_molecular_zoom_hero.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.4",
@@ -34969,7 +34969,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1011",
-    "url": "/mind_maps/premium_pdf/premium_boiling_3stages_molecular_columns.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_3stages_molecular_columns.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.4",
@@ -35023,7 +35023,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1012",
-    "url": "/mind_maps/premium_pdf/premium_boiling_conditions_altitude_pressure_purity.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_conditions_altitude_pressure_purity.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.4",
@@ -35079,7 +35079,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1013",
-    "url": "/mind_maps/premium_pdf/premium_boiling_process_6steps_sequence.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_process_6steps_sequence.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.4",
@@ -35134,7 +35134,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1014",
-    "url": "/mind_maps/premium_pdf/premium_boiling_bottom_5summary_icons.png",
+    "url": "/mind_maps/premium_pdf/premium_boiling_bottom_5summary_icons.webp",
     "subject": "Φυσική",
     "grade": "Α' Γυμνασίου",
     "chapter": "3.4",
@@ -35189,7 +35189,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1015",
-    "url": "/mind_maps/premium_pdf/premium_atm_earth_atmosphere_molecular_zoom.png",
+    "url": "/mind_maps/premium_pdf/premium_atm_earth_atmosphere_molecular_zoom.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -35233,7 +35233,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1016",
-    "url": "/mind_maps/premium_pdf/premium_atm_3columns_weight_gravity_omnidirectional.png",
+    "url": "/mind_maps/premium_pdf/premium_atm_3columns_weight_gravity_omnidirectional.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -35275,7 +35275,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1017",
-    "url": "/mind_maps/premium_pdf/premium_atm_torricelli_experiment_5steps.png",
+    "url": "/mind_maps/premium_pdf/premium_atm_torricelli_experiment_5steps.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -35316,7 +35316,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1018",
-    "url": "/mind_maps/premium_pdf/premium_atm_effects_straw_lungs_cooker_house.png",
+    "url": "/mind_maps/premium_pdf/premium_atm_effects_straw_lungs_cooker_house.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -35360,7 +35360,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1019",
-    "url": "/mind_maps/premium_pdf/premium_atm_variations_altitude_weather_isobars_barometer.png",
+    "url": "/mind_maps/premium_pdf/premium_atm_variations_altitude_weather_isobars_barometer.webp",
     "subject": "Φυσική",
     "grade": "Β' Γυμνασίου",
     "chapter": "2.3",
@@ -35405,7 +35405,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1020",
-    "url": "/mind_maps/premium_pdf/premium_carbon_atom_tetrahedral_bonds.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_atom_tetrahedral_bonds.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35447,7 +35447,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1021",
-    "url": "/mind_maps/premium_pdf/premium_carbon_hero_coal_diamond_graphite_graphene.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_hero_coal_diamond_graphite_graphene.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35490,7 +35490,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1022",
-    "url": "/mind_maps/premium_pdf/premium_carbon_bohr_model_6protons_6neutrons.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_bohr_model_6protons_6neutrons.webp",
     "subject": "Χημεία",
     "grade": "Α' Λυκείου",
     "chapter": "1.2",
@@ -35535,7 +35535,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1023",
-    "url": "/mind_maps/premium_pdf/premium_carbon_periodic_table_tile.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_periodic_table_tile.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35580,7 +35580,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1024",
-    "url": "/mind_maps/premium_pdf/premium_carbon_4covalent_bonds_model.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_4covalent_bonds_model.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35623,7 +35623,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1025",
-    "url": "/mind_maps/premium_pdf/premium_carbon_allotropes_diamond_graphite_graphene_fullerene.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_allotropes_diamond_graphite_graphene_fullerene.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35665,7 +35665,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1026",
-    "url": "/mind_maps/premium_pdf/premium_carbon_diamond_crystal_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_diamond_crystal_structure.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35708,7 +35708,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1027",
-    "url": "/mind_maps/premium_pdf/premium_carbon_graphite_layered_structure.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_graphite_layered_structure.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35751,7 +35751,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1028",
-    "url": "/mind_maps/premium_pdf/premium_carbon_cycle_ecosystem_diagram.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_cycle_ecosystem_diagram.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35796,7 +35796,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1029",
-    "url": "/mind_maps/premium_pdf/premium_carbon_bottom_7summary_icons.png",
+    "url": "/mind_maps/premium_pdf/premium_carbon_bottom_7summary_icons.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.1",
@@ -35840,7 +35840,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1030",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_methane_ch4_3d_molecule.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_methane_ch4_3d_molecule.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -35892,7 +35892,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1031",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_hero_barrel_burner_gas_cylinder.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_hero_barrel_burner_gas_cylinder.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -35944,7 +35944,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1032",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_ethane_tetrahedral_geometry.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_ethane_tetrahedral_geometry.webp",
     "subject": "Χημεία",
     "grade": "Β' Λυκείου",
     "chapter": "1.2",
@@ -35995,7 +35995,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1033",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_states_gas_liquid_solid.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_states_gas_liquid_solid.webp",
     "subject": "Χημεία",
     "grade": "Β' Λυκείου",
     "chapter": "1.2",
@@ -36048,7 +36048,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1034",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_combustion_ch4_reaction.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_combustion_ch4_reaction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -36102,7 +36102,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1035",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_natural_sources_oil_gas_extraction.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_natural_sources_oil_gas_extraction.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -36154,7 +36154,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1036",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_fractional_distillation_tower.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_fractional_distillation_tower.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -36205,7 +36205,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1037",
-    "url": "/mind_maps/premium_pdf/premium_alkanes_everyday_uses_7icons_row.png",
+    "url": "/mind_maps/premium_pdf/premium_alkanes_everyday_uses_7icons_row.webp",
     "subject": "Χημεία",
     "grade": "Γ' Γυμνασίου",
     "chapter": "3.2",
@@ -36260,7 +36260,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1038",
-    "url": "/mind_maps/premium_pdf/premium_resistance_electric_field_electrons.png",
+    "url": "/mind_maps/premium_pdf/premium_resistance_electric_field_electrons.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36290,7 +36290,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1039",
-    "url": "/mind_maps/premium_pdf/premium_resistance_copper_wire_cross_section.png",
+    "url": "/mind_maps/premium_pdf/premium_resistance_copper_wire_cross_section.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36319,7 +36319,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1040",
-    "url": "/mind_maps/premium_pdf/premium_resistance_electron_ion_collisions.png",
+    "url": "/mind_maps/premium_pdf/premium_resistance_electron_ion_collisions.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36347,7 +36347,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1041",
-    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -36371,7 +36371,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1042",
-    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -36394,7 +36394,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1043",
-    "url": "/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.png",
+    "url": "/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.webp",
     "subject": "Βιολογία",
     "grade": "Α' Γυμνασίου",
     "chapter": "1.2",
@@ -36415,7 +36415,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1044",
-    "url": "/mind_maps/premium_pdf/premium_circuit_closed_bulb_lit.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_closed_bulb_lit.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36441,7 +36441,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1045",
-    "url": "/mind_maps/premium_pdf/premium_circuit_open_bulb_off.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_open_bulb_off.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36466,7 +36466,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1046",
-    "url": "/mind_maps/premium_pdf/premium_circuit_source_battery_chemical.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_source_battery_chemical.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36490,7 +36490,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1047",
-    "url": "/mind_maps/premium_pdf/premium_circuit_source_generator_kinetic.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_source_generator_kinetic.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36516,7 +36516,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1048",
-    "url": "/mind_maps/premium_pdf/premium_circuit_source_solar_photovoltaic.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_source_solar_photovoltaic.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36541,7 +36541,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1049",
-    "url": "/mind_maps/premium_pdf/premium_circuit_source_thermocouple_thermal.png",
+    "url": "/mind_maps/premium_pdf/premium_circuit_source_thermocouple_thermal.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.2",
@@ -36566,7 +36566,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1050",
-    "url": "/mind_maps/premium_pdf/premium_conductors_vs_insulators_cylinder.png",
+    "url": "/mind_maps/premium_pdf/premium_conductors_vs_insulators_cylinder.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -36593,7 +36593,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1051",
-    "url": "/mind_maps/premium_pdf/premium_current_random_thermal_motion.png",
+    "url": "/mind_maps/premium_pdf/premium_current_random_thermal_motion.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -36619,7 +36619,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1052",
-    "url": "/mind_maps/premium_pdf/premium_current_battery_directed_flow.png",
+    "url": "/mind_maps/premium_pdf/premium_current_battery_directed_flow.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",
@@ -36644,7 +36644,7 @@ export const MIND_MAPS_CATALOG: MindMapLibraryItem[] = [
   },
   {
     "id": "mm-1053",
-    "url": "/mind_maps/premium_pdf/premium_current_resistor_flow_result.png",
+    "url": "/mind_maps/premium_pdf/premium_current_resistor_flow_result.webp",
     "subject": "Φυσική",
     "grade": "Γ' Γυμνασίου",
     "chapter": "2.1",

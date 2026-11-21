@@ -13,7 +13,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 52,
     "height": 76,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_leaf_left.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_leaf_left.webp",
     "zOrder": 12,
     "naturalWidth": 45,
     "naturalHeight": 71
@@ -26,7 +26,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 56,
     "height": 76,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_leaf_right.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_leaf_right.webp",
     "zOrder": 13,
     "naturalWidth": 55,
     "naturalHeight": 71
@@ -39,7 +39,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 56,
     "height": 332,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_scientists_hooke_schleiden_schwann_virchow.webp",
     "zOrder": 14,
     "naturalWidth": 83,
     "naturalHeight": 440
@@ -52,7 +52,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 96,
     "height": 176,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_prokaryotic_clean.webp",
     "zOrder": 15,
     "naturalWidth": 236,
     "naturalHeight": 436
@@ -65,7 +65,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 136,
     "height": 160,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_eukaryotic_small_clean.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_eukaryotic_small_clean.webp",
     "zOrder": 16,
     "naturalWidth": 372,
     "naturalHeight": 436
@@ -78,7 +78,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 68,
     "height": 292,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_theory_3circles.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_theory_3circles.webp",
     "zOrder": 17,
     "naturalWidth": 114,
     "naturalHeight": 440
@@ -91,7 +91,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 196,
     "height": 342,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_plant_eukaryotic_isolated.webp",
     "zOrder": 18,
     "naturalWidth": 364,
     "naturalHeight": 604
@@ -104,7 +104,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 42,
     "height": 328,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_organelles_8icons_full.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_organelles_8icons_full.webp",
     "zOrder": 19,
     "naturalWidth": 71,
     "naturalHeight": 504
@@ -117,7 +117,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 206,
     "height": 334,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_animal_eukaryotic_isolated.webp",
     "zOrder": 20,
     "naturalWidth": 392,
     "naturalHeight": 604
@@ -130,7 +130,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 242,
     "height": 76,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_size_3icons_clean.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_size_3icons_clean.webp",
     "zOrder": 21,
     "naturalWidth": 440,
     "naturalHeight": 148
@@ -143,7 +143,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 96,
     "height": 178,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_optical_microscope.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_optical_microscope.webp",
     "zOrder": 22,
     "naturalWidth": 238,
     "naturalHeight": 440
@@ -169,7 +169,7 @@ export function buildCellBiologyNotebook(folder = "Γενικά"): Notebook {
     "width": 244,
     "height": 102,
     "rotation": 0,
-    "dataUrl": "/mind_maps/premium_pdf/premium_cell_neuron_clean.png",
+    "dataUrl": "/mind_maps/premium_pdf/premium_cell_neuron_clean.webp",
     "zOrder": 24,
     "naturalWidth": 440,
     "naturalHeight": 204

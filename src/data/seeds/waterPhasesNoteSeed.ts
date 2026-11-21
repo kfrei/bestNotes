@@ -13,7 +13,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 326,
     "height": 184,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/01_states_conditions.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/01_states_conditions.webp",
     "zOrder": 13,
     "naturalWidth": 393,
     "naturalHeight": 222
@@ -26,7 +26,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 300,
     "height": 118,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/12_temperature_ranges.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/12_temperature_ranges.webp",
     "zOrder": 14,
     "naturalWidth": 346,
     "naturalHeight": 201
@@ -65,7 +65,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 60,
     "height": 90,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_3/melting_boiling.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_3/melting_boiling.webp",
     "zOrder": 17,
     "naturalWidth": 277,
     "naturalHeight": 420
@@ -91,7 +91,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 78,
     "height": 80,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/02_solid.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/02_solid.webp",
     "zOrder": 19,
     "naturalWidth": 227,
     "naturalHeight": 233
@@ -104,7 +104,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 76,
     "height": 74,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_1.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/03_liquid_1.webp",
     "zOrder": 20,
     "naturalWidth": 190,
     "naturalHeight": 186
@@ -117,7 +117,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 96,
     "height": 68,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/04_gas.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/04_gas.webp",
     "zOrder": 21,
     "naturalWidth": 350,
     "naturalHeight": 247
@@ -130,7 +130,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 76,
     "height": 83,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/10_melting_point.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/10_melting_point.webp",
     "zOrder": 22,
     "naturalWidth": 236,
     "naturalHeight": 258
@@ -143,7 +143,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 74,
     "height": 83,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.webp",
     "zOrder": 23,
     "naturalWidth": 224,
     "naturalHeight": 252
@@ -156,7 +156,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 58,
     "height": 86,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/11_boiling_point.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/11_boiling_point.webp",
     "zOrder": 24,
     "naturalWidth": 133,
     "naturalHeight": 199
@@ -169,7 +169,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 56,
     "height": 88,
     "rotation": 0,
-    "dataUrl": "/mind_maps/physics_a_gymnasio/1_4/02_thermometer_beaker.png",
+    "dataUrl": "/mind_maps/physics_a_gymnasio/1_4/02_thermometer_beaker.webp",
     "zOrder": 25,
     "naturalWidth": 180,
     "naturalHeight": 298
@@ -182,7 +182,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 112,
     "height": 67,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/06_melting.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/06_melting.webp",
     "zOrder": 26,
     "naturalWidth": 400,
     "naturalHeight": 239
@@ -195,7 +195,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 110,
     "height": 69,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/07_freezing.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/07_freezing.webp",
     "zOrder": 27,
     "naturalWidth": 380,
     "naturalHeight": 238
@@ -208,7 +208,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 76,
     "height": 85,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/08_boiling.webp",
     "zOrder": 28,
     "naturalWidth": 224,
     "naturalHeight": 252
@@ -221,7 +221,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 106,
     "height": 78,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/09_condensation.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/09_condensation.webp",
     "zOrder": 29,
     "naturalWidth": 351,
     "naturalHeight": 260
@@ -234,7 +234,7 @@ export function buildWaterPhaseChangesNotebook(folder = "Γενικά"): Noteboo
     "width": 216,
     "height": 144,
     "rotation": 0,
-    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/05_phase_symbols.png",
+    "dataUrl": "/mind_maps/chemistry_b_gymnasio/1_2/05_phase_symbols.webp",
     "zOrder": 30,
     "naturalWidth": 360,
     "naturalHeight": 239

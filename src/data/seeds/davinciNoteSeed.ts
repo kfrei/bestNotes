@@ -68,7 +68,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-portrait',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_portrait_vitruvian_blue_sketch.webp?v=vintage7',
       x: 292,
       y: 128,
       width: 332,
@@ -81,7 +81,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-villa',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_vinci_villa_blue_sketch.webp?v=vintage7',
       x: 26,
       y: 262,
       width: 236,
@@ -94,7 +94,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-map',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_italy_map_blue_sketch.webp?v=vintage7',
       x: 92,
       y: 382,
       width: 148,
@@ -107,7 +107,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-monalisa',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_mona_lisa_blue_sketch.webp?v=vintage7',
       x: 30,
       y: 648,
       width: 152,
@@ -120,7 +120,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-water',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_water_flow_vortex_blue_sketch.webp?v=vintage7',
       x: 768,
       y: 252,
       width: 146,
@@ -133,7 +133,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-optics',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_optics_lens_eye_blue_sketch.webp?v=vintage7',
       x: 772,
       y: 425,
       width: 142,
@@ -146,7 +146,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-geology',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_geology_strata_cube_blue_sketch.webp?v=vintage7',
       x: 776,
       y: 574,
       width: 138,
@@ -159,7 +159,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-anatomy',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_anatomy_muscles_skull_blue_sketch.webp?v=vintage7',
       x: 28,
       y: 900,
       width: 262,
@@ -172,7 +172,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-nature',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_botany_horse_study_blue_sketch.webp?v=vintage7',
       x: 328,
       y: 758,
       width: 260,
@@ -185,7 +185,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-heli',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_aerial_screw_helicopter_blue_sketch.webp?v=vintage7',
       x: 635,
       y: 832,
       width: 268,
@@ -198,7 +198,7 @@ export function buildDaVinciNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-dv-tank',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_davinci_armored_tank_blue_sketch.webp?v=vintage7',
       x: 678,
       y: 972,
       width: 184,

@@ -68,7 +68,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-portrait',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_portrait_blue_sketch.webp?v=vintage7',
       x: 268,
       y: 126,
       width: 404,
@@ -81,7 +81,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-spacetime',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_spacetime_curvature_blue_sketch.webp?v=vintage7',
       x: 24,
       y: 262,
       width: 225,
@@ -94,7 +94,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-emc2',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_emc2_equation_blue_sketch.webp?v=vintage7',
       x: 28,
       y: 636,
       width: 212,
@@ -107,7 +107,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-photoelectric',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_photoelectric_effect_blue_sketch.webp?v=vintage7',
       x: 22,
       y: 908,
       width: 278,
@@ -120,7 +120,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-dove',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_peace_dove_blue_sketch.webp?v=vintage7',
       x: 696,
       y: 248,
       width: 198,
@@ -133,7 +133,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-curiosity',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_curiosity_thought_bubble_blue_sketch.webp?v=vintage7',
       x: 708,
       y: 602,
       width: 186,
@@ -146,7 +146,7 @@ export function buildEinsteinNotebook(folder = 'Γενικά'): Notebook {
     {
       id: 'img-ein-cosmos',
       layerId: 'layer-1',
-      dataUrl: '/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.png?v=vintage7',
+      dataUrl: '/mind_maps/premium_pdf/premium_einstein_cosmos_orbit_blue_sketch.webp?v=vintage7',
       x: 668,
       y: 898,
       width: 242,

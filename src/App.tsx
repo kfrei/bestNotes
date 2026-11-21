@@ -373,7 +373,6 @@ import {
   type MindMapSubject,
   type MindMapGrade,
 } from './data/mindMapsCatalog';
-import { HANDCRAFTED_VECTOR_CATALOG } from './data/vectorCatalog';
 import {
   PERIODIC_ELEMENTS_H_TO_RN,
   getPeriodicElementByZ,
@@ -1419,7 +1418,7 @@ export default function App() {
           simShowDarkWireTrack?: boolean;
           simSpeedMultiplier?: number;
           showShapeLibraryPanel?: boolean;
-          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom';
+          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'custom';
           librarySubjectFilter?: 'Όλα' | MindMapSubject;
           libraryGradeFilter?: 'Όλες' | MindMapGrade;
           stickerCategoryFilter?: StickerCategory;
@@ -2849,7 +2848,7 @@ export default function App() {
     origX: number;
     origY: number;
   } | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'vectors' | 'custom'>(
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'custom'>(
     () => initialSession?.libraryTab || 'all'
   );
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>(
@@ -13286,7 +13285,10 @@ export default function App() {
               staticPageRenderCacheRef.current.clear();
               renderStaticSceneRef.current(true);
             };
-            imgEl.src = imgObj.dataUrl;
+            imgEl.src =
+              imgObj.dataUrl.startsWith('/mind_maps/') && imgObj.dataUrl.endsWith('.png')
+                ? `${imgObj.dataUrl.slice(0, -4)}.webp`
+                : imgObj.dataUrl;
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
 
@@ -52855,7 +52857,10 @@ export default function App() {
           resolve(img);
         };
         img.onerror = () => resolve(null);
-        img.src = dataUrl;
+        img.src =
+          dataUrl.startsWith('/mind_maps/') && dataUrl.endsWith('.png')
+            ? `${dataUrl.slice(0, -4)}.webp`
+            : dataUrl;
       });
     },
     []
@@ -63853,17 +63858,6 @@ export default function App() {
                         Εικονίδια ({iconsTotal})
                       </button>
                       <button
-                        onClick={() => setLibraryTab('vectors')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
-                          libraryTab === 'vectors'
-                            ? 'bg-[#234978] text-white shadow-xs'
-                            : 'text-[#475569] hover:text-[#234978]'
-                        }`}
-                        title="Χειροποίητα Native Vector (SVG) — άπειρη ευκρίνεια σε κάθε μεγέθυνση"
-                      >
-                        Vector ({HANDCRAFTED_VECTOR_CATALOG.length})
-                      </button>
-                      <button
                         onClick={() => setLibraryTab('custom')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'custom'
@@ -64572,75 +64566,6 @@ export default function App() {
                             )}
                           </div>
                         )}
-                      </div>
-                    );
-                  })()
-                ) : libraryTab === 'vectors' ? (
-                  (() => {
-                    const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
-                    const filteredVectors = qNorm
-                      ? HANDCRAFTED_VECTOR_CATALOG.filter((item) => {
-                          const hay = normalizeGreekText(
-                            `${item.title} ${item.subject} ${item.tags.join(' ')}`
-                          );
-                          return hay.includes(qNorm);
-                        })
-                      : HANDCRAFTED_VECTOR_CATALOG;
-
-                    return (
-                      <div key="tab-vectors" className="flex flex-col min-h-0 flex-1">
-                        <div className="flex items-center justify-between gap-2 px-2 py-1.5 mb-2 rounded-xl bg-[#efebe3]/80 border border-[#dfd8cb] text-[10px] text-[#475569] shrink-0">
-                          <span className="font-semibold text-[#234978]">
-                            ✨ Χειροποίητα Native SVG — άπειρη ευκρίνεια (2–6 KB)
-                          </span>
-                          <span className="font-bold text-[#234978] shrink-0">
-                            {filteredVectors.length} SVG
-                          </span>
-                        </div>
-                        <div className="overflow-y-auto pr-1 grid grid-cols-2 gap-2 max-h-[50vh]">
-                          {filteredVectors.map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => {
-                                insertImageDataUrlOnPage(
-                                  item.url,
-                                  `✨ Προστέθηκε Native Vector: «${item.title}»`
-                                );
-                              }}
-                              className="group flex flex-col justify-between p-2 rounded-xl border border-[#dfd8cb] bg-[#fdfbf7] hover:bg-[#efebe3]/70 hover:border-[#234978]/60 transition cursor-pointer shadow-2xs"
-                              title={`${item.title} (Native SVG • ${item.svgKb})\nΚλικ για εισαγωγή στη σελίδα`}
-                            >
-                              <div>
-                                <div className="flex items-center justify-between gap-1 mb-1">
-                                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold border bg-[#234978]/10 text-[#234978] border-[#234978]/25">
-                                    Native SVG
-                                  </span>
-                                  <span className="text-[9px] font-semibold text-[#64748b]">
-                                    {item.svgKb}
-                                  </span>
-                                </div>
-                                <div
-                                  className="w-full h-24 rounded-lg bg-slate-100/60 border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
-                                  style={{
-                                    backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
-                                    backgroundSize: '10px 10px',
-                                  }}
-                                >
-                                  <img
-                                    src={item.url}
-                                    alt={item.title}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
-                                  />
-                                </div>
-                                <div className="mt-1.5 text-[10.5px] font-bold text-[#2c3e50] leading-tight line-clamp-2">
-                                  {item.title}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                     );
                   })()

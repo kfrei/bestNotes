@@ -78,7 +78,10 @@ function loadImageElement(src: string): Promise<HTMLImageElement | null> {
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    img.src = src;
+    img.src =
+      src.startsWith('/mind_maps/') && src.endsWith('.png')
+        ? `${src.slice(0, -4)}.webp`
+        : src;
   });
 }
 
