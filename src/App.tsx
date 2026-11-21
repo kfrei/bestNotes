@@ -17828,6 +17828,19 @@ export default function App() {
     [getRangeEffectiveStyle]
   );
 
+  const getEffectiveTextFontFamily = useCallback(
+    (txt: TextObject): TextFontStyle => {
+      const len = (txt.text || '').length;
+      if (!txt.isMath && len > 0 && txt.spans && txt.spans.length > 0) {
+        const eff = getRangeEffectiveStyle(txt, 0, len).fontFamily;
+        return eff === 'calligraphic-bold' ? 'calligraphic' : eff;
+      }
+      const raw = txt.fontFamily || 'sans';
+      return raw === 'calligraphic-bold' ? 'calligraphic' : raw;
+    },
+    [getRangeEffectiveStyle]
+  );
+
   const applyStyleToTextRange = useCallback(
     (
       txt: TextObject,
@@ -40335,7 +40348,7 @@ export default function App() {
         setTextFontSize(tappedExistingTxt.fontSize);
         setTextBold(getEffectiveTextBold(tappedExistingTxt));
         setTextShadow(getEffectiveTextShadow(tappedExistingTxt));
-        setTextFontFamily(tappedExistingTxt.fontFamily || 'sans');
+        setTextFontFamily(getEffectiveTextFontFamily(tappedExistingTxt));
         setTextAlign(tappedExistingTxt.textAlign || 'left');
         setShowToolSubBar(true);
         const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
@@ -40538,7 +40551,7 @@ export default function App() {
           setTextFontSize(candTxt.fontSize);
           setTextBold(getEffectiveTextBold(candTxt));
           setTextShadow(getEffectiveTextShadow(candTxt));
-          setTextFontFamily(candTxt.fontFamily || 'sans');
+          setTextFontFamily(getEffectiveTextFontFamily(candTxt));
           setTextAlign(candTxt.textAlign || 'left');
           setShowToolSubBar(true);
           return;
@@ -42014,7 +42027,7 @@ export default function App() {
         setTextFontSize(topHitTxt.fontSize);
         setTextBold(getEffectiveTextBold(topHitTxt));
         setTextShadow(getEffectiveTextShadow(topHitTxt));
-        setTextFontFamily(topHitTxt.fontFamily || 'sans');
+        setTextFontFamily(getEffectiveTextFontFamily(topHitTxt));
         setTextAlign(topHitTxt.textAlign || 'left');
         setShowToolSubBar(true);
         return;
@@ -61105,7 +61118,7 @@ export default function App() {
                   const rawFontFamily: TextFontStyle = subStyle
                     ? subStyle.fontFamily
                     : selTxt
-                    ? selTxt.fontFamily || 'sans'
+                    ? getEffectiveTextFontFamily(selTxt)
                     : textFontFamily;
                   const currentFontFamily: TextFontStyle =
                     rawFontFamily === 'calligraphic-bold' ? 'calligraphic' : rawFontFamily;
@@ -61205,6 +61218,47 @@ export default function App() {
                   const applyFontFamily = (nextFont: TextFontStyle) => {
                     setTextFontFamily(nextFont);
                     if (selTxt && targetTxtIdSet.size > 0) {
+                      const liveRange =
+                        editingTextId === selTxt.id && !selTxt.isMath
+                          ? getActiveRangeForText(selTxt.id, (selTxt.text || '').length)
+                          : null;
+                      if (liveRange && liveRange.end > liveRange.start) {
+                        const nextRng = {
+                          textId: selTxt.id,
+                          start: liveRange.start,
+                          end: liveRange.end,
+                        };
+                        activeTextRangeRef.current = nextRng;
+                        setActiveTextRange(nextRng);
+                        const coversWholeText =
+                          liveRange.start === 0 &&
+                          liveRange.end >= (selTxt.text || '').length;
+                        updateActivePage((page) => ({
+                          ...page,
+                          texts: (page.texts || []).map((t) =>
+                            t.id === selTxt.id
+                              ? {
+                                  ...t,
+                                  ...(coversWholeText
+                                    ? {
+                                        fontFamily: nextFont,
+                                        bold:
+                                          Boolean(t.bold) ||
+                                          t.fontFamily === 'calligraphic-bold',
+                                      }
+                                    : {}),
+                                  spans: applyStyleToTextRange(
+                                    t,
+                                    liveRange.start,
+                                    liveRange.end,
+                                    { fontFamily: nextFont }
+                                  ),
+                                }
+                              : t
+                          ),
+                        }));
+                        return;
+                      }
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) => {
@@ -61217,11 +61271,22 @@ export default function App() {
                             .replace(/\\text\{([^}]*)\}/g, '$1')
                             .trim();
                           const nextIsMath = t.isMath && hasRealMath;
+                          const effBold =
+                            Boolean(t.bold) || t.fontFamily === 'calligraphic-bold';
                           return {
                             ...t,
                             text: cleanedPlainText || t.text,
                             isMath: nextIsMath,
                             fontFamily: nextFont,
+                            bold: effBold,
+                            ...(t.spans
+                              ? {
+                                  spans: t.spans.map((sp) => ({
+                                    ...sp,
+                                    fontFamily: nextFont,
+                                  })),
+                                }
+                              : {}),
                             boxHeight: undefined,
                           };
                         }),
@@ -61364,15 +61429,18 @@ export default function App() {
                         }}
                         onTouchStart={(e) => {
                           e.stopPropagation();
+                          lastTextBarDirectTapTimeRef.current = performance.now();
                         }}
                         onTouchMove={(e) => {
                           e.stopPropagation();
+                          lastTextBarDirectTapTimeRef.current = performance.now();
                         }}
                         onMouseDown={(e) => {
                           // Prevent losing <textarea> focus while clicking/dragging font strip
                           e.preventDefault();
                         }}
                         onPointerDown={(e) => {
+                          lastTextBarDirectTapTimeRef.current = performance.now();
                           if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
                             const el = e.currentTarget;
                             el.dataset.dragPointerId = String(e.pointerId);
@@ -61392,7 +61460,7 @@ export default function App() {
                             const startX = Number(el.dataset.dragStartX || 0);
                             const origScroll = Number(el.dataset.dragScrollLeft || 0);
                             const dx = e.clientX - startX;
-                            if (Math.abs(dx) > 5) {
+                            if (Math.abs(dx) > 12) {
                               if (el.dataset.wasDragged !== '1') {
                                 el.dataset.wasDragged = '1';
                                 try {
@@ -61406,6 +61474,7 @@ export default function App() {
                           }
                         }}
                         onPointerUp={(e) => {
+                          lastTextBarDirectTapTimeRef.current = performance.now();
                           const el = e.currentTarget;
                           el.dataset.isDragging = '0';
                           if (el.dataset.wasDragged === '1') {
@@ -61421,9 +61490,16 @@ export default function App() {
                             }, 80);
                           }
                         }}
+                        onPointerLeave={(e) => {
+                          const el = e.currentTarget;
+                          if (el.dataset.isDragging === '1' && el.dataset.wasDragged !== '1') {
+                            el.dataset.isDragging = '0';
+                          }
+                        }}
                         onPointerCancel={(e) => {
                           const el = e.currentTarget;
                           el.dataset.isDragging = '0';
+                          el.dataset.wasDragged = '0';
                           try {
                             if (el.hasPointerCapture(e.pointerId)) {
                               el.releasePointerCapture(e.pointerId);
@@ -61436,8 +61512,8 @@ export default function App() {
                           touchAction: 'pan-x',
                           WebkitOverflowScrolling: 'touch',
                         }}
-                        className="flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-[238px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden overscroll-contain touch-pan-x select-none shrink-0"
-                        title="Σύρετε αριστερά/δεξιά (swipe) για περισσότερες γραμματοσειρές"
+                        className="relative flex items-center gap-0.5 bg-[#ece7dc] p-0.5 rounded-full border border-[#dfd8cb] max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden overscroll-contain touch-pan-x select-none shrink-0"
+                        title="Επιλογή γραμματοσειράς"
                       >
                         {(
                           [
@@ -61451,51 +61527,48 @@ export default function App() {
                             { id: 'sans', label: 'Τυπωμένο' },
                           ] as { id: TextFontStyle; label: string }[]
                         ).map((fOpt) => {
-                          const autoScrollKey = `${selTxt?.id || 'default'}:${currentFontFamily}`;
+                          const isSelectedFont = currentFontFamily === fOpt.id;
                           return (
                             <button
                               key={fOpt.id}
                               type="button"
-                              ref={(btnEl) => {
-                                if (btnEl && currentFontFamily === fOpt.id) {
-                                  const parent = btnEl.parentElement;
-                                  if (
-                                    parent &&
-                                    parent.dataset.lastAutoScrolledKey !== autoScrollKey &&
-                                    parent.dataset.isDragging !== '1'
-                                  ) {
-                                    parent.dataset.lastAutoScrolledKey = autoScrollKey;
-                                    const btnLeft = btnEl.offsetLeft;
-                                    const btnRight = btnLeft + btnEl.offsetWidth;
-                                    if (btnLeft < parent.scrollLeft) {
-                                      parent.scrollTo({
-                                        left: Math.max(0, btnLeft - 4),
-                                        behavior: 'smooth',
-                                      });
-                                    } else if (btnRight > parent.scrollLeft + parent.clientWidth) {
-                                      parent.scrollTo({
-                                        left: btnRight - parent.clientWidth + 4,
-                                        behavior: 'smooth',
-                                      });
-                                    }
-                                  }
-                                }
+                              aria-pressed={isSelectedFont}
+                              onMouseDown={(e) => {
+                                // Keep <textarea> focus when clicking a font
+                                e.preventDefault();
                               }}
                               onClick={(e) => {
-                                const parent = e.currentTarget.parentElement;
+                                const btnEl = e.currentTarget;
+                                const parent = btnEl.parentElement;
                                 if (parent && parent.dataset.wasDragged === '1') {
                                   parent.dataset.wasDragged = '0';
                                   return;
                                 }
                                 applyFontFamily(fOpt.id);
+                                // On very narrow screens where the pill overflows horizontally, keep the clicked button visible without jumping away
+                                if (parent && parent.scrollWidth > parent.clientWidth + 2) {
+                                  const parentRect = parent.getBoundingClientRect();
+                                  const btnRect = btnEl.getBoundingClientRect();
+                                  if (btnRect.left < parentRect.left + 2) {
+                                    parent.scrollBy({
+                                      left: btnRect.left - parentRect.left - 6,
+                                      behavior: 'smooth',
+                                    });
+                                  } else if (btnRect.right > parentRect.right - 2) {
+                                    parent.scrollBy({
+                                      left: btnRect.right - parentRect.right + 6,
+                                      behavior: 'smooth',
+                                    });
+                                  }
+                                }
                               }}
                               style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
-                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer shrink-0 whitespace-nowrap ${
-                                currentFontFamily === fOpt.id
-                                  ? 'bg-[#234978] text-white shadow-xs'
-                                  : 'text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
+                              className={`px-2.5 py-0.5 rounded-full text-[11px] transition cursor-pointer shrink-0 whitespace-nowrap ${
+                                isSelectedFont
+                                  ? 'bg-[#234978] text-white font-semibold shadow-xs ring-1 ring-[#1b3a60]/25'
+                                  : 'font-medium text-[#475569] hover:bg-[#fdfbf7] hover:text-[#234978]'
                               }`}
-                              title={`Γραμματοσειρά: ${fOpt.label} (σύρετε για τις υπόλοιπες)`}
+                              title={`Γραμματοσειρά: ${fOpt.label}`}
                             >
                               {fOpt.label}
                             </button>
@@ -68831,7 +68904,7 @@ export default function App() {
                             setTextFontSize(txt.fontSize);
                             setTextBold(getEffectiveTextBold(txt));
                             setTextShadow(getEffectiveTextShadow(txt));
-                            setTextFontFamily(txt.fontFamily || 'sans');
+                            setTextFontFamily(getEffectiveTextFontFamily(txt));
                             setTextAlign(txt.textAlign || 'left');
                             setSelectedStrokeIds([]);
                             setSelectedImageId(null);
@@ -69033,7 +69106,7 @@ export default function App() {
                             setTextFontSize(txt.fontSize);
                             setTextBold(getEffectiveTextBold(txt));
                             setTextShadow(getEffectiveTextShadow(txt));
-                            setTextFontFamily(txt.fontFamily || 'sans');
+                            setTextFontFamily(getEffectiveTextFontFamily(txt));
                             setSelectedLassoTextIds([]);
                             setSelectedStrokeIds([]);
                             setSelectedImageId(null);
@@ -69293,7 +69366,7 @@ export default function App() {
                                   : null;
                               const displayedFontFamily = effectiveSubStyle
                                 ? effectiveSubStyle.fontFamily
-                                : txt.fontFamily;
+                                : getEffectiveTextFontFamily(txt);
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
                                 : getEffectiveTextBold(txt);
@@ -69464,9 +69537,7 @@ export default function App() {
                                           }));
                                           return;
                                         }
-                                        const rawCur = txt.fontFamily || 'sans';
-                                        const cur: TextFontStyle =
-                                          rawCur === 'calligraphic-bold' ? 'calligraphic' : rawCur;
+                                        const cur = getEffectiveTextFontFamily(txt);
                                         const nextFont = order[(order.indexOf(cur) + 1) % order.length];
                                         setTextFontFamily(nextFont);
                                         updateActivePage((page) => ({
@@ -69479,6 +69550,14 @@ export default function App() {
                                               ...t,
                                               fontFamily: nextFont,
                                               bold: effBold,
+                                              ...(t.spans
+                                                ? {
+                                                    spans: t.spans.map((sp) => ({
+                                                      ...sp,
+                                                      fontFamily: nextFont,
+                                                    })),
+                                                  }
+                                                : {}),
                                               boxHeight: undefined,
                                             };
                                           }),
