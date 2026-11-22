@@ -421,23 +421,24 @@ export function buildGravitySceneFromStrokes(
     }
   }
 
-  // Bind initial velocity arrows (v0) to the nearest dynamic body
+  // Bind initial velocity arrows (v0) ONLY to a nearby dynamic body (tail or midpoint within radius + 115px)
+  // so moving the ball far away from a left-behind arrow immediately detaches v0!
   const dynamicBodies = bodies.filter((bd) => !bd.pinned);
   for (const arr of arrows) {
     const tail = arr.arrowStart && !arr.arrowEnd ? arr.points[arr.points.length - 1] : arr.points[0];
     const tip = arr.arrowStart && !arr.arrowEnd ? arr.points[0] : arr.points[arr.points.length - 1];
+    const midX = (tail.x + tip.x) * 0.5;
+    const midY = (tail.y + tip.y) * 0.5;
     let bestBody: GravityBodyState | null = null;
     let bestDist = Infinity;
     for (const bd of dynamicBodies) {
-      const d = Math.hypot(tail.x - bd.initCx, tail.y - bd.initCy);
-      if (d <= bd.radius + 85 && d < bestDist) {
+      const dTail = Math.hypot(tail.x - bd.initCx, tail.y - bd.initCy);
+      const dMid = Math.hypot(midX - bd.initCx, midY - bd.initCy);
+      const d = Math.min(dTail, dMid);
+      if (d <= bd.radius + 115 && d < bestDist) {
         bestDist = d;
         bestBody = bd;
       }
-    }
-    // If the user Lasso-selected exactly 1 dynamic body + an arrow, always bind it!
-    if (!bestBody && dynamicBodies.length === 1) {
-      bestBody = dynamicBodies[0];
     }
     if (bestBody) {
       // Arrow length in px * 5.2 -> initial velocity in px/s (e.g. 100px arrow at 45° -> ~450px parabolic range!)
@@ -931,28 +932,30 @@ export function renderGravityOverlay(
       continue;
     }
 
-    // 0. Pre-launch parabolic trajectory preview & v0 badge when paused at t = 0
+    // 0. Pre-launch parabolic trajectory preview (ONLY for upward projectile launches!) & v0 badge when paused at t = 0
     if (!isRunning && b.trail.length <= 1) {
       const v0Mag = Math.hypot(b.initVx, b.initVy);
       if (v0Mag > 12) {
-        const gPx = config.gravity * GRAVITY_PX_PER_M;
-        ctx.save();
-        ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(b.cx, b.cy);
-        const dtPreview = 0.04;
-        const maxSteps = 42;
-        for (let s = 1; s <= maxSteps; s++) {
-          const t = s * dtPreview;
-          const px = b.cx + b.initVx * t;
-          const py = b.cy + b.initVy * t + 0.5 * gPx * t * t;
-          ctx.lineTo(px, py);
-          if (py > b.cy + b.radius + 90) break;
+        if (b.initVy < -25) {
+          const gPx = config.gravity * GRAVITY_PX_PER_M;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(b.cx, b.cy);
+          const dtPreview = 0.04;
+          const maxSteps = 42;
+          for (let s = 1; s <= maxSteps; s++) {
+            const t = s * dtPreview;
+            const px = b.cx + b.initVx * t;
+            const py = b.cy + b.initVy * t + 0.5 * gPx * t * t;
+            ctx.lineTo(px, py);
+            if (py > b.cy + b.radius + 24) break;
+          }
+          ctx.stroke();
+          ctx.restore();
         }
-        ctx.stroke();
-        ctx.restore();
 
         const v0Ms = (v0Mag / GRAVITY_PX_PER_M).toFixed(1);
         drawVectorArrow(
