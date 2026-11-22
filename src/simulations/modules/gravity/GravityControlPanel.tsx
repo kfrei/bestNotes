@@ -109,7 +109,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
           <strong>{segmentCount > 0 ? '✓' : '—'}</strong>
         </span>
         <span className="text-[#64748b]">
-          v = <strong>{energy.speedMs.toFixed(1)}</strong> m/s
+          u = <strong>{energy.speedMs.toFixed(1)}</strong> m/s
         </span>
       </div>
 

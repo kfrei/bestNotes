@@ -965,7 +965,7 @@ export function renderGravityOverlay(
           b.initVx * 0.22,
           b.initVy * 0.22,
           '#2563eb',
-          `v₀ = ${v0Ms} m/s`
+          `u₀ = ${v0Ms} m/s`
         );
       }
     }
@@ -1015,7 +1015,7 @@ export function renderGravityOverlay(
         const topClearY = b.cy - (b.shapeKind === 'ball' ? b.radius : b.halfH) - 10;
         const vOriginX = b.cx + ux * (outerR * 0.55);
         const vOriginY = Math.min(topClearY, b.cy + uy * (outerR * 0.35) - outerR * 0.72);
-        drawVectorArrow(ctx, vOriginX, vOriginY, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'v');
+        drawVectorArrow(ctx, vOriginX, vOriginY, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'u');
       }
     }
 
