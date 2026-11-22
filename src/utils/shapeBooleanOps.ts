@@ -58,6 +58,34 @@ export function strokeToPolygonRing(s: StrokeObject): Ring {
     s.shapeType === 'sphere' ||
     s.shapeType === 'shaded-sphere';
 
+  // Circle / Ellipse / Sphere shapes in BestNotes are stored as 4 cardinal points (or bounds) without
+  // Bezier handles and rendered via ctx.ellipse(cx, cy, rx, ry) — always sample them into a crisp 72-pt ellipse ring!
+  if (isRoundShape && !hasBezier && pts.length <= 12) {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const rx = Math.max(1, (maxX - minX) * 0.5);
+    const ry = Math.max(1, (maxY - minY) * 0.5);
+    const STEPS = 72;
+    for (let i = 0; i < STEPS; i++) {
+      const a = (i / STEPS) * Math.PI * 2;
+      pushDedup(ring, cx + rx * Math.cos(a), cy + ry * Math.sin(a));
+    }
+    if (ring.length >= 3) {
+      ring.push([ring[0][0], ring[0][1]]);
+    }
+    return ring;
+  }
+
   if (hasBezier) {
     const stepsPerSeg = isRoundShape
       ? Math.max(12, Math.ceil(72 / Math.max(1, pts.length - 1)))

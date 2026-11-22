@@ -16929,10 +16929,15 @@ export default function App() {
         return;
       }
       const removedIds = new Set(targetStrokes.map((s) => s.id));
-      updateActivePage((page) => ({
-        ...page,
-        strokes: [...page.strokes.filter((s) => !removedIds.has(s.id)), ...resultStrokes],
-      }));
+      // Guarantee Undo ALWAYS records the pre-boolean state even if a prior selection gesture set suppressNextUndoRecordRef
+      suppressNextUndoRecordRef.current = false;
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: [...page.strokes.filter((s) => !removedIds.has(s.id)), ...resultStrokes],
+        }),
+        true
+      );
       setSelectedStrokeIds(resultStrokes.map((s) => s.id));
       const labels: Record<BooleanShapeOp, string> = {
         union: 'Ένωση (εξωτερικό περίγραμμα)',
