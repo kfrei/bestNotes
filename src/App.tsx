@@ -63166,6 +63166,97 @@ export default function App() {
                       </button>
                     </div>
 
+                    {/* Standalone Monochrome "3D" Extrude Toggle right between Ζωντάνεμα and textOCR */}
+                    {selectedStrokeIds.length === 1 &&
+                      (() => {
+                        const sel3D = activePage.strokes.find(
+                          (s) => s.id === selectedStrokeIds[0]
+                        );
+                        if (!sel3D) return null;
+                        const canExt = isExtrudable2DShape(sel3D) && !hasExtrude3D(sel3D);
+                        const active3D = is3DStudioShape(sel3D);
+                        if (!canExt && !active3D) return null;
+                        return (
+                          <div className="flex items-center bg-[#ece7dc] p-0.5 rounded-lg border border-[#dfd8cb]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (canExt) {
+                                  const selBox = getSelectionCombinedBox(selectedStrokeIds, []);
+                                  const boxW = selBox ? selBox.maxX - selBox.minX : 100;
+                                  const boxH = selBox ? selBox.maxY - selBox.minY : 100;
+                                  const isFlatEllipse =
+                                    (sel3D.shapeType === 'ellipse' ||
+                                      sel3D.shapeType === 'circle') &&
+                                    boxW > boxH * 1.35;
+                                  updateActivePage(
+                                    (pg) => ({
+                                      ...pg,
+                                      strokes: pg.strokes.map((st) =>
+                                        st.id === sel3D.id
+                                          ? {
+                                              ...st,
+                                              extrudeDx: isFlatEllipse ? 0 : 28,
+                                              extrudeDy: isFlatEllipse ? -68 : -22,
+                                              shadingStyle3D: 'studio',
+                                              lightAngle3D: 45,
+                                            }
+                                          : st
+                                      ),
+                                    }),
+                                    true
+                                  );
+                                } else if (hasExtrude3D(sel3D)) {
+                                  updateActivePage(
+                                    (pg) => ({
+                                      ...pg,
+                                      strokes: pg.strokes.map((st) =>
+                                        st.id === sel3D.id
+                                          ? {
+                                              ...st,
+                                              extrudeDx: undefined,
+                                              extrudeDy: undefined,
+                                              shadingStyle3D: undefined,
+                                              lightAngle3D: undefined,
+                                            }
+                                          : st
+                                      ),
+                                    }),
+                                    true
+                                  );
+                                }
+                              }}
+                              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[5px] font-semibold cursor-pointer whitespace-nowrap transition ${
+                                active3D
+                                  ? 'bg-[#d6cbb8] text-[#234978] shadow-inner border border-[#bfb097]/70'
+                                  : 'hover:bg-[#fdfbf7] text-[#234978]'
+                              }`}
+                              title={
+                                active3D
+                                  ? 'Ενεργό 3D (κλικ για επιστροφή σε 2D)'
+                                  : 'Μετατροπή 2D σχήματος σε 3D'
+                              }
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.9"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="w-3.5 h-3.5 text-[#475569]"
+                              >
+                                <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
+                                <path d="M12 12l8-4.5" />
+                                <path d="M12 12v9" />
+                                <path d="M12 12L4 7.5" />
+                              </svg>
+                              <span>3D</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
+
                     {(selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || selectedImageIds.length > 0) && (
                       <LassoOcrButtons
                         isConvertingHandwriting={isConvertingHandwriting}
@@ -71894,7 +71985,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleConvertSelectedStrokesToPolygon}
-                              className="flex items-center gap-1.5 px-3 py-1 rounded-xl ipados-liquid-glass bg-[#fdfbf7]/80 hover:bg-[#d6cbb8] backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-xs font-bold shadow-[0_8px_24px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 transition cursor-pointer whitespace-nowrap"
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-lg ipados-liquid-glass bg-[#fdfbf7]/80 hover:bg-[#d6cbb8] backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-xs font-bold shadow-[0_8px_24px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 transition cursor-pointer whitespace-nowrap"
                               title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
                             >
                               <span>Πολύγωνο</span>
@@ -71903,7 +71994,7 @@ export default function App() {
                         );
                       })()}
 
-                    {/* Mini-Blender 2.5D/3D Controls: 1-Click "🧊 3D" Extrude + Draggable Depth/Perspective Handle + 4 Shading Styles & Light Direction */}
+                    {/* Mini-Blender 2.5D/3D Controls: Draggable Depth/Perspective Handle + Bottom 3D Studio Bar (ONLY when an active 3D shape is selected!) */}
                     {isCurrentActive &&
                       activeTool === 'lasso' &&
                       selectedStrokeIds.length === 1 &&
@@ -71912,14 +72003,13 @@ export default function App() {
                           (s) => s.id === selectedStrokeIds[0]
                         );
                         if (!selStroke) return null;
-                        const canExtrude = isExtrudable2DShape(selStroke) && !hasExtrude3D(selStroke);
                         const is3D = is3DStudioShape(selStroke);
-                        if (!canExtrude && !is3D) return null;
+                        if (!is3D) return null;
 
                         const selBox = getSelectionCombinedBox(selectedStrokeIds, []);
                         if (!selBox) return null;
 
-                        const handleInfo = is3D ? get3DExtrudeHandleAnchorAndPos(selStroke) : null;
+                        const handleInfo = get3DExtrudeHandleAnchorAndPos(selStroke);
                         const activeStyle: ShadingStyle3D = selStroke.shadingStyle3D || 'studio';
                         const activeLight = ((selStroke.lightAngle3D ?? 45) % 360 + 360) % 360;
                         const lightArrow =
@@ -72036,7 +72126,7 @@ export default function App() {
                               </>
                             )}
 
-                            {/* 2. Minimal Floating 3D Studio Bar (Warm Beige Liquid-Glass matching all BestNotes menus!) */}
+                            {/* 2. Minimal Floating 3D Studio Bar (Warm Beige Liquid-Glass with crisp tighter corners!) */}
                             <div
                               data-ui-panel="true"
                               onPointerDown={(ev) => ev.stopPropagation()}
@@ -72046,93 +72136,66 @@ export default function App() {
                                 top: pillY,
                                 touchAction: 'manipulation',
                               }}
-                              className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 rounded-xl ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-[11px] font-semibold shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 whitespace-nowrap"
+                              className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 rounded-lg ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-[11px] font-semibold shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 whitespace-nowrap"
                             >
-                              {canExtrude ? (
+                              {(
+                                [
+                                  { id: 'studio', label: 'Studio' },
+                                  { id: 'flat', label: 'Flat' },
+                                  { id: 'wireframe', label: 'Wire' },
+                                ] as { id: ShadingStyle3D; label: string }[]
+                              ).map((stOpt) => (
                                 <button
+                                  key={stOpt.id}
                                   type="button"
-                                  onClick={() => {
-                                    const boxW = selBox.maxX - selBox.minX;
-                                    const boxH = selBox.maxY - selBox.minY;
-                                    const isFlatEllipse =
-                                      (selStroke.shapeType === 'ellipse' ||
-                                        selStroke.shapeType === 'circle') &&
-                                      boxW > boxH * 1.35;
-                                    patch3D({
-                                      extrudeDx: isFlatEllipse ? 0 : 28,
-                                      extrudeDy: isFlatEllipse ? -68 : -22,
-                                      shadingStyle3D: 'studio',
-                                      lightAngle3D: 45,
-                                    });
-                                  }}
-                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#d6cbb8] hover:bg-[#c8baa3] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-2xs cursor-pointer transition"
-                                  title="Μετατροπή 2D σχήματος σε 3D (Extrude)"
+                                  onClick={() => patch3D({ shadingStyle3D: stOpt.id })}
+                                  className={`px-2 py-0.5 rounded-[5px] cursor-pointer transition ${
+                                    activeStyle === stOpt.id
+                                      ? 'bg-[#d6cbb8] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-inner'
+                                      : 'text-[#5c5346] hover:text-[#2c251d] hover:bg-[#ebe4d7]/75'
+                                  }`}
+                                  title={`Στυλ 3D: ${stOpt.label}`}
                                 >
-                                  <span>🧊</span>
-                                  <span>3D</span>
+                                  {stOpt.label}
                                 </button>
-                              ) : (
+                              ))}
+                              <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextAng =
+                                    activeLight === 45
+                                      ? 135
+                                      : activeLight === 135
+                                        ? 225
+                                        : activeLight === 225
+                                          ? 315
+                                          : 45;
+                                  patch3D({ lightAngle3D: nextAng });
+                                }}
+                                className="px-2 py-0.5 rounded-[5px] bg-[#efe8db]/80 hover:bg-[#d6cbb8] text-[#5c4829] border border-[#d6cbb8]/70 cursor-pointer transition"
+                                title="Αλλαγή Κατεύθυνσης Φωτός (45° / 135° / 225° / 315°)"
+                              >
+                                ☀️ {lightArrow}
+                              </button>
+                              {hasExtrude3D(selStroke) && (
                                 <>
-                                  {(
-                                    [
-                                      { id: 'studio', label: 'Studio' },
-                                      { id: 'flat', label: 'Flat' },
-                                      { id: 'wireframe', label: 'Wire' },
-                                    ] as { id: ShadingStyle3D; label: string }[]
-                                  ).map((stOpt) => (
-                                    <button
-                                      key={stOpt.id}
-                                      type="button"
-                                      onClick={() => patch3D({ shadingStyle3D: stOpt.id })}
-                                      className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
-                                        activeStyle === stOpt.id
-                                          ? 'bg-[#d6cbb8] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-inner'
-                                          : 'text-[#5c5346] hover:text-[#2c251d] hover:bg-[#ebe4d7]/75'
-                                      }`}
-                                      title={`Στυλ 3D: ${stOpt.label}`}
-                                    >
-                                      {stOpt.label}
-                                    </button>
-                                  ))}
                                   <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const nextAng =
-                                        activeLight === 45
-                                          ? 135
-                                          : activeLight === 135
-                                            ? 225
-                                            : activeLight === 225
-                                              ? 315
-                                              : 45;
-                                      patch3D({ lightAngle3D: nextAng });
-                                    }}
-                                    className="px-2 py-0.5 rounded-md bg-[#efe8db]/80 hover:bg-[#d6cbb8] text-[#5c4829] border border-[#d6cbb8]/70 cursor-pointer transition"
-                                    title="Αλλαγή Κατεύθυνσης Φωτός (45° / 135° / 225° / 315°)"
+                                    onClick={() =>
+                                      patch3D({
+                                        extrudeDx: undefined,
+                                        extrudeDy: undefined,
+                                        shadingStyle3D: undefined,
+                                        lightAngle3D: undefined,
+                                      })
+                                    }
+                                    className="px-2 py-0.5 rounded-[5px] text-[#6b6052] hover:text-rose-700 hover:bg-[#ebe4d7]/75 cursor-pointer transition"
+                                    title="Επιστροφή σε επίπεδο 2D σχήμα"
                                   >
-                                    ☀️ {lightArrow}
+                                    2D
                                   </button>
-                                  {hasExtrude3D(selStroke) && (
-                                    <>
-                                      <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          patch3D({
-                                            extrudeDx: undefined,
-                                            extrudeDy: undefined,
-                                            shadingStyle3D: undefined,
-                                            lightAngle3D: undefined,
-                                          })
-                                        }
-                                        className="px-2 py-0.5 rounded-md text-[#6b6052] hover:text-rose-700 hover:bg-[#ebe4d7]/75 cursor-pointer transition"
-                                        title="Επιστροφή σε επίπεδο 2D σχήμα"
-                                      >
-                                        2D
-                                      </button>
-                                    </>
-                                  )}
                                 </>
                               )}
                             </div>
