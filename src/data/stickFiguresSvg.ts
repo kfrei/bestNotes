@@ -9,6 +9,11 @@ import type { StrokeObject } from '../types/note';
  *   so users can bend or lengthen any arm, leg, torso, or head directly on the page!
  */
 export const STICKMAN_POSE_JOINTS: Record<string, [number, number][]> = {
+  'stickman-pull-left': [
+    [118, 46], [116, 78], [112, 134],
+    [82, 96], [48, 114], [86, 100], [54, 118],
+    [84, 166], [56, 200], [134, 158], [104, 200],
+  ],
   'stickman-standing': [
     [110, 44], [110, 74], [110, 132],
     [93, 98], [76, 118], [127, 98], [144, 118],
@@ -186,6 +191,12 @@ export function buildStickFigureSvgMarkup(
   let body = '';
 
   switch (shapeKind) {
+    case 'stickman-pull-left':
+      body = `
+        <circle cx="118" cy="46" r="18" fill="${c}"/>
+        <path ${common} d="M116,64 L112,134 M114,82 L48,114 M112,134 L56,200 M112,134 L134,158 L104,200"/>
+      `;
+      break;
     case 'stickman-standing':
       body = `
         <circle cx="110" cy="46" r="18" fill="${c}"/>
@@ -236,7 +247,6 @@ export function buildStickFigureSvgMarkup(
       break;
     case 'stickman-hanging':
       body = `
-        <line x1="44" y1="30" x2="176" y2="30" stroke="${c}" stroke-width="${Math.max(4, Math.round(sw * 0.7))}" stroke-linecap="round"/>
         <circle cx="110" cy="76" r="17" fill="${c}"/>
         <path ${common} d="M110,93 L110,152 M110,104 L82,66 L82,30 M110,104 L138,66 L138,30 M110,152 L96,196 M110,152 L126,192"/>
       `;
@@ -323,6 +333,14 @@ export function buildStickFigureSvgMarkup(
 const STICK_COMMON_TAGS = ['stickman', 'stick figure', 'ανθρωπάκι', 'ανθρωπάκια', 'φιγούρα', 'vector'];
 
 export const STICK_FIGURES_STICKERS: StickerCatalogItem[] = [
+  {
+    id: 'sk-stickman-pull-left',
+    title: 'Stickman — Βήμα / Τράβηγμα Αριστερά (Προφίλ)',
+    iconifyId: 'custom-svg:stickman-pull-left:#16a34a:10',
+    category: 'Μονόχρωμα Σκίτσα',
+    colorStyle: 'monochrome',
+    tags: [...STICK_COMMON_TAGS, 'προφίλ', 'αριστερά', 'βήμα', 'τραβάω', 'σπρώχνω', 'κίνηση', 'δύναμη'],
+  },
   {
     id: 'sk-stickman-standing',
     title: 'Stickman — Όρθιο Ανθρωπάκι',
