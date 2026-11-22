@@ -652,7 +652,11 @@ export function stepGravityScene(
       const r = b.shapeKind === 'ball' ? b.radius : Math.min(b.halfW, b.halfH);
 
       const wasTrackedOnRail = wasOnGroundMap.get(b.strokeId) || b.onGround;
+      const preCollisionVx = b.vx;
+      const preCollisionSpeed = Math.hypot(b.vx, b.vy);
       let hitAnySegment = false;
+      let firstHitNx = 0;
+      let firstHitNy = 0;
 
       for (let iter = 0; iter < 2; iter++) {
         let bestOverlap = 0;
@@ -691,6 +695,40 @@ export function stepGravityScene(
 
         b.cx += nx * bestOverlap;
         b.cy += ny * bestOverlap;
+
+        // Detect V-trough pinch (ball wider than a tight sine/U trough touching BOTH opposing walls in 1 substep):
+        // Redirect smoothly up the forward wall in the direction of motion so it never gets wedged at the bottom!
+        if (iter === 0) {
+          firstHitNx = nx;
+          firstHitNy = ny;
+        } else if (config.guideRailEnabled && firstHitNx * nx < -0.15 && preCollisionSpeed > 6) {
+          const dirX = preCollisionVx >= 0 ? 1 : -1;
+          // Choose the forward wall's normal (right wall has nx < 0; left wall has nx > 0)
+          const fwdNx = (dirX > 0 ? firstHitNx < 0 : firstHitNx > 0) ? firstHitNx : nx;
+          const fwdNy = (dirX > 0 ? firstHitNx < 0 : firstHitNx > 0) ? firstHitNy : ny;
+          // Up-and-forward unit tangent along the forward wall
+          let climbTx = -fwdNy;
+          let climbTy = fwdNx;
+          if (climbTx * dirX < 0) {
+            climbTx = -climbTx;
+            climbTy = -climbTy;
+          }
+          const useExactInitE =
+            !config.frictionEnabled &&
+            !config.airDragEnabled &&
+            !hasExternalPushMap.get(b.strokeId) &&
+            dynamicBodyCount === 1 &&
+            config.restitution >= 0.99;
+          const refY = useExactInitE ? b.initCy : (preStepYMap.get(b.strokeId) ?? b.cy);
+          const refSpeedSq = useExactInitE
+            ? b.initVx * b.initVx + b.initVy * b.initVy
+            : (preStepSpeedSqMap.get(b.strokeId) ?? preCollisionSpeed * preCollisionSpeed);
+          const targetSpeed = Math.sqrt(Math.max(1e-2, refSpeedSq + 2 * gPx * (b.cy - refY)));
+          b.vx = climbTx * targetSpeed;
+          b.vy = climbTy * targetSpeed;
+          b.onGround = true;
+          break;
+        }
 
         const vn = b.vx * nx + b.vy * ny;
         if (vn < 0) {
