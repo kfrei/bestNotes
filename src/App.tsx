@@ -6214,6 +6214,7 @@ export default function App() {
           { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string }
         >();
         const softDeletedList: Notebook[] = [];
+        const purgedRemoteIds = new Set<string>();
         const rescuedFolderStyles: CustomFolderMeta[] = [];
 
         snapshot.forEach((docSnap) => {
@@ -6314,6 +6315,17 @@ export default function App() {
           }
 
           if (data.deleted === true) {
+            // Empty dataJson with deleted:true means permanently purged from Recycle Bin on a device
+            if (!data.dataJson || (typeof data.dataJson === 'string' && data.dataJson.trim().length === 0)) {
+              purgedRemoteIds.add(data.id);
+            }
+            if (!isFromCache) {
+              remoteDeletedIdsRef.current.add(data.id);
+              if (userEditedInSessionRef.current.has(data.id)) {
+                userEditedInSessionRef.current.delete(data.id);
+                saveUserEditedSessionIds(userEditedInSessionRef.current);
+              }
+            }
             remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
           }
         });
@@ -6372,11 +6384,27 @@ export default function App() {
         const mergedBinMap = new Map<string, Notebook>();
         for (const item of softDeletedList) mergedBinMap.set(item.id, item);
         for (const item of localDeletedNotebooksRef.current) {
-          if (!mergedBinMap.has(item.id) && !remoteMap.get(item.id)?.nb) {
+          // Never resurrect an item that was permanently purged or restored on another device!
+          if (purgedRemoteIds.has(item.id)) continue;
+          if (remoteMap.get(item.id)?.nb) continue;
+          // On a live authoritative server snapshot (!isFromCache), trust the server's Recycle Bin
+          // unless the item was deleted locally in this very session and hasn't reached the server yet.
+          if (!isFromCache && !mergedBinMap.has(item.id) && !sessionDeletedNotebookIds.has(item.id)) {
+            continue;
+          }
+          if (!mergedBinMap.has(item.id)) {
             mergedBinMap.set(item.id, item);
           }
         }
-        setDeletedCloudNotebooks(Array.from(mergedBinMap.values()));
+        const finalBinList = Array.from(mergedBinMap.values());
+        // Keep local IndexedDB recycle bin strictly synced with the reconciled list so stale items never stick!
+        const prevBinIds = localDeletedNotebooksRef.current.map((n) => n.id).join(',');
+        const nextBinIds = finalBinList.map((n) => n.id).join(',');
+        if (prevBinIds !== nextBinIds) {
+          localDeletedNotebooksRef.current = finalBinList;
+          void saveNotebooksToIndexedDB(`${uid}__recycle_bin`, finalBinList);
+        }
+        setDeletedCloudNotebooks(finalBinList);
 
         // Compute notebooks that are strictly newer locally (or unsynced local-only) SYNCHRONOUSLY from notebooksRef.current!
         // Never populate this inside setNotebooks(prev => ...) because React 18/19 defers state updaters asynchronously.
@@ -59556,6 +59584,12 @@ export default function App() {
                               localDeletedNotebooksRef.current = [];
                               setDeletedCloudNotebooks([]);
                               setShowRecycleBinBar(false);
+                              for (const item of toPurge) {
+                                sessionDeletedNotebookIds.delete(item.id);
+                                remoteDeletedIdsRef.current.add(item.id);
+                                userEditedInSessionRef.current.delete(item.id);
+                              }
+                              saveUserEditedSessionIds(userEditedInSessionRef.current);
                               if (currentUser) {
                                 void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, []);
                                 for (const item of toPurge) {
@@ -59629,6 +59663,7 @@ export default function App() {
                                   localDeletedNotebooksRef.current = nextBin;
                                   remoteDeletedIdsRef.current.delete(delNb.id);
                                   userEditedInSessionRef.current.add(delNb.id);
+                                  saveUserEditedSessionIds(userEditedInSessionRef.current);
                                   if (currentUser) {
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     pushNotebookToCloudTracked(currentUser.uid, restoredNb);
@@ -59654,6 +59689,10 @@ export default function App() {
                                     (n) => n.id !== delNb.id
                                   );
                                   localDeletedNotebooksRef.current = nextBin;
+                                  sessionDeletedNotebookIds.delete(delNb.id);
+                                  remoteDeletedIdsRef.current.add(delNb.id);
+                                  userEditedInSessionRef.current.delete(delNb.id);
+                                  saveUserEditedSessionIds(userEditedInSessionRef.current);
                                   if (currentUser) {
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     void setDoc(
