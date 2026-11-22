@@ -26,6 +26,7 @@ export type RichTipId =
   | 'tool-highlighter'
   | 'tool-shape'
   | 'tool-text'
+  | 'tool-rect-lasso'
   | 'tool-lasso'
   | 'tool-direct-node'
   | 'tool-tape'
@@ -66,7 +67,8 @@ const TIP_DEFS: Record<RichTipId, TipDef> = {
   'tool-highlighter': { title: 'Υπογραμμιστής', subtitle: 'Ημιδιαφανής τονισμός κειμένου', shortcut: 'H / Η' },
   'tool-shape': { title: 'Σχήματα & Γεωμετρία', subtitle: 'Ευθείες, κύκλοι, βελάκια, τεταρτοκύκλιο', shortcut: 'O / Ο' },
   'tool-text': { title: 'Κείμενο', subtitle: 'Πλαίσια κειμένου, LaTeX & ελληνικές γραμματοσειρές', shortcut: 'T / Τ' },
-  'tool-lasso': { title: 'Λάσο Επιλογής', subtitle: 'Επιλογή, μετακίνηση, OCR & συνδυασμός', shortcut: 'L / Λ' },
+  'tool-rect-lasso': { title: 'Ορθογώνια Επιλογή', subtitle: 'Σύρε ορθογώνιο πλαίσιο από τη γωνία για επιλογή' },
+  'tool-lasso': { title: 'Λάσο Επιλογής', subtitle: 'Ελεύθερη επιλογή, μετακίνηση, OCR & συνδυασμός', shortcut: 'S / Σ' },
   'tool-direct-node': { title: 'Επεξεργασία Κόμβων', subtitle: 'Κίνηση κορυφών & καμπυλότητας Bézier' },
   'tool-tape': { title: 'Ταινία Απόκρυψης', subtitle: 'Κάλυψη & αποκάλυψη απαντήσεων με 1 κλικ' },
   'tool-laser': { title: 'Laser Παρουσίασης', subtitle: 'Κόκκινος δείκτης που σβήνει απαλά' },
@@ -340,6 +342,28 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
         </g>
       )}
 
+      {id === 'tool-rect-lasso' && (
+        <g>
+          <circle cx="48" cy="31" r="10" fill="#2563eb" fillOpacity="0.55" />
+          <g style={{ transformOrigin: '16px 11px', animation: 'rtRectSelectGrow 2.1s ease-in-out infinite' }}>
+            <rect
+              x="16"
+              y="11"
+              width="64"
+              height="40"
+              rx="2.5"
+              fill="#2563eb"
+              fillOpacity="0.1"
+              stroke="#234978"
+              strokeWidth="1.8"
+              strokeDasharray="4.5 3"
+            />
+            <circle cx="16" cy="11" r="2.6" fill="#234978" />
+            <circle cx="80" cy="51" r="2.6" fill="#2563eb" />
+          </g>
+        </g>
+      )}
+
       {id === 'tool-lasso' && (
         <g>
           <circle cx="48" cy="31" r="10" fill="#2563eb" fillOpacity="0.55" />
@@ -565,6 +589,7 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtEraseClipWipe { 0%, 14% { transform: translateX(0px); } 64%, 88% { transform: translateX(74px); } 92%, 100% { transform: translateX(0px); } }
         @keyframes rtBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
         @keyframes rtDashMarch { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -16; } }
+        @keyframes rtRectSelectGrow { 0%, 14% { transform: scale(0.18); opacity: 0.7; } 56%, 86% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.18); opacity: 0.7; } }
         @keyframes rtNodeBounce { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-4px); } }
         @keyframes rtTapePeek { 0%, 25% { opacity: 0.96; } 55%, 82% { opacity: 0.16; } 100% { opacity: 0.96; } }
         @keyframes rtSpinSlow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

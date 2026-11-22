@@ -62041,7 +62041,7 @@ export default function App() {
                 { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', tip: 'tool-highlighter', icon: Highlighter },
                 { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', tip: 'tool-shape', icon: Shapes },
                 { id: 'text', title: 'Text (Κείμενο) — T / Τ', tip: 'tool-text', icon: Type },
-                { id: 'rect-lasso', title: 'Rectangular Select (Επιλογή με Ορθογώνιο πλαίσιο)', tip: 'tool-lasso', icon: RectSelectIcon },
+                { id: 'rect-lasso', title: 'Rectangular Select (Επιλογή με Ορθογώνιο πλαίσιο)', tip: 'tool-rect-lasso', icon: RectSelectIcon },
                 { id: 'lasso', title: 'Select (Ελεύθερη Επιλογή Λάσο) — S / Σ', tip: 'tool-lasso', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', tip: 'tool-direct-node', icon: BezierNodesIcon },
                 { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', tip: 'align-center-xy', icon: AlignObjectsIcon },
@@ -74117,11 +74117,22 @@ export default function App() {
                                 // Normalize to (-180, 180]
                                 while (nextAngle > 180) nextAngle -= 360;
                                 while (nextAngle <= -180) nextAngle += 360;
-                                // Magnetic snap within ±5° of cardinal (0°, 90°, 180°, 270°/360°) & 45° angles
-                                for (const snapDeg of [0, 45, 90, 135, 180, -45, -90, -135, -180]) {
-                                  if (Math.abs(nextAngle - snapDeg) <= 5) {
+                                // Strong magnetic lock within ±10° of Horizontal (0°, 180°) & Vertical (90°, -90°),
+                                // plus gentle ±4° snap on 45° diagonals
+                                let snappedCardinal = false;
+                                for (const snapDeg of [0, 90, 180, -90, -180]) {
+                                  if (Math.abs(nextAngle - snapDeg) <= 10) {
                                     nextAngle = snapDeg === -180 ? 180 : snapDeg;
+                                    snappedCardinal = true;
                                     break;
+                                  }
+                                }
+                                if (!snappedCardinal) {
+                                  for (const snapDeg of [45, 135, -45, -135]) {
+                                    if (Math.abs(nextAngle - snapDeg) <= 4) {
+                                      nextAngle = snapDeg;
+                                      break;
+                                    }
                                   }
                                 }
                                 setRulerState(
@@ -74146,11 +74157,55 @@ export default function App() {
                               }}
                               className="absolute left-1/2 -top-9 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing"
                             >
-                              <div className="w-7 h-7 rounded-full bg-white/95 border border-slate-400/80 shadow-md flex items-center justify-center text-slate-600 hover:text-slate-900 transition">
+                              <div
+                                className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center transition ${
+                                  Math.abs(pageRuler.angle % 90) < 0.5
+                                    ? 'bg-[#eff6ff] border-[#2563eb] text-[#234978] ring-2 ring-[#2563eb]/25'
+                                    : 'bg-white/95 border-slate-400/80 text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
                                 <RotateCw className="w-3.5 h-3.5" />
                               </div>
                               <div className="w-[1.5px] h-2 bg-slate-400/80" />
                             </div>
+
+                            {/* 1-Click Horizontal (0°) <-> Vertical (90°) Lock Toggle on Left of Rotation Handle */}
+                            <button
+                              type="button"
+                              data-ui-panel="true"
+                              title="1-Κλικ Κλείδωμα Οριζόντια (0°) ↔ Κατακόρυφα (90°)"
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRulerState((prev) => {
+                                  const norm = ((prev.angle % 180) + 180) % 180;
+                                  const isAlreadyHoriz = norm < 5 || norm > 175;
+                                  const nextAngle = isAlreadyHoriz ? 90 : 0;
+                                  return { ...prev, angle: nextAngle };
+                                }, pageObj.id);
+                              }}
+                              className="absolute left-[calc(50%-30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
+                            >
+                              <div
+                                className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center text-[9.5px] font-extrabold tracking-tight transition ${
+                                  Math.abs(pageRuler.angle % 90) < 0.5
+                                    ? 'bg-[#234978] text-white border-[#1b3a60]'
+                                    : 'bg-white/95 text-slate-600 border-slate-400/80 hover:text-slate-900'
+                                }`}
+                              >
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    transform: `rotate(${-pageRuler.angle}deg)`,
+                                  }}
+                                >
+                                  {Math.abs(((pageRuler.angle % 180) + 180) % 180 - 90) < 5 ? '90°' : '0°'}
+                                </span>
+                              </div>
+                              <div className="w-[1.5px] h-2 bg-slate-400/80" />
+                            </button>
 
                             {/* Millimeter Precision Toggle Button Next to Rotation Handle */}
                             <button
