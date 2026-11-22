@@ -39053,12 +39053,13 @@ export default function App() {
       }
 
       // 3. Also check pure Horizontal (0°) and Vertical (90°) alignment through neighbor if not already covered by a shape edge
+      //    For open straight lines / polylines: gentle close-proximity lock (~3.15° / 8px) so it only snaps when very close to H/V!
       const cardinalAxes = [
         { ux: 1, uy: 0, nx: 0, ny: 1 },
         { ux: 0, uy: 1, nx: -1, ny: 0 },
       ];
-      const maxPerpSnap = M === 2 ? 18 : 10;
-      const maxSinSnap = M === 2 ? 0.18 : 0.11;
+      const maxPerpSnap = !isClosedLoop ? 8 : 10;
+      const maxSinSnap = !isClosedLoop ? 0.055 : 0.11;
       for (const ax of cardinalAxes) {
         const alreadyCovered = nonIncidentEdges.some(
           (e) => Math.abs(e.ux * ax.ny - e.uy * ax.nx) < 0.02
@@ -46664,13 +46665,11 @@ export default function App() {
             }
           }
           const hasBezierCurvedHandles = activeTargetStroke.points.some((p, pIdx, arr) => {
-            if (
-              Boolean(p.smooth) ||
-              p.inDx !== undefined ||
-              p.inDy !== undefined ||
-              p.outDx !== undefined ||
-              p.outDy !== undefined
-            ) {
+            const hasNonZeroIn =
+              p.inDx !== undefined && p.inDy !== undefined && Math.hypot(p.inDx, p.inDy) > 1.5;
+            const hasNonZeroOut =
+              p.outDx !== undefined && p.outDy !== undefined && Math.hypot(p.outDx, p.outDy) > 1.5;
+            if (Boolean(p.smooth) || hasNonZeroIn || hasNonZeroOut) {
               return true;
             }
             if (p.cx !== undefined && p.cy !== undefined && pIdx > 0) {
@@ -46711,10 +46710,10 @@ export default function App() {
             const uniqueVertices = isClosedLoop
               ? activeTargetStroke.points.slice(0, Math.max(1, activeTargetStroke.points.length - 1))
               : activeTargetStroke.points;
-            // Only snap canonical geometric shapes (Triangles = 3, Quadrilaterals/Parallelograms/Trapezoids = 4, or 2-point straight lines)
+            // Snap canonical geometric shapes (Triangles = 3, Quadrilaterals = 4) AND any open straight line / polyline (>= 2 nodes)
             const isCanonicalStraightGeometry =
               (isClosedLoop && uniqueVertices.length >= 3 && uniqueVertices.length <= 4) ||
-              (!isClosedLoop && uniqueVertices.length === 2);
+              (!isClosedLoop && uniqueVertices.length >= 2);
             if (isCanonicalStraightGeometry) {
               const snapRes = computeParallelNodeSnap(
                 latestPt,
