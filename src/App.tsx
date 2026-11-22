@@ -115,6 +115,16 @@ import {
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
 import { AdminPerfPill, AdminPerfDropdownButton } from './components/AdminPerfPill';
 import { recordSimFrameSample, markSimLoopStopped } from './utils/perfTelemetry';
+import {
+  type ActiveAngleEditor,
+  findAngleVertexAtPoint,
+  isSameAngleEditor,
+  getAngleGeometry,
+  hitTestAngleArmHandle,
+  computeSnappedAngleArmPosition,
+  applyAngleArmMoveToStrokes,
+  drawInteractiveAngleOverlay,
+} from './utils/interactiveAngleTool';
 import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
   syncNotebookPdfToGoogleDrive,
@@ -3102,6 +3112,13 @@ export default function App() {
     }
   }, [selectedImageId]);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
+  const [activeAngleEditor, setActiveAngleEditor] = useState<ActiveAngleEditor | null>(null);
+  const activeAngleEditorRef = useRef<ActiveAngleEditor | null>(null);
+  activeAngleEditorRef.current = activeAngleEditor;
+  const draggingAngleArmRef = useRef<{ arm: 'A' | 'B'; pageId: string } | null>(null);
+  const lastAngleTapRef = useRef<{ time: number; x: number; y: number; pageId: string } | null>(
+    null
+  );
   const shiftKeyPressedRef = useRef<boolean>(false);
   const lastArrowNudgeAtRef = useRef<number>(0);
   const lassoAdditiveRef = useRef<boolean>(false);
@@ -8751,6 +8768,7 @@ export default function App() {
         setLibraryTagEditorNbId(null);
         setFolderPickerNbId(null);
         setShareMenuTarget(null);
+        setActiveAngleEditor(null);
       }
     };
 
@@ -13202,6 +13220,7 @@ export default function App() {
           selectedImageIds.length > 0 ||
           selectedLassoTextIds.length > 0 ||
           Boolean(activeNodeStrokeId) ||
+          Boolean(activeAngleEditor && activeAngleEditor.pageId === pageObj.id) ||
           rulerState.visible ||
           (isShapeTool && lastCreatedShapeIdsRef.current.length > 0) ||
           (isSimulating && Boolean(pageObj.circuitSims?.length)) ||
@@ -13233,6 +13252,10 @@ export default function App() {
             rulerState.visible ? 1 : 0
           }|${rulerState.showMm ? 1 : 0}|${
             showSimulationPanel && simActiveCategory === 'heat' ? 1 : 0
+          }|${
+            activeAngleEditor && activeAngleEditor.pageId === pageObj.id
+              ? `${activeAngleEditor.armA.strokeId}:${activeAngleEditor.armA.armPointIdx}:${activeAngleEditor.armB.strokeId}:${activeAngleEditor.armB.armPointIdx}:${activeAngleEditor.draggingArm || ''}:${activeAngleEditor.snappedDeg ?? ''}`
+              : ''
           }`;
         }
       }
@@ -15103,8 +15126,13 @@ export default function App() {
           isGravityRunningRef.current
         );
       }
+
+      // 9. Interactive Angle Measurement & Arm-Drag Overlay (Double-Click on any angle vertex)
+      if (isCurrentActivePage && activeAngleEditor && activeAngleEditor.pageId === pageObj.id) {
+        drawInteractiveAngleOverlay(ctx, pageObj.strokes, activeAngleEditor);
+      }
     });
-  }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
+  }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, activeAngleEditor, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (Lasso-Scoped, 0 RAF when paused/closed) ──
@@ -41005,6 +41033,78 @@ export default function App() {
       }
     }
 
+    // 0-angle. Interactive Angle Measurement & Arm Dragging (Double-click / Double-tap on any angle vertex)
+    if (activeAngleEditorRef.current && activeAngleEditorRef.current.pageId === targetPage.id) {
+      const curAngleEd = activeAngleEditorRef.current;
+      const angleHit = hitTestAngleArmHandle(pt, targetPage.strokes, curAngleEd, 22);
+      if (angleHit === 'A' || angleHit === 'B') {
+        e.preventDefault();
+        suppressNextUndoRecordRef.current = false;
+        pushUndoSnapshot(targetPage);
+        draggingAngleArmRef.current = { arm: angleHit, pageId: targetPage.id };
+        setActiveAngleEditor({ ...curAngleEd, draggingArm: angleHit });
+        isDrawingRef.current = true;
+        activePointerIdRef.current = e.pointerId;
+        activePointerTypeRef.current = e.pointerType;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      if (angleHit === 'vertex') {
+        if (e.pointerType !== 'mouse') {
+          const now = Date.now();
+          const prevTap = lastAngleTapRef.current;
+          if (
+            prevTap &&
+            prevTap.pageId === targetPage.id &&
+            now - prevTap.time < 380 &&
+            Math.hypot(pt.x - prevTap.x, pt.y - prevTap.y) <= 24
+          ) {
+            lastAngleTapRef.current = null;
+            setActiveAngleEditor(null);
+            return;
+          }
+          lastAngleTapRef.current = { time: now, x: pt.x, y: pt.y, pageId: targetPage.id };
+        }
+        return;
+      }
+      // Clicked outside handles & vertex -> dismiss angle editor and proceed normally
+      setActiveAngleEditor(null);
+    } else if (
+      e.pointerType !== 'mouse' &&
+      (activeTool === 'lasso' || activeTool === 'direct-node' || activeTool === 'shape')
+    ) {
+      // Touch / Apple Pencil double-tap detection on angle vertices
+      const now = Date.now();
+      const prevTap = lastAngleTapRef.current;
+      if (
+        prevTap &&
+        prevTap.pageId === targetPage.id &&
+        now - prevTap.time < 380 &&
+        Math.hypot(pt.x - prevTap.x, pt.y - prevTap.y) <= 24
+      ) {
+        const lockedIds = new Set(
+          targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+        );
+        const foundAngle = findAngleVertexAtPoint(pt, targetPage.strokes, lockedIds, targetPage.id, 26);
+        if (foundAngle) {
+          lastAngleTapRef.current = null;
+          e.preventDefault();
+          setSelectedStrokeIds([]);
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
+          setSelectedLassoTextIds([]);
+          setActiveNodeStrokeId(null);
+          setActiveAngleEditor(foundAngle);
+          return;
+        }
+      }
+      lastAngleTapRef.current = { time: now, x: pt.x, y: pt.y, pageId: targetPage.id };
+    }
+
     // 0-heat. Interactive Heat & Thermodynamics Simulation Canvas Interactions (ONLY when Sim panel is open on Heat, Live PDF, or Eraser)
     if (
       heatSim.activeHeatSim &&
@@ -44467,6 +44567,30 @@ export default function App() {
         ctx.arc(latestPt.x, latestPt.y, 3.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+      }
+      return;
+    }
+
+    // 0-angle. Interactive Angle Arm Dragging (live soft-snap at 30°, 45°, 60°, 90°, 120°):
+    if (draggingAngleArmRef.current && activeAngleEditorRef.current) {
+      const dragAng = draggingAngleArmRef.current;
+      const curAngleEd = activeAngleEditorRef.current;
+      const geom = getAngleGeometry(activePage.strokes, curAngleEd);
+      if (geom) {
+        const fixedArmPt = dragAng.arm === 'A' ? geom.armB : geom.armA;
+        const snapped = computeSnappedAngleArmPosition(latestPt, geom.vertex, fixedArmPt);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: applyAngleArmMoveToStrokes(page.strokes, curAngleEd, dragAng.arm, snapped),
+          }),
+          false
+        );
+        if (curAngleEd.snappedDeg !== snapped.snappedDeg) {
+          setActiveAngleEditor((prev) =>
+            prev ? { ...prev, snappedDeg: snapped.snappedDeg } : prev
+          );
+        }
       }
       return;
     }
@@ -50125,6 +50249,15 @@ export default function App() {
           showToast('ℹ️ Η γραμμή κοπής πρέπει να διαπερνά το σχήμα για να το χωρίσει!');
         }
       }
+      return;
+    }
+
+    if (draggingAngleArmRef.current) {
+      draggingAngleArmRef.current = null;
+      isDrawingRef.current = false;
+      activePointerIdRef.current = null;
+      activePointerTypeRef.current = null;
+      setActiveAngleEditor((prev) => (prev ? { ...prev, draggingArm: null } : prev));
       return;
     }
 
@@ -70887,7 +71020,6 @@ export default function App() {
                       onPointerUp={handlePointerUp}
                       onPointerCancel={handlePointerUp}
                       onDoubleClick={(e) => {
-                        if (activeTool !== 'lasso' && activeTool !== 'text') return;
                         const rect = e.currentTarget.getBoundingClientRect();
                         if (rect.width <= 0 || rect.height <= 0) return;
                         const ptX = (e.clientX - rect.left) * (pW / rect.width);
@@ -70895,37 +71027,62 @@ export default function App() {
                         const lockedIds = new Set(
                           pageObj.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
                         );
-                        const txtList = pageObj.texts || [];
-                        for (let idx = txtList.length - 1; idx >= 0; idx--) {
-                          const txt = txtList[idx];
-                          if (lockedIds.has(txt.layerId)) continue;
-                          if (
-                            txt.groupId?.startsWith('math-graph-grp-') ||
-                            txt.id.startsWith('math-graph-txt-')
-                          ) {
-                            continue;
+                        if (activeTool === 'lasso' || activeTool === 'text') {
+                          const txtList = pageObj.texts || [];
+                          for (let idx = txtList.length - 1; idx >= 0; idx--) {
+                            const txt = txtList[idx];
+                            if (lockedIds.has(txt.layerId)) continue;
+                            if (
+                              txt.groupId?.startsWith('math-graph-grp-') ||
+                              txt.id.startsWith('math-graph-txt-')
+                            ) {
+                              continue;
+                            }
+                            if (isPagePointOnTextGlyphs({ x: ptX, y: ptY }, txt, 6)) {
+                              setSelectedLassoTextIds([]);
+                              setSelectedStrokeIds([]);
+                              setSelectedImageIds([]);
+                              setSelectedImageId(null);
+                              setActiveNodeStrokeId(null);
+                              setActiveAngleEditor(null);
+                              setShowToolSubBar(true);
+                              const { caretIndex, wordStart, wordEnd } =
+                                getTextCaretAndWordAtPoint(
+                                  txt.id,
+                                  txt.text || '',
+                                  e.clientX,
+                                  e.clientY
+                                );
+                              if (wordEnd > wordStart) {
+                                focusAndPlaceCaretInTextBox(txt.id, wordStart, wordEnd);
+                              } else {
+                                focusAndPlaceCaretInTextBox(txt.id, caretIndex, caretIndex);
+                              }
+                              return;
+                            }
                           }
-                          if (isPagePointOnTextGlyphs({ x: ptX, y: ptY }, txt, 6)) {
-                            setSelectedLassoTextIds([]);
+                        }
+
+                        // Double-click on any angle vertex -> toggle soft emerald-green angle overlay + draggable arms
+                        const foundAngle = findAngleVertexAtPoint(
+                          { x: ptX, y: ptY },
+                          pageObj.strokes,
+                          lockedIds,
+                          pageObj.id,
+                          24
+                        );
+                        if (foundAngle) {
+                          if (isSameAngleEditor(activeAngleEditorRef.current, foundAngle)) {
+                            setActiveAngleEditor(null);
+                          } else {
                             setSelectedStrokeIds([]);
                             setSelectedImageIds([]);
                             setSelectedImageId(null);
+                            setSelectedLassoTextIds([]);
                             setActiveNodeStrokeId(null);
-                            setShowToolSubBar(true);
-                            const { caretIndex, wordStart, wordEnd } =
-                              getTextCaretAndWordAtPoint(
-                                txt.id,
-                                txt.text || '',
-                                e.clientX,
-                                e.clientY
-                              );
-                            if (wordEnd > wordStart) {
-                              focusAndPlaceCaretInTextBox(txt.id, wordStart, wordEnd);
-                            } else {
-                              focusAndPlaceCaretInTextBox(txt.id, caretIndex, caretIndex);
-                            }
-                            return;
+                            setActiveAngleEditor(foundAngle);
                           }
+                          return;
                         }
                       }}
                       onPointerLeave={(e) => {
