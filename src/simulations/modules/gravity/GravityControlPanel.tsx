@@ -299,6 +299,21 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
             {config.pageBoundsEnabled ? 'ON' : 'OFF (Ελεύθερο)'}
           </span>
         </div>
+
+        <div className="flex items-center justify-between pt-1 border-t border-[#ece7dc]">
+          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.guideRailEnabled}
+              onChange={(e) => setConfig((c) => ({ ...c, guideRailEnabled: e.target.checked }))}
+              className="accent-[#234978] rounded"
+            />
+            <span>Τροχιά-Οδηγός</span>
+          </label>
+          <span className="text-[11px] font-bold text-[#234978]">
+            {config.guideRailEnabled ? 'ON' : 'OFF (Ελεύθερο)'}
+          </span>
+        </div>
       </div>
 
       {/* Live Energy Bars (K, U, E) */}

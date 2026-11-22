@@ -61,6 +61,7 @@ export interface GravityLabConfig {
   airDragEnabled: boolean;
   airDragCoeff: number; // 0.02 .. 0.30
   pageBoundsEnabled: boolean; // true = bounce off page edges; false = fly/fall freely off-page
+  guideRailEnabled: boolean; // true = hug convex ramp/shelf corners smoothly without ski-jump liftoff
   pushForceN: number; // Legacy/default magnitude in Newtons (-40 .. +40 N)
   pusherForcesN: Record<string, number>; // Per-Stickman signed force F (-40 .. +40 N) keyed by strokeId
   showVelocity: boolean; // Velocity vector v (drawn outside, slightly above & ahead of body)
@@ -79,6 +80,7 @@ export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   airDragEnabled: false,
   airDragCoeff: 0.08,
   pageBoundsEnabled: true,
+  guideRailEnabled: true,
   pushForceN: 14,
   pusherForcesN: {},
   showVelocity: false,

@@ -650,6 +650,9 @@ export function stepGravityScene(
       if (b.pinned) continue;
       const r = b.shapeKind === 'ball' ? b.radius : Math.min(b.halfW, b.halfH);
 
+      const wasTrackedOnRail = wasOnGroundMap.get(b.strokeId) || b.onGround;
+      let hitAnySegment = false;
+
       for (let iter = 0; iter < 2; iter++) {
         let bestOverlap = 0;
         let bestNx = 0;
@@ -680,6 +683,7 @@ export function stepGravityScene(
         }
 
         if (bestOverlap <= 0) break;
+        hitAnySegment = true;
 
         const nx = bestNx;
         const ny = bestNy;
@@ -743,6 +747,78 @@ export function stepGravityScene(
               const sign = vt >= 0 ? 1 : -1;
               b.vx = sign * targetSpeed * tx;
               b.vy = sign * targetSpeed * ty;
+            }
+          }
+        }
+      }
+
+      // 3b. Guide Rail ("Τροχιά-Οδηγός"): when already rolling/sliding on a track, hug convex corners
+      //     smoothly (e.g. steep ramp -> horizontal upper shelf or upper shelf -> downward ramp)
+      //     without launching into the air, preserving exact mechanical energy!
+      if (config.guideRailEnabled && wasTrackedOnRail && !hitAnySegment && segments.length > 0) {
+        let bestDist = Infinity;
+        let bestNx = 0;
+        let bestNy = 0;
+        let bestRContact = r + 1.5;
+
+        for (const seg of segments) {
+          const abx = seg.bx - seg.ax;
+          const aby = seg.by - seg.ay;
+          const lenSq = abx * abx + aby * aby;
+          if (lenSq < 1e-4) continue;
+          const t = Math.max(0, Math.min(1, ((b.cx - seg.ax) * abx + (b.cy - seg.ay) * aby) / lenSq));
+          const closestX = seg.ax + t * abx;
+          const closestY = seg.ay + t * aby;
+          const dx = b.cx - closestX;
+          const dy = b.cy - closestY;
+          const dist = Math.hypot(dx, dy);
+          const rContact = r + (seg.halfWidth ?? 1.5);
+          if (dist > 1e-5 && dist <= rContact + 14 && dist < bestDist) {
+            const nyCand = dy / dist;
+            // Only hug upper track surfaces (not vertical walls or ceilings)
+            if (nyCand < -0.15) {
+              bestDist = dist;
+              bestNx = dx / dist;
+              bestNy = nyCand;
+              bestRContact = rContact;
+            }
+          }
+        }
+
+        if (bestDist < Infinity) {
+          const pull = bestRContact - bestDist; // <= 0, pulls body smoothly back onto track surface
+          b.cx += bestNx * pull;
+          b.cy += bestNy * pull;
+          b.onGround = true;
+          b.normalX = bestNx;
+          b.normalY = bestNy;
+          b.normalForceN = Math.max(b.normalForceN, Math.max(0, b.mass * config.gravity * (-bestNy)));
+
+          const tx = -bestNy;
+          const ty = bestNx;
+          const vt = b.vx * tx + b.vy * ty;
+          if (!config.frictionEnabled && !config.airDragEnabled && !hasExternalPushMap.get(b.strokeId)) {
+            const preY = preStepYMap.get(b.strokeId) ?? b.cy;
+            const preSpeedSq = preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy);
+            const targetSpeedSq = preSpeedSq + 2 * gPx * (b.cy - preY);
+            if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
+              const targetSpeed = Math.sqrt(targetSpeedSq);
+              const sign = vt >= 0 ? 1 : -1;
+              b.vx = sign * targetSpeed * tx;
+              b.vy = sign * targetSpeed * ty;
+            } else {
+              b.vx = vt * tx;
+              b.vy = vt * ty;
+            }
+          } else {
+            const speed = Math.hypot(b.vx, b.vy);
+            if (speed > 1e-3 && Math.abs(vt) > 1e-3) {
+              const sign = vt >= 0 ? 1 : -1;
+              b.vx = sign * speed * tx;
+              b.vy = sign * speed * ty;
+            } else {
+              b.vx = vt * tx;
+              b.vy = vt * ty;
             }
           }
         }
