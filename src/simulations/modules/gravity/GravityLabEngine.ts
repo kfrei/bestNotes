@@ -771,7 +771,9 @@ export function stepGravityScene(
           const tx = -ny;
           const ty = nx;
           const vtBefore = b.vx * tx + b.vy * ty;
-          const wasRollingOnTrack = (wasOnGroundMap.get(b.strokeId) || b.onGround) && ny < -0.04;
+          const wasRollingOnTrack =
+            (wasOnGroundMap.get(b.strokeId) || b.onGround) &&
+            (ny < -0.04 || Math.abs(vn) < Math.max(85, Math.abs(vtBefore) * 0.72));
           // Smooth grazing/rolling contact on curved U-bowls & steep ramp->floor transitions vs genuine air drop/wall bounce!
           const isGrazingSlide =
             wasRollingOnTrack ||
@@ -855,13 +857,23 @@ export function stepGravityScene(
           const rContact = r + (seg.halfWidth ?? 1.5);
           if (dist > 1e-5 && dist <= rContact + 14 && dist < bestDist) {
             const nyCand = dy / dist;
-            // Only hug upper/steep track surfaces (not ceilings)
-            if (nyCand < -0.04) {
+            // Only hug upper track floors/shelves (convex ramp-to-shelf corners, NOT vertical walls or overhead loop ceilings!)
+            if (nyCand < -0.35) {
               bestDist = dist;
               bestNx = dx / dist;
               bestNy = nyCand;
               bestRContact = rContact;
             }
+          }
+        }
+
+        if (bestDist < Infinity) {
+          const pull = bestRContact - bestDist; // <= 0, pulls body smoothly back onto track surface
+          const pullDotV = pull * bestNx * b.vx + pull * bestNy * b.vy;
+          const speedNow = Math.hypot(b.vx, b.vy);
+          // Never yank a ball backward along its own velocity (e.g. when climbing past a loop equator)
+          if (speedNow > 1e-3 && pullDotV < -0.45 * Math.abs(pull) * speedNow) {
+            bestDist = Infinity;
           }
         }
 
