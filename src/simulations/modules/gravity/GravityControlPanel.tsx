@@ -113,31 +113,42 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </span>
       </div>
 
-      {/* Restitution e (Bounce Elasticity) */}
-      <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">Ελαστικότητα e</span>
-          <span className="font-bold text-[#234978]">
-            {config.restitution.toFixed(2)}{' '}
-            <span className="font-normal text-[10px] text-[#64748b]">
-              ({config.restitution <= 0.05 ? 'Πλαστική' : config.restitution >= 0.96 ? 'Ελαστική' : 'Φθίνουσα'})
-            </span>
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.02}
-          value={config.restitution}
-          onChange={(e) => setConfig((c) => ({ ...c, restitution: parseFloat(e.target.value) }))}
-          className="w-full accent-[#234978]"
-        />
-      </div>
-
-      {/* Friction & Air Drag Toggles */}
+      {/* Elastic Collisions, Friction & Air Drag Toggles */}
       <div className="space-y-2 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
         <div className="flex items-center justify-between">
+          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.restitution >= 0.99}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  restitution: e.target.checked ? 1.0 : 0.78,
+                }))
+              }
+              className="accent-[#234978] rounded"
+            />
+            <span>Ελαστικές Κρούσεις</span>
+          </label>
+          <span className="text-[11px] font-bold text-[#234978]">
+            {config.restitution >= 0.99
+              ? 'ON (e=1 · ΑΔΜΕ)'
+              : `e=${config.restitution.toFixed(2)}`}
+          </span>
+        </div>
+        {config.restitution < 0.99 && (
+          <input
+            type="range"
+            min={0}
+            max={0.98}
+            step={0.02}
+            value={config.restitution}
+            onChange={(e) => setConfig((c) => ({ ...c, restitution: parseFloat(e.target.value) }))}
+            className="w-full accent-[#234978]"
+          />
+        )}
+
+        <div className="flex items-center justify-between pt-1 border-t border-[#ece7dc]">
           <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
             <input
               type="checkbox"

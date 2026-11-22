@@ -55,7 +55,7 @@ export interface GravityLabConfig {
 
 export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   gravity: 9.8,
-  restitution: 0.78,
+  restitution: 1.0,
   frictionEnabled: false,
   frictionMu: 0.18,
   airDragEnabled: false,
