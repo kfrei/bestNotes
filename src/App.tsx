@@ -4101,50 +4101,32 @@ export default function App() {
     }
     return 'grid';
   });
-  const [librarySortBy, setLibrarySortBy] = useState<'date' | 'alpha' | 'size'>(() => {
+  const [defaultLibrarySort] = useState<{ by: 'date' | 'alpha' | 'size'; asc: boolean }>(() => {
     try {
       const saved = localStorage.getItem('bestnotes_lib_sort_v1');
-      if (saved === 'date' || saved === 'alpha' || saved === 'size') return saved;
+      const by: 'date' | 'alpha' | 'size' =
+        saved === 'date' || saved === 'alpha' || saved === 'size' ? saved : 'date';
+      const savedAsc = localStorage.getItem('bestnotes_lib_sort_asc_v1');
+      const asc = savedAsc === 'true' ? true : savedAsc === 'false' ? false : by === 'alpha';
+      return { by, asc };
+    } catch {
+      return { by: 'date', asc: false };
+    }
+  });
+  const [folderSortMap, setFolderSortMap] = useState<
+    Record<string, { by: 'date' | 'alpha' | 'size'; asc: boolean }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('bestnotes_folder_sort_map_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
     } catch {
       // ignore
     }
-    return 'date';
+    return {};
   });
-  const [librarySortAsc, setLibrarySortAsc] = useState<boolean>(() => {
-    try {
-      const savedAsc = localStorage.getItem('bestnotes_lib_sort_asc_v1');
-      if (savedAsc === 'true') return true;
-      if (savedAsc === 'false') return false;
-      const savedSort = localStorage.getItem('bestnotes_lib_sort_v1');
-      return savedSort === 'alpha';
-    } catch {
-      return false;
-    }
-  });
-  const handleSelectLibrarySort = useCallback(
-    (mode: 'alpha' | 'date' | 'size') => {
-      if (librarySortBy === mode) {
-        const nextAsc = !librarySortAsc;
-        setLibrarySortAsc(nextAsc);
-        try {
-          localStorage.setItem('bestnotes_lib_sort_asc_v1', String(nextAsc));
-        } catch {
-          // ignore
-        }
-      } else {
-        const defaultAsc = mode === 'alpha';
-        setLibrarySortBy(mode);
-        setLibrarySortAsc(defaultAsc);
-        try {
-          localStorage.setItem('bestnotes_lib_sort_v1', mode);
-          localStorage.setItem('bestnotes_lib_sort_asc_v1', String(defaultAsc));
-        } catch {
-          // ignore
-        }
-      }
-    },
-    [librarySortBy, librarySortAsc]
-  );
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
   const [activeLibrarySubjectFilter, setActiveLibrarySubjectFilter] = useState<string>('all');
   const [recentOpenedAtMap, setRecentOpenedAtMap] = useState<Record<string, number>>(() => {
@@ -4176,6 +4158,28 @@ export default function App() {
     typeof initialSession?.activeLibraryFolder === 'string' && initialSession.activeLibraryFolder.trim().length > 0
       ? initialSession.activeLibraryFolder.trim()
       : null
+  );
+  const currentFolderSortKey = activeLibraryFolder ? activeLibraryFolder.trim() : '__root__';
+  const activeFolderSort = folderSortMap[currentFolderSortKey] || defaultLibrarySort;
+  const librarySortBy = activeFolderSort.by;
+  const librarySortAsc = activeFolderSort.asc;
+  const handleSelectLibrarySort = useCallback(
+    (mode: 'alpha' | 'date' | 'size') => {
+      const nextPref =
+        librarySortBy === mode
+          ? { by: mode, asc: !librarySortAsc }
+          : { by: mode, asc: mode === 'alpha' };
+      setFolderSortMap((prev) => {
+        const nextMap = { ...prev, [currentFolderSortKey]: nextPref };
+        try {
+          localStorage.setItem('bestnotes_folder_sort_map_v1', JSON.stringify(nextMap));
+        } catch {
+          // ignore
+        }
+        return nextMap;
+      });
+    },
+    [currentFolderSortKey, librarySortBy, librarySortAsc]
   );
   const [isClosingDocument, setIsClosingDocument] = useState<boolean>(false);
   const navigateToLibraryFolder = useCallback((targetPath: string | null, _immediate = false) => {
