@@ -71881,7 +71881,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleConvertSelectedStrokesToPolygon}
-                              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b2a4a]/95 hover:bg-sky-600 text-white text-xs font-bold shadow-lg border border-sky-400/60 transition cursor-pointer whitespace-nowrap"
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-xl ipados-liquid-glass bg-[#fdfbf7]/80 hover:bg-[#d6cbb8] backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-xs font-bold shadow-[0_8px_24px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 transition cursor-pointer whitespace-nowrap"
                               title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
                             >
                               <span>Πολύγωνο</span>
@@ -72013,7 +72013,7 @@ export default function App() {
                               </>
                             )}
 
-                            {/* 2. Minimal Floating 3D Studio Pill */}
+                            {/* 2. Minimal Floating 3D Studio Bar (Warm Beige Liquid-Glass matching all BestNotes menus!) */}
                             <div
                               data-ui-panel="true"
                               onPointerDown={(ev) => ev.stopPropagation()}
@@ -72023,7 +72023,7 @@ export default function App() {
                                 top: pillY,
                                 touchAction: 'manipulation',
                               }}
-                              className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-[#111c33]/95 backdrop-blur-md text-white text-[11px] font-semibold shadow-xl border border-sky-400/40 whitespace-nowrap"
+                              className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 rounded-xl ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl backdrop-saturate-200 text-[#2c251d] text-[11px] font-semibold shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 whitespace-nowrap"
                             >
                               {canExtrude ? (
                                 <button
@@ -72036,7 +72036,7 @@ export default function App() {
                                       lightAngle3D: 45,
                                     })
                                   }
-                                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-bold cursor-pointer transition"
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#d6cbb8] hover:bg-[#c8baa3] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-2xs cursor-pointer transition"
                                   title="Μετατροπή 2D σχήματος σε 3D (Extrude)"
                                 >
                                   <span>🧊</span>
@@ -72056,17 +72056,17 @@ export default function App() {
                                       key={stOpt.id}
                                       type="button"
                                       onClick={() => patch3D({ shadingStyle3D: stOpt.id })}
-                                      className={`px-2 py-0.5 rounded-full cursor-pointer transition ${
+                                      className={`px-2 py-0.5 rounded-md cursor-pointer transition ${
                                         activeStyle === stOpt.id
-                                          ? 'bg-sky-500 text-white shadow-sm'
-                                          : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                          ? 'bg-[#d6cbb8] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-inner'
+                                          : 'text-[#5c5346] hover:text-[#2c251d] hover:bg-[#ebe4d7]/75'
                                       }`}
                                       title={`Στυλ 3D: ${stOpt.label}`}
                                     >
                                       {stOpt.label}
                                     </button>
                                   ))}
-                                  <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+                                  <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -72080,14 +72080,14 @@ export default function App() {
                                               : 45;
                                       patch3D({ lightAngle3D: nextAng });
                                     }}
-                                    className="px-2 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 cursor-pointer transition"
+                                    className="px-2 py-0.5 rounded-md bg-[#efe8db]/80 hover:bg-[#d6cbb8] text-[#5c4829] border border-[#d6cbb8]/70 cursor-pointer transition"
                                     title="Αλλαγή Κατεύθυνσης Φωτός (45° / 135° / 225° / 315°)"
                                   >
                                     ☀️ {lightArrow}
                                   </button>
                                   {hasExtrude3D(selStroke) && (
                                     <>
-                                      <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+                                      <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -72098,7 +72098,7 @@ export default function App() {
                                             lightAngle3D: undefined,
                                           })
                                         }
-                                        className="px-2 py-0.5 rounded-full text-slate-300 hover:text-rose-300 hover:bg-white/10 cursor-pointer transition"
+                                        className="px-2 py-0.5 rounded-md text-[#6b6052] hover:text-rose-700 hover:bg-[#ebe4d7]/75 cursor-pointer transition"
                                         title="Επιστροφή σε επίπεδο 2D σχήμα"
                                       >
                                         2D

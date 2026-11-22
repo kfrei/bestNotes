@@ -77,10 +77,39 @@ function mixRgb(a: [number, number, number], b: [number, number, number], t: num
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-/** Sample cubic bezier curve segment (p0 -> p1 with cp2/cp1) into N points */
+/** Sample circle/ellipse, cubic/quadratic bezier, or polygon boundary cleanly into a vertex ring */
 function sampleRingFromStroke(s: StrokeObject): { x: number; y: number }[] {
   const pts = s.points;
   if (!pts || pts.length < 3) return [];
+
+  // BestNotes stores circles & ellipses as 4 cardinal points: [Top, Right, Bottom, Left] (supports rotation & stretch!)
+  if ((s.shapeType === 'circle' || s.shapeType === 'ellipse') && pts.length === 4) {
+    const cx = (pts[0].x + pts[2].x) * 0.5;
+    const cy = (pts[0].y + pts[2].y) * 0.5;
+    const ux = pts[1].x - cx;
+    const uy = pts[1].y - cy;
+    const vx = pts[2].x - cx;
+    const vy = pts[2].y - cy;
+    const ring: { x: number; y: number }[] = [];
+    const STEPS = 48;
+    for (let i = 0; i < STEPS; i++) {
+      const ang = (i / STEPS) * Math.PI * 2;
+      const c = Math.cos(ang);
+      const sn = Math.sin(ang);
+      ring.push({
+        x: cx + c * ux + sn * vx,
+        y: cy + c * uy + sn * vy,
+      });
+    }
+    let signedArea = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      signedArea += a.x * b.y - b.x * a.y;
+    }
+    if (signedArea < 0) ring.reverse();
+    return ring;
+  }
 
   const isCurved =
     s.shapeType === 'circle' ||
@@ -229,40 +258,58 @@ export function get3DExtrudeHandleAnchorAndPos(
   return null;
 }
 
-/** Draws diagonal pen-hatching lines clipped inside a polygon for the 'sketch' 3D style. */
+/**
+ * Draws clean diagonal pencil-hatching lines strictly inside a polygon using
+ * exact analytical line-polygon clipping (NEVER overflows outside the face!).
+ */
 function drawSketchHatching(
   ctx: CanvasRenderingContext2D,
   poly: { x: number; y: number }[],
   inkColor: string,
-  darkness: number
+  darkness: number,
+  baseOpacity = 1
 ) {
-  if (darkness <= 0.12 || poly.length < 3) return;
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
+  if (darkness <= 0.14 || poly.length < 3) return;
+  // Hatch line direction: diagonal 45° (u = (0.707, -0.707)), normal n = (0.707, 0.707)
+  const nx = 0.70710678;
+  const ny = 0.70710678;
+  let minProj = Infinity;
+  let maxProj = -Infinity;
   for (const p of poly) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
+    const pr = p.x * nx + p.y * ny;
+    if (pr < minProj) minProj = pr;
+    if (pr > maxProj) maxProj = pr;
   }
-  const spacing = Math.max(4.5, 11 - darkness * 6.5);
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(poly[0].x, poly[0].y);
-  for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-  ctx.closePath();
-  ctx.clip();
+  const spacing = Math.max(5.5, 12.5 - darkness * 6.5);
 
+  ctx.save();
   ctx.strokeStyle = inkColor;
-  ctx.globalAlpha = Math.min(0.45, 0.14 + darkness * 0.34);
-  ctx.lineWidth = 0.9;
+  ctx.globalAlpha = baseOpacity * Math.min(0.36, 0.12 + darkness * 0.26);
+  ctx.lineWidth = 0.85;
   ctx.beginPath();
-  const span = maxX - minX + (maxY - minY);
-  for (let d = -span; d <= span; d += spacing) {
-    ctx.moveTo(minX + d, minY);
-    ctx.lineTo(minX + d - (maxY - minY) * 0.72, maxY);
+
+  const m = poly.length;
+  for (let d = minProj + spacing * 0.5; d < maxProj; d += spacing) {
+    const hits: { x: number; y: number; t: number }[] = [];
+    for (let i = 0; i < m; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % m];
+      const pa = a.x * nx + a.y * ny - d;
+      const pb = b.x * nx + b.y * ny - d;
+      if ((pa <= 0 && pb > 0) || (pb <= 0 && pa > 0)) {
+        const frac = pa / (pa - pb);
+        const ix = a.x + (b.x - a.x) * frac;
+        const iy = a.y + (b.y - a.y) * frac;
+        hits.push({ x: ix, y: iy, t: ix * ny - iy * nx });
+      }
+    }
+    if (hits.length >= 2) {
+      hits.sort((u, v) => u.t - v.t);
+      for (let k = 0; k + 1 < hits.length; k += 2) {
+        ctx.moveTo(hits[k].x, hits[k].y);
+        ctx.lineTo(hits[k + 1].x, hits[k + 1].y);
+      }
+    }
   }
   ctx.stroke();
   ctx.restore();
@@ -459,6 +506,13 @@ export function drawPolyExtruded3D(
     ctx.closePath();
   };
 
+  const baseAlpha = s.opacity ?? 1;
+  const fillRatio =
+    s.fillTransparency !== undefined
+      ? Math.max(0.05, Math.min(1, (100 - s.fillTransparency) / 100))
+      : 1;
+  const faceAlpha = baseAlpha * fillRatio;
+
   // 4. Draw visible extruded side walls
   for (const q of quads) {
     if (!q.visible) continue;
@@ -479,15 +533,18 @@ export function drawPolyExtruded3D(
         g.addColorStop(0, mixRgb(baseRgb, [15, 23, 42], 0.14));
         g.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.48));
       }
+      ctx.globalAlpha = faceAlpha;
       ctx.fillStyle = g;
       tracePoly(q.quad);
       ctx.fill();
       if (!isSmoothCurve) {
+        ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = mixRgb(baseRgb, [15, 23, 42], 0.28);
         ctx.lineWidth = Math.max(0.75, contourW * 0.55);
         ctx.stroke();
       }
     } else if (style === 'flat') {
+      ctx.globalAlpha = faceAlpha;
       ctx.fillStyle =
         brightness > 0.55
           ? mixRgb(baseRgb, [255, 255, 255], 0.62)
@@ -497,28 +554,32 @@ export function drawPolyExtruded3D(
       tracePoly(q.quad);
       ctx.fill();
       if (!isSmoothCurve) {
+        ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = inkColor;
         ctx.lineWidth = Math.max(1.3, contourW);
         ctx.stroke();
       }
     } else if (style === 'sketch') {
+      ctx.globalAlpha = faceAlpha;
       ctx.fillStyle =
-        brightness > 0.55 ? '#ffffff' : brightness > 0.3 ? '#f1f5f9' : '#e2e8f0';
+        brightness > 0.55 ? '#ffffff' : brightness > 0.3 ? '#f8fafc' : '#eef2f6';
       tracePoly(q.quad);
       ctx.fill();
-      drawSketchHatching(ctx, q.quad, inkColor, 1 - brightness);
+      drawSketchHatching(ctx, q.quad, inkColor, 1 - brightness, faceAlpha);
       if (!isSmoothCurve) {
+        ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = inkColor;
         ctx.lineWidth = Math.max(1.4, contourW * 1.05);
         ctx.stroke();
       }
     }
   }
+  ctx.globalAlpha = baseAlpha;
 
   // For smooth curved extruded solids (cylinders/ellipses), draw clean silhouette outer contour on back arc
-  if (isSmoothCurve && (style === 'flat' || style === 'sketch')) {
-    ctx.strokeStyle = inkColor;
-    ctx.lineWidth = Math.max(1.3, contourW);
+  if (isSmoothCurve && (style === 'flat' || style === 'sketch' || style === 'studio')) {
+    ctx.strokeStyle = style === 'studio' ? mixRgb(baseRgb, [15, 23, 42], 0.32) : inkColor;
+    ctx.lineWidth = style === 'studio' ? Math.max(0.85, contourW * 0.6) : Math.max(1.3, contourW);
     for (const q of quads) {
       if (!q.visible) continue;
       ctx.beginPath();
@@ -553,34 +614,41 @@ export function drawPolyExtruded3D(
     fg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.24));
     fg.addColorStop(0.5, mixRgb(baseRgb, [15, 23, 42], 0.14));
     fg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.42));
+    ctx.globalAlpha = faceAlpha;
     ctx.fillStyle = fg;
     tracePoly(frontPts);
     ctx.fill();
 
     // Subtle bright specular bevel along front edge
     ctx.save();
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.lineWidth = Math.max(0.85, contourW * 0.65);
     tracePoly(frontPts);
     ctx.stroke();
     ctx.restore();
 
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = mixRgb(baseRgb, [15, 23, 42], 0.34);
     ctx.lineWidth = Math.max(0.85, contourW * 0.6);
     tracePoly(frontPts);
     ctx.stroke();
   } else if (style === 'flat') {
+    ctx.globalAlpha = faceAlpha;
     ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.12);
     tracePoly(frontPts);
     ctx.fill();
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = inkColor;
     ctx.lineWidth = Math.max(1.5, contourW * 1.1);
     ctx.stroke();
   } else if (style === 'sketch') {
-    ctx.fillStyle = '#f8fafc';
+    ctx.globalAlpha = faceAlpha;
+    ctx.fillStyle = '#ffffff';
     tracePoly(frontPts);
     ctx.fill();
-    drawSketchHatching(ctx, frontPts, inkColor, 0.26);
+    drawSketchHatching(ctx, frontPts, inkColor, 0.20, faceAlpha);
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = inkColor;
     ctx.lineWidth = Math.max(1.6, contourW * 1.15);
     ctx.stroke();
