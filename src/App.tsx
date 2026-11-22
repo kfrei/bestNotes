@@ -12886,10 +12886,10 @@ export default function App() {
         ctx.fillStyle = shadeColor;
         const baseFillAlpha =
           fillTrans === 0
-            ? 0.94
+            ? 1
             : isStencilCustomFill && s.fillTransparency === undefined
             ? 0.85
-            : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
+            : Math.max(0.05, Math.min(1, (100 - fillTrans) / 100));
         ctx.globalAlpha = baseFillAlpha * (s.opacity ?? 1);
         const hasSubpathHoles = s.points.some((p) => p.twist === 888);
         if (hasSubpathHoles) {
@@ -53083,10 +53083,10 @@ export default function App() {
     ]
   );
 
-  // Apply Fill Transparency (5% to 95% in 5% steps, default: 90% very transparent)
+  // Apply Fill Transparency (0% to 95% in 5% steps, default: 90% very transparent)
   const applyFillTransparencyToSelection = useCallback(
     (rawNextTrans: number) => {
-      const nextTrans = Math.max(5, Math.min(95, Math.round(rawNextTrans / 5) * 5));
+      const nextTrans = Math.max(0, Math.min(95, Math.round(rawNextTrans / 5) * 5));
       setFillTransparency(nextTrans);
 
       const baseIds =
@@ -62460,9 +62460,9 @@ export default function App() {
                     ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
                     : fillStyle !== 'none';
                 const rawTrans =
-                  targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
+                  targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0)
                     ?.fillTransparency ?? fillTransparency;
-                const effectiveTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
+                const effectiveTrans = Math.max(0, Math.min(95, Math.round(rawTrans / 5) * 5));
                 const effectiveDashed =
                   styleTargetStrokes.length > 0
                     ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
@@ -62471,7 +62471,7 @@ export default function App() {
                 const effectiveInkPreviewColor = /^#f{3,6}$/i.test(activeFillColor.trim())
                   ? '#475569'
                   : activeFillColor;
-                const fillAlpha = Math.max(0.08, Math.min(0.95, (100 - effectiveTrans) / 100));
+                const fillAlpha = Math.max(0.08, Math.min(1, (100 - effectiveTrans) / 100));
 
                 return (
                   <>
@@ -62684,7 +62684,7 @@ export default function App() {
                               ? 'bg-[#efebe3] border-[#234978] text-[#234978] ring-2 ring-[#234978]/25'
                               : 'bg-[#efebe3] hover:bg-[#e4ded2] border-[#dfd8cb] text-[#2c3e50]'
                           }`}
-                          title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για μπάρα επιλογής 5% – 95% ανά 5%)`}
+                          title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για μπάρα επιλογής 0% – 95% ανά 5%)`}
                         >
                           <span>{effectiveTrans}%</span>
                           <span className="text-[9px] opacity-75">▾</span>
@@ -62718,9 +62718,9 @@ export default function App() {
                 (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
               );
               const rawTrans =
-                targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
+                targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0)
                   ?.fillTransparency ?? fillTransparency;
-              const currentTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
+              const currentTrans = Math.max(0, Math.min(95, Math.round(rawTrans / 5) * 5));
               const previewColor = targetStrokes[0]?.color || strokeColor || '#234978';
               return (
                 <div
@@ -62739,7 +62739,7 @@ export default function App() {
                         className="w-3.5 h-3.5 rounded-full border border-[#dfd8cb] shadow-2xs shrink-0"
                         style={{
                           backgroundColor: previewColor,
-                          opacity: Math.max(0.05, Math.min(0.95, (100 - currentTrans) / 100)),
+                          opacity: Math.max(0.05, Math.min(1, (100 - currentTrans) / 100)),
                         }}
                       />
                       <span>Διαφάνεια Γεμίσματος</span>
@@ -62751,8 +62751,8 @@ export default function App() {
 
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => applyFillTransparencyToSelection(Math.max(5, currentTrans - 5))}
-                      disabled={currentTrans <= 5}
+                      onClick={() => applyFillTransparencyToSelection(Math.max(0, currentTrans - 5))}
+                      disabled={currentTrans <= 0}
                       className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
                       title="Μείωση διαφάνειας (-5%)"
                     >
@@ -62760,7 +62760,7 @@ export default function App() {
                     </button>
                     <input
                       type="range"
-                      min={5}
+                      min={0}
                       max={95}
                       step={5}
                       value={currentTrans}
