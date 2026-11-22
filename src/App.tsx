@@ -378,6 +378,20 @@ import { STEM_VECTORS_CATALOG } from './data/vectors';
 import { createStickmanStrokePoints, drawStickmanStroke } from './data/stickFiguresSvg';
 import { drawStickman3DStroke } from './data/stickFigures3D';
 import {
+  DEFAULT_GRAVITY_CONFIG,
+  type GravityBodyState,
+  type GravityEnergyStats,
+  type GravityLabConfig,
+  type GravitySegment,
+} from './simulations/modules/gravity/types';
+import {
+  buildGravitySceneFromStrokes,
+  computeGravityEnergyStats,
+  renderGravityOverlay,
+  stepGravityScene,
+} from './simulations/modules/gravity/GravityLabEngine';
+import { GravityControlPanel } from './simulations/modules/gravity/GravityControlPanel';
+import {
   drawExtruded3DStroke,
   hasExtrude3D,
   isExtrudable2DShape,
@@ -1428,7 +1442,7 @@ export default function App() {
           activeLayerId?: string;
           showLayersPanel?: boolean;
           showSimulationPanel?: boolean;
-          simActiveCategory?: 'circuits' | 'springs' | 'forces' | 'heat' | 'atoms' | null;
+          simActiveCategory?: 'circuits' | 'springs' | 'forces' | 'heat' | 'atoms' | 'gravity' | null;
           simPanelPos?: { x: number; y: number };
           isSimulating?: boolean;
           isSpringSimulating?: boolean;
@@ -2116,17 +2130,40 @@ export default function App() {
     Boolean(initialSession?.showSimulationPanel)
   );
   const [simActiveCategory, setSimActiveCategory] = useState<
-    'circuits' | 'springs' | 'forces' | 'atoms' | 'heat' | null
+    'circuits' | 'springs' | 'forces' | 'atoms' | 'heat' | 'gravity' | null
   >(() => {
     try {
       const saved = localStorage.getItem('bestnotes_last_sim_category') as any;
-      if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat'].includes(saved)) {
+      if (saved && ['circuits', 'springs', 'forces', 'atoms', 'heat', 'gravity'].includes(saved)) {
         return saved;
       }
     } catch {
       // ignore
     }
     return initialSession?.simActiveCategory ?? 'heat';
+  });
+
+  // ── Unified Gravity Lab ('gravity') state & refs (0 RAF when paused/closed) ──
+  const [gravityConfig, setGravityConfig] = useState<GravityLabConfig>(DEFAULT_GRAVITY_CONFIG);
+  const gravityConfigRef = useRef<GravityLabConfig>(DEFAULT_GRAVITY_CONFIG);
+  gravityConfigRef.current = gravityConfig;
+  const [isGravityRunning, setIsGravityRunning] = useState<boolean>(false);
+  const isGravityRunningRef = useRef<boolean>(false);
+  isGravityRunningRef.current = isGravityRunning;
+  const [gravityPinnedOverrides, setGravityPinnedOverrides] = useState<Record<string, boolean>>({});
+  const gravityBodiesRef = useRef<GravityBodyState[]>([]);
+  const gravitySegmentsRef = useRef<GravitySegment[]>([]);
+  const gravityOffsetsRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
+  const gravityHiddenStrokeIdsRef = useRef<Set<string>>(new Set());
+  const [gravityBodiesUi, setGravityBodiesUi] = useState<GravityBodyState[]>([]);
+  const [gravitySegmentCount, setGravitySegmentCount] = useState<number>(0);
+  const [gravityEnergyStats, setGravityEnergyStats] = useState<GravityEnergyStats>({
+    kineticJ: 0,
+    potentialJ: 0,
+    totalJ: 0,
+    speedMs: 0,
+    heightM: 0,
+    refFloorY: 800,
   });
   const [isSimulating, setIsSimulating] = useState<boolean>(() => Boolean(initialSession?.isSimulating));
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(() =>
@@ -11747,7 +11784,12 @@ export default function App() {
 
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
     if (s.points.length === 0) return;
+    if (gravityHiddenStrokeIdsRef.current.has(s.id)) return;
     ctx.save();
+    const gOff = gravityOffsetsRef.current.get(s.id);
+    if (gOff && (gOff.dx !== 0 || gOff.dy !== 0)) {
+      ctx.translate(gOff.dx, gOff.dy);
+    }
 
     const isBulbInternalFilamentOrLead =
       s.shapeType === 'bulb' &&
@@ -14767,9 +14809,176 @@ export default function App() {
           });
         }
       }
+
+      // 8. Unified Gravity Lab Overlay (trails, live tether strings, v/W/N vectors, pinned badges)
+      if (
+        isCurrentActivePage &&
+        showSimulationPanel &&
+        simActiveCategory === 'gravity' &&
+        gravityBodiesRef.current.length > 0
+      ) {
+        renderGravityOverlay(
+          ctx,
+          gravityBodiesRef.current,
+          gravityConfigRef.current,
+          isGravityRunningRef.current
+        );
+      }
     });
   }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
+
+  // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (0 RAF when paused/closed) ──
+  const rescanGravityScene = useCallback(
+    (overridesArg?: Record<string, boolean>) => {
+      const ov = overridesArg ?? gravityPinnedOverrides;
+      const curPage =
+        activeNotebookLiveRef.current.pages[activePageIndexLiveRef.current] ||
+        activeNotebookLiveRef.current.pages[0];
+      if (!curPage) return;
+      const visibleLayerIds = new Set(
+        (curPage.layers || [{ id: 'layer-1', visible: true }])
+          .filter((l) => l.visible !== false)
+          .map((l) => l.id)
+      );
+      const visibleStrokes = curPage.strokes.filter(
+        (s) => visibleLayerIds.has(s.layerId || 'layer-1')
+      );
+      const { bodies, segments } = buildGravitySceneFromStrokes(visibleStrokes, ov);
+      gravityBodiesRef.current = bodies;
+      gravitySegmentsRef.current = segments;
+      gravityOffsetsRef.current.clear();
+      gravityHiddenStrokeIdsRef.current.clear();
+      for (const b of bodies) {
+        if (!b.pinned && b.tether) {
+          gravityHiddenStrokeIdsRef.current.add(b.tether.strokeId);
+        }
+      }
+      setGravityBodiesUi(bodies.map((b) => ({ ...b })));
+      setGravitySegmentCount(segments.length);
+      const pH = getPageLogicalHeight(curPage);
+      setGravityEnergyStats(
+        computeGravityEnergyStats(bodies, segments, gravityConfigRef.current, pH)
+      );
+      renderStaticSceneRef.current();
+    },
+    [gravityPinnedOverrides]
+  );
+
+  const resetGravityScene = useCallback(() => {
+    setIsGravityRunning(false);
+    gravityOffsetsRef.current.clear();
+    for (const b of gravityBodiesRef.current) {
+      b.cx = b.initCx;
+      b.cy = b.initCy;
+      b.vx = b.initVx;
+      b.vy = b.initVy;
+      b.normalX = 0;
+      b.normalY = 0;
+      b.normalForceN = 0;
+      b.onGround = false;
+      b.trail = [{ x: b.initCx, y: b.initCy }];
+    }
+    const curPage =
+      activeNotebookLiveRef.current.pages[activePageIndexLiveRef.current] ||
+      activeNotebookLiveRef.current.pages[0];
+    const pH = curPage ? getPageLogicalHeight(curPage) : 1123;
+    setGravityEnergyStats(
+      computeGravityEnergyStats(
+        gravityBodiesRef.current,
+        gravitySegmentsRef.current,
+        gravityConfigRef.current,
+        pH
+      )
+    );
+    renderStaticSceneRef.current();
+  }, []);
+
+  const toggleGravityBodyPin = useCallback(
+    (strokeId: string) => {
+      const target = gravityBodiesRef.current.find((b) => b.strokeId === strokeId);
+      const nextPinned = target ? !target.pinned : true;
+      setIsGravityRunning(false);
+      setGravityPinnedOverrides((prev) => {
+        const next = { ...prev, [strokeId]: nextPinned };
+        rescanGravityScene(next);
+        return next;
+      });
+    },
+    [rescanGravityScene]
+  );
+
+  // Auto-scan page whenever Gravity tab is opened or strokes change while paused
+  useEffect(() => {
+    if (showSimulationPanel && simActiveCategory === 'gravity') {
+      if (!isGravityRunningRef.current) {
+        rescanGravityScene();
+      }
+    } else {
+      if (isGravityRunningRef.current) setIsGravityRunning(false);
+      if (gravityOffsetsRef.current.size > 0 || gravityHiddenStrokeIdsRef.current.size > 0) {
+        gravityOffsetsRef.current.clear();
+        gravityHiddenStrokeIdsRef.current.clear();
+        renderStaticSceneRef.current();
+      }
+    }
+  }, [showSimulationPanel, simActiveCategory, activePage.id, activePage.strokes.length, rescanGravityScene]);
+
+  // Strictly-gated 60/120fps Gravity Physics RAF Loop (0 RAF when paused or panel closed!)
+  useEffect(() => {
+    if (!isGravityRunning || !showSimulationPanel || simActiveCategory !== 'gravity') return;
+    let rafId = 0;
+    let lastTs = performance.now();
+    let lastUiTs = 0;
+
+    const tick = (now: number) => {
+      const dtSec = Math.min(0.033, Math.max(0.001, (now - lastTs) / 1000));
+      lastTs = now;
+      const curPage =
+        activeNotebookLiveRef.current.pages[activePageIndexLiveRef.current] ||
+        activeNotebookLiveRef.current.pages[0];
+      const pW = curPage ? getPageLogicalWidth(curPage) : 794;
+      const pH = curPage ? getPageLogicalHeight(curPage) : 1123;
+
+      stepGravityScene(
+        gravityBodiesRef.current,
+        gravitySegmentsRef.current,
+        gravityConfigRef.current,
+        dtSec,
+        pW,
+        pH
+      );
+
+      const offsets = gravityOffsetsRef.current;
+      offsets.clear();
+      for (const b of gravityBodiesRef.current) {
+        if (!b.pinned) {
+          offsets.set(b.strokeId, { dx: b.cx - b.initCx, dy: b.cy - b.initCy });
+        }
+      }
+
+      renderStaticSceneRef.current();
+
+      if (now - lastUiTs >= 70) {
+        lastUiTs = now;
+        setGravityEnergyStats(
+          computeGravityEnergyStats(
+            gravityBodiesRef.current,
+            gravitySegmentsRef.current,
+            gravityConfigRef.current,
+            pH
+          )
+        );
+      }
+
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isGravityRunning, showSimulationPanel, simActiveCategory]);
   const eraserUndoRecordedRef = useRef<boolean>(false);
   const commitLiveEraserStateIfNeeded = useCallback(() => {
     if (eraserRenderRafRef.current !== null) {
@@ -65675,6 +65884,9 @@ export default function App() {
                       setShowSimulationPanel(false);
                       // Pause active motion when closing the control panel, while keeping all simulations visible on paper
                       if (isSimulating) setIsSimulating(false);
+                      if (isGravityRunning) setIsGravityRunning(false);
+                      gravityOffsetsRef.current.clear();
+                      gravityHiddenStrokeIdsRef.current.clear();
                       if (isSpringSimulating && !isSpringPaused) setIsSpringPaused(true);
                       if (!showHeatStopwatch && heatSim.activeHeatSim?.isRunning) {
                         heatSim.pauseHeatingAndSim();
@@ -65786,9 +65998,40 @@ export default function App() {
                   >
                     <span>Άτομο</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSimActiveCategory('gravity');
+                    }}
+                    className={`shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold whitespace-nowrap flex items-center justify-center transition cursor-pointer ${
+                      simActiveCategory === 'gravity'
+                        ? 'bg-[#234978] text-white shadow-xs'
+                        : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
+                    }`}
+                  >
+                    <span>Βαρύτητα</span>
+                  </button>
                 </div>
 
-                {simActiveCategory === 'circuits' ? (
+                {simActiveCategory === 'gravity' ? (
+                  <GravityControlPanel
+                    config={gravityConfig}
+                    setConfig={setGravityConfig}
+                    isRunning={isGravityRunning}
+                    onToggleRun={() => {
+                      if (!isGravityRunning && gravityBodiesRef.current.length === 0) {
+                        rescanGravityScene();
+                      }
+                      setIsGravityRunning((r) => !r);
+                    }}
+                    onReset={resetGravityScene}
+                    onRescan={rescanGravityScene}
+                    bodies={gravityBodiesUi}
+                    segmentCount={gravitySegmentCount}
+                    energy={gravityEnergyStats}
+                    onToggleBodyPin={toggleGravityBodyPin}
+                  />
+                ) : simActiveCategory === 'circuits' ? (
                   <CircuitControlPanel
                     activeNotebook={activeNotebook}
                     activePage={activePage}
