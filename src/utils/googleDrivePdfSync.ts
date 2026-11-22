@@ -26,6 +26,7 @@ import {
   drawShaded3DShapeStroke,
 } from './geometryAndAlgorithms';
 import { drawStickmanStroke } from '../data/stickFiguresSvg';
+import { drawStickman3DStroke } from '../data/stickFigures3D';
 
 function getStrokeBounds(s: StrokeObject): { minX: number; maxX: number; minY: number; maxY: number } {
   let minX = Infinity,
@@ -460,6 +461,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
 
   if (s.isShape && s.shapeType === 'stickman') {
     if (drawStickmanStroke(ctx, s)) return;
+  }
+
+  if (s.isShape && s.shapeType === 'stickman-3d') {
+    if (drawStickman3DStroke(ctx, s)) return;
   }
 
   if (s.shapeType === 'title-box' && s.points.length >= 4) {

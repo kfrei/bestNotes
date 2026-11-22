@@ -1,5 +1,6 @@
 import { scoreSingleGreekTokenMatch } from '../utils/geometryAndAlgorithms';
 import { buildStickFigureSvgMarkup, STICK_FIGURES_STICKERS } from './stickFiguresSvg';
+import { buildStickman3DSvgMarkup, STICK_FIGURES_3D_STICKERS } from './stickFigures3D';
 
 export type StickerCategory =
   | 'Όλα'
@@ -43,6 +44,7 @@ export const STICKER_COLOR_STYLES: { id: StickerColorStyle; label: string }[] = 
 ];
 
 export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
+  ...STICK_FIGURES_3D_STICKERS,
   ...STICK_FIGURES_STICKERS,
   // =========================================================================
   // 0. ΘΑΥΜΑΣΤΙΚΑ & ΑΝΑΠΟΔΑ ΤΡΙΓΩΝΑ ΠΡΟΣΟΧΗΣ (Πλήρως Προσαρμόσιμο Χρώμα!)
@@ -4376,6 +4378,10 @@ export function buildCustomStickerSvgDataUrl(
   const stickSvg = buildStickFigureSvgMarkup(shapeKind, colorHex, strokeWidthNum);
   if (stickSvg) {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(stickSvg)}`;
+  }
+  const stick3dSvg = buildStickman3DSvgMarkup(shapeKind, colorHex);
+  if (stick3dSvg) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(stick3dSvg)}`;
   }
   const c = colorHex || '#dc2626';
   const w = Math.max(3, Math.min(26, strokeWidthNum || 12));

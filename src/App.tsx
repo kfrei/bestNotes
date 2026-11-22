@@ -376,6 +376,7 @@ import {
 } from './data/mindMapsCatalog';
 import { STEM_VECTORS_CATALOG } from './data/vectors';
 import { createStickmanStrokePoints, drawStickmanStroke } from './data/stickFiguresSvg';
+import { drawStickman3DStroke } from './data/stickFigures3D';
 
 // Unified Science catalog: keeps Native Vector SVGs modular on disk (src/data/vectors/)
 // while presenting them seamlessly inside «Επιστήμες» alongside upgraded HD WebP diagrams.
@@ -9970,7 +9971,7 @@ export default function App() {
   // Returns true ONLY if the given node can actually be deleted (never on endpoints of an open line/curve or minimum-vertex polygons!)
   const canDeleteStrokeNode = (s: StrokeObject | undefined | null, nodeIdx: number | undefined): boolean => {
     if (!s || nodeIdx === undefined || nodeIdx < 0) return false;
-    if (s.shapeType === 'stickman') return false;
+    if (s.shapeType === 'stickman' || s.shapeType === 'stickman-3d') return false;
     if (!s.isShape) {
       const kList =
         s.keyNodeIndices && s.keyNodeIndices.length >= 2
@@ -12218,9 +12219,12 @@ export default function App() {
       if (drawShaded3DShapeStroke(ctx, s)) return;
     }
 
-    // 0b3. Articulated Poseable Stickman ('stickman' — 11 draggable skeleton joint nodes!)
+    // 0b3. Articulated Poseable Stickman ('stickman' & 'stickman-3d' — 11 draggable skeleton joint nodes!)
     if (s.shapeType === 'stickman' && s.points.length >= 11) {
       if (drawStickmanStroke(ctx, s)) return;
+    }
+    if (s.shapeType === 'stickman-3d' && s.points.length >= 11) {
+      if (drawStickman3DStroke(ctx, s)) return;
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
@@ -63976,10 +63980,16 @@ export default function App() {
                     };
 
                     const handleInsertStickerFromAll = async (stItem: StickerCatalogItem) => {
-                      if (stItem.iconifyId.startsWith('custom-svg:stickman-')) {
+                      if (
+                        stItem.iconifyId.startsWith('custom-svg:stickman-') ||
+                        stItem.iconifyId.startsWith('custom-svg:stick3d-')
+                      ) {
+                        const is3D = stItem.iconifyId.startsWith('custom-svg:stick3d-');
                         const parts = stItem.iconifyId.split(':');
-                        const poseKey = parts[1] || 'stickman-standing';
-                        const effectiveColor = stickerCustomColor || strokeColor || '#1e293b';
+                        const rawKey = parts[1] || 'stickman-standing';
+                        const poseKey = is3D ? rawKey.replace('stick3d-', 'stickman-') : rawKey;
+                        const effectiveColor =
+                          stickerCustomColor || (is3D ? '#475569' : strokeColor || '#1e293b');
                         const effectiveWidth = Math.max(3, Math.round((stickerCustomWidth || 10) * 0.65));
                         const tapPt = lastLassoEmptyTapPtRef.current;
                         const cx = tapPt ? tapPt.x : 340;
@@ -63995,7 +64005,7 @@ export default function App() {
                           opacity: 1,
                           layerId: activeLayerId,
                           isShape: true,
-                          shapeType: 'stickman',
+                          shapeType: is3D ? 'stickman-3d' : 'stickman',
                           points: createStickmanStrokePoints(poseKey, cx, cy, 165),
                         };
                         updateActivePage((page) => ({
@@ -64006,7 +64016,7 @@ export default function App() {
                         setSelectedTextId(null);
                         setSelectedStrokeIds([newStickStroke.id]);
                         setActiveTool('lasso');
-                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα nodes για να κινήσεις χέρια/πόδια!`);
+                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα 11 nodes για να κινήσεις χέρια/πόδια!`);
                         return;
                       }
                       const svgUrl = getIconifySvgUrl(
@@ -64016,6 +64026,13 @@ export default function App() {
                         stickerCustomColor,
                         stickerCustomWidth
                       );
+                      if (stItem.iconifyId.startsWith('custom-svg:callout3d-')) {
+                        insertImageDataUrlOnPage(
+                          svgUrl,
+                          `✨ Προστέθηκε 3D Vector: «${stItem.title}»`
+                        );
+                        return;
+                      }
                       if (
                         stItem.iconifyId.startsWith('local-png:') ||
                         (stItem.iconifyId.startsWith('sketch-png:') && !stickerCustomColor)
@@ -64721,10 +64738,16 @@ export default function App() {
                     };
 
                     const handleInsertStickerItem = async (stItem: StickerCatalogItem) => {
-                      if (stItem.iconifyId.startsWith('custom-svg:stickman-')) {
+                      if (
+                        stItem.iconifyId.startsWith('custom-svg:stickman-') ||
+                        stItem.iconifyId.startsWith('custom-svg:stick3d-')
+                      ) {
+                        const is3D = stItem.iconifyId.startsWith('custom-svg:stick3d-');
                         const parts = stItem.iconifyId.split(':');
-                        const poseKey = parts[1] || 'stickman-standing';
-                        const effectiveColor = stickerCustomColor || strokeColor || '#1e293b';
+                        const rawKey = parts[1] || 'stickman-standing';
+                        const poseKey = is3D ? rawKey.replace('stick3d-', 'stickman-') : rawKey;
+                        const effectiveColor =
+                          stickerCustomColor || (is3D ? '#475569' : strokeColor || '#1e293b');
                         const effectiveWidth = Math.max(3, Math.round((stickerCustomWidth || 10) * 0.65));
                         const tapPt = lastLassoEmptyTapPtRef.current;
                         const cx = tapPt ? tapPt.x : 340;
@@ -64740,7 +64763,7 @@ export default function App() {
                           opacity: 1,
                           layerId: activeLayerId,
                           isShape: true,
-                          shapeType: 'stickman',
+                          shapeType: is3D ? 'stickman-3d' : 'stickman',
                           points: createStickmanStrokePoints(poseKey, cx, cy, 165),
                         };
                         updateActivePage((page) => ({
@@ -64751,7 +64774,7 @@ export default function App() {
                         setSelectedTextId(null);
                         setSelectedStrokeIds([newStickStroke.id]);
                         setActiveTool('lasso');
-                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα nodes για να κινήσεις χέρια/πόδια!`);
+                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα 11 nodes για να κινήσεις χέρια/πόδια!`);
                         return;
                       }
                       const svgUrl = getIconifySvgUrl(
@@ -64761,6 +64784,13 @@ export default function App() {
                         stickerCustomColor,
                         stickerCustomWidth
                       );
+                      if (stItem.iconifyId.startsWith('custom-svg:callout3d-')) {
+                        insertImageDataUrlOnPage(
+                          svgUrl,
+                          `✨ Προστέθηκε 3D Vector: «${stItem.title}»`
+                        );
+                        return;
+                      }
                       if (
                         stItem.iconifyId.startsWith('local-png:') ||
                         (stItem.iconifyId.startsWith('sketch-png:') && !stickerCustomColor)
