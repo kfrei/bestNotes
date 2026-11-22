@@ -135,7 +135,7 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
     (p) => p.inDx !== undefined || p.outDx !== undefined || p.cx !== undefined
   );
   if (isCurved) {
-    const stepsPerSeg = Math.max(4, Math.min(36, Math.ceil(64 / Math.max(1, pts.length - 1))));
+    const stepsPerSeg = Math.max(4, Math.min(64, Math.ceil(64 / Math.max(1, pts.length - 1))));
     for (let i = 0; i < pts.length - 1; i++) {
       const a: BezierPoint = pts[i];
       const b: BezierPoint = pts[i + 1];
@@ -710,8 +710,15 @@ export function stepGravityScene(
         let bestOverlap = 0;
         let bestNx = 0;
         let bestNy = 0;
+        let bestSegTx = 1;
+        let bestSegTy = 0;
+        let bestSegIdx = -1;
+        let bestSegT = 0.5;
+        let bestClosestX = 0;
+        let bestClosestY = 0;
 
-        for (const seg of segments) {
+        for (let si = 0; si < segments.length; si++) {
+          const seg = segments[si];
           const abx = seg.bx - seg.ax;
           const aby = seg.by - seg.ay;
           const lenSq = abx * abx + aby * aby;
@@ -731,6 +738,13 @@ export function stepGravityScene(
               bestOverlap = overlap;
               bestNx = dx / dist;
               bestNy = dy / dist;
+              const segLen = Math.sqrt(lenSq);
+              bestSegTx = abx / segLen;
+              bestSegTy = aby / segLen;
+              bestSegIdx = si;
+              bestSegT = t;
+              bestClosestX = closestX;
+              bestClosestY = closestY;
             }
           }
         }
@@ -738,8 +752,42 @@ export function stepGravityScene(
         if (bestOverlap <= 0) break;
         hitAnySegment = true;
 
-        const nx = bestNx;
-        const ny = bestNy;
+        let nx = bestNx;
+        let ny = bestNy;
+
+        // If hitting an open free track tip (no connected neighbor segment) while moving nearly
+        // parallel to the track (launching off or re-entering a quarter-circle/ramp tip), use the
+        // true flat surface normal of the segment instead of the rounded endpoint cap normal!
+        const speedBeforeHit = Math.hypot(b.vx, b.vy);
+        if (
+          bestSegIdx >= 0 &&
+          (bestSegT <= 1e-4 || bestSegT >= 1 - 1e-4) &&
+          speedBeforeHit > 1e-3 &&
+          Math.abs(b.vx * bestSegTx + b.vy * bestSegTy) >= 0.65 * speedBeforeHit
+        ) {
+          let isConnectedJoint = false;
+          for (let sj = 0; sj < segments.length; sj++) {
+            if (sj === bestSegIdx) continue;
+            const other = segments[sj];
+            if (
+              Math.hypot(other.ax - bestClosestX, other.ay - bestClosestY) <= 4.5 ||
+              Math.hypot(other.bx - bestClosestX, other.by - bestClosestY) <= 4.5
+            ) {
+              isConnectedJoint = true;
+              break;
+            }
+          }
+          if (!isConnectedJoint) {
+            let sNx = -bestSegTy;
+            let sNy = bestSegTx;
+            if (sNx * bestNx + sNy * bestNy < 0) {
+              sNx = -sNx;
+              sNy = -sNy;
+            }
+            nx = sNx;
+            ny = sNy;
+          }
+        }
 
         b.cx += nx * bestOverlap;
         b.cy += ny * bestOverlap;
@@ -786,9 +834,15 @@ export function stepGravityScene(
           const wasRollingOnTrack =
             (wasOnGroundMap.get(b.strokeId) || b.onGround) &&
             (ny < -0.04 || Math.abs(vn) < Math.max(85, Math.abs(vtBefore) * 0.72));
-          // Smooth grazing/rolling contact on curved U-bowls & steep ramp->floor transitions vs genuine air drop/wall bounce!
+          const speedNowBefore = Math.hypot(b.vx, b.vy);
+          const isParallelTrackReentry =
+            config.guideRailEnabled &&
+            speedNowBefore > 1e-3 &&
+            Math.abs(b.vx * bestSegTx + b.vy * bestSegTy) >= 0.72 * speedNowBefore;
+          // Smooth grazing/rolling contact on curved U-bowls, steep ramp->floor transitions, & tangential track re-entry!
           const isGrazingSlide =
             wasRollingOnTrack ||
+            isParallelTrackReentry ||
             Math.abs(vn) < 42 ||
             Math.abs(vn) < Math.abs(vtBefore) * 0.48;
           const eEff = isGrazingSlide ? 0 : config.restitution;
@@ -855,7 +909,8 @@ export function stepGravityScene(
         let bestNy = 0;
         let bestRContact = r + 1.5;
 
-        for (const seg of segments) {
+        for (let si = 0; si < segments.length; si++) {
+          const seg = segments[si];
           const abx = seg.bx - seg.ax;
           const aby = seg.by - seg.ay;
           const lenSq = abx * abx + aby * aby;
@@ -868,6 +923,24 @@ export function stepGravityScene(
           const dist = Math.hypot(dx, dy);
           const rContact = r + (seg.halfWidth ?? 1.5);
           if (dist > 1e-5 && dist <= rContact + 14 && dist < bestDist) {
+            // Never hook/wrap a ball around an open free track tip (e.g. top of a quarter-circle
+            // or launch ramp end): if closest point is an endpoint with no connected neighbor segment,
+            // let the ball launch cleanly into free flight!
+            if (t <= 1e-4 || t >= 1 - 1e-4) {
+              let isConnectedJoint = false;
+              for (let sj = 0; sj < segments.length; sj++) {
+                if (sj === si) continue;
+                const other = segments[sj];
+                if (
+                  Math.hypot(other.ax - closestX, other.ay - closestY) <= 4.5 ||
+                  Math.hypot(other.bx - closestX, other.by - closestY) <= 4.5
+                ) {
+                  isConnectedJoint = true;
+                  break;
+                }
+              }
+              if (!isConnectedJoint) continue;
+            }
             const nyCand = dy / dist;
             // Only hug upper track floors/shelves (convex ramp-to-shelf corners, NOT vertical walls or overhead loop ceilings!)
             if (nyCand < -0.35) {
