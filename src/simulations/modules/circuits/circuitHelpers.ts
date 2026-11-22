@@ -49,9 +49,32 @@ export function getNextDefaultCircuitSimName(nb: Notebook, page?: NotePage): str
   return `κύκλωμα${usedNames.size + 1}`;
 }
 
+function isExplicitCircuitComponentShape(shapeType?: string): boolean {
+  return (
+    shapeType === 'battery' ||
+    shapeType === 'voltage-source' ||
+    shapeType === 'bulb' ||
+    shapeType === 'bulb-symbol' ||
+    shapeType === 'resistor' ||
+    shapeType === 'switch' ||
+    shapeType === 'switch-blade' ||
+    shapeType === 'switch-knob' ||
+    shapeType === 'fan' ||
+    shapeType === 'fan-blade' ||
+    shapeType === 'fan-hub' ||
+    shapeType === 'ammeter' ||
+    shapeType === 'ammeter-needle' ||
+    shapeType === 'ammeter-label' ||
+    shapeType === 'voltmeter' ||
+    shapeType === 'voltmeter-needle' ||
+    shapeType === 'voltmeter-label'
+  );
+}
+
 export function isCircuitEligibleStroke(s: StrokeObject): boolean {
   if (s.tool === 'highlighter') return false;
   if (s.arrowStart || s.arrowEnd) return false;
+  if (isExplicitCircuitComponentShape(s.shapeType)) return true;
   if (s.points[0]?.twist === 999) return false;
   if (s.fillStyle && s.fillStyle !== 'none') return false;
   if (!s.isShape) {
@@ -61,25 +84,7 @@ export function isCircuitEligibleStroke(s: StrokeObject): boolean {
   if (s.shapeType === 'line') {
     return s.points.length >= 2;
   }
-  return (
-    s.shapeType === 'battery' ||
-    s.shapeType === 'voltage-source' ||
-    s.shapeType === 'bulb' ||
-    s.shapeType === 'bulb-symbol' ||
-    s.shapeType === 'resistor' ||
-    s.shapeType === 'switch' ||
-    s.shapeType === 'switch-blade' ||
-    s.shapeType === 'switch-knob' ||
-    s.shapeType === 'fan' ||
-    s.shapeType === 'fan-blade' ||
-    s.shapeType === 'fan-hub' ||
-    s.shapeType === 'ammeter' ||
-    s.shapeType === 'ammeter-needle' ||
-    s.shapeType === 'ammeter-label' ||
-    s.shapeType === 'voltmeter' ||
-    s.shapeType === 'voltmeter-needle' ||
-    s.shapeType === 'voltmeter-label'
-  );
+  return false;
 }
 
 /**
@@ -91,31 +96,14 @@ export function isCircuitEligibleStroke(s: StrokeObject): boolean {
 export function isCircuitSimConnectedStroke(s: StrokeObject): boolean {
   if (s.tool === 'highlighter') return false;
   if (s.arrowStart || s.arrowEnd) return false;
+  if (isExplicitCircuitComponentShape(s.shapeType)) return true;
   if (s.points[0]?.twist === 999) return false;
   if (s.fillStyle && s.fillStyle !== 'none') return false;
   if (!s.isShape) return false;
   if (s.shapeType === 'line') {
     return s.points.length >= 2;
   }
-  return (
-    s.shapeType === 'battery' ||
-    s.shapeType === 'voltage-source' ||
-    s.shapeType === 'bulb' ||
-    s.shapeType === 'bulb-symbol' ||
-    s.shapeType === 'resistor' ||
-    s.shapeType === 'switch' ||
-    s.shapeType === 'switch-blade' ||
-    s.shapeType === 'switch-knob' ||
-    s.shapeType === 'fan' ||
-    s.shapeType === 'fan-blade' ||
-    s.shapeType === 'fan-hub' ||
-    s.shapeType === 'ammeter' ||
-    s.shapeType === 'ammeter-needle' ||
-    s.shapeType === 'ammeter-label' ||
-    s.shapeType === 'voltmeter' ||
-    s.shapeType === 'voltmeter-needle' ||
-    s.shapeType === 'voltmeter-label'
-  );
+  return false;
 }
 
 const strokeFastBBoxCache = new WeakMap<

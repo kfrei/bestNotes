@@ -29644,8 +29644,6 @@ export default function App() {
           });
         } else if (cs.comp.kind === 'fan') {
           const f = cs.comp;
-          const rOuter = Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
-          const rHub = Math.max(5.5, rOuter * 0.22);
           let ringStroke: StrokeObject | undefined;
           let bladeStroke: StrokeObject | undefined;
           for (const sid of f.strokeIds) {
@@ -29654,17 +29652,24 @@ export default function App() {
             if (!ringStroke && fs.shapeType === 'fan' && fs.points.length > 2) ringStroke = fs;
             if (!bladeStroke && fs.shapeType === 'fan-blade') bladeStroke = fs;
           }
+          const ringB = ringStroke ? getStrokeBounds(ringStroke) : null;
+          const rOuter = ringB
+            ? Math.max(16, (ringB.maxX - ringB.minX + (ringB.maxY - ringB.minY)) * 0.25)
+            : Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
+          const fanCx = ringB ? (ringB.minX + ringB.maxX) * 0.5 : f.cx;
+          const fanCy = ringB ? (ringB.minY + ringB.maxY) * 0.5 : f.cy;
+          const rHub = Math.max(5.5, rOuter * 0.22);
           fans.push({
             compIdx: mIdx,
             active: cs.active,
             powerFactor: cs.powerFactor,
-            cx: f.cx,
-            cy: f.cy,
+            cx: fanCx,
+            cy: fanCy,
             minX: f.minX,
             maxX: f.maxX,
             rOuter,
             rHub,
-            ringPerimeterColor: ringStroke?.color || '#1e293b',
+            ringPerimeterColor: ringStroke?.color || '#475569',
             bladeFillColor:
               bladeStroke?.fillStyle === 'none'
                 ? 'transparent'
