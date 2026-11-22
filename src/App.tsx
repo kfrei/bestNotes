@@ -13298,6 +13298,12 @@ export default function App() {
 
           if (!imgEl.complete) {
             staticPageRenderCacheRef.current.delete(pageObj.id);
+            if (!imgEl.onload) {
+              imgEl.onload = () => {
+                staticPageRenderCacheRef.current.clear();
+                renderStaticSceneRef.current(true);
+              };
+            }
           }
 
           if (imgEl.complete && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
@@ -16527,12 +16533,21 @@ export default function App() {
         }
         }
 
-        const preloaded = new Image();
-        if (finalDataUrl.startsWith('http')) {
-          preloaded.crossOrigin = 'anonymous';
+        if (finalDataUrl === dataUrl && img.complete && img.naturalWidth > 0) {
+          // Reuse the already-loaded & decoded HTMLImageElement so the image renders on frame 0 (no empty box flash!)
+          imageElementsCacheRef.current.set(finalDataUrl, img);
+        } else {
+          const preloaded = new Image();
+          if (finalDataUrl.startsWith('http') || finalDataUrl.startsWith('/')) {
+            preloaded.crossOrigin = 'anonymous';
+          }
+          preloaded.onload = () => {
+            staticPageRenderCacheRef.current.clear();
+            renderStaticSceneRef.current(true);
+          };
+          preloaded.src = finalDataUrl;
+          imageElementsCacheRef.current.set(finalDataUrl, preloaded);
         }
-        preloaded.src = finalDataUrl;
-        imageElementsCacheRef.current.set(finalDataUrl, preloaded);
 
         const maxW = 440;
         const maxH = 540;
