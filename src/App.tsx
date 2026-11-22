@@ -14601,7 +14601,7 @@ export default function App() {
               } else {
                 liveNodePt = target.points[delNode.nodeIdx];
               }
-              if (liveNodePt) {
+              if (liveNodePt && target.shapeType !== 'stickman' && target.shapeType !== 'stickman-3d') {
                 const bx = liveNodePt.x + 26;
                 const by = liveNodePt.y - 18;
                 const bzX = liveNodePt.x - 26;
@@ -37140,7 +37140,7 @@ export default function App() {
     sampledCurvePoints?: BezierPoint[];
     sampledBaseKeyIndices?: number[];
   } | null => {
-    if (!target || isShapeWithoutNodes(target)) return null;
+    if (!target || isShapeWithoutNodes(target) || target.shapeType === 'stickman' || target.shapeType === 'stickman-3d') return null;
 
     // 1. Freehand Stroke / Curve (!target.isShape): evaluate continuous Quadratic Bézier & linear segments along the entire curve!
     if (!target.isShape) {
@@ -37618,7 +37618,7 @@ export default function App() {
     bezierBtnX: number;
     bezierBtnY: number;
   } | null => {
-    if (!target || isShapeWithoutNodes(target)) return null;
+    if (!target || isShapeWithoutNodes(target) || target.shapeType === 'stickman' || target.shapeType === 'stickman-3d') return null;
 
     if (!target.isShape) {
       const keyIndices =
@@ -41401,7 +41401,7 @@ export default function App() {
                 clearActiveOverlay();
               }
               const hitPt = target.points[bestIdx];
-              if (hitPt) {
+              if (hitPt && target.shapeType !== 'stickman' && target.shapeType !== 'stickman-3d') {
                 activeDeleteNodeRef.current = {
                   strokeId: target.id,
                   nodeIdx: bestIdx,
@@ -41418,6 +41418,9 @@ export default function App() {
                   activeBezierNodeRef.current = null;
                 }
                 renderStaticSceneRef.current();
+              } else {
+                activeDeleteNodeRef.current = null;
+                activeBezierNodeRef.current = null;
               }
               pushUndoSnapshot(targetPage);
               setDraggingNodeIdx({ index: bestIdx, isControl: false });
