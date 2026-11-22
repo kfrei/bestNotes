@@ -15186,6 +15186,24 @@ export default function App() {
     [buildGravityFromIds]
   );
 
+  const pinSelectedAsGravityFloor = useCallback(() => {
+    if (selectedStrokeIds.length === 0) return;
+    setIsGravityRunning(false);
+    const mergedIds = Array.from(
+      new Set([...gravityBoundStrokeIdsRef.current, ...selectedStrokeIds])
+    );
+    setGravityPinnedOverrides((prev) => {
+      const next = { ...prev };
+      for (const sid of selectedStrokeIds) {
+        next[sid] = true;
+      }
+      buildGravityFromIds(mergedIds, next);
+      return next;
+    });
+    setSelectedStrokeIds([]);
+    showToast('📌 Ορίστηκε ως ακίνητο δάπεδο / τροχιά!');
+  }, [selectedStrokeIds, buildGravityFromIds, showToast]);
+
   // Live-sync bound Gravity Lab strokes ONLY when the user actually edits/rotates/stretches strokes while paused
   // (NEVER reset body positions on Pause — only explicit Reset button returns bodies to start!)
   const lastGravitySyncedStrokesRef = useRef(activePage.strokes);
@@ -66728,6 +66746,7 @@ export default function App() {
                     }}
                     onReset={resetGravityScene}
                     onLoadFromLasso={loadGravityFromLasso}
+                    onPinSelectedAsFloor={pinSelectedAsGravityFloor}
                     onClearScene={clearGravityScene}
                     lassoSelectedCount={selectedStrokeIds.length}
                     hasBoundScene={gravityBoundCount > 0}

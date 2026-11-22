@@ -9,6 +9,7 @@ interface GravityControlPanelProps {
   onToggleRun: () => void;
   onReset: () => void;
   onLoadFromLasso: () => void;
+  onPinSelectedAsFloor: () => void;
   onClearScene: () => void;
   lassoSelectedCount: number;
   hasBoundScene: boolean;
@@ -25,6 +26,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
   onToggleRun,
   onReset,
   onLoadFromLasso,
+  onPinSelectedAsFloor,
   onClearScene,
   lassoSelectedCount,
   hasBoundScene,
@@ -69,6 +71,18 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
           </button>
         )}
       </div>
+
+      {lassoSelectedCount > 0 && (
+        <button
+          type="button"
+          onClick={onPinSelectedAsFloor}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-semibold transition cursor-pointer"
+          title="Καρφίτσωμα επιλεγμένου σχήματος ως ακίνητο δάπεδο/τροχιά (π.χ. εξωτερικός κύκλος, τεταρτοκύκλιο)"
+        >
+          <span>📌</span>
+          <span>Ορισμός ως Ακίνητο Δάπεδο</span>
+        </button>
+      )}
 
       {!hasBoundScene && (
         <div className="px-2.5 py-2 rounded-lg bg-[#f5f1e8] border border-[#e3ddd2] text-[11px] text-[#5c5346] leading-snug">

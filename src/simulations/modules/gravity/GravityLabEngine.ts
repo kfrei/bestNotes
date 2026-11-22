@@ -83,11 +83,29 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
 
   const segHalfW = Math.min(8, Math.max(1.5, (s.width || 3) * 0.5));
 
-  // 4. Flat extruded ellipse disc used as a floor
-  if ((s.shapeType === 'circle' || s.shapeType === 'ellipse') && pts.length === 4) {
+  // 4. Circle / Ellipse used as a static floor or hollow loop-the-loop track!
+  if (s.shapeType === 'circle' || s.shapeType === 'ellipse') {
     const b = getStrokeBounds(s);
-    const yTop = b.cy + depthMidY;
-    segs.push({ ax: b.minX, ay: yTop, bx: b.maxX, by: yTop, strokeId: s.id, halfWidth: segHalfW });
+    if (b.w > b.h * 2.4 && has3DDepth && pts.length === 4) {
+      // Flat 3D extruded disc -> horizontal top surface
+      const yTop = b.cy + depthMidY;
+      segs.push({ ax: b.minX, ay: yTop, bx: b.maxX, by: yTop, strokeId: s.id, halfWidth: segHalfW });
+      return segs;
+    }
+    // Full 360° hollow circular/elliptical track (e.g. loop-the-loop / ανακύκλωση) -> 64 smooth perimeter segments!
+    const rx = b.w * 0.5;
+    const ry = b.h * 0.5;
+    const STEPS = 64;
+    let prevX = b.cx + rx;
+    let prevY = b.cy;
+    for (let i = 1; i <= STEPS; i++) {
+      const ang = (i / STEPS) * Math.PI * 2;
+      const curX = b.cx + rx * Math.cos(ang);
+      const curY = b.cy + ry * Math.sin(ang);
+      segs.push({ ax: prevX, ay: prevY, bx: curX, by: curY, strokeId: s.id, halfWidth: segHalfW });
+      prevX = curX;
+      prevY = curY;
+    }
     return segs;
   }
 
@@ -361,13 +379,31 @@ export function buildGravitySceneFromStrokes(
     }
   }
 
-  // Second pass: if a non-ball body (e.g. trapezoid/wedge/step) is BELOW and >= 2x larger in area
-  // than another dynamic body in the same Lasso selection, automatically pin it as a static ramp/floor!
+  // Second pass:
+  //   a) If a big circle/ellipse ENCLOSES a smaller dynamic body (loop-the-loop / ανακύκλωση), auto-pin it as a hollow circular track!
+  //   b) If a non-ball body (e.g. trapezoid/wedge/step) is BELOW and >= 2x larger in area than another dynamic body, auto-pin it as a static ramp/floor!
   if (bodies.length >= 2) {
     const strokeById = new Map(strokes.map((st) => [st.id, st]));
     for (const candidate of bodies) {
-      if (candidate.pinned || candidate.shapeKind === 'ball') continue;
+      if (candidate.pinned) continue;
       if (pinnedOverrides[candidate.strokeId] !== undefined) continue;
+      if (candidate.shapeKind === 'ball') {
+        const enclosesSmaller = bodies.some((other) => {
+          if (other.strokeId === candidate.strokeId || other.pinned) return false;
+          if (candidate.radius < other.radius * 2.0) return false;
+          const nx = (other.initCx - candidate.initCx) / Math.max(1, candidate.halfW);
+          const ny = (other.initCy - candidate.initCy) / Math.max(1, candidate.halfH);
+          return nx * nx + ny * ny <= 1.05;
+        });
+        if (enclosesSmaller) {
+          candidate.pinned = true;
+          candidate.label = 'Δάπεδο (Κύκλος)';
+          consumedStrokeIds.delete(candidate.strokeId);
+          const st = strokeById.get(candidate.strokeId);
+          if (st) segments.push(...sampleStrokeToSegments(st));
+        }
+        continue;
+      }
       const candArea = candidate.halfW * candidate.halfH * 4;
       const supportsSmallerAbove = bodies.some((other) => {
         if (other.strokeId === candidate.strokeId || other.pinned) return false;
@@ -1050,23 +1086,37 @@ export function renderGravityOverlay(
 
   for (const b of bodies) {
     if (b.pinned) {
-      if (!isRunning) {
-        // Subtle 📌 badge on pinned bodies when paused
-        ctx.save();
-        ctx.fillStyle = 'rgba(253, 251, 247, 0.92)';
-        ctx.strokeStyle = '#c2b59f';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(b.cx, b.cy, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.font = '10px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#5c5346';
-        ctx.fillText('📌', b.cx, b.cy + 0.5);
-        ctx.restore();
-      }
+      // Subtle faint red pin tucked on the bottom-right rim/corner of the pinned floor/track
+      const pinX =
+        b.shapeKind === 'ball'
+          ? b.cx + b.halfW * 0.72
+          : b.cx + Math.max(8, b.halfW - 6);
+      const pinY =
+        b.shapeKind === 'ball'
+          ? b.cy + b.halfH * 0.72
+          : b.cy + Math.max(8, b.halfH - 6);
+      ctx.save();
+      ctx.globalAlpha = isRunning ? 0.36 : 0.62;
+      ctx.fillStyle = 'rgba(254, 242, 242, 0.88)';
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(pinX, pinY, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Crisp tiny red pushpin icon (circle head + needle pointing down-left onto the rim)
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(pinX + 1.5, pinY - 1.8, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(pinX + 0.2, pinY - 0.2);
+      ctx.lineTo(pinX - 3.2, pinY + 3.4);
+      ctx.stroke();
+      ctx.restore();
       continue;
     }
 
