@@ -14989,7 +14989,9 @@ export default function App() {
     [buildGravityFromIds]
   );
 
-  // Live-sync bound Gravity Lab strokes whenever the user edits/rotates/stretches an arrow, body, or ramp while paused!
+  // Live-sync bound Gravity Lab strokes ONLY when the user actually edits/rotates/stretches strokes while paused
+  // (NEVER reset body positions on Pause — only explicit Reset button returns bodies to start!)
+  const lastGravitySyncedStrokesRef = useRef(activePage.strokes);
   useEffect(() => {
     if (
       !showSimulationPanel ||
@@ -14997,10 +14999,27 @@ export default function App() {
       isGravityRunning ||
       gravityBoundStrokeIdsRef.current.length === 0
     ) {
+      lastGravitySyncedStrokesRef.current = activePage.strokes;
       return;
     }
+    if (lastGravitySyncedStrokesRef.current === activePage.strokes) {
+      return;
+    }
+    lastGravitySyncedStrokesRef.current = activePage.strokes;
     buildGravityFromIds(gravityBoundStrokeIdsRef.current);
   }, [activePage.strokes, showSimulationPanel, simActiveCategory, isGravityRunning, buildGravityFromIds]);
+
+  // Repaint paused Gravity overlay immediately when toggling vector checkboxes (Ταχύτητα / Δυνάμεις / ΣF / Ίχνος)
+  useEffect(() => {
+    if (
+      showSimulationPanel &&
+      simActiveCategory === 'gravity' &&
+      !isGravityRunning &&
+      gravityBoundStrokeIdsRef.current.length > 0
+    ) {
+      renderStaticSceneRef.current();
+    }
+  }, [gravityConfig, showSimulationPanel, simActiveCategory, isGravityRunning]);
 
   // Clean up Gravity offsets when switching away from Gravity tab, closing panel, or changing page
   useEffect(() => {

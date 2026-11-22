@@ -1132,7 +1132,7 @@ export function renderGravityOverlay(
           fx * scale,
           fy * scale,
           '#7c3aed',
-          `ΣF = ${fNetMag.toFixed(1)} N`
+          'ΣF'
         );
       } else {
         // Equilibrium badge when ΣF = 0
@@ -1141,7 +1141,7 @@ export function renderGravityOverlay(
         ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const badgeText = 'ΣF = 0 N';
+        const badgeText = 'ΣF = 0';
         const tw = ctx.measureText(badgeText).width + 12;
         ctx.fillStyle = 'rgba(245, 243, 255, 0.94)';
         ctx.strokeStyle = '#7c3aed';
