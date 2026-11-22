@@ -199,6 +199,13 @@ export function stepGravityScene(
 
         b.cx += nx * bestOverlap;
         b.cy += ny * bestOverlap;
+        if (ny < -0.15) {
+          b.onGround = true;
+          if (b.normalForceN === 0) {
+            b.normalX = nx;
+            b.normalY = ny;
+          }
+        }
 
         // Detect V-trough pinch (ball wider than a tight sine/U trough touching BOTH opposing walls in 1 substep):
         // Redirect smoothly up the forward wall in the direction of motion so it never gets wedged at the bottom!
@@ -491,14 +498,37 @@ export function stepGravityScene(
   }
 
   // Smoothly align sliding/resting boxes to the slope angle of the surface they are riding on
-  const rotBlend = Math.min(1, 18 * clampedDt);
+  const rotBlend = Math.min(1, 22 * clampedDt);
   for (const b of bodies) {
     if (b.pinned || b.shapeKind !== 'box') continue;
-    if (b.onGround && (b.normalX !== 0 || b.normalY !== 0)) {
-      const nLen = Math.hypot(b.normalX, b.normalY);
+    let snx = b.normalX;
+    let sny = b.normalY;
+    // Fallback: if riding on ground without a recorded normal, sample the closest floor/ramp segment directly underneath
+    if ((snx === 0 && sny === 0) && segments.length > 0) {
+      const rBox = Math.min(b.halfW, b.halfH);
+      let minD = rBox + 8;
+      for (let si = 0; si < segments.length; si++) {
+        const seg = segments[si];
+        const abx = seg.bx - seg.ax;
+        const aby = seg.by - seg.ay;
+        const lenSq = abx * abx + aby * aby;
+        if (lenSq < 1e-4) continue;
+        const t = Math.max(0, Math.min(1, ((b.cx - seg.ax) * abx + (b.cy - seg.ay) * aby) / lenSq));
+        const dx = b.cx - (seg.ax + t * abx);
+        const dy = b.cy - (seg.ay + t * aby);
+        const d = Math.hypot(dx, dy);
+        if (d > 1e-5 && d < minD && dy / d < -0.15) {
+          minD = d;
+          snx = dx / d;
+          sny = dy / d;
+        }
+      }
+    }
+    if (snx !== 0 || sny !== 0) {
+      const nLen = Math.hypot(snx, sny);
       if (nLen > 1e-4) {
-        const nx = b.normalX / nLen;
-        const ny = b.normalY / nLen;
+        const nx = snx / nLen;
+        const ny = sny / nLen;
         // Only tilt along traversable slopes/floors (not pure vertical walls)
         if (ny < -0.15) {
           const targetAngle = Math.atan2(nx, -ny);
