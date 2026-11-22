@@ -49518,14 +49518,62 @@ export default function App() {
       activeTool === 'tape' ||
       activeTool === 'highlighter'
     ) {
+      // Live magnetic endpoint snap + visual ring for the END point while drawing lines/arrows/quarter-circles
+      const isLineLikeDraw =
+        snappedCurrentStrokeRef.current?.shapeType === 'line' ||
+        (activeTool === 'shape' &&
+          (shapePreset === 'line' ||
+            shapePreset === 'arrow' ||
+            shapePreset === 'double-arrow' ||
+            shapePreset === 'quarter-circle' ||
+            shapePreset === 'auto'));
+      let endSnapHit: { x: number; y: number; strokeId: string; endIdx: 0 | 1; dist: number } | null = null;
+      if (isLineLikeDraw && currentStrokePtsRef.current.length >= 2) {
+        const startPtDraw = currentStrokePtsRef.current[0];
+        if (distance(startPtDraw, latestPt) >= 16) {
+          const candHit = findNearestStrokeEndpoint(latestPt, activePage.strokes, 14, true);
+          if (candHit && distance(startPtDraw, candHit) >= 14) {
+            endSnapHit = candHit;
+          }
+        }
+      }
+      if (endSnapHit) {
+        const lastIdx = currentStrokePtsRef.current.length - 1;
+        if (lastIdx >= 1) {
+          currentStrokePtsRef.current[lastIdx] = {
+            ...currentStrokePtsRef.current[lastIdx],
+            x: endSnapHit.x,
+            y: endSnapHit.y,
+          };
+        }
+        if (lastRawCanvasPtRef.current) {
+          lastRawCanvasPtRef.current = {
+            ...lastRawCanvasPtRef.current,
+            x: endSnapHit.x,
+            y: endSnapHit.y,
+          };
+        }
+        setNodeMagnetState({
+          strokeId: endSnapHit.strokeId,
+          draggedKeyPosIdx: endSnapHit.endIdx,
+          targetX: endSnapHit.x,
+          targetY: endSnapHit.y,
+          progress: 100,
+        });
+      } else if (isLineLikeDraw) {
+        setNodeMagnetState(null);
+      }
+
       if (snappedCurrentStrokeRef.current && snappedCurrentStrokeRef.current.shapeType === 'line') {
         const start = currentStrokePtsRef.current[0];
-        let x2 = latestPt.x;
-        let y2 = latestPt.y;
-        const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
-        const absAngle = Math.abs(angleDeg);
-        if (absAngle < 5 || absAngle > 175) y2 = start.y;
-        else if (Math.abs(absAngle - 90) < 5) x2 = start.x;
+        let x2 = endSnapHit ? endSnapHit.x : latestPt.x;
+        let y2 = endSnapHit ? endSnapHit.y : latestPt.y;
+        if (!endSnapHit) {
+          const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
+          const absAngle = Math.abs(angleDeg);
+          if (absAngle < 5 || absAngle > 175) y2 = start.y;
+          else if (Math.abs(absAngle - 90) < 5) x2 = start.x;
+        }
 
         snappedCurrentStrokeRef.current = {
           shapeType: 'line',
@@ -50742,6 +50790,7 @@ export default function App() {
       clearActiveOverlay();
       return;
     }
+    setNodeMagnetState(null);
     const rawPts = currentStrokePtsRef.current;
     currentStrokePtsRef.current = [];
     if (rawPts.length === 0) {
