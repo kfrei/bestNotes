@@ -5316,15 +5316,26 @@ export async function tintMonochromeSketchDataUrl(
         const rVal = Math.round((tr + lum * (1 - tr)) * 255);
         const gVal = Math.round((tg + lum * (1 - tg)) * 255);
         const bVal = Math.round((tb + lum * (1 - tb)) * 255);
-        d[i] = Math.min(255, (rVal + 3) & 0xf8);
-        d[i + 1] = Math.min(255, (gVal + 3) & 0xf8);
-        d[i + 2] = Math.min(255, (bVal + 3) & 0xf8);
-        d[i + 3] = d[i + 3] > 246 ? 255 : (d[i + 3] + 7) & 0xf0;
+        d[i] = rVal;
+        d[i + 1] = gVal;
+        d[i + 2] = bVal;
+        d[i + 3] = d[i + 3] > 246 ? 255 : d[i + 3];
       }
       ctx.putImageData(imgData, 0, 0);
       const trimmed = autoTrimCanvasToVisibleBounds(canvas, 6);
-      const webpUrl = trimmed.toDataURL('image/webp', 0.86);
       const pngUrl = trimmed.toDataURL('image/png');
+      // Apple WebKit (iPadOS/iOS/Safari) has a known CoreGraphics hardware WebP encoder bug
+      // on transparent canvases that corrupts alpha/chroma into neon green/red/black blocks!
+      const isAppleWebKit =
+        typeof navigator !== 'undefined' &&
+        (/iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+          /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent));
+      if (isAppleWebKit) {
+        resolve(pngUrl);
+        return;
+      }
+      const webpUrl = trimmed.toDataURL('image/webp', 0.86);
       resolve(
         webpUrl.startsWith('data:image/webp') && webpUrl.length < pngUrl.length ? webpUrl : pngUrl
       );

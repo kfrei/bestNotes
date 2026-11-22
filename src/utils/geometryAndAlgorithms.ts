@@ -3034,8 +3034,14 @@ export function encodeCanvasOptimizedDataUrl(canvas: HTMLCanvasElement): string 
     return jpegUrl;
   }
 
-  // Transparent image: try native alpha WebP first (supported in Chrome/Edge & modern WebKit)
-  const webpUrl = canvas.toDataURL('image/webp', 0.86);
+  // Transparent image: skip WebP encoding on Apple WebKit (iPadOS/iOS/Safari) because
+  // WebKit's canvas alpha-WebP encoder produces severe neon green/red/black chroma corruption!
+  const isAppleWebKit =
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+      /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent));
+  const webpUrl = isAppleWebKit ? '' : canvas.toDataURL('image/webp', 0.86);
 
   // Also quantize RGB noise slightly (32 levels/channel = 32,768 colors) so PNG DEFLATE compresses 3x smaller on Safari
   for (let i = 0; i < data.length; i += 4) {
