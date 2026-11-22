@@ -1242,6 +1242,30 @@ function buildPresetShape(
       ],
     };
   }
+  if (preset === 'quarter-circle') {
+    // Exact 90° quarter-circle arc (hyperbola orientation: vertical down at top-left -> horizontal right at bottom-right)
+    const R = Math.max(44, Math.max(w, h));
+    const K = 0.55228475; // Exact cubic Bézier constant 4/3 * (sqrt(2) - 1) for a 90° circular arc
+    return {
+      shapeType: 'line',
+      points: [
+        {
+          x: minX,
+          y: minY,
+          outDx: 0,
+          outDy: R * K,
+          pressure: 0.7,
+        },
+        {
+          x: minX + R,
+          y: minY + R,
+          inDx: -R * K,
+          inDy: 0,
+          pressure: 0.7,
+        },
+      ],
+    };
+  }
   if (preset === 'sine') {
     const yAxis = (minY + maxY) / 2;
     const amp = Math.max(24, h / 2);

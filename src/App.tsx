@@ -63320,6 +63320,16 @@ export default function App() {
                           ),
                         },
                         {
+                          id: 'quarter-circle',
+                          title: 'Τεταρτοκύκλιο (90° Τόξο)',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 9 3 L 9 18 L 24 18" strokeWidth="1.1" strokeDasharray="2 2" strokeOpacity="0.4" />
+                              <path d="M 9 3 A 15 15 0 0 0 24 18" strokeWidth="2.2" />
+                            </svg>
+                          ),
+                        },
+                        {
                           id: 'sine',
                           title: 'Ημίτονο (Sine)',
                           icon: (

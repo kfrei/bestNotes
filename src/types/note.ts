@@ -32,6 +32,7 @@ export type ShapePresetType =
   | 'arc'
   | 'parabola'
   | 'hyperbola'
+  | 'quarter-circle'
   | 'sine'
   | 'cosine'
   | 'cuboid'
