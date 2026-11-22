@@ -1,4 +1,5 @@
 import katex from 'katex';
+import { drawExtruded3DStroke, hasExtrude3D } from './extrude3DRenderer';
 import {
   Notebook,
   NotePage,
@@ -468,6 +469,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
 
   if (s.isShape && s.shapeType === 'stickman-3d') {
     if (drawStickman3DStroke(ctx, s)) return;
+  }
+
+  if (hasExtrude3D(s)) {
+    if (drawExtruded3DStroke(ctx, s)) return;
   }
 
   if (s.shapeType === 'title-box' && s.points.length >= 4) {

@@ -129,6 +129,11 @@ export interface StrokeObject {
   };
   attachedToWeightId?: string; // ID of the parent weight directly above this weight in a vertical hook-to-hook chain
   attachedToSpringId?: string; // ID of the spring stroke ('spring') whose free end this pointer needle ('spring-pointer' or 'arrow') is attached to
+  // Mini-Blender 2.5D Extrude & Studio 3D properties
+  extrudeDx?: number;
+  extrudeDy?: number;
+  shadingStyle3D?: 'studio' | 'sketch' | 'flat' | 'wireframe';
+  lightAngle3D?: number; // Light direction in degrees (45 = top-right, 135 = top-left, 225 = bottom-left, 315 = bottom-right)
 }
 
 export type TextFontStyle =

@@ -8,6 +8,7 @@ import {
   SmartSketchEffectRegion,
   SmartSketchSoundscape,
 } from '../types/note';
+import { drawPolyExtruded3D } from './extrude3DRenderer';
 export { PHYSICS_EQUATIONS_CATALOG } from './physicsEquationsLibrary';
 export type { PhysicsEquationCatalogEntry } from './physicsEquationsLibrary';
 
@@ -17868,6 +17869,12 @@ export function drawShaded3DShapeStroke(
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
+  const hasCustom3D =
+    s.extrudeDx !== undefined ||
+    s.extrudeDy !== undefined ||
+    (s.shadingStyle3D !== undefined && s.shadingStyle3D !== 'studio') ||
+    s.lightAngle3D !== undefined;
+
   // ── 2. SHADED 3D CUBOID / CUBE ────────────────────────────────────────────
   if (s.shapeType === 'shaded-cuboid') {
     const fTL = bilerp(0, 0.28);
@@ -17877,6 +17884,12 @@ export function drawShaded3DShapeStroke(
     const bTL = bilerp(0.28, 0);
     const bTR = bilerp(1.0, 0);
     const bBR = bilerp(1.0, 0.72);
+    if (hasCustom3D) {
+      const dx = s.extrudeDx ?? bTR.x - fTR.x;
+      const dy = s.extrudeDy ?? bTR.y - fTR.y;
+      ctx.restore();
+      return drawPolyExtruded3D(ctx, [fTL, fTR, fBR, fBL], dx, dy, s);
+    }
 
     const shCenter = bilerp(0.42, 0.99);
     drawGroundShadow(shCenter.x, shCenter.y, wLen * 0.56, hLen * 0.14, quadAngle);
@@ -18040,6 +18053,12 @@ export function drawShaded3DShapeStroke(
     const pBLb = { x: pBL.x, y: pBL.y + slabH };
     const pBRb = { x: pBR.x, y: pBR.y + slabH };
     const pTRb = { x: pTR.x, y: pTR.y + slabH };
+    if (hasCustom3D) {
+      const dx = s.extrudeDx ?? pTR.x - pBR.x;
+      const dy = s.extrudeDy ?? pTR.y - pBR.y;
+      ctx.restore();
+      return drawPolyExtruded3D(ctx, [pBL, pBR, pBRb, pBLb], dx, dy, s);
+    }
 
     const shC = bilerp(0.5, 0.92);
     drawGroundShadow(shC.x, shC.y + slabH * 0.4, wLen * 0.5, Math.max(6, slabH * 0.9), quadAngle);
@@ -18114,6 +18133,12 @@ export function drawShaded3DShapeStroke(
     const fTL = bilerp(0.04, 0.28);
     const bTL = bilerp(0.28, 0.08);
     const bBR = bilerp(0.96, 0.74);
+    if (hasCustom3D) {
+      const dx = s.extrudeDx ?? bTL.x - fTL.x;
+      const dy = s.extrudeDy ?? bTL.y - fTL.y;
+      ctx.restore();
+      return drawPolyExtruded3D(ctx, [fBL, fBR, fTL], dx, dy, s);
+    }
 
     const shC = bilerp(0.5, 0.95);
     drawGroundShadow(shC.x, shC.y, wLen * 0.5, Math.max(7, hLen * 0.1), quadAngle);

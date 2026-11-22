@@ -377,6 +377,14 @@ import {
 import { STEM_VECTORS_CATALOG } from './data/vectors';
 import { createStickmanStrokePoints, drawStickmanStroke } from './data/stickFiguresSvg';
 import { drawStickman3DStroke } from './data/stickFigures3D';
+import {
+  drawExtruded3DStroke,
+  hasExtrude3D,
+  isExtrudable2DShape,
+  is3DStudioShape,
+  get3DExtrudeHandleAnchorAndPos,
+  type ShadingStyle3D,
+} from './utils/extrude3DRenderer';
 
 // Unified Science catalog: keeps Native Vector SVGs modular on disk (src/data/vectors/)
 // while presenting them seamlessly inside «Επιστήμες» alongside upgraded HD WebP diagrams.
@@ -12231,6 +12239,11 @@ export default function App() {
     }
     if (s.shapeType === 'stickman-3d' && s.points.length >= 11) {
       if (drawStickman3DStroke(ctx, s)) return;
+    }
+
+    // 0b4. Mini-Blender 2.5D/3D Extruded Shapes (any 2D polygon/circle/triangle extruded to 3D)
+    if (hasExtrude3D(s)) {
+      if (drawExtruded3DStroke(ctx, s)) return;
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
@@ -71874,6 +71887,228 @@ export default function App() {
                               <span>Πολύγωνο</span>
                             </button>
                           </div>
+                        );
+                      })()}
+
+                    {/* Mini-Blender 2.5D/3D Controls: 1-Click "🧊 3D" Extrude + Draggable Depth/Perspective Handle + 4 Shading Styles & Light Direction */}
+                    {isCurrentActive &&
+                      activeTool === 'lasso' &&
+                      selectedStrokeIds.length === 1 &&
+                      (() => {
+                        const selStroke = activePage.strokes.find(
+                          (s) => s.id === selectedStrokeIds[0]
+                        );
+                        if (!selStroke) return null;
+                        const canExtrude = isExtrudable2DShape(selStroke) && !hasExtrude3D(selStroke);
+                        const is3D = is3DStudioShape(selStroke);
+                        if (!canExtrude && !is3D) return null;
+
+                        const selBox = getSelectionCombinedBox(selectedStrokeIds, []);
+                        if (!selBox) return null;
+
+                        const handleInfo = is3D ? get3DExtrudeHandleAnchorAndPos(selStroke) : null;
+                        const activeStyle: ShadingStyle3D = selStroke.shadingStyle3D || 'studio';
+                        const activeLight = ((selStroke.lightAngle3D ?? 45) % 360 + 360) % 360;
+                        const lightArrow =
+                          activeLight === 135
+                            ? '↖'
+                            : activeLight === 225
+                              ? '↙'
+                              : activeLight === 315
+                                ? '↘'
+                                : '↗';
+
+                        const patch3D = (
+                          patch: Partial<StrokeObject>,
+                          recordUndo = true
+                        ) => {
+                          updateActivePage(
+                            (pg) => ({
+                              ...pg,
+                              strokes: pg.strokes.map((st) =>
+                                st.id === selStroke.id ? { ...st, ...patch } : st
+                              ),
+                            }),
+                            recordUndo
+                          );
+                        };
+
+                        const pillX = Math.max(130, Math.min(pW - 130, selBox.cx));
+                        const pillY = Math.min(pH - 28, selBox.maxY + 34);
+
+                        return (
+                          <>
+                            {/* 1. Single Draggable 3D Depth & Perspective Handle (Blender Extrude feel!) */}
+                            {handleInfo && (
+                              <>
+                                <svg
+                                  width={pW}
+                                  height={pH}
+                                  className="absolute inset-0 pointer-events-none z-[58]"
+                                >
+                                  <line
+                                    x1={handleInfo.anchor.x}
+                                    y1={handleInfo.anchor.y}
+                                    x2={handleInfo.handle.x}
+                                    y2={handleInfo.handle.y}
+                                    stroke="#0ea5e9"
+                                    strokeWidth={1.6}
+                                    strokeDasharray="4 3"
+                                  />
+                                  <circle
+                                    cx={handleInfo.anchor.x}
+                                    cy={handleInfo.anchor.y}
+                                    r={3.5}
+                                    fill="#0ea5e9"
+                                  />
+                                </svg>
+                                <div
+                                  data-ui-panel="true"
+                                  title="Σύρε για αλλαγή 3D Βάθους & Γωνίας Προοπτικής"
+                                  style={{
+                                    left: handleInfo.handle.x,
+                                    top: handleInfo.handle.y,
+                                    touchAction: 'none',
+                                  }}
+                                  onPointerDown={(ev) => {
+                                    ev.stopPropagation();
+                                    ev.preventDefault();
+                                    const startClientX = ev.clientX;
+                                    const startClientY = ev.clientY;
+                                    const origDx = handleInfo.dx;
+                                    const origDy = handleInfo.dy;
+                                    const scale = Math.max(0.2, zoom || 1);
+                                    // Record one undo snapshot before dragging
+                                    patch3D({ extrudeDx: origDx, extrudeDy: origDy }, true);
+                                    const onMove = (me: PointerEvent) => {
+                                      const nextDx = Math.max(
+                                        -180,
+                                        Math.min(180, origDx + (me.clientX - startClientX) / scale)
+                                      );
+                                      const nextDy = Math.max(
+                                        -180,
+                                        Math.min(180, origDy + (me.clientY - startClientY) / scale)
+                                      );
+                                      patch3D(
+                                        {
+                                          extrudeDx: Math.round(nextDx),
+                                          extrudeDy: Math.round(nextDy),
+                                        },
+                                        false
+                                      );
+                                    };
+                                    const onUp = () => {
+                                      window.removeEventListener('pointermove', onMove);
+                                      window.removeEventListener('pointerup', onUp);
+                                      window.removeEventListener('pointercancel', onUp);
+                                    };
+                                    window.addEventListener('pointermove', onMove);
+                                    window.addEventListener('pointerup', onUp);
+                                    window.addEventListener('pointercancel', onUp);
+                                  }}
+                                  className="absolute z-[62] -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-indigo-600 text-white shadow-lg border-2 border-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 transition-transform select-none text-[10px] font-black"
+                                >
+                                  3D
+                                </div>
+                              </>
+                            )}
+
+                            {/* 2. Minimal Floating 3D Studio Pill */}
+                            <div
+                              data-ui-panel="true"
+                              onPointerDown={(ev) => ev.stopPropagation()}
+                              onMouseDown={(ev) => ev.stopPropagation()}
+                              style={{
+                                left: pillX,
+                                top: pillY,
+                                touchAction: 'manipulation',
+                              }}
+                              className="absolute z-[60] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-[#111c33]/95 backdrop-blur-md text-white text-[11px] font-semibold shadow-xl border border-sky-400/40 whitespace-nowrap"
+                            >
+                              {canExtrude ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    patch3D({
+                                      extrudeDx: 28,
+                                      extrudeDy: -22,
+                                      shadingStyle3D: 'studio',
+                                      lightAngle3D: 45,
+                                    })
+                                  }
+                                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-bold cursor-pointer transition"
+                                  title="Μετατροπή 2D σχήματος σε 3D (Extrude)"
+                                >
+                                  <span>🧊</span>
+                                  <span>3D</span>
+                                </button>
+                              ) : (
+                                <>
+                                  {(
+                                    [
+                                      { id: 'studio', label: 'Studio' },
+                                      { id: 'sketch', label: 'Sketch' },
+                                      { id: 'flat', label: 'Flat' },
+                                      { id: 'wireframe', label: 'Wire' },
+                                    ] as { id: ShadingStyle3D; label: string }[]
+                                  ).map((stOpt) => (
+                                    <button
+                                      key={stOpt.id}
+                                      type="button"
+                                      onClick={() => patch3D({ shadingStyle3D: stOpt.id })}
+                                      className={`px-2 py-0.5 rounded-full cursor-pointer transition ${
+                                        activeStyle === stOpt.id
+                                          ? 'bg-sky-500 text-white shadow-sm'
+                                          : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                      }`}
+                                      title={`Στυλ 3D: ${stOpt.label}`}
+                                    >
+                                      {stOpt.label}
+                                    </button>
+                                  ))}
+                                  <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextAng =
+                                        activeLight === 45
+                                          ? 135
+                                          : activeLight === 135
+                                            ? 225
+                                            : activeLight === 225
+                                              ? 315
+                                              : 45;
+                                      patch3D({ lightAngle3D: nextAng });
+                                    }}
+                                    className="px-2 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 cursor-pointer transition"
+                                    title="Αλλαγή Κατεύθυνσης Φωτός (45° / 135° / 225° / 315°)"
+                                  >
+                                    ☀️ {lightArrow}
+                                  </button>
+                                  {hasExtrude3D(selStroke) && (
+                                    <>
+                                      <span className="w-px h-3.5 bg-white/20 mx-0.5" />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          patch3D({
+                                            extrudeDx: undefined,
+                                            extrudeDy: undefined,
+                                            shadingStyle3D: undefined,
+                                            lightAngle3D: undefined,
+                                          })
+                                        }
+                                        className="px-2 py-0.5 rounded-full text-slate-300 hover:text-rose-300 hover:bg-white/10 cursor-pointer transition"
+                                        title="Επιστροφή σε επίπεδο 2D σχήμα"
+                                      >
+                                        2D
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </>
                         );
                       })()}
 
