@@ -41,6 +41,7 @@ export function getStrokeBounds(s: StrokeObject) {
 export function getOrientedHalfExtents(s: StrokeObject): {
   halfThickness: number;
   halfLength: number;
+  longAxisAngle: number;
 } {
   const pts = s.points;
   const aabb = getStrokeBounds(s);
@@ -48,10 +49,12 @@ export function getOrientedHalfExtents(s: StrokeObject): {
     return {
       halfThickness: Math.min(aabb.w, aabb.h) * 0.5,
       halfLength: Math.max(aabb.w, aabb.h) * 0.5,
+      longAxisAngle: 0,
     };
   }
   let bestThickness = Math.min(aabb.w, aabb.h);
   let bestLength = Math.max(aabb.w, aabb.h);
+  let bestAngle = aabb.w >= aabb.h ? 0 : Math.PI * 0.5;
 
   const count = pts.length;
   for (let i = 0; i < count; i++) {
@@ -84,12 +87,17 @@ export function getOrientedHalfExtents(s: StrokeObject): {
     if (spanN > 1 && spanN < bestThickness) {
       bestThickness = spanN;
       bestLength = Math.max(spanU, spanN);
+      let ang = Math.atan2(uy, ux);
+      while (ang > Math.PI * 0.5) ang -= Math.PI;
+      while (ang <= -Math.PI * 0.5) ang += Math.PI;
+      bestAngle = ang;
     }
   }
 
   return {
     halfThickness: Math.max(4, bestThickness * 0.5),
     halfLength: Math.max(4, bestLength * 0.5),
+    longAxisAngle: bestAngle,
   };
 }
 

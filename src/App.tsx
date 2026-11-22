@@ -2179,7 +2179,9 @@ export default function App() {
   const gravitySegmentsRef = useRef<GravitySegment[]>([]);
   const gravityBoundStrokeIdsRef = useRef<string[]>([]);
   const [gravityBoundCount, setGravityBoundCount] = useState<number>(0);
-  const gravityOffsetsRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
+  const gravityOffsetsRef = useRef<
+    Map<string, { dx: number; dy: number; dAngle?: number; pivotX?: number; pivotY?: number }>
+  >(new Map());
   const gravityHiddenStrokeIdsRef = useRef<Set<string>>(new Set());
   const [gravityBodiesUi, setGravityBodiesUi] = useState<GravityBodyState[]>([]);
   const [gravitySegmentCount, setGravitySegmentCount] = useState<number>(0);
@@ -12064,8 +12066,22 @@ export default function App() {
     if (gravityHiddenStrokeIdsRef.current.has(s.id)) return;
     ctx.save();
     const gOff = gravityOffsetsRef.current.get(s.id);
-    if (gOff && (gOff.dx !== 0 || gOff.dy !== 0)) {
-      ctx.translate(gOff.dx, gOff.dy);
+    if (
+      gOff &&
+      (gOff.dx !== 0 || gOff.dy !== 0 || (gOff.dAngle && Math.abs(gOff.dAngle) > 1e-4))
+    ) {
+      if (
+        gOff.dAngle &&
+        Math.abs(gOff.dAngle) > 1e-4 &&
+        gOff.pivotX !== undefined &&
+        gOff.pivotY !== undefined
+      ) {
+        ctx.translate(gOff.pivotX + gOff.dx, gOff.pivotY + gOff.dy);
+        ctx.rotate(gOff.dAngle);
+        ctx.translate(-gOff.pivotX, -gOff.pivotY);
+      } else {
+        ctx.translate(gOff.dx, gOff.dy);
+      }
     }
 
     const isBulbInternalFilamentOrLead =
@@ -15236,6 +15252,7 @@ export default function App() {
       b.cy = b.initCy;
       b.vx = b.initVx;
       b.vy = b.initVy;
+      b.angle = b.initAngle ?? 0;
       b.normalX = 0;
       b.normalY = 0;
       b.normalForceN = 0;
@@ -15364,7 +15381,15 @@ export default function App() {
         if (!b.pinned) {
           const dx = b.cx - b.initCx;
           const dy = b.cy - b.initCy;
-          offsets.set(b.strokeId, { dx, dy });
+          const dAngle =
+            b.shapeKind === 'box' ? (b.angle ?? b.initAngle ?? 0) - (b.initAngle ?? 0) : 0;
+          offsets.set(b.strokeId, {
+            dx,
+            dy,
+            dAngle,
+            pivotX: b.initCx,
+            pivotY: b.initCy,
+          });
           if (b.pushers && b.pushers.length > 0) {
             for (const p of b.pushers) {
               offsets.set(p.strokeId, { dx, dy });

@@ -40,6 +40,8 @@ export interface GravityBodyState {
   radius: number;
   halfW: number;
   halfH: number;
+  initAngle?: number;
+  angle?: number;
   mass: number;
   // Live physics telemetry (updated each physics step)
   normalX: number;

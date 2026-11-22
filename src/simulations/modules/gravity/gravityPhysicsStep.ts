@@ -489,6 +489,29 @@ export function stepGravityScene(
       if (b.trail.length > MAX_TRAIL_PTS) b.trail.shift();
     }
   }
+
+  // Smoothly align sliding/resting boxes to the slope angle of the surface they are riding on
+  const rotBlend = Math.min(1, 18 * clampedDt);
+  for (const b of bodies) {
+    if (b.pinned || b.shapeKind !== 'box') continue;
+    if (b.onGround && (b.normalX !== 0 || b.normalY !== 0)) {
+      const nLen = Math.hypot(b.normalX, b.normalY);
+      if (nLen > 1e-4) {
+        const nx = b.normalX / nLen;
+        const ny = b.normalY / nLen;
+        // Only tilt along traversable slopes/floors (not pure vertical walls)
+        if (ny < -0.15) {
+          const targetAngle = Math.atan2(nx, -ny);
+          const curAngle = b.angle ?? b.initAngle ?? 0;
+          let delta = targetAngle - curAngle;
+          // Shortest path modulo PI (symmetric box)
+          while (delta > Math.PI * 0.5) delta -= Math.PI;
+          while (delta <= -Math.PI * 0.5) delta += Math.PI;
+          b.angle = curAngle + delta * rotBlend;
+        }
+      }
+    }
+  }
 }
 
 export function computeGravityEnergyStats(

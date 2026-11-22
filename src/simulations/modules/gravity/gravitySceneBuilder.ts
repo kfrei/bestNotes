@@ -149,6 +149,8 @@ export function buildGravitySceneFromStrokes(
       radius,
       halfW: isBall ? b.w * 0.5 : boxHalfW,
       halfH: isBall ? b.h * 0.5 : boxHalfH,
+      initAngle: oriented ? oriented.longAxisAngle : 0,
+      angle: oriented ? oriented.longAxisAngle : 0,
       mass,
       normalX: 0,
       normalY: 0,
