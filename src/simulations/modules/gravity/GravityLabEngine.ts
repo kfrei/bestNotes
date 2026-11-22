@@ -1086,36 +1086,52 @@ export function renderGravityOverlay(
 
   for (const b of bodies) {
     if (b.pinned) {
-      // Subtle faint red pin tucked on the bottom-right rim/corner of the pinned floor/track
+      // Classic tilted faint-red pushpin positioned neatly OUTSIDE the bottom-right rim/corner of the pinned floor
       const pinX =
         b.shapeKind === 'ball'
-          ? b.cx + b.halfW * 0.72
-          : b.cx + Math.max(8, b.halfW - 6);
+          ? b.cx + (b.halfW + 15) * 0.72
+          : b.cx + b.halfW + 10;
       const pinY =
         b.shapeKind === 'ball'
-          ? b.cy + b.halfH * 0.72
-          : b.cy + Math.max(8, b.halfH - 6);
+          ? b.cy + (b.halfH + 15) * 0.72
+          : b.cy + b.halfH + 6;
       ctx.save();
-      ctx.globalAlpha = isRunning ? 0.36 : 0.62;
-      ctx.fillStyle = 'rgba(254, 242, 242, 0.88)';
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 1.25;
-      ctx.beginPath();
-      ctx.arc(pinX, pinY, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      // Crisp tiny red pushpin icon (circle head + needle pointing down-left onto the rim)
+      ctx.translate(pinX, pinY);
+      ctx.rotate(0.45); // ~26° tilt so the needle points cleanly toward the floor rim
+      ctx.globalAlpha = isRunning ? 0.42 : 0.68;
       ctx.fillStyle = '#dc2626';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 0.7;
+
+      // 1. Sharp tapered needle pointing down-left toward the line
       ctx.beginPath();
-      ctx.arc(pinX + 1.5, pinY - 1.8, 2.8, 0, Math.PI * 2);
+      ctx.moveTo(-1.1, 3.0);
+      ctx.lineTo(1.1, 3.0);
+      ctx.lineTo(0, 9.5);
+      ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 1.4;
-      ctx.lineCap = 'round';
+
+      // 2. Flared circular collar/base
       ctx.beginPath();
-      ctx.moveTo(pinX + 0.2, pinY - 0.2);
-      ctx.lineTo(pinX - 3.2, pinY + 3.4);
+      ctx.ellipse(0, 2.5, 5.2, 1.9, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
+
+      // 3. Tapered pushpin stem/neck
+      ctx.beginPath();
+      ctx.moveTo(-2.5, 2.0);
+      ctx.lineTo(-1.8, -5.0);
+      ctx.lineTo(1.8, -5.0);
+      ctx.lineTo(2.5, 2.0);
+      ctx.closePath();
+      ctx.fill();
+
+      // 4. Flat oval top cap with crisp light rim separator
+      ctx.beginPath();
+      ctx.ellipse(0, -5.5, 3.9, 1.45, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.restore();
       continue;
     }
