@@ -48469,6 +48469,79 @@ export default function App() {
             );
           });
           if (curBox && !isAttachedOrUnhookingWeight) {
+            // Magnetic center-to-endpoint snap when dragging a single sphere/circle onto the end
+            // of a straight 2-point line segment (pendulum rod/string assembly — never on curved arcs/quarter-circles!)
+            let snappedSphereToLineEnd = false;
+            if (
+              targetStrokeIdList.length === 1 &&
+              targetImgIdList.length === 0 &&
+              selectedLassoTextIds.length === 0
+            ) {
+              const draggedSphere = activePage.strokes.find((s) => s.id === targetStrokeIdList[0]);
+              const isSphereLike =
+                draggedSphere &&
+                (draggedSphere.shapeType === 'circle' ||
+                  draggedSphere.shapeType === 'sphere' ||
+                  draggedSphere.shapeType === 'shaded-sphere' ||
+                  draggedSphere.shapeType === 'ellipse');
+              if (isSphereLike) {
+                const candCxSphere = curBox.cx + rawDx;
+                const candCySphere = curBox.cy + rawDy;
+                const hiddenLayerIds = new Set(
+                  (activePage.layers || [])
+                    .filter((l) => l.visible === false || l.locked)
+                    .map((l) => l.id)
+                );
+                let bestLineEnd: { x: number; y: number; strokeId: string; endIdx: 0 | 1; dist: number } | null = null;
+                for (const other of activePage.strokes) {
+                  if (
+                    other.id === draggedSphere.id ||
+                    hiddenLayerIds.has(other.layerId) ||
+                    other.shapeType !== 'line' ||
+                    other.points.length !== 2
+                  ) {
+                    continue;
+                  }
+                  const hasCurve = other.points.some(
+                    (p) =>
+                      (p.outDx !== undefined && Math.abs(p.outDx) > 0.5) ||
+                      (p.outDy !== undefined && Math.abs(p.outDy) > 0.5) ||
+                      (p.inDx !== undefined && Math.abs(p.inDx) > 0.5) ||
+                      (p.inDy !== undefined && Math.abs(p.inDy) > 0.5) ||
+                      (p.cx !== undefined && p.cy !== undefined)
+                  );
+                  if (hasCurve) continue;
+                  const p0 = other.points[0];
+                  const p1 = other.points[1];
+                  const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                  const isMostlyHoriz = Math.abs(p1.y - p0.y) < Math.abs(p1.x - p0.x) * 0.25;
+                  if (len < 20 || isMostlyHoriz) continue;
+                  const d0 = Math.hypot(candCxSphere - p0.x, candCySphere - p0.y);
+                  if (d0 <= 14 && (!bestLineEnd || d0 < bestLineEnd.dist)) {
+                    bestLineEnd = { x: p0.x, y: p0.y, strokeId: other.id, endIdx: 0, dist: d0 };
+                  }
+                  const d1 = Math.hypot(candCxSphere - p1.x, candCySphere - p1.y);
+                  if (d1 <= 14 && (!bestLineEnd || d1 < bestLineEnd.dist)) {
+                    bestLineEnd = { x: p1.x, y: p1.y, strokeId: other.id, endIdx: 1, dist: d1 };
+                  }
+                }
+                if (bestLineEnd) {
+                  snapDx = bestLineEnd.x - candCxSphere;
+                  snapDy = bestLineEnd.y - candCySphere;
+                  snappedSphereToLineEnd = true;
+                  setNodeMagnetState({
+                    strokeId: draggedSphere.id,
+                    draggedKeyPosIdx: 0,
+                    targetX: bestLineEnd.x,
+                    targetY: bestLineEnd.y,
+                    progress: 100,
+                  });
+                } else {
+                  setNodeMagnetState(null);
+                }
+              }
+            }
+
             const isPureTextLassoMove =
               selectedLassoTextIds.length > 0 &&
               targetStrokeIdList.length === 0 &&
@@ -48486,8 +48559,8 @@ export default function App() {
             const candMaxY = curBox.maxY + rawDy;
             const candCy = curBox.cy + rawDy;
 
-            let bestDiffX = SNAP_T;
-            let bestDiffY = SNAP_T;
+            let bestDiffX = snappedSphereToLineEnd ? 0 : SNAP_T;
+            let bestDiffY = snappedSphereToLineEnd ? 0 : SNAP_T;
 
             // Magnetic Snap to Page Corners & Page Edges (especially for Images and Selection)
             const PAGE_CORNER_SNAP = hasImagesInMove ? 28 : 20;

@@ -446,7 +446,10 @@ export function buildGravitySceneFromStrokes(
         if (bd.pinned || bd.tether) continue;
         const d0 = Math.hypot(p0.x - bd.initCx, p0.y - bd.initCy);
         const d1 = Math.hypot(p1.x - bd.initCx, p1.y - bd.initCy);
-        const tol = bd.radius + 26;
+        // Strict pendulum tether binding: ONLY when the sphere's CENTER is very close to the
+        // endpoint of a straight 2-point line segment (e.g. magnetically snapped there), so a ball
+        // merely resting on top of an inclined ramp (center >= radius away) NEVER turns the ramp into a pendulum!
+        const tol = Math.max(8, Math.min(12, bd.radius * 0.55));
         if (d0 <= tol && d1 > d0 + 18) {
           bd.tether = { strokeId: line.id, pivotX: p1.x, pivotY: p1.y, length: Math.hypot(bd.initCx - p1.x, bd.initCy - p1.y) };
           consumedStrokeIds.add(line.id);
