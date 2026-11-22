@@ -60373,21 +60373,21 @@ export default function App() {
                           }
                         }}
                         title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
-                        className={`flex items-center justify-between px-4 py-4 min-h-[82px] rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
+                        className={`xl:col-span-2 flex items-center justify-center px-5 py-5 min-h-[104px] rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
                           isLibraryDropZoneActive
                             ? 'bg-sky-100/90 border-[#234978] ring-2 ring-inset ring-[#234978]'
                             : 'bg-white/75 border-slate-300/90 hover:bg-white hover:border-slate-400'
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="w-10 h-11 rounded-lg border border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-slate-50 text-slate-400">
-                            <Upload className="w-4 h-4" />
+                        <div className="flex items-center justify-center gap-3.5 min-w-0">
+                          <div className="w-11 h-12 rounded-lg border border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-slate-50 text-slate-400">
+                            <Upload className="w-5 h-5" />
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-slate-600 truncate">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-600 truncate">
                               + Άνοιγμα Αρχείου (Drag &amp; Drop)
                             </p>
-                            <p className="text-[11px] text-slate-400 truncate">
+                            <p className="text-xs text-slate-400 truncate">
                               .bestNotes • .pdf • .png • .jpg • .gif
                             </p>
                           </div>
