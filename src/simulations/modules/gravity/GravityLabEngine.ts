@@ -135,7 +135,7 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
     (p) => p.inDx !== undefined || p.outDx !== undefined || p.cx !== undefined
   );
   if (isCurved) {
-    const stepsPerSeg = Math.max(4, Math.min(16, Math.ceil(64 / Math.max(1, pts.length - 1))));
+    const stepsPerSeg = Math.max(4, Math.min(36, Math.ceil(64 / Math.max(1, pts.length - 1))));
     for (let i = 0; i < pts.length - 1; i++) {
       const a: BezierPoint = pts[i];
       const b: BezierPoint = pts[i + 1];
@@ -287,7 +287,16 @@ export function buildGravitySceneFromStrokes(
     }
 
     // 3. 2-point straight lines: could be a tether string OR a flat floor/ramp
-    if (s.shapeType === 'line' && s.points.length === 2) {
+    // Curved 2-point Bézier arcs (e.g. quarter-circle) have non-zero handles and are ALWAYS static tracks!
+    const hasCurveHandles = s.points.some(
+      (p) =>
+        (p.outDx !== undefined && Math.abs(p.outDx) > 0.5) ||
+        (p.outDy !== undefined && Math.abs(p.outDy) > 0.5) ||
+        (p.inDx !== undefined && Math.abs(p.inDx) > 0.5) ||
+        (p.inDy !== undefined && Math.abs(p.inDy) > 0.5) ||
+        (p.cx !== undefined && p.cy !== undefined)
+    );
+    if (s.shapeType === 'line' && s.points.length === 2 && !hasCurveHandles) {
       potentialTethers.push(s);
       continue;
     }
