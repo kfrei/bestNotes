@@ -1132,16 +1132,16 @@ export function renderGravityOverlay(
           fx * scale,
           fy * scale,
           '#7c3aed',
-          `Fολ = ${fNetMag.toFixed(1)} N`
+          `ΣF = ${fNetMag.toFixed(1)} N`
         );
       } else {
-        // Equilibrium badge when Fολ = 0
+        // Equilibrium badge when ΣF = 0
         const badgeY = b.cy - (b.shapeKind === 'ball' ? b.radius : b.halfH) - 16;
         ctx.save();
         ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const badgeText = 'Fολ = 0 N';
+        const badgeText = 'ΣF = 0 N';
         const tw = ctx.measureText(badgeText).width + 12;
         ctx.fillStyle = 'rgba(245, 243, 255, 0.94)';
         ctx.strokeStyle = '#7c3aed';

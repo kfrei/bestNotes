@@ -191,7 +191,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
 
             {multi && (
               <div className="pt-1.5 border-t border-[#e3ddd2] flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-[#475569]">Συνισταμένη Fολ</span>
+                <span className="font-semibold text-[#475569]">Συνισταμένη ΣF</span>
                 <span
                   className={`font-bold ${
                     Math.abs(netForceN) < 0.2 ? 'text-emerald-700' : 'text-[#234978]'
@@ -328,8 +328,8 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
       {/* Vector Overlay Checkboxes (all unchecked by default; Forces <-> Net Force mutually exclusive!) + Trail */}
       <div className="space-y-1.5 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
         <div className="text-[10px] font-bold text-[#64748b] uppercase">Διανύσματα</div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
-          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <label className="flex items-center gap-1 font-semibold cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={config.showVelocity}
@@ -340,7 +340,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
             />
             <span>Ταχύτητα</span>
           </label>
-          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+          <label className="flex items-center gap-1 font-semibold cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={config.showForces}
@@ -355,7 +355,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
             />
             <span>Δυνάμεις</span>
           </label>
-          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+          <label className="flex items-center gap-1 font-semibold cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={config.showNetForce}
@@ -368,7 +368,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
               }
               className="accent-[#7c3aed] rounded"
             />
-            <span>Συνισταμένη</span>
+            <span>ΣF</span>
           </label>
         </div>
         <div className="pt-1.5 border-t border-[#ece7dc]">
