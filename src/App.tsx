@@ -42916,7 +42916,10 @@ export default function App() {
       for (let idx = txtList.length - 1; idx >= 0; idx--) {
         const txt = txtList[idx];
         if (lockedLayers.has(txt.layerId)) continue;
-        if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) continue;
+        const isLiveMathGraphText =
+          (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) &&
+          Boolean(txt.groupId && activePage.strokes.some((s) => s.groupId === txt.groupId));
+        if (isLiveMathGraphText) continue;
         if (isPagePointOnTextGlyphs(pt, txt, 6)) {
           topHitTxt = txt;
           break;
@@ -43414,7 +43417,10 @@ export default function App() {
     // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed any standalone Text / MathOCR equation boxes!
     const matchedStandaloneTexts = (activePage.texts || []).filter((txt) => {
       if (lockedLayers.has(txt.layerId)) return false;
-      if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) {
+      const isLiveMathGraphText =
+        (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) &&
+        Boolean(txt.groupId && activePage.strokes.some((s) => s.groupId === txt.groupId));
+      if (isLiveMathGraphText) {
         return false;
       }
       const tb = getTextVisualBounds(txt);
@@ -43706,6 +43712,35 @@ export default function App() {
       if (p.y > bMaxY) bMaxY = p.y;
     }
 
+    const filterOrphanedMathGraphTexts = (
+      texts: TextObject[],
+      remainingStrokes: StrokeObject[]
+    ): { nextTexts: TextObject[]; textsChanged: boolean } => {
+      if (!texts || texts.length === 0) return { nextTexts: texts, textsChanged: false };
+      let survivingMathGroups: Set<string> | null = null;
+      let changed = false;
+      const nextTexts = texts.filter((t) => {
+        if (lockedLayerIds.has(t.layerId)) return true;
+        const isMathTxt =
+          t.groupId?.startsWith('math-graph-grp-') || t.id.startsWith('math-graph-txt-');
+        if (!isMathTxt) return true;
+        if (!survivingMathGroups) {
+          survivingMathGroups = new Set<string>();
+          for (let i = 0; i < remainingStrokes.length; i++) {
+            const g = remainingStrokes[i].groupId;
+            if (g && g.startsWith('math-graph-grp-')) survivingMathGroups.add(g);
+          }
+        }
+        const hasParentStrokes = Boolean(t.groupId && survivingMathGroups.has(t.groupId));
+        if (!hasParentStrokes) {
+          changed = true;
+          return false;
+        }
+        return true;
+      });
+      return { nextTexts: changed ? nextTexts : texts, textsChanged: changed };
+    };
+
     const computeErasedPage = (page: NotePage): { nextPage: NotePage; modified: boolean } => {
       if (eraserSubType === 'stroke' || eraserSubType === 'highlighter-only') {
         const removedIds: string[] = [];
@@ -43729,8 +43764,9 @@ export default function App() {
           if (hit) removedIds.push(s.id);
           return !hit;
         });
-        if (removedIds.length === 0) return { nextPage: page, modified: false };
-        if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        const { nextTexts, textsChanged } = filterOrphanedMathGraphTexts(page.texts || [], filtered);
+        if (removedIds.length === 0 && !textsChanged) return { nextPage: page, modified: false };
+        if (removedIds.length > 0 && !isTvReceiverModeRef.current && liveTvSenderRef.current) {
           liveTvSenderRef.current.sendLiveErase({
             pageId: page.id,
             removedIds,
@@ -43738,7 +43774,14 @@ export default function App() {
             cursorPt: cursorPayload,
           });
         }
-        return { nextPage: { ...page, strokes: filtered }, modified: true };
+        return {
+          nextPage: {
+            ...page,
+            strokes: removedIds.length > 0 ? filtered : page.strokes,
+            texts: nextTexts,
+          },
+          modified: true,
+        };
       } else {
         // Pixel / Segment Eraser ('precision'):
         // Pre-filter each stroke once against the batch AABB before running exact circle-segment splitting!
@@ -43788,8 +43831,12 @@ export default function App() {
           }
         }
 
-        if (!anyModified) return { nextPage: page, modified: false };
-        if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        const { nextTexts, textsChanged } = filterOrphanedMathGraphTexts(
+          page.texts || [],
+          anyModified ? nextStrokes : page.strokes
+        );
+        if (!anyModified && !textsChanged) return { nextPage: page, modified: false };
+        if (anyModified && !isTvReceiverModeRef.current && liveTvSenderRef.current) {
           const finalIds = new Set(nextStrokes.map((s) => s.id));
           const removedIds: string[] = [];
           origIds.forEach((id) => {
@@ -43803,7 +43850,14 @@ export default function App() {
             cursorPt: cursorPayload,
           });
         }
-        return { nextPage: { ...page, strokes: nextStrokes }, modified: true };
+        return {
+          nextPage: {
+            ...page,
+            strokes: anyModified ? nextStrokes : page.strokes,
+            texts: nextTexts,
+          },
+          modified: true,
+        };
       }
     };
 
