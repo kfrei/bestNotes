@@ -579,6 +579,7 @@ export function stepGravityScene(
   const preStepYMap = new Map<string, number>();
   const preStepSpeedSqMap = new Map<string, number>();
   const hasExternalPushMap = new Map<string, boolean>();
+  const dynamicBodyCount = bodies.reduce((acc, b) => acc + (b.pinned ? 0 : 1), 0);
 
   for (let step = 0; step < SUB_STEPS; step++) {
     // 1. Apply Gravity, Stickman Pushing Force F & Air Drag + integrate velocity & position
@@ -696,12 +697,12 @@ export function stepGravityScene(
           const tx = -ny;
           const ty = nx;
           const vtBefore = b.vx * tx + b.vy * ty;
-          const wasRollingOnTrack = (wasOnGroundMap.get(b.strokeId) || b.onGround) && ny < -0.35;
+          const wasRollingOnTrack = (wasOnGroundMap.get(b.strokeId) || b.onGround) && ny < -0.04;
           // Smooth grazing/rolling contact on curved U-bowls & steep ramp->floor transitions vs genuine air drop/wall bounce!
           const isGrazingSlide =
             wasRollingOnTrack ||
             Math.abs(vn) < 42 ||
-            Math.abs(vn) < Math.abs(vtBefore) * 0.42;
+            Math.abs(vn) < Math.abs(vtBefore) * 0.48;
           const eEff = isGrazingSlide ? 0 : config.restitution;
           const jn = -(1 + eEff) * vn;
           b.vx += jn * nx;
@@ -734,19 +735,24 @@ export function stepGravityScene(
             }
           } else if (!config.airDragEnabled && isGrazingSlide && !hasExternalPushMap.get(b.strokeId)) {
             // Ideal conservative mode (Friction OFF, Air Drag OFF, no external pusher):
-            // Enforce exact mechanical energy conservation from the START of the substep:
-            // v²_after = v²_preStep + 2 g (y_after - y_preStep)
-            // Eliminates symplectic-Euler sink-and-pushback energy drain on horizontal shelves
-            // AND eliminates cos(dTheta) chord-transition energy loss on ramps & curved U-bowls!
-            const preY = preStepYMap.get(b.strokeId) ?? b.cy;
-            const preSpeedSq = preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy);
+            // When single dynamic body + elastic (ideal), lock directly to exact initial mechanical energy
+            // E₀ = ½ u₀² - g y₀ so ZERO numerical drift ever accumulates across steep 85° walls or troughs!
+            const useExactInitE = dynamicBodyCount === 1 && config.restitution >= 0.99;
+            const refY = useExactInitE ? b.initCy : (preStepYMap.get(b.strokeId) ?? b.cy);
+            const refSpeedSq = useExactInitE
+              ? b.initVx * b.initVx + b.initVy * b.initVy
+              : (preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy));
             const vt = b.vx * tx + b.vy * ty;
-            const targetSpeedSq = preSpeedSq + 2 * gPx * (b.cy - preY);
-            if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
+            const targetSpeedSq = refSpeedSq + 2 * gPx * (b.cy - refY);
+            if (targetSpeedSq > 1e-2 && Math.abs(vt) > 1e-3) {
               const targetSpeed = Math.sqrt(targetSpeedSq);
               const sign = vt >= 0 ? 1 : -1;
               b.vx = sign * targetSpeed * tx;
               b.vy = sign * targetSpeed * ty;
+            } else if (useExactInitE && targetSpeedSq <= 1e-2 && b.vy < 0) {
+              // Exact turning point at initial height h₀: stop uphill velocity so gravity pulls it smoothly back down!
+              b.vx = 0;
+              b.vy = 0;
             }
           }
         }
@@ -775,8 +781,8 @@ export function stepGravityScene(
           const rContact = r + (seg.halfWidth ?? 1.5);
           if (dist > 1e-5 && dist <= rContact + 14 && dist < bestDist) {
             const nyCand = dy / dist;
-            // Only hug upper track surfaces (not vertical walls or ceilings)
-            if (nyCand < -0.15) {
+            // Only hug upper/steep track surfaces (not ceilings)
+            if (nyCand < -0.04) {
               bestDist = dist;
               bestNx = dx / dist;
               bestNy = nyCand;
@@ -798,14 +804,20 @@ export function stepGravityScene(
           const ty = bestNx;
           const vt = b.vx * tx + b.vy * ty;
           if (!config.frictionEnabled && !config.airDragEnabled && !hasExternalPushMap.get(b.strokeId)) {
-            const preY = preStepYMap.get(b.strokeId) ?? b.cy;
-            const preSpeedSq = preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy);
-            const targetSpeedSq = preSpeedSq + 2 * gPx * (b.cy - preY);
-            if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
+            const useExactInitE = dynamicBodyCount === 1 && config.restitution >= 0.99;
+            const refY = useExactInitE ? b.initCy : (preStepYMap.get(b.strokeId) ?? b.cy);
+            const refSpeedSq = useExactInitE
+              ? b.initVx * b.initVx + b.initVy * b.initVy
+              : (preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy));
+            const targetSpeedSq = refSpeedSq + 2 * gPx * (b.cy - refY);
+            if (targetSpeedSq > 1e-2 && Math.abs(vt) > 1e-3) {
               const targetSpeed = Math.sqrt(targetSpeedSq);
               const sign = vt >= 0 ? 1 : -1;
               b.vx = sign * targetSpeed * tx;
               b.vy = sign * targetSpeed * ty;
+            } else if (useExactInitE && targetSpeedSq <= 1e-2 && b.vy < 0) {
+              b.vx = 0;
+              b.vy = 0;
             } else {
               b.vx = vt * tx;
               b.vy = vt * ty;
