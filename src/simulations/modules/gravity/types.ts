@@ -16,7 +16,11 @@ export interface GravityTether {
 
 export interface GravityPusher {
   strokeId: string;
-  dir: 1 | -1; // +1 = pushing right, -1 = pushing left
+  dir: 1 | -1; // auto-detected from torso lean (+1 = right →, -1 = left ←)
+  role: 'push' | 'pull';
+  color: string;
+  label: string; // 'F' when single, 'F₁' / 'F₂' when multiple
+  initCx: number;
 }
 
 export interface GravityBodyState {
@@ -45,7 +49,7 @@ export interface GravityBodyState {
   onGround: boolean;
   trail: { x: number; y: number }[];
   tether?: GravityTether;
-  pusher?: GravityPusher;
+  pushers?: GravityPusher[];
   v0ArrowStrokeId?: string;
 }
 
@@ -57,7 +61,8 @@ export interface GravityLabConfig {
   airDragEnabled: boolean;
   airDragCoeff: number; // 0.02 .. 0.30
   pageBoundsEnabled: boolean; // true = bounce off page edges; false = fly/fall freely off-page
-  pushForceN: number; // Stickman horizontal pushing force in Newtons (0 .. 40 N)
+  pushForceN: number; // Legacy/default magnitude in Newtons (-40 .. +40 N)
+  pusherForcesN: Record<string, number>; // Per-Stickman signed force F (-40 .. +40 N) keyed by strokeId
   showVectors: boolean;
   showTrail: boolean;
   showEnergy: boolean;
@@ -72,6 +77,7 @@ export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   airDragCoeff: 0.08,
   pageBoundsEnabled: true,
   pushForceN: 14,
+  pusherForcesN: {},
   showVectors: true,
   showTrail: true,
   showEnergy: true,

@@ -14894,12 +14894,25 @@ export default function App() {
       return false;
     }
     const ok = buildGravityFromIds(selectedStrokeIds);
-    // Align initial signed force F direction with detected Stickman torso lean (user can freely slide -40..+40 N anytime!)
-    const detectedPusher = gravityBodiesRef.current.find((b) => !b.pinned && b.pusher)?.pusher;
-    if (detectedPusher) {
+    // Align initial signed force F direction for every detected Stickman from torso lean (user can freely slide -40..+40 N each!)
+    const detectedPushers = gravityBodiesRef.current.flatMap((b) =>
+      !b.pinned && b.pushers ? b.pushers : []
+    );
+    if (detectedPushers.length > 0) {
       setGravityConfig((c) => {
-        const mag = Math.abs(c.pushForceN) || 14;
-        return { ...c, pushForceN: detectedPusher.dir * mag };
+        const nextMap = { ...c.pusherForcesN };
+        for (const p of detectedPushers) {
+          const prevMag =
+            nextMap[p.strokeId] !== undefined
+              ? Math.abs(nextMap[p.strokeId]) || 14
+              : 14;
+          nextMap[p.strokeId] = p.dir * prevMag;
+        }
+        return {
+          ...c,
+          pushForceN: detectedPushers[0].dir * (Math.abs(c.pushForceN) || 14),
+          pusherForcesN: nextMap,
+        };
       });
     }
     // Deselect lasso box so the scene looks clean & ready to play!
@@ -15033,8 +15046,10 @@ export default function App() {
           const dx = b.cx - b.initCx;
           const dy = b.cy - b.initCy;
           offsets.set(b.strokeId, { dx, dy });
-          if (b.pusher) {
-            offsets.set(b.pusher.strokeId, { dx, dy });
+          if (b.pushers && b.pushers.length > 0) {
+            for (const p of b.pushers) {
+              offsets.set(p.strokeId, { dx, dy });
+            }
           }
         }
       }

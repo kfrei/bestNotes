@@ -450,22 +450,22 @@ export function buildGravitySceneFromStrokes(
     }
   }
 
-  // Bind pushing Stickmen (2D 'stickman' & 3D 'stickman-3d') to the nearest dynamic body!
-  // Stickman on LEFT of body -> pushes RIGHT (+1); Stickman on RIGHT of body -> pushes LEFT (-1).
+  // Bind ALL Stickmen (2D 'stickman' & 3D 'stickman-3d') to their nearest dynamic body!
+  // Supports 1, 2, or more Stickmen acting simultaneously on the same box (same-direction or tug-of-war!).
+  const SUBSCRIPT_DIGITS = ['₁', '₂', '₃', '₄', '₅', '₆'];
   for (const st of stickmen) {
     const sb = getStrokeBounds(st);
     let bestBody: GravityBodyState | null = null;
     let bestDist = Infinity;
     for (const bd of dynamicBodies) {
-      if (bd.pusher) continue;
       const dx = Math.abs(sb.cx - bd.initCx);
       const dy = Math.abs(sb.cy - bd.initCy);
-      if (dx <= bd.halfW + sb.w + 90 && dy <= bd.halfH + sb.h * 0.9 + 50 && dx < bestDist) {
+      if (dx <= bd.halfW + sb.w + 140 && dy <= bd.halfH + sb.h * 1.1 + 80 && dx < bestDist) {
         bestDist = dx;
         bestBody = bd;
       }
     }
-    if (!bestBody && dynamicBodies.length === 1 && !dynamicBodies[0].pusher) {
+    if (!bestBody && dynamicBodies.length === 1) {
       bestBody = dynamicBodies[0];
     }
     if (bestBody) {
@@ -477,7 +477,31 @@ export function buildGravitySceneFromStrokes(
       const leanX = head && hip ? head.x - hip.x : 0;
       const dir: 1 | -1 =
         Math.abs(leanX) > 4 ? (leanX > 0 ? 1 : -1) : sb.cx <= bestBody.initCx ? 1 : -1;
-      bestBody.pusher = { strokeId: st.id, dir };
+      const isLeftOfBox = sb.cx <= bestBody.initCx;
+      const role: 'push' | 'pull' = (isLeftOfBox && dir === 1) || (!isLeftOfBox && dir === -1) ? 'push' : 'pull';
+      if (!bestBody.pushers) bestBody.pushers = [];
+      bestBody.pushers.push({
+        strokeId: st.id,
+        dir,
+        role,
+        color: st.color || '#2563eb',
+        label: 'F',
+        initCx: sb.cx,
+      });
+    }
+  }
+
+  // Sort pushers left-to-right per body and assign clean labels ('F' if 1, 'F₁' / 'F₂' if 2+)
+  for (const bd of dynamicBodies) {
+    if (bd.pushers && bd.pushers.length > 0) {
+      bd.pushers.sort((a, b) => a.initCx - b.initCx);
+      if (bd.pushers.length === 1) {
+        bd.pushers[0].label = 'F';
+      } else {
+        bd.pushers.forEach((p, idx) => {
+          p.label = `F${SUBSCRIPT_DIGITS[idx] || idx + 1}`;
+        });
+      }
     }
   }
 
@@ -553,10 +577,20 @@ export function stepGravityScene(
       if (b.pinned) continue;
       b.vy += gPx * subDt;
 
-      // Stickman signed horizontal force F (-40..+40 N: negative = left ←, positive = right →)
-      if (b.pusher && Math.abs(config.pushForceN) > 0.1) {
-        const axPx = (config.pushForceN / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
-        b.vx += axPx * subDt;
+      // Sum all Stickmen signed horizontal forces F₁ + F₂ + ... (-40..+40 N each)
+      if (b.pushers && b.pushers.length > 0) {
+        let netForceN = 0;
+        for (const p of b.pushers) {
+          const fVal =
+            config.pusherForcesN[p.strokeId] !== undefined
+              ? config.pusherForcesN[p.strokeId]
+              : p.dir * (Math.abs(config.pushForceN) || 14);
+          netForceN += fVal;
+        }
+        if (Math.abs(netForceN) > 0.05) {
+          const axPx = (netForceN / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
+          b.vx += axPx * subDt;
+        }
       }
 
       if (config.airDragEnabled && config.airDragCoeff > 0) {
@@ -698,7 +732,7 @@ export function stepGravityScene(
       // Keep inside A4 page bounds gently ONLY when pageBoundsEnabled is checked!
       if (config.pageBoundsEnabled) {
         const halfWBound = b.shapeKind === 'ball' ? r : b.halfW;
-        const wallRestitution = b.pusher ? 0 : config.restitution;
+        const wallRestitution = b.pushers && b.pushers.length > 0 ? 0 : config.restitution;
         if (b.cx - halfWBound < 8) {
           b.cx = 8 + halfWBound;
           if (b.vx < 0) b.vx = -b.vx * wallRestitution;
@@ -975,35 +1009,75 @@ export function renderGravityOverlay(
         const nLen = Math.min(58, b.normalForceN * 3.4);
         drawVectorArrow(ctx, b.cx, b.cy, b.normalX * nLen, b.normalY * nLen, '#059669', 'N');
       }
-      // Stickman signed horizontal force F (royal blue: - = left ←, + = right →)
-      if (b.pusher && Math.abs(config.pushForceN) > 0.2) {
-        const fDir = config.pushForceN >= 0 ? 1 : -1;
-        const fLen = Math.min(72, 22 + Math.abs(config.pushForceN) * 1.4);
-        drawVectorArrow(
-          ctx,
-          b.cx,
-          b.cy,
-          fDir * fLen,
-          0,
-          '#1d4ed8',
-          `F = ${Math.abs(config.pushForceN).toFixed(0)} N`
-        );
+      // Individual Stickman signed horizontal forces (F, or F₁ & F₂ color-coded + Net Fολ when 2+!)
+      let netAppliedForceN = 0;
+      if (b.pushers && b.pushers.length > 0) {
+        const multi = b.pushers.length >= 2;
+        b.pushers.forEach((p, idx) => {
+          const fVal =
+            config.pusherForcesN[p.strokeId] !== undefined
+              ? config.pusherForcesN[p.strokeId]
+              : p.dir * (Math.abs(config.pushForceN) || 14);
+          netAppliedForceN += fVal;
+          if (Math.abs(fVal) > 0.2) {
+            const fDir = fVal >= 0 ? 1 : -1;
+            const fLen = Math.min(76, 22 + Math.abs(fVal) * 1.35);
+            const yOffset = multi ? (idx - (b.pushers!.length - 1) * 0.5) * 14 : 0;
+            const arrowColor =
+              p.color && p.color !== '#000000' && p.color !== '#111827' ? p.color : '#1d4ed8';
+            drawVectorArrow(
+              ctx,
+              b.cx,
+              b.cy + yOffset,
+              fDir * fLen,
+              0,
+              arrowColor,
+              `${p.label} = ${Math.abs(fVal).toFixed(0)} N`
+            );
+          }
+        });
+
+        // Show Net Resultant Force Fολ cleanly above the box when 2+ Stickmen act on it!
+        if (multi) {
+          const badgeY = b.cy - b.halfH - 18;
+          ctx.save();
+          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const isEq = Math.abs(netAppliedForceN) < 0.2;
+          const badgeText = isEq
+            ? 'Fολ = 0 N (Ισορροπία)'
+            : `Fολ = ${netAppliedForceN > 0 ? '+' : ''}${netAppliedForceN.toFixed(0)} N (${
+                netAppliedForceN > 0 ? '→' : '←'
+              })`;
+          const tw = ctx.measureText(badgeText).width + 14;
+          ctx.fillStyle = isEq ? 'rgba(236, 253, 245, 0.94)' : 'rgba(239, 246, 255, 0.94)';
+          ctx.strokeStyle = isEq ? '#10b981' : '#234978';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.roundRect(b.cx - tw / 2, badgeY - 10, tw, 20, 6);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = isEq ? '#047857' : '#1e3a8a';
+          ctx.fillText(badgeText, b.cx, badgeY + 0.5);
+          ctx.restore();
+        }
       }
-      // Friction force T (amber) opposing horizontal motion / applied force
+      // Friction force T (amber) opposing horizontal motion / net applied force
       if (config.frictionEnabled && b.onGround && b.frictionForceN > 0.2) {
         const motionDir =
           Math.abs(b.vx) > 2
             ? b.vx > 0
               ? 1
               : -1
-            : b.pusher && Math.abs(config.pushForceN) > 0.2
-            ? config.pushForceN > 0
+            : Math.abs(netAppliedForceN) > 0.2
+            ? netAppliedForceN > 0
               ? 1
               : -1
             : 0;
         if (motionDir !== 0) {
           const tLen = Math.min(64, 18 + b.frictionForceN * 1.4);
-          drawVectorArrow(ctx, b.cx, b.cy + 6, -motionDir * tLen, 0, '#d97706', 'T');
+          drawVectorArrow(ctx, b.cx, b.cy + 8, -motionDir * tLen, 0, '#d97706', 'T');
         }
       }
     }

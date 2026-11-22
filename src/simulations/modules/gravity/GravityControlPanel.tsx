@@ -113,43 +113,101 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </span>
       </div>
 
-      {/* Contextual Stickman Signed Force F (-40..+40 N: negative = left ←, positive = right →) */}
-      {bodies.some((b) => !b.pinned && b.pusher) && (
-        <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold">
-              Δύναμη{' '}
-              <span className="text-[#64748b] font-normal">
-                ({config.pushForceN > 0 ? '→' : config.pushForceN < 0 ? '←' : '0'})
-              </span>
-            </span>
-            <span className="font-bold text-[#234978]">
-              {config.pushForceN > 0 ? `+${config.pushForceN.toFixed(0)}` : config.pushForceN.toFixed(0)} N
-            </span>
+      {/* Contextual Stickmen Signed Forces F / F₁, F₂ (-40..+40 N each + Live Net Resultant Fολ!) */}
+      {(() => {
+        const activePushers = bodies.flatMap((b) => (!b.pinned && b.pushers ? b.pushers : []));
+        if (activePushers.length === 0) return null;
+        const multi = activePushers.length >= 2;
+        const getForceVal = (p: (typeof activePushers)[number]) =>
+          config.pusherForcesN[p.strokeId] !== undefined
+            ? config.pusherForcesN[p.strokeId]
+            : p.dir * (Math.abs(config.pushForceN) || 14);
+        const netForceN = activePushers.reduce((sum, p) => sum + getForceVal(p), 0);
+        return (
+          <div className="space-y-2 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
+            {activePushers.map((p, idx) => {
+              const fVal = getForceVal(p);
+              return (
+                <div
+                  key={p.strokeId}
+                  className={idx > 0 ? 'pt-2 border-t border-[#ece7dc] space-y-1' : 'space-y-1'}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      {multi && (
+                        <span
+                          className="w-2.5 h-2.5 rounded-full inline-block shrink-0"
+                          style={{ backgroundColor: p.color || '#2563eb' }}
+                        />
+                      )}
+                      <span>
+                        {multi ? `Δύναμη ${p.label}` : 'Δύναμη'}{' '}
+                        <span className="text-[#64748b] font-normal">
+                          ({fVal > 0 ? '→' : fVal < 0 ? '←' : '0'})
+                        </span>
+                      </span>
+                    </span>
+                    <span className="font-bold text-[#234978]">
+                      {fVal > 0 ? `+${fVal.toFixed(0)}` : fVal.toFixed(0)} N
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-40}
+                    max={40}
+                    step={1}
+                    value={fVal}
+                    onChange={(e) => {
+                      const nextVal = parseFloat(e.target.value);
+                      setConfig((c) => ({
+                        ...c,
+                        pushForceN: multi ? c.pushForceN : nextVal,
+                        pusherForcesN: { ...c.pusherForcesN, [p.strokeId]: nextVal },
+                      }));
+                    }}
+                    className="w-full accent-[#234978]"
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-[#64748b] font-medium">
+                    <span>← -40 N</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConfig((c) => ({
+                          ...c,
+                          pushForceN: multi ? c.pushForceN : 0,
+                          pusherForcesN: { ...c.pusherForcesN, [p.strokeId]: 0 },
+                        }))
+                      }
+                      className="px-1.5 py-0.5 rounded hover:bg-[#e5dfd3] text-[#2c3e50] cursor-pointer"
+                      title="Μηδενισμός δύναμης"
+                    >
+                      0
+                    </button>
+                    <span>+40 N →</span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {multi && (
+              <div className="pt-1.5 border-t border-[#e3ddd2] flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-[#475569]">Συνισταμένη Fολ</span>
+                <span
+                  className={`font-bold ${
+                    Math.abs(netForceN) < 0.2 ? 'text-emerald-700' : 'text-[#234978]'
+                  }`}
+                >
+                  {Math.abs(netForceN) < 0.2
+                    ? '0 N (Ισορροπία)'
+                    : `${netForceN > 0 ? '+' : ''}${netForceN.toFixed(0)} N (${
+                        netForceN > 0 ? '→' : '←'
+                      })`}
+                </span>
+              </div>
+            )}
           </div>
-          <input
-            type="range"
-            min={-40}
-            max={40}
-            step={1}
-            value={config.pushForceN}
-            onChange={(e) => setConfig((c) => ({ ...c, pushForceN: parseFloat(e.target.value) }))}
-            className="w-full accent-[#234978]"
-          />
-          <div className="flex items-center justify-between text-[10px] text-[#64748b] font-medium">
-            <span>← -40 N</span>
-            <button
-              type="button"
-              onClick={() => setConfig((c) => ({ ...c, pushForceN: 0 }))}
-              className="px-1.5 py-0.5 rounded hover:bg-[#e5dfd3] text-[#2c3e50] cursor-pointer"
-              title="Μηδενισμός δύναμης"
-            >
-              0
-            </button>
-            <span>+40 N →</span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Elastic Collisions, Friction & Air Drag Toggles */}
       <div className="space-y-2 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
