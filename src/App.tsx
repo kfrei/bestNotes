@@ -169,7 +169,13 @@ import {
   isClosedBooleanShape,
   type BooleanShapeOp,
 } from './utils/shapeBooleanOps';
+import {
+  sliceShapeWithPath,
+  sliceShapeEqualParts,
+  type EqualSlicePreset,
+} from './utils/shapeSliceOps';
 import { ShapeBooleanDropdown } from './components/ShapeBooleanDropdown';
+import { ShapeSliceDropdown } from './components/ShapeSliceDropdown';
 import { RichHoverTooltipHost } from './components/RichHoverTooltip';
 import {
   importGoodnotesFile,
@@ -16902,6 +16908,51 @@ export default function App() {
       updateActivePage,
       showToast,
     ]
+  );
+
+  const [knifeCutTargetId, setKnifeCutTargetId] = useState<string | null>(null);
+  const knifeCutPtsRef = useRef<{ x: number; y: number }[]>([]);
+
+  // Cancel knife cut mode if selection changes or user presses Escape
+  useEffect(() => {
+    if (!knifeCutTargetId) return;
+    if (selectedStrokeIds.length !== 1 || selectedStrokeIds[0] !== knifeCutTargetId) {
+      setKnifeCutTargetId(null);
+      knifeCutPtsRef.current = [];
+    }
+  }, [knifeCutTargetId, selectedStrokeIds]);
+
+  const handleEqualSliceSelected = useCallback(
+    (preset: EqualSlicePreset) => {
+      if (selectedStrokeIds.length !== 1) return;
+      const target = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
+      if (!target || !isClosedBooleanShape(target)) {
+        showToast('ℹ️ Επίλεξε ένα κλειστό σχήμα για κόψιμο!');
+        return;
+      }
+      const baseZ = Math.max(target.zOrder ?? 0, getNextPageZOrder(activePage));
+      const pieces = sliceShapeEqualParts(target, preset, baseZ);
+      if (pieces.length < 2) {
+        showToast('ℹ️ Δεν ήταν δυνατό το κόψιμο αυτού του σχήματος.');
+        return;
+      }
+      // Undo-First Guarantee: ALWAYS record pre-slice state for Undo!
+      suppressNextUndoRecordRef.current = false;
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: [...page.strokes.filter((s) => s.id !== target.id), ...pieces],
+        }),
+        true
+      );
+      setSelectedStrokeIds(pieces.map((p) => p.id));
+      showToast(
+        preset === 'quarter-split'
+          ? '🍕 Αποκόπηκε το ¼ έξω από το σχήμα (¼ + ¾) — σύρε τα ξεχωριστά!'
+          : `🍕 Το σχήμα κόπηκε σε ${pieces.length} ίσα ανεξάρτητα κομμάτια!`
+      );
+    },
+    [activePage, selectedStrokeIds, updateActivePage, showToast]
   );
 
   // Photoshop / Illustrator Pathfinder Boolean Shape Operations (Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός)
@@ -40162,6 +40213,20 @@ export default function App() {
       penTapTrackRef.current = null;
     }
 
+    // 0a-knife. 1-Shot Shape Knife Cut Mode: draw a red dashed cut line/angle across the selected shape!
+    if (knifeCutTargetId) {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      activePointerIdRef.current = e.pointerId;
+      activePointerTypeRef.current = e.pointerType;
+      isDrawingRef.current = true;
+      knifeCutPtsRef.current = [{ x: pt.x, y: pt.y }];
+      return;
+    }
+
     // 0a-0. Interactive Circuit Completion Proposal ("✨ Ολοκλήρωση"):
     //       1-Tap on "✓ Αποδοχή" check button, "✕" cancel button, or drag any of the 4 Corner Nodes (tl, tr, br, bl)!
     // 0-livepdf. Interactive Play/Stop & Switch Pills on Simulation Borders in Live PDF Mode
@@ -44356,6 +44421,41 @@ export default function App() {
       if (distFromStart > penTapTrackRef.current.maxDist) {
         penTapTrackRef.current.maxDist = distFromStart;
       }
+    }
+
+    // 0-knife. Live red dashed knife cut path preview while dragging
+    if (knifeCutTargetId && knifeCutPtsRef.current.length > 0) {
+      const kPts = knifeCutPtsRef.current;
+      const lastK = kPts[kPts.length - 1];
+      if (Math.hypot(latestPt.x - lastK.x, latestPt.y - lastK.y) >= 3) {
+        kPts.push({ x: latestPt.x, y: latestPt.y });
+      }
+      const c = activeCanvasRef.current;
+      const ctx = activeCtxRef.current;
+      if (c && ctx) {
+        ctx.save();
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([7, 5]);
+        ctx.beginPath();
+        ctx.moveTo(kPts[0].x, kPts[0].y);
+        for (let i = 1; i < kPts.length; i++) {
+          ctx.lineTo(kPts[i].x, kPts[i].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(kPts[0].x, kPts[0].y, 3.5, 0, Math.PI * 2);
+        ctx.arc(latestPt.x, latestPt.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      return;
     }
 
     // 0-heat. Interactive Heat & Thermodynamics Simulation Move / Drag:
@@ -49985,6 +50085,35 @@ export default function App() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
     flushPendingSimDragCommit();
+
+    // 0-knife. Complete 1-shot Shape Knife Cut with full Undo-First Guarantee!
+    if (knifeCutTargetId && knifeCutPtsRef.current.length > 0) {
+      const cutPts = [...knifeCutPtsRef.current];
+      knifeCutPtsRef.current = [];
+      clearActiveOverlay();
+      const targetId = knifeCutTargetId;
+      setKnifeCutTargetId(null);
+      const target = activePage.strokes.find((s) => s.id === targetId);
+      if (target && cutPts.length >= 2) {
+        const baseZ = Math.max(target.zOrder ?? 0, getNextPageZOrder(activePage));
+        const pieces = sliceShapeWithPath(target, cutPts, baseZ);
+        if (pieces.length >= 2) {
+          suppressNextUndoRecordRef.current = false;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: [...page.strokes.filter((s) => s.id !== target.id), ...pieces],
+            }),
+            true
+          );
+          setSelectedStrokeIds(pieces.map((p) => p.id));
+          showToast(`✂️ Το σχήμα κόπηκε σε ${pieces.length} ανεξάρτητα κομμάτια!`);
+        } else {
+          showToast('ℹ️ Η γραμμή κοπής πρέπει να διαπερνά το σχήμα για να το χωρίσει!');
+        }
+      }
+      return;
+    }
 
     if (heatSim.handlePointerUp()) {
       renderStaticSceneRef.current();
@@ -64267,6 +64396,27 @@ export default function App() {
                     Boolean(heatSim.activeHeatSim?.selectedObjectId || heatSim.activeHeatSim?.selectedObjectIds?.length)) && (
                   <div className="flex items-center gap-1.5">
                     {(() => {
+                      if (selectedStrokeIds.length === 1) {
+                        const singleSt = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
+                        if (singleSt && isClosedBooleanShape(singleSt)) {
+                          return (
+                            <ShapeSliceDropdown
+                              isKnifeActive={knifeCutTargetId === singleSt.id}
+                              onStartKnifeCut={() => {
+                                setKnifeCutTargetId(singleSt.id);
+                                showToast('🔪 Σύρε 1 γραμμή ή γωνία πάνω στο σχήμα για να το κόψεις!');
+                              }}
+                              onCancelKnifeCut={() => {
+                                setKnifeCutTargetId(null);
+                                knifeCutPtsRef.current = [];
+                                clearActiveOverlay();
+                              }}
+                              onSelectEqualSlice={handleEqualSliceSelected}
+                            />
+                          );
+                        }
+                        return null;
+                      }
                       if (selectedStrokeIds.length < 2) return null;
                       const selSet = new Set(selectedStrokeIds);
                       const closedCount = activePage.strokes.filter(
