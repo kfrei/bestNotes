@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Πνευμονική Κυψελίδα &amp; Ανταλλαγή Αερίων (O₂ / CO₂)</text>
+  <!-- Alveolus sac -->
+  <path d="M168,42 L168,84 A78,78 0 1,0 242,84 L242,42" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.4" filter="url(#soft-shadow)"/>
+  <text x="205" y="138" text-anchor="middle" class="t-sub" fill="#0369a1">Κυψελίδα</text>
+  <text x="205" y="154" text-anchor="middle" class="t-sm">(Αέρας πλούσιος σε O₂)</text>
+  <!-- Capillary wrapping bottom -->
+  <path d="M44,196 Q116,252 205,252 Q294,252 396,196" fill="none" stroke="#ef4444" stroke-width="24" stroke-linecap="round" opacity="0.22"/>
+  <path d="M44,196 Q116,252 205,252" fill="none" stroke="#2563eb" stroke-width="18" stroke-linecap="round" opacity="0.65"/>
+  <path d="M205,252 Q294,252 396,196" fill="none" stroke="#dc2626" stroke-width="18" stroke-linecap="round" opacity="0.72"/>
+  <!-- Diffusion arrows -->
+  <line x1="234" y1="186" x2="254" y2="232" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arr-red)"/>
+  <text x="278" y="210" class="t-eq" fill="#b91c1c">O₂ (διάχυση)</text>
+  <line x1="162" y1="232" x2="180" y2="186" stroke="#2563eb" stroke-width="2.6" marker-end="url(#arr-blue)"/>
+  <text x="114" y="210" class="t-eq" fill="#1d4ed8">CO₂ (διάχυση)</text>
+  <!-- Labels -->
+  <text x="72" y="176" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Φλεβικό αίμα</text>
+  <text x="72" y="188" text-anchor="middle" class="t-sm">(↑ CO₂, ↓ O₂)</text>
+  <text x="384" y="176" text-anchor="middle" class="t-lbl" fill="#b91c1c">Αρτηριακό αίμα</text>
+  <text x="384" y="188" text-anchor="middle" class="t-sm">(↑ O₂, ↓ CO₂)</text>
+  <text x="230" y="294" text-anchor="middle" class="t-eq">Παθητική διάχυση από υψηλότερη προς χαμηλότερη μερική πίεση</text>
+
+</svg>

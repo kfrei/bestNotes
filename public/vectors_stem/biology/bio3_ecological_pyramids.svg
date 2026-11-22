@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Οικολογική Πυραμίδα Ενέργειας (Κανόνας του 10%)</text>
+  <!-- 4 trapezoid levels -->
+  <polygon points="184,48 276,48 296,94 164,94" fill="#ef4444" stroke="#991b1b" stroke-width="1.5"/>
+  <text x="230" y="76" text-anchor="middle" class="t-w">3ης τάξης (10 kcal)</text>
+
+  <polygon points="154,98 306,98 334,146 126,146" fill="#f97316" stroke="#9a3412" stroke-width="1.5"/>
+  <text x="230" y="126" text-anchor="middle" class="t-w">Καταναλωτές 2ης τάξης (100 kcal)</text>
+
+  <polygon points="116,150 344,150 374,198 86,198" fill="#eab308" stroke="#854d0e" stroke-width="1.5"/>
+  <text x="230" y="178" text-anchor="middle" class="t-lbl">Καταναλωτές 1ης τάξης — Φυτοφάγα (1.000 kcal)</text>
+
+  <polygon points="74,202 386,202 418,252 42,252" fill="#22c55e" stroke="#14532d" stroke-width="1.5"/>
+  <text x="230" y="232" text-anchor="middle" class="t-w">Παραγωγοί — Φυτά / Φυτοπλαγκτόν (10.000 kcal)</text>
+
+  <!-- Heat loss arrows on right -->
+  <line x1="364" y1="174" x2="424" y2="156" stroke="#dc2626" stroke-width="2" marker-end="url(#arr-red)"/>
+  <text x="412" y="144" text-anchor="middle" class="t-sm" fill="#b91c1c">~90% Θερμότητα</text>
+  <rect x="20" y="264" width="420" height="32" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="284" text-anchor="middle" class="t-eq">Μόνο ~10% της ενέργειας περνά στο επόμενο τροφικό επίπεδο (ροή μονόδρομη)</text>
+
+</svg>

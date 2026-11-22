@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Εναλλαγή Ημέρας &amp; Νύχτας (Περιστροφή της Γης • 24 ώρες)</text>
+  <rect x="18" y="36" width="424" height="220" rx="12" fill="#0f172a"/>
+  <!-- Sun left -->
+  <circle cx="74" cy="146" r="34" fill="url(#sun-g)"/>
+  <text x="74" y="150" text-anchor="middle" class="t-lbl">Ήλιος</text>
+  <line x1="116" y1="106" x2="196" y2="106" stroke="#facc15" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <line x1="116" y1="146" x2="196" y2="146" stroke="#facc15" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <line x1="116" y1="186" x2="196" y2="186" stroke="#facc15" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <!-- Earth split Day (left lit) / Night (right dark) -->
+  <circle cx="294" cy="146" r="66" fill="url(#earth-g)" stroke="#93c5fd" stroke-width="2"/>
+  <path d="M294,80 A66,66 0 0,1 294,212 Z" fill="#020617" opacity="0.72"/>
+  <!-- Axis -->
+  <line x1="274" y1="62" x2="314" y2="230" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,3"/>
+  <text x="256" y="150" text-anchor="middle" class="t-w" fill="#fef08a">ΗΜΕΡΑ</text>
+  <text x="330" y="150" text-anchor="middle" class="t-w" fill="#94a3b8">ΝΥΧΤΑ</text>
+  <text x="394" y="84" text-anchor="middle" class="t-w" font-size="9">Άξονας</text>
+  <text x="394" y="96" text-anchor="middle" class="t-w" font-size="9">περιστροφής</text>
+  <rect x="18" y="264" width="424" height="32" rx="8" fill="#fefce8" stroke="#fde047"/>
+  <text x="230" y="284" text-anchor="middle" class="t-lbl" fill="#92400e">Η Γη περιστρέφεται γύρω από τον άξονά της από Δύση προς Ανατολή σε 24 ώρες</text>
+
+</svg>

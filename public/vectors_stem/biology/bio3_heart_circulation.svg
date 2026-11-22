@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Καρδιά &amp; Διπλή Κυκλοφορία (Μικρή &amp; Μεγάλη)</text>
+  <!-- Lungs top -->
+  <rect x="154" y="38" width="152" height="38" rx="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.6"/>
+  <text x="230" y="61" text-anchor="middle" class="t-lbl" fill="#0369a1">Πνεύμονες (Οξυγόνωση)</text>
+  <!-- Heart center (4 chambers) -->
+  <g transform="translate(174,108)" filter="url(#soft-shadow)">
+    <rect x="0" y="0" width="56" height="44" rx="8" fill="#bfdbfe" stroke="#1d4ed8" stroke-width="1.6"/>
+    <text x="28" y="26" text-anchor="middle" class="t-lbl" fill="#1e3a8a">Δ. Κόλπος</text>
+    <rect x="56" y="0" width="56" height="44" rx="8" fill="#fecaca" stroke="#dc2626" stroke-width="1.6"/>
+    <text x="84" y="26" text-anchor="middle" class="t-lbl" fill="#991b1b">Α. Κόλπος</text>
+    <rect x="0" y="44" width="56" height="52" rx="8" fill="#60a5fa" stroke="#1e3a8a" stroke-width="1.6"/>
+    <text x="28" y="74" text-anchor="middle" class="t-w">Δ. Κοιλία</text>
+    <rect x="56" y="44" width="56" height="52" rx="8" fill="#ef4444" stroke="#991b1b" stroke-width="1.6"/>
+    <text x="84" y="74" text-anchor="middle" class="t-w">Α. Κοιλία</text>
+  </g>
+  <!-- Body tissues bottom -->
+  <rect x="144" y="238" width="172" height="38" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+  <text x="230" y="261" text-anchor="middle" class="t-lbl" fill="#92400e">Ιστοί &amp; Όργανα Σώματος</text>
+  <!-- Pulmonary circuit arrows -->
+  <path d="M174,174 Q94,140 150,58" fill="none" stroke="#2563eb" stroke-width="2.6" marker-end="url(#arr-blue)"/>
+  <text x="82" y="100" text-anchor="middle" class="t-sm" fill="#1d4ed8">Πνευμονική</text>
+  <text x="82" y="113" text-anchor="middle" class="t-sm" fill="#1d4ed8">αρτηρία (CO₂)</text>
+  <path d="M310,58 Q366,92 290,126" fill="none" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arr-red)"/>
+  <text x="380" y="92" text-anchor="middle" class="t-sm" fill="#b91c1c">Πνευμονική</text>
+  <text x="380" y="105" text-anchor="middle" class="t-sm" fill="#b91c1c">φλέβα (O₂)</text>
+  <!-- Systemic circuit arrows -->
+  <path d="M290,180 Q374,210 320,256" fill="none" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arr-red)"/>
+  <text x="386" y="220" text-anchor="middle" class="t-sm" fill="#b91c1c">Αορτή (O₂)</text>
+  <path d="M140,256 Q78,200 170,128" fill="none" stroke="#2563eb" stroke-width="2.6" marker-end="url(#arr-blue)"/>
+  <text x="74" y="220" text-anchor="middle" class="t-sm" fill="#1d4ed8">Κοίλες φλέβες</text>
+  <text x="230" y="298" text-anchor="middle" class="t-sm">Μπλε = Φλεβικό αίμα (CO₂)   |   Κόκκινο = Αρτηριακό αίμα (O₂)</text>
+
+</svg>

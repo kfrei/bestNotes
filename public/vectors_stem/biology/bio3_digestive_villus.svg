@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Εντερική Λάχνη &amp; Απορρόφηση Θρεπτικών Ουσιών</text>
+  <!-- Villus finger projection -->
+  <path d="M132,248 L132,120 Q132,56 184,56 Q236,56 236,120 L236,248 Z" fill="#fef3c7" stroke="#d97706" stroke-width="2.4" filter="url(#soft-shadow)"/>
+  <!-- Lacteal (lymphatic) central green -->
+  <path d="M184,248 L184,92" stroke="#16a34a" stroke-width="10" stroke-linecap="round"/>
+  <!-- Capillary network red/blue -->
+  <path d="M162,248 L162,102 Q184,78 206,102 L206,248" fill="none" stroke="#dc2626" stroke-width="3.2"/>
+  <path d="M156,144 Q184,132 212,144 M156,184 Q184,172 212,184" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <!-- Absorption arrows -->
+  <line x1="78" y1="116" x2="128" y2="116" stroke="#dc2626" stroke-width="2.2" marker-end="url(#arr-red)"/>
+  <text x="72" y="102" text-anchor="middle" class="t-sm" fill="#b91c1c">Γλυκόζη &amp;</text>
+  <text x="72" y="114" text-anchor="middle" class="t-sm" fill="#b91c1c">Αμινοξέα</text>
+  <line x1="78" y1="176" x2="128" y2="176" stroke="#16a34a" stroke-width="2.2" marker-end="url(#arr-green)"/>
+  <text x="72" y="164" text-anchor="middle" class="t-sm" fill="#15803d">Λιπαρά οξέα</text>
+  <text x="72" y="176" text-anchor="middle" class="t-sm" fill="#15803d">&amp; Γλυκερόλη</text>
+  <!-- Right annotations -->
+  <line x1="236" y1="92" x2="292" y2="82" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="298" y="85" class="t-lbl">Μονόστιβο επιθήλιο</text>
+  <line x1="208" y1="136" x2="292" y2="136" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="298" y="139" class="t-lbl" fill="#b91c1c">Αιμοφόρα τριχοειδή</text>
+  <text x="298" y="152" class="t-sm">(→ Πυλαία φλέβα → Ήπαρ)</text>
+  <line x1="188" y1="196" x2="292" y2="196" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="298" y="199" class="t-lbl" fill="#15803d">Λεμφαγγείο (Χυλοφόρο)</text>
+  <text x="298" y="212" class="t-sm">(Απορρόφηση λιπιδίων)</text>
+  <rect x="20" y="264" width="420" height="32" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="284" text-anchor="middle" class="t-eq">Οι λάχνες &amp; μικρολάχνες αυξάνουν τεράστια την επιφάνεια απορρόφησης</text>
+
+</svg>

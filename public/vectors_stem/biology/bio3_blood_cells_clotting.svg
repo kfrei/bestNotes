@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Κύτταρα Αίματος &amp; Μηχανισμός Πήξης</text>
+  <g transform="translate(18,40)">
+    <rect width="136" height="196" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
+    <ellipse cx="68" cy="76" rx="36" ry="26" fill="url(#cell-red)" stroke="#991b1b" stroke-width="1.5"/>
+    <ellipse cx="68" cy="76" rx="15" ry="9" fill="#991b1b" opacity="0.35"/>
+    <text x="68" y="128" text-anchor="middle" class="t-sub" fill="#991b1b">Ερυθρά (RBC)</text>
+    <text x="68" y="148" text-anchor="middle" class="t-sm">Απύρηνα, αμφίκοιλα</text>
+    <text x="68" y="164" text-anchor="middle" class="t-sm">Αιμοσφαιρίνη (Hb)</text>
+    <text x="68" y="180" text-anchor="middle" class="t-sm">Μεταφορά O₂ / CO₂</text>
+  </g>
+  <g transform="translate(162,40)">
+    <rect width="136" height="196" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+    <circle cx="68" cy="76" r="32" fill="url(#cell-blue)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <circle cx="58" cy="70" r="9" fill="#1e3a8a"/><circle cx="76" cy="78" r="10" fill="#1e3a8a"/>
+    <text x="68" y="128" text-anchor="middle" class="t-sub" fill="#1e3a8a">Λευκά (WBC)</text>
+    <text x="68" y="148" text-anchor="middle" class="t-sm">Εμπύρηνα</text>
+    <text x="68" y="164" text-anchor="middle" class="t-sm">Φαγοκυττάρωση &amp;</text>
+    <text x="68" y="180" text-anchor="middle" class="t-sm">Παραγωγή αντισωμάτων</text>
+  </g>
+  <g transform="translate(306,40)">
+    <rect width="136" height="196" rx="10" fill="#fefce8" stroke="#fde047"/>
+    <polygon points="48,68 62,56 76,68 68,84 52,82" fill="url(#cell-amber)" stroke="#92400e"/>
+    <polygon points="74,78 88,68 96,82 82,92" fill="url(#cell-amber)" stroke="#92400e"/>
+    <line x1="40" y1="62" x2="100" y2="96" stroke="#d97706" stroke-width="1.6" stroke-dasharray="4,2"/>
+    <line x1="100" y1="60" x2="40" y2="96" stroke="#d97706" stroke-width="1.6" stroke-dasharray="4,2"/>
+    <text x="68" y="128" text-anchor="middle" class="t-sub" fill="#92400e">Αιμοπετάλια</text>
+    <text x="68" y="148" text-anchor="middle" class="t-sm">Κυτταρικά θραύσματα</text>
+    <text x="68" y="164" text-anchor="middle" class="t-sm">Ινωδογόνο → Ινώδες</text>
+    <text x="68" y="180" text-anchor="middle" class="t-sm">Πήξη αίματος (θρόμβος)</text>
+  </g>
+  <rect x="18" y="252" width="424" height="42" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="270" text-anchor="middle" class="t-eq">Σύσταση Αίματος: ~55% Πλάσμα (νερό, πρωτεΐνες) + ~45% Έμμορφα συστατικά</text>
+  <text x="230" y="286" text-anchor="middle" class="t-sm">Παραγωγή όλων των κυττάρων στον ερυθρό μυελό των οστών</text>
+
+</svg>

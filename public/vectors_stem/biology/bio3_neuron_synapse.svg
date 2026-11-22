@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Δομή Νευρώνα &amp; Χημική Σύναψη</text>
+  <!-- Dendrites -->
+  <path d="M74,132 L38,94 M74,132 L32,126 M74,132 L40,164 M74,132 L64,182 M74,132 L64,84" stroke="#7c3aed" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- Cell body (soma) -->
+  <circle cx="96" cy="132" r="26" fill="url(#cell-purple)" stroke="#581c87" stroke-width="1.6" filter="url(#soft-shadow)"/>
+  <circle cx="96" cy="132" r="9" fill="#fef08a"/>
+  <!-- Axon + Myelin sheaths -->
+  <line x1="122" y1="132" x2="344" y2="132" stroke="#7c3aed" stroke-width="4.5"/>
+  <rect x="136" y="121" width="38" height="22" rx="10" fill="#fde68a" stroke="#d97706" stroke-width="1.4"/>
+  <rect x="184" y="121" width="38" height="22" rx="10" fill="#fde68a" stroke="#d97706" stroke-width="1.4"/>
+  <rect x="232" y="121" width="38" height="22" rx="10" fill="#fde68a" stroke="#d97706" stroke-width="1.4"/>
+  <rect x="280" y="121" width="38" height="22" rx="10" fill="#fde68a" stroke="#d97706" stroke-width="1.4"/>
+  <!-- Axon terminals + synaptic cleft -->
+  <path d="M344,132 L374,104 M344,132 L380,132 M344,132 L374,160" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="378" cy="104" r="6" fill="#a855f7"/>
+  <circle cx="384" cy="132" r="6" fill="#a855f7"/>
+  <circle cx="378" cy="160" r="6" fill="#a855f7"/>
+  <!-- Neurotransmitters & postsynaptic membrane -->
+  <circle cx="396" cy="126" r="2.5" fill="#dc2626"/>
+  <circle cx="400" cy="136" r="2.5" fill="#dc2626"/>
+  <circle cx="395" cy="144" r="2.5" fill="#dc2626"/>
+  <path d="M412,92 Q404,132 412,172" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+  <!-- Direction arrow -->
+  <line x1="130" y1="86" x2="320" y2="86" stroke="#dc2626" stroke-width="2.4" marker-end="url(#arr-red)"/>
+  <text x="225" y="76" text-anchor="middle" class="t-lbl" fill="#b91c1c">Κατεύθυνση Νευρικής Ώσης →</text>
+  <!-- Labels -->
+  <text x="54" y="204" text-anchor="middle" class="t-sm">Δενδρίτες</text>
+  <text x="108" y="176" text-anchor="middle" class="t-sm">Κυτταρικό σώμα</text>
+  <text x="226" y="168" text-anchor="middle" class="t-lbl">Νευράξονας &amp; Έλυτρο Μυελίνης</text>
+  <text x="394" y="188" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Σύναψη</text>
+  <text x="394" y="202" text-anchor="middle" class="t-sm">(Νευροδιαβιβαστές)</text>
+  <rect x="20" y="256" width="420" height="38" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="279" text-anchor="middle" class="t-eq">Ηλεκτρικό σήμα στον νευράξονα → Χημική μεταβίβαση στη σύναψη</text>
+
+</svg>

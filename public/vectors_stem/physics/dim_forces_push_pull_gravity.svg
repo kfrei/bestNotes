@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Δυνάμεις στην Καθημερινή Ζωή (ΣΤ΄ Δημοτικού)</text>
+  <g transform="translate(18,40)">
+    <rect width="204" height="114" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="102" y="22" text-anchor="middle" class="t-sub" fill="#1e3a8a">1. Βαρύτητα (Βάρος)</text>
+    <circle cx="102" cy="54" r="14" fill="#ef4444"/>
+    <line x1="102" y1="68" x2="102" y2="96" stroke="#1e293b" stroke-width="2.6" marker-end="url(#arr-dark)"/>
+    <text x="102" y="108" text-anchor="middle" class="t-sm">Έλξη της Γης προς τα κάτω</text>
+  </g>
+  <g transform="translate(238,40)">
+    <rect width="204" height="114" rx="10" fill="#fef3c7" stroke="#f59e0b"/>
+    <text x="102" y="22" text-anchor="middle" class="t-sub" fill="#92400e">2. Τριβή</text>
+    <rect x="74" y="54" width="56" height="30" rx="4" fill="#d97706"/>
+    <line x1="134" y1="69" x2="176" y2="69" stroke="#16a34a" stroke-width="2.4" marker-end="url(#arr-green)"/>
+    <line x1="70" y1="82" x2="32" y2="82" stroke="#dc2626" stroke-width="2.4" marker-end="url(#arr-red)"/>
+    <text x="102" y="106" text-anchor="middle" class="t-sm">Αντιστέκεται στην κίνηση</text>
+  </g>
+  <g transform="translate(18,166)">
+    <rect width="204" height="114" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
+    <text x="102" y="22" text-anchor="middle" class="t-sub" fill="#0369a1">3. Άνωση (στο νερό)</text>
+    <rect x="34" y="64" width="136" height="32" fill="url(#water-g)"/>
+    <rect x="82" y="50" width="40" height="24" rx="4" fill="#f59e0b"/>
+    <line x1="102" y1="88" x2="102" y2="42" stroke="#2563eb" stroke-width="2.4" marker-end="url(#arr-blue)"/>
+    <text x="102" y="108" text-anchor="middle" class="t-sm">Σπρώχνει τα σώματα προς τα πάνω</text>
+  </g>
+  <g transform="translate(238,166)">
+    <rect width="204" height="114" rx="10" fill="#fef2f2" stroke="#f87171"/>
+    <text x="102" y="22" text-anchor="middle" class="t-sub" fill="#991b1b">4. Μαγνητική / Ηλεκτρική</text>
+    <rect x="48" y="54" width="46" height="22" fill="#dc2626"/><text x="71" y="69" text-anchor="middle" class="t-w">N</text>
+    <rect x="110" y="54" width="46" height="22" fill="#2563eb"/><text x="133" y="69" text-anchor="middle" class="t-w">S</text>
+    <text x="102" y="106" text-anchor="middle" class="t-sm">Δυνάμεις από απόσταση!</text>
+  </g>
+
+</svg>

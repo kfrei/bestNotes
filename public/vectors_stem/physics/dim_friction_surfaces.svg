@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Τριβή σε Λεία vs Τραχιά Επιφάνεια</text>
+  <!-- Top: Smooth (ice) -->
+  <rect x="20" y="42" width="420" height="98" rx="10" fill="#e0f2fe" stroke="#38bdf8"/>
+  <text x="34" y="62" class="t-sub" fill="#0369a1">1. Λεία επιφάνεια (π.χ. πάγος, γυαλί) → Μικρή τριβή</text>
+  <line x1="36" y1="114" x2="424" y2="114" stroke="#0284c7" stroke-width="3"/>
+  <rect x="76" y="84" width="48" height="28" rx="4" fill="#2563eb"/>
+  <line x1="130" y1="98" x2="364" y2="98" stroke="#16a34a" stroke-width="2.8" marker-end="url(#arr-green)"/>
+  <text x="256" y="90" text-anchor="middle" class="t-lbl" fill="#15803d">Μεγάλη απόσταση κύλισης →</text>
+  <!-- Bottom: Rough (sandpaper / carpet) -->
+  <rect x="20" y="154" width="420" height="98" rx="10" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="34" y="174" class="t-sub" fill="#92400e">2. Τραχιά επιφάνεια (π.χ. χαλί, άσφαλτος) → Μεγάλη τριβή</text>
+  <polyline points="36,226 48,220 60,226 72,220 84,226 96,220 108,226 120,220 132,226 144,220 156,226 168,220 180,226 192,220 204,226 216,220 228,226 240,220 252,226 264,220 276,226 288,220 300,226 312,220 324,226 336,220 348,226 360,220 372,226 384,220 396,226 408,220 420,226" fill="none" stroke="#b45309" stroke-width="2.4"/>
+  <rect x="76" y="192" width="48" height="28" rx="4" fill="#d97706"/>
+  <line x1="130" y1="206" x2="196" y2="206" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arr-red)"/>
+  <text x="286" y="210" text-anchor="middle" class="t-lbl" fill="#b91c1c">Σταματάει γρήγορα!</text>
+  <rect x="20" y="264" width="420" height="32" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="284" text-anchor="middle" class="t-lbl" fill="#14532d">Η τριβή μάς επιτρέπει να περπατάμε και στα αυτοκίνητα να φρενάρουν!</text>
+
+</svg>

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Καμπύλες Αύξησης Πληθυσμού (Εκθετική J vs Λογιστική S)</text>
+  <line x1="62" y1="236" x2="424" y2="236" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <line x1="62" y1="236" x2="62" y2="44" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <text x="430" y="240" class="t-lbl">Χρόνος (t)</text>
+  <text x="52" y="52" text-anchor="end" class="t-lbl">N</text>
+  <!-- Carrying capacity K -->
+  <line x1="62" y1="96" x2="416" y2="96" stroke="#dc2626" stroke-width="1.8" stroke-dasharray="6,4"/>
+  <text x="342" y="86" class="t-eq" fill="#b91c1c">Φέρουσα ικανότητα (K)</text>
+  <!-- J curve (exponential) -->
+  <path d="M62,230 Q144,226 196,174 Q236,126 254,52" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="5,3"/>
+  <text x="256" y="64" class="t-lbl" fill="#b91c1c">Καμπύλη J (Απεριόριστοι πόροι)</text>
+  <!-- S curve (logistic) -->
+  <path d="M62,230 Q150,224 218,162 Q274,104 342,99 L412,97" fill="none" stroke="#16a34a" stroke-width="3"/>
+  <text x="336" y="122" class="t-lbl" fill="#15803d">Καμπύλη S (Περιοριστικοί παράγοντες)</text>
+  <rect x="20" y="262" width="420" height="34" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="283" text-anchor="middle" class="t-eq">K = μέγιστος πληθυσμός που μπορεί να συντηρήσει σταθερά ένα οικοσύστημα</text>
+
+</svg>

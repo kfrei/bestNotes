@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Τροφική Αλυσίδα (Ροή Ενέργειας στη Φύση)</text>
+  <g transform="translate(14,92)">
+    <rect x="0" y="0" width="76" height="72" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+    <text x="38" y="32" text-anchor="middle" class="t-lbl">🌿 Φυτό</text>
+    <text x="38" y="54" text-anchor="middle" class="t-sm">Παραγωγός</text>
+    <line x1="78" y1="36" x2="90" y2="36" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+    <rect x="92" y="0" width="76" height="72" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <text x="130" y="32" text-anchor="middle" class="t-lbl">🦗 Ακρίδα</text>
+    <text x="130" y="54" text-anchor="middle" class="t-sm">Φυτοφάγο</text>
+    <line x1="170" y1="36" x2="182" y2="36" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+    <rect x="184" y="0" width="78" height="72" rx="10" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.6"/>
+    <text x="223" y="32" text-anchor="middle" class="t-lbl">🐸 Βάτραχος</text>
+    <text x="223" y="54" text-anchor="middle" class="t-sm">Σαρκοφάγο 1</text>
+    <line x1="264" y1="36" x2="276" y2="36" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+    <rect x="278" y="0" width="68" height="72" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="1.6"/>
+    <text x="312" y="32" text-anchor="middle" class="t-lbl">🐍 Φίδι</text>
+    <text x="312" y="54" text-anchor="middle" class="t-sm">Σαρκοφάγο 2</text>
+    <line x1="348" y1="36" x2="360" y2="36" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+    <rect x="362" y="0" width="70" height="72" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+    <text x="397" y="32" text-anchor="middle" class="t-lbl">🦅 Αετός</text>
+    <text x="397" y="54" text-anchor="middle" class="t-sm">Κορυφαίος</text>
+  </g>
+  <rect x="96" y="198" width="268" height="44" rx="10" fill="#f1f5f9" stroke="#64748b"/>
+  <text x="230" y="218" text-anchor="middle" class="t-lbl">🍄 Αποικοδομητές (Μύκητες &amp; Βακτήρια)</text>
+  <text x="230" y="233" text-anchor="middle" class="t-sm">Επιστρέφουν τα θρεπτικά συστατικά στο έδαφος!</text>
+  <rect x="20" y="262" width="420" height="32" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="282" text-anchor="middle" class="t-lbl" fill="#14532d">Κάθε βέλος (→) σημαίνει «γίνεται τροφή για...»</text>
+
+</svg>

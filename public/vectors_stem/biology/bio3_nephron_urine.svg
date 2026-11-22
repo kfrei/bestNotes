@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Νεφρώνας &amp; Σχηματισμός Ούρων</text>
+  <!-- Bowman's capsule + Glomerulus -->
+  <path d="M74,84 A36,36 0 1,0 134,84" fill="#fef3c7" stroke="#d97706" stroke-width="2.4"/>
+  <circle cx="104" cy="92" r="18" fill="url(#cell-red)" opacity="0.85"/>
+  <text x="104" y="54" text-anchor="middle" class="t-lbl">1. Διήθηση</text>
+  <text x="104" y="66" text-anchor="middle" class="t-sm">(Έλυτρο Bowman)</text>
+  <!-- Proximal tubule -> Loop of Henle -> Distal tubule -> Collecting duct -->
+  <path d="M134,88 Q166,74 186,108 L186,216 Q210,248 234,216 L234,108 Q264,74 302,102 L344,102" fill="none" stroke="#eab308" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M134,88 Q166,74 186,108 L186,216 Q210,248 234,216 L234,108 Q264,74 302,102 L344,102" fill="none" stroke="#854d0e" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <!-- Collecting duct -->
+  <rect x="342" y="76" width="22" height="168" rx="8" fill="#fde047" stroke="#854d0e" stroke-width="1.8"/>
+  <line x1="353" y1="100" x2="353" y2="230" stroke="#854d0e" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <!-- Arrows for Reabsorption & Secretion -->
+  <line x1="176" y1="158" x2="132" y2="158" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arr-blue)"/>
+  <text x="96" y="156" text-anchor="middle" class="t-lbl" fill="#1d4ed8">2. Επαναρρόφηση</text>
+  <text x="96" y="170" text-anchor="middle" class="t-sm">(H₂O, γλυκόζη, Na⁺)</text>
+  <line x1="292" y1="154" x2="254" y2="136" stroke="#dc2626" stroke-width="2.2" marker-end="url(#arr-red)"/>
+  <text x="302" y="172" text-anchor="middle" class="t-lbl" fill="#b91c1c">3. Έκκριση</text>
+  <text x="302" y="186" text-anchor="middle" class="t-sm">(H⁺, τοξίνες)</text>
+  <text x="210" y="252" text-anchor="middle" class="t-sm">Αγκύλη Henle</text>
+  <text x="404" y="158" text-anchor="middle" class="t-lbl">Αθροιστικό</text>
+  <text x="404" y="172" text-anchor="middle" class="t-lbl">σωληνάριο</text>
+  <text x="404" y="192" text-anchor="middle" class="t-sm">→ Ούρα</text>
+  <rect x="20" y="268" width="420" height="30" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="287" text-anchor="middle" class="t-eq">Ομοιόσταση νερού &amp; ιόντων • Απομάκρυνση ουρίας &amp; άχρηστων ουσιών</text>
+
+</svg>

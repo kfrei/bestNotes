@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ανοσοβιολογική Απόκριση (Αντίσωμα–Αντιγόνο &amp; Μνήμη)</text>
+  <!-- Left: Y-shaped Antibody binding Antigen -->
+  <rect x="18" y="38" width="198" height="216" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="117" y="56" text-anchor="middle" class="t-sub">Σύμπλοκο Αντιγόνου–Αντισώματος</text>
+  <!-- Y antibody -->
+  <path d="M117,196 L117,140 M117,140 L84,104 M117,140 L150,104" stroke="#2563eb" stroke-width="9" stroke-linecap="round"/>
+  <path d="M98,118 L78,98 M136,118 L156,98" stroke="#60a5fa" stroke-width="6" stroke-linecap="round"/>
+  <!-- Antigens fitting tips -->
+  <polygon points="68,86 88,86 78,104" fill="#ef4444" stroke="#991b1b"/>
+  <polygon points="146,86 166,86 156,104" fill="#ef4444" stroke="#991b1b"/>
+  <text x="117" y="80" text-anchor="middle" class="t-lbl" fill="#b91c1c">Αντιγόνα (ειδική σύνδεση)</text>
+  <text x="117" y="222" text-anchor="middle" class="t-sm">Πλασματοκύτταρα (Β-λεμφοκύτταρα)</text>
+  <text x="117" y="236" text-anchor="middle" class="t-sm">→ Παραγωγή αντισωμάτων</text>
+  <!-- Right: Primary vs Secondary response graph -->
+  <rect x="226" y="38" width="216" height="216" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="334" y="56" text-anchor="middle" class="t-sub">Πρωτογενής vs Δευτερογενής</text>
+  <line x1="246" y1="222" x2="430" y2="222" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <line x1="246" y1="222" x2="246" y2="74" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <!-- Primary low bump, Secondary tall fast peak -->
+  <path d="M246,222 L268,222 Q286,174 304,196 Q320,210 340,210 L352,210 Q366,84 384,96 Q404,116 426,142" fill="none" stroke="#dc2626" stroke-width="2.6"/>
+  <text x="292" y="170" text-anchor="middle" class="t-sm">1η επαφή</text>
+  <text x="382" y="86" text-anchor="middle" class="t-lbl" fill="#b91c1c">2η επαφή (Μνήμη!)</text>
+  <text x="334" y="242" text-anchor="middle" class="t-sm">Χρόνος (εμβολιασμός → κύτταρα μνήμης)</text>
+  <rect x="18" y="264" width="424" height="32" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="284" text-anchor="middle" class="t-eq">Ειδική Άμυνα: Χυμική (Β-κύτταρα/αντισώματα) &amp; Κυτταρική (Τ-κύτταρα)</text>
+
+</svg>

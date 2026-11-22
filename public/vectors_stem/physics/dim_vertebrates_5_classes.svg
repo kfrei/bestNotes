@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Οι 5 Ομάδες Σπονδυλωτών Ζώων (Έχουν Σπονδυλική Στήλη)</text>
+  <rect x="22" y="42" width="416" height="38" rx="10" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/><text x="38" y="66" class="t-sub">🐟 Ψάρια</text><text x="156" y="65" class="t-lbl">Λέπια • Βράγχια • Ψυχρόαιμα • Αυγά στο νερό</text><rect x="22" y="88" width="416" height="38" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/><text x="38" y="112" class="t-sub">🐸 Αμφίβια</text><text x="156" y="111" class="t-lbl">Υγρό δέρμα • Μεταμόρφωση (γυρίνος → βάτραχος)</text><rect x="22" y="134" width="416" height="38" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/><text x="38" y="158" class="t-sub">🦎 Ερπετά</text><text x="156" y="157" class="t-lbl">Φολίδες • Πνεύμονες • Ψυχρόαιμα • Αυγά στη στεριά</text><rect x="22" y="180" width="416" height="38" rx="10" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.5"/><text x="38" y="204" class="t-sub">🦅 Πτηνά</text><text x="156" y="203" class="t-lbl">Φτερά & πούπουλα • Θερμόαιμα • Αυγά με κέλυφος</text><rect x="22" y="226" width="416" height="38" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/><text x="38" y="250" class="t-sub">🦁 Θηλαστικά</text><text x="156" y="249" class="t-lbl">Τρίχωμα • Θερμόαιμα • Γεννούν ζωντανά & θηλάζουν</text>
+  <text x="230" y="294" text-anchor="middle" class="t-sm">Ασπόνδυλα (χωρίς σπονδυλική στήλη): Έντομα, Μαλάκια, Σκουλήκια, Αράχνες</text>
+
+</svg>

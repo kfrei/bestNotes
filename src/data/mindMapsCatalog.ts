@@ -1,6 +1,14 @@
 // Auto-generated Educational Transparent Image Library Catalog (local /mind_maps/ assets)
 export type MindMapSubject = 'Φυσική' | 'Χημεία' | 'Βιολογία' | 'Γεωγραφία';
-export type MindMapGrade = "Α' Γυμνασίου" | "Β' Γυμνασίου" | "Γ' Γυμνασίου" | "Α' Λυκείου" | "Β' Λυκείου" | "Γ' Λυκείου";
+export type MindMapGrade =
+  | "Ε' Δημοτικού"
+  | "ΣΤ' Δημοτικού"
+  | "Α' Γυμνασίου"
+  | "Β' Γυμνασίου"
+  | "Γ' Γυμνασίου"
+  | "Α' Λυκείου"
+  | "Β' Λυκείου"
+  | "Γ' Λυκείου";
 
 export interface MindMapLibraryItem {
   id: string;

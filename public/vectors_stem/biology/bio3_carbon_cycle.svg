@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ο Κύκλος του Άνθρακα (CO₂ — Φωτοσύνθεση, Αναπνοή, Καύσεις)</text>
+  <rect x="148" y="38" width="164" height="38" rx="18" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.8"/>
+  <text x="230" y="61" text-anchor="middle" class="t-lbl" fill="#0369a1">Ατμοσφαιρικό CO₂</text>
+  <!-- Plants -->
+  <rect x="24" y="138" width="124" height="44" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="86" y="158" text-anchor="middle" class="t-lbl" fill="#14532d">Φυτά (Παραγωγοί)</text>
+  <text x="86" y="172" text-anchor="middle" class="t-sm">Οργανικές ενώσεις</text>
+  <!-- Animals -->
+  <rect x="174" y="138" width="112" height="44" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+  <text x="230" y="158" text-anchor="middle" class="t-lbl" fill="#92400e">Ζώα (Καταναλωτές)</text>
+  <text x="230" y="172" text-anchor="middle" class="t-sm">Τροφή</text>
+  <!-- Fossil fuels & Factories -->
+  <rect x="312" y="138" width="128" height="44" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+  <text x="376" y="158" text-anchor="middle" class="t-lbl" fill="#991b1b">Ορυκτά Καύσιμα</text>
+  <text x="376" y="172" text-anchor="middle" class="t-sm">Βιομηχανία / Καύσεις</text>
+  <!-- Decomposers bottom -->
+  <rect x="144" y="232" width="172" height="40" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="1.6"/>
+  <text x="230" y="256" text-anchor="middle" class="t-lbl">Αποικοδομητές (Έδαφος)</text>
+  <!-- Arrows -->
+  <line x1="170" y1="78" x2="96" y2="134" stroke="#16a34a" stroke-width="2.6" marker-end="url(#arr-green)"/>
+  <text x="92" y="102" text-anchor="middle" class="t-lbl" fill="#15803d">Φωτοσύνθεση</text>
+  <line x1="230" y1="136" x2="230" y2="80" stroke="#d97706" stroke-width="2.2" marker-end="url(#arr-amber)"/>
+  <text x="266" y="110" class="t-sm" fill="#b45309">Αναπνοή</text>
+  <line x1="364" y1="136" x2="296" y2="78" stroke="#dc2626" stroke-width="2.6" marker-end="url(#arr-red)"/>
+  <text x="374" y="102" text-anchor="middle" class="t-lbl" fill="#b91c1c">Καύσεις ↑ CO₂</text>
+  <line x1="150" y1="160" x2="172" y2="160" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <line x1="86" y1="184" x2="152" y2="232" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr-dark)"/>
+  <line x1="230" y1="184" x2="230" y2="228" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr-dark)"/>
+  <text x="230" y="294" text-anchor="middle" class="t-sm">Ανακύκλωση άνθρακα μεταξύ ατμόσφαιρας, βιόσφαιρας &amp; λιθόσφαιρας</text>
+
+</svg>

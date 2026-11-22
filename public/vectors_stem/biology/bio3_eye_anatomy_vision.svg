@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ανατομία Οφθαλμού &amp; Προσαρμογή Όρασης</text>
+  <!-- Eyeball -->
+  <circle cx="204" cy="148" r="84" fill="#f8fafc" stroke="#1e293b" stroke-width="2.2" filter="url(#soft-shadow)"/>
+  <!-- Cornea bulge left -->
+  <path d="M126,112 Q104,148 126,184" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.2"/>
+  <!-- Lens -->
+  <ellipse cx="144" cy="148" rx="11" ry="30" fill="#bae6fd" stroke="#0284c7" stroke-width="1.8"/>
+  <!-- Retina arc right -->
+  <path d="M244,76 A80,80 0 0,1 244,220" fill="none" stroke="#f59e0b" stroke-width="4.5"/>
+  <!-- Optic nerve -->
+  <rect x="284" y="138" width="44" height="20" fill="#fde68a" stroke="#b45309" stroke-width="1.6"/>
+  <!-- Light rays focusing on retina -->
+  <line x1="42" y1="126" x2="144" y2="126" stroke="#dc2626" stroke-width="2"/>
+  <line x1="42" y1="170" x2="144" y2="170" stroke="#dc2626" stroke-width="2"/>
+  <line x1="144" y1="126" x2="284" y2="148" stroke="#dc2626" stroke-width="2"/>
+  <line x1="144" y1="170" x2="284" y2="148" stroke="#dc2626" stroke-width="2"/>
+  <!-- Labels -->
+  <text x="72" y="102" text-anchor="middle" class="t-lbl">Κερατοειδής</text>
+  <text x="144" y="96" text-anchor="middle" class="t-lbl" fill="#0369a1">Κρυσταλλοειδής φακός</text>
+  <text x="356" y="114" class="t-lbl" fill="#b45309">Αμφιβληστροειδής</text>
+  <text x="356" y="128" class="t-sm">(Ραβδία &amp; Κωνία)</text>
+  <text x="356" y="152" class="t-lbl">Οπτικό νεύρο</text>
+  <rect x="20" y="256" width="420" height="40" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="274" text-anchor="middle" class="t-eq">Μυωπία: Είδωλο μπροστά (αποκλίνων φακός) | Υπερμετρωπία: Είδωλο πίσω (συγκλίνων)</text>
+  <text x="230" y="289" text-anchor="middle" class="t-sm">Κωνία → έγχρωμη όραση (ημέρα)  •  Ραβδία → όραση σε χαμηλό φωτισμό</text>
+
+</svg>

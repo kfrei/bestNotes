@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Τα Μέρη του Άνθους &amp; Επικονίαση</text>
+  <!-- Stem & sepals -->
+  <line x1="230" y1="256" x2="230" y2="196" stroke="#15803d" stroke-width="7"/>
+  <ellipse cx="196" cy="198" rx="22" ry="8" transform="rotate(-20 196 198)" fill="#22c55e" stroke="#14532d"/>
+  <ellipse cx="264" cy="198" rx="22" ry="8" transform="rotate(20 264 198)" fill="#22c55e" stroke="#14532d"/>
+  <!-- Petals -->
+  <ellipse cx="164" cy="136" rx="44" ry="26" transform="rotate(-30 164 136)" fill="#fbcfe8" stroke="#db2777" stroke-width="1.8"/>
+  <ellipse cx="296" cy="136" rx="44" ry="26" transform="rotate(30 296 136)" fill="#fbcfe8" stroke="#db2777" stroke-width="1.8"/>
+  <!-- Pistil (center) -->
+  <path d="M214,196 Q206,162 224,142 L224,96 L236,96 L236,142 Q254,162 246,196 Z" fill="#fef08a" stroke="#ca8a04" stroke-width="1.8"/>
+  <ellipse cx="230" cy="94" rx="14" ry="7" fill="#f59e0b" stroke="#92400e"/>
+  <!-- Stamens -->
+  <line x1="210" y1="184" x2="184" y2="108" stroke="#ca8a04" stroke-width="2.4"/>
+  <ellipse cx="182" cy="104" rx="10" ry="6" fill="#f97316" stroke="#9a3412"/>
+  <line x1="250" y1="184" x2="276" y2="108" stroke="#ca8a04" stroke-width="2.4"/>
+  <ellipse cx="278" cy="104" rx="10" ry="6" fill="#f97316" stroke="#9a3412"/>
+  <!-- Labels -->
+  <text x="86" y="96" class="t-lbl" fill="#be185d">Πέταλα (χρώμα)</text>
+  <text x="86" y="168" class="t-lbl" fill="#c2410c">Στήμονες (Γύρη)</text>
+  <text x="356" y="96" class="t-lbl" fill="#b45309">Ύπερος (Στίγμα</text>
+  <text x="356" y="110" class="t-sm">&amp; Ωοθήκη → Καρπός)</text>
+  <text x="356" y="204" class="t-lbl" fill="#15803d">Σέπαλα</text>
+  <rect x="20" y="264" width="420" height="32" rx="8" fill="#fefce8" stroke="#fde047"/>
+  <text x="230" y="284" text-anchor="middle" class="t-lbl" fill="#92400e">Επικονίαση = μεταφορά γύρης από τους στήμονες στον ύπερο (μέλισσες / άνεμος)</text>
+
+</svg>

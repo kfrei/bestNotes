@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="cell-red" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="cell-blue" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="cell-green" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="cell-amber" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="cell-purple" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </radialGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 10.5px Georgia, "Times New Roman", serif; fill: #14532d; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ευτροφισμός Υδάτινων Οικοσυστημάτων</text>
+  <rect x="18" y="48" width="96" height="106" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text x="66" y="72" text-anchor="middle" class="t-sub" fill="#92400e">1. Λιπάσματα</text>
+  <text x="66" y="96" text-anchor="middle" class="t-sm">Νιτρικά (NO₃⁻)</text>
+  <text x="66" y="112" text-anchor="middle" class="t-sm">&amp; Φωσφορικά</text>
+  <text x="66" y="128" text-anchor="middle" class="t-sm">σε λίμνες/θάλασσες</text>
+  <line x1="116" y1="100" x2="132" y2="100" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+  <rect x="136" y="48" width="96" height="106" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="184" y="72" text-anchor="middle" class="t-sub" fill="#14532d">2. Άνθιση Φυκών</text>
+  <text x="184" y="96" text-anchor="middle" class="t-sm">Υπέρμετρη αύξηση</text>
+  <text x="184" y="112" text-anchor="middle" class="t-sm">φυτοπλαγκτού</text>
+  <text x="184" y="128" text-anchor="middle" class="t-sm">(εμποδίζει το φως)</text>
+  <line x1="234" y1="100" x2="250" y2="100" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+
+  <rect x="254" y="48" width="96" height="106" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
+  <text x="302" y="72" text-anchor="middle" class="t-sub" fill="#0369a1">3. Αποικοδόμηση</text>
+  <text x="302" y="96" text-anchor="middle" class="t-sm">Αερόβια βακτήρια</text>
+  <text x="302" y="112" text-anchor="middle" class="t-sm">καταναλώνουν</text>
+  <text x="302" y="128" text-anchor="middle" class="t-sm">το διαλυμένο O₂</text>
+  <line x1="352" y1="100" x2="368" y2="100" stroke="#dc2626" stroke-width="2" marker-end="url(#arr-red)"/>
+
+  <rect x="372" y="48" width="70" height="106" rx="10" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="407" y="72" text-anchor="middle" class="t-sub" fill="#991b1b">4. Ανοξία</text>
+  <text x="407" y="102" text-anchor="middle" class="t-sm">↓ O₂</text>
+  <text x="407" y="120" text-anchor="middle" class="t-sm">Θάνατος</text>
+  <text x="407" y="134" text-anchor="middle" class="t-sm">ψαριών</text>
+
+  <!-- Lake schematic bottom -->
+  <rect x="20" y="176" width="420" height="72" rx="10" fill="#bae6fd" stroke="#0284c7"/>
+  <rect x="20" y="176" width="420" height="16" rx="4" fill="#16a34a" opacity="0.8"/>
+  <text x="230" y="188" text-anchor="middle" class="t-w">Πυκνό στρώμα φυτοπλαγκτού στην επιφάνεια (μπλοκάρει το φως)</text>
+  <text x="230" y="226" text-anchor="middle" class="t-lbl" fill="#0c4a6e">Βυθός χωρίς O₂ — Υποβάθμιση υδάτινου οικοσυστήματος</text>
+  <rect x="20" y="262" width="420" height="32" rx="8" fill="#fefce8" stroke="#fde047"/>
+  <text x="230" y="282" text-anchor="middle" class="t-eq">Αντιμετώπιση: Βιολογικός καθαρισμός λυμάτων &amp; ορθολογική λίπανση</text>
+
+</svg>

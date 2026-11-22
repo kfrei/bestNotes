@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ηλεκτρομαγνήτης (Καρφί, Σύρμα &amp; Μπαταρία)</text>
+  <!-- Iron nail -->
+  <rect x="152" y="126" width="194" height="20" rx="4" fill="#94a3b8" stroke="#334155" stroke-width="1.8"/>
+  <polygon points="346,126 370,136 346,146" fill="#64748b"/>
+  <rect x="142" y="114" width="12" height="44" rx="3" fill="#64748b" stroke="#334155"/>
+  <ellipse cx="196" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="210" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="224" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="238" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="252" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="266" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="280" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/><ellipse cx="294" cy="136" rx="7" ry="26" fill="none" stroke="#ea580c" stroke-width="3"/>
+  <!-- Battery bottom -->
+  <rect x="196" y="204" width="100" height="36" rx="6" fill="#f59e0b" stroke="#78350f" stroke-width="1.8"/>
+  <text x="246" y="226" text-anchor="middle" class="t-w">+  Μπαταρία  −</text>
+  <path d="M196,162 L196,222 M296,162 L296,222" fill="none" stroke="#1e293b" stroke-width="2.4"/>
+  <!-- Paperclips attracted -->
+  <ellipse cx="388" cy="136" rx="12" ry="5" fill="none" stroke="#2563eb" stroke-width="2.2"/>
+  <ellipse cx="408" cy="144" rx="12" ry="5" fill="none" stroke="#2563eb" stroke-width="2.2"/>
+  <text x="392" y="112" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Συνδετήρες</text>
+  <text x="392" y="124" text-anchor="middle" class="t-sm">(έλκονται!)</text>
+  <rect x="20" y="262" width="420" height="34" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="230" y="283" text-anchor="middle" class="t-lbl" fill="#14532d">Όταν περνάει ρεύμα γίνεται μαγνήτης • Όταν ανοίξει το κύκλωμα, χάνει τον μαγνητισμό!</text>
+
+</svg>

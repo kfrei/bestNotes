@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <radialGradient id="sun-g" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-g" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="water-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Μορφές &amp; Μετατροπές Ενέργειας</text>
+  <circle cx="230" cy="148" r="46" fill="url(#sun-g)" stroke="#d97706" stroke-width="2" filter="url(#soft-shadow)"/>
+  <text x="230" y="145" text-anchor="middle" class="t-sub">ΕΝΕΡΓΕΙΑ</text>
+  <text x="230" y="160" text-anchor="middle" class="t-sm">(Δεν χάνεται!)</text>
+  <g font-weight="600">
+    <rect x="26" y="46" width="126" height="38" rx="10" fill="#fef3c7" stroke="#d97706"/><text x="89" y="69" text-anchor="middle" class="t-lbl">Φωτεινή (Ήλιος)</text>
+    <rect x="308" y="46" width="126" height="38" rx="10" fill="#dbeafe" stroke="#2563eb"/><text x="371" y="69" text-anchor="middle" class="t-lbl">Ηλεκτρική (Ρεύμα)</text>
+    <rect x="26" y="132" width="126" height="38" rx="10" fill="#dcfce7" stroke="#16a34a"/><text x="89" y="155" text-anchor="middle" class="t-lbl">Χημική (Τροφή)</text>
+    <rect x="308" y="132" width="126" height="38" rx="10" fill="#fee2e2" stroke="#dc2626"/><text x="371" y="155" text-anchor="middle" class="t-lbl">Θερμική (Ζέστη)</text>
+    <rect x="26" y="216" width="126" height="38" rx="10" fill="#f3e8ff" stroke="#7c3aed"/><text x="89" y="239" text-anchor="middle" class="t-lbl">Κινητική (Κίνηση)</text>
+    <rect x="308" y="216" width="126" height="38" rx="10" fill="#e0f2fe" stroke="#0284c7"/><text x="371" y="239" text-anchor="middle" class="t-lbl">Δυναμική (Ύψος)</text>
+  </g>
+  <g stroke="#64748b" stroke-width="1.8" marker-end="url(#arr-dark)">
+    <line x1="154" y1="68" x2="192" y2="114"/><line x1="306" y1="68" x2="268" y2="114"/>
+    <line x1="154" y1="150" x2="180" y2="150"/><line x1="306" y1="150" x2="280" y2="150"/>
+    <line x1="154" y1="230" x2="192" y2="184"/><line x1="306" y1="230" x2="268" y2="184"/>
+  </g>
+  <rect x="20" y="266" width="420" height="30" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="285" text-anchor="middle" class="t-lbl" fill="#1e3a8a">Η ενέργεια μετατρέπεται διαρκώς από τη μια μορφή στην άλλη!</text>
+
+</svg>
