@@ -588,86 +588,101 @@ export function stepGravityScene(
       }
     }
 
-    // 3. Body vs Static Segments Collision (closest-point-on-segment, 2 iterations for crisp corners)
+    // 3. Body vs Static Segments Collision — Deepest-Contact-First (2 passes) to eliminate
+    //    Box2D-style "ghost vertex" kicks when a ball hits near a joint between two flat segments!
     for (const b of bodies) {
       if (b.pinned) continue;
       const r = b.shapeKind === 'ball' ? b.radius : Math.min(b.halfW, b.halfH);
 
-      for (const seg of segments) {
-        const abx = seg.bx - seg.ax;
-        const aby = seg.by - seg.ay;
-        const lenSq = abx * abx + aby * aby;
-        if (lenSq < 1e-4) continue;
+      for (let iter = 0; iter < 2; iter++) {
+        let bestOverlap = 0;
+        let bestNx = 0;
+        let bestNy = 0;
 
-        const t = Math.max(0, Math.min(1, ((b.cx - seg.ax) * abx + (b.cy - seg.ay) * aby) / lenSq));
-        const closestX = seg.ax + t * abx;
-        const closestY = seg.ay + t * aby;
-        const dx = b.cx - closestX;
-        const dy = b.cy - closestY;
-        const dist = Math.hypot(dx, dy);
-        const rContact = r + (seg.halfWidth ?? 1.5);
+        for (const seg of segments) {
+          const abx = seg.bx - seg.ax;
+          const aby = seg.by - seg.ay;
+          const lenSq = abx * abx + aby * aby;
+          if (lenSq < 1e-4) continue;
 
-        if (dist < rContact && dist > 1e-5) {
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const overlap = rContact - dist;
-          const yBefore = b.cy;
-          const speedBeforeSq = b.vx * b.vx + b.vy * b.vy;
+          const t = Math.max(0, Math.min(1, ((b.cx - seg.ax) * abx + (b.cy - seg.ay) * aby) / lenSq));
+          const closestX = seg.ax + t * abx;
+          const closestY = seg.ay + t * aby;
+          const dx = b.cx - closestX;
+          const dy = b.cy - closestY;
+          const dist = Math.hypot(dx, dy);
+          const rContact = r + (seg.halfWidth ?? 1.5);
 
-          b.cx += nx * overlap;
-          b.cy += ny * overlap;
-
-          const vn = b.vx * nx + b.vy * ny;
-          if (vn < 0) {
-            const tx = -ny;
-            const ty = nx;
-            const vtBefore = b.vx * tx + b.vy * ty;
-            // Smooth grazing/rolling contact on curved U-bowls & ramps vs genuine drop/wall bounce
-            // (42 px/s ≈ 1.5px micro-drop; real air drops hit at 120+ px/s and bounce cleanly!)
-            const isGrazingSlide =
-              Math.abs(vn) < 42 || Math.abs(vn) < Math.abs(vtBefore) * 0.42;
-            const eEff = isGrazingSlide ? 0 : config.restitution;
-            const jn = -(1 + eEff) * vn;
-            b.vx += jn * nx;
-            b.vy += jn * ny;
-
-            // Track live normal force for vector visualization
-            const nForce = (jn / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
-            if (nForce > b.normalForceN) {
-              b.normalForceN = nForce;
-              b.normalX = nx;
-              b.normalY = ny;
+          if (dist < rContact && dist > 1e-5) {
+            const overlap = rContact - dist;
+            if (overlap > bestOverlap) {
+              bestOverlap = overlap;
+              bestNx = dx / dist;
+              bestNy = dy / dist;
             }
-            b.onGround = true;
+          }
+        }
 
-            if (config.frictionEnabled && config.frictionMu > 0) {
-              // Coulomb Friction along tangent (ONLY when frictionEnabled === true!)
-              const vt = b.vx * tx + b.vy * ty;
-              const maxFricDeltaV = config.frictionMu * Math.abs(jn);
-              if (Math.abs(vt) <= maxFricDeltaV + 0.6) {
-                b.vx -= vt * tx;
-                b.vy -= vt * ty;
-                const appliedFricN = (Math.abs(vt) / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
-                b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
-              } else {
-                const sign = vt > 0 ? 1 : -1;
-                b.vx -= sign * maxFricDeltaV * tx;
-                b.vy -= sign * maxFricDeltaV * ty;
-                const appliedFricN = (maxFricDeltaV / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
-                b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
-              }
-            } else if (!config.airDragEnabled && isGrazingSlide) {
-              // Ideal conservative mode (Friction OFF & Air Drag OFF):
-              // Rotate velocity smoothly onto the curved tangent WITHOUT losing cos(dTheta) energy
-              // across polyline chord transitions, accounting for exact ΔU = -mgΔy from push-out!
-              const vt = b.vx * tx + b.vy * ty;
-              const targetSpeedSq = speedBeforeSq + 2 * gPx * (b.cy - yBefore);
-              if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
-                const targetSpeed = Math.sqrt(targetSpeedSq);
-                const sign = vt >= 0 ? 1 : -1;
-                b.vx = sign * targetSpeed * tx;
-                b.vy = sign * targetSpeed * ty;
-              }
+        if (bestOverlap <= 0) break;
+
+        const nx = bestNx;
+        const ny = bestNy;
+        const yBefore = b.cy;
+        const speedBeforeSq = b.vx * b.vx + b.vy * b.vy;
+
+        b.cx += nx * bestOverlap;
+        b.cy += ny * bestOverlap;
+
+        const vn = b.vx * nx + b.vy * ny;
+        if (vn < 0) {
+          const tx = -ny;
+          const ty = nx;
+          const vtBefore = b.vx * tx + b.vy * ty;
+          // Smooth grazing/rolling contact on curved U-bowls & ramps vs genuine drop/wall bounce
+          // (42 px/s ≈ 1.5px micro-drop; real air drops hit at 120+ px/s and bounce cleanly!)
+          const isGrazingSlide =
+            Math.abs(vn) < 42 || Math.abs(vn) < Math.abs(vtBefore) * 0.42;
+          const eEff = isGrazingSlide ? 0 : config.restitution;
+          const jn = -(1 + eEff) * vn;
+          b.vx += jn * nx;
+          b.vy += jn * ny;
+
+          // Track live normal force for vector visualization
+          const nForce = (jn / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
+          if (nForce > b.normalForceN) {
+            b.normalForceN = nForce;
+            b.normalX = nx;
+            b.normalY = ny;
+          }
+          b.onGround = true;
+
+          if (config.frictionEnabled && config.frictionMu > 0) {
+            // Coulomb Friction along tangent (ONLY when frictionEnabled === true!)
+            const vt = b.vx * tx + b.vy * ty;
+            const maxFricDeltaV = config.frictionMu * Math.abs(jn);
+            if (Math.abs(vt) <= maxFricDeltaV + 0.6) {
+              b.vx -= vt * tx;
+              b.vy -= vt * ty;
+              const appliedFricN = (Math.abs(vt) / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
+              b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
+            } else {
+              const sign = vt > 0 ? 1 : -1;
+              b.vx -= sign * maxFricDeltaV * tx;
+              b.vy -= sign * maxFricDeltaV * ty;
+              const appliedFricN = (maxFricDeltaV / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
+              b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
+            }
+          } else if (!config.airDragEnabled && isGrazingSlide) {
+            // Ideal conservative mode (Friction OFF & Air Drag OFF):
+            // Rotate velocity smoothly onto the curved tangent WITHOUT losing cos(dTheta) energy
+            // across polyline chord transitions, accounting for exact ΔU = -mgΔy from push-out!
+            const vt = b.vx * tx + b.vy * ty;
+            const targetSpeedSq = speedBeforeSq + 2 * gPx * (b.cy - yBefore);
+            if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
+              const targetSpeed = Math.sqrt(targetSpeedSq);
+              const sign = vt >= 0 ? 1 : -1;
+              b.vx = sign * targetSpeed * tx;
+              b.vy = sign * targetSpeed * ty;
             }
           }
         }
