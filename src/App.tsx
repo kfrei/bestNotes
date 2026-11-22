@@ -42936,7 +42936,7 @@ export default function App() {
     let startPt = pt;
     let downSnapHit: { strokeId: string; endIdx: 0 | 1; x: number; y: number; dist: number } | null = null;
     if (effectiveTool === 'pen' || effectiveTool === 'pencil' || effectiveTool === 'shape') {
-      const joinSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 9, true);
+      const joinSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 12, true);
       if (joinSnapHit) {
         startPt = { ...pt, x: joinSnapHit.x, y: joinSnapHit.y };
       }
@@ -44205,7 +44205,7 @@ export default function App() {
         performance.now() - lastPenLiftTimeRef.current >= 380
       ) {
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
-        const hit = findNearestStrokeEndpoint(hoverPt, activePage.strokes, 8, true);
+        const hit = findNearestStrokeEndpoint(hoverPt, activePage.strokes, 12, true);
         if (hit) {
           const key = `${hit.strokeId}:${hit.endIdx}`;
           if (!endpointSnapHoverRef.current || endpointSnapHoverRef.current.key !== key) {
@@ -44214,7 +44214,7 @@ export default function App() {
           }
         } else if (endpointSnapHoverRef.current) {
           const prev = endpointSnapHoverRef.current;
-          if (Math.hypot(hoverPt.x - prev.x, hoverPt.y - prev.y) > 12) {
+          if (Math.hypot(hoverPt.x - prev.x, hoverPt.y - prev.y) > 15) {
             cancelEndpointSnapPulse();
           }
         }
@@ -50879,6 +50879,14 @@ export default function App() {
     // Works immediately with the Shape tool ('line' / 'auto') AND with Hold-to-Snap (>= 520ms) in Pen/Pencil.
     const ALMOST_TOUCH_LINE_TOL = activeTool === 'shape' ? 14 : 10;
     const CLOSE_POLYGON_RING_TOL = activeTool === 'shape' ? 18 : 14;
+    const hasCubicBezierHandles = (pts: BezierPoint[]): boolean =>
+      pts.some(
+        (p) =>
+          (p.outDx !== undefined && Math.abs(p.outDx) > 0.5) ||
+          (p.outDy !== undefined && Math.abs(p.outDy) > 0.5) ||
+          (p.inDx !== undefined && Math.abs(p.inDx) > 0.5) ||
+          (p.inDy !== undefined && Math.abs(p.inDy) > 0.5)
+      );
     const isCandidateOpenLine = (s: StrokeObject): boolean =>
       Boolean(
         s.isShape &&
@@ -50888,6 +50896,7 @@ export default function App() {
           !s.arrowEnd &&
           s.points.length >= 2 &&
           s.points[0]?.twist !== 999 &&
+          !hasCubicBezierHandles(s.points) &&
           s.color === strokeColor &&
           (s.layerId || 'layer-1') === activeLayerId
       );
@@ -50933,8 +50942,10 @@ export default function App() {
       isShape &&
       shapeType === 'line' &&
       finalPts.length === 2 &&
+      !hasCubicBezierHandles(finalPts) &&
       !arrowEnd &&
       shapePreset !== 'arrow' &&
+      shapePreset !== 'quarter-circle' &&
       (activeTool === 'shape' || holdElapsedMs >= 520)
     ) {
       const p0 = finalPts[0];
@@ -51216,13 +51227,9 @@ export default function App() {
     if (weldedIntoExistingStroke) {
       const updatedStroke = weldedIntoExistingStroke;
       lastCreatedShapeIdsRef.current = [updatedStroke.id];
-      const sCtx = staticCanvasRef.current?.getContext('2d');
-      if (sCtx) {
-        sCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-        drawStrokeOnContext(sCtx, updatedStroke);
-      }
       clearActiveOverlay();
-
+      // ALWAYS guarantee Undo records the exact pre-weld state!
+      suppressNextUndoRecordRef.current = false;
       updateActivePage((page) => {
         const nextStrokes = page.strokes
           .filter((s) => s.id !== weldedRemoveSecondaryId)
@@ -51239,7 +51246,9 @@ export default function App() {
             })
           : page.circuitSims;
         return { ...page, strokes: nextStrokes, circuitSims: nextSims };
-      });
+      }, true);
+      staticPageRenderCacheRef.current.delete(activePage.id);
+      queueMicrotask(() => renderStaticSceneRef.current?.());
 
       if (activeTool === 'shape' && weldedClosedIntoPolygon) {
         setSelectedStrokeIds([updatedStroke.id]);
