@@ -29,7 +29,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
   onActivateAtomSim,
 }) => {
   return (
-    <div className="flex items-center gap-1 bg-[#efebe3] p-0.5 rounded-full border border-[#dfd8cb] relative">
+    <div className="flex items-center gap-1 bg-[#efebe3] p-0.5 rounded-lg border border-[#dfd8cb] relative">
       {/* 1. Direct textOCR (Single Tap) */}
       <button
         type="button"
@@ -38,7 +38,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
           onConvertTextOcr();
         }}
         disabled={isConvertingHandwriting}
-        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
           isConvertingHandwriting
             ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
             : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb] shadow-2xs'
@@ -56,7 +56,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
           data-popover-trigger="lasso-ocr"
           onClick={() => setOpenMenu((v) => (v === 'math' ? null : 'math'))}
           disabled={isConvertingHandwriting}
-          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
             openMenu === 'math'
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb]'
@@ -162,7 +162,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
           data-popover-trigger="lasso-ocr"
           onClick={() => setOpenMenu((v) => (v === 'chem' ? null : 'chem'))}
           disabled={isConvertingHandwriting}
-          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
             openMenu === 'chem'
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb]'
