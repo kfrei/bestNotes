@@ -296,7 +296,7 @@ export const ShapeSliceDropdown: React.FC<ShapeSliceDropdownProps> = ({
                         ? 'bg-[#234978] text-white border-[#1b3a60] shadow-2xs'
                         : 'bg-[#fdfbf7] hover:bg-[#ece7dc] text-[#1b2a4a] border-[#dfd8cb]'
                     }`}
-                    title={`Κόψιμο σε ${btn.label} ίσα κομμάτια (${btn.fraction})`}
+                    aria-label={`Κόψιμο σε ${btn.label} ίσα κομμάτια (${btn.fraction})`}
                   >
                     <span className="text-xs font-bold leading-none">{btn.fraction}</span>
                     <span className={`text-[9px] mt-0.5 ${hovered === btn.preset ? 'text-blue-100' : 'text-slate-500'}`}>

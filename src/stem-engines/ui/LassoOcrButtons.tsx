@@ -54,7 +54,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb] shadow-2xs'
           }`}
-          title="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+          aria-label="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου"
         >
           <Type className="w-3.5 h-3.5" />
           <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
@@ -109,7 +109,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'equation' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=)"
+              aria-label="MathOCR: Εξίσωση / LaTeX"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center font-serif text-[12px]">
@@ -131,7 +131,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'graph' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="Διάγραμμα OCR: Αναγνώριση χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9) και σχεδίαση σε σύστημα αξόνων"
+              aria-label="Διάγραμμα OCR"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[11px]">
@@ -152,7 +152,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'polygon' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
+              aria-label="Πολύγωνο"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[12px]">
@@ -174,7 +174,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'code' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="Κώδικας OCR: Αναγνώριση χειρόγραφου κώδικα & Ψευδογλώσσας ΑΕΠΠ (ΓΛΩΣΣΑ) με αυτόματες εσοχές"
+              aria-label="Κώδικας OCR"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center">
@@ -232,7 +232,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredChemMode === 'reaction' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="ChemOCR: Αναγνώριση χειρόγραφης χημικής αντίδρασης (π.χ. C + O₂ → CO₂) με δομή ατόμων & κίνηση ηλεκτρονίων"
+              aria-label="ChemOCR: Αντιδράσεις"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center">
@@ -254,7 +254,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredChemMode === 'molecule3d' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="3D.OCR: Αναγνώριση χειρόγραφης ένωσης (H₂O, CH₄, CO₂...) και εμφάνιση Draggable 3D Μορίου με νέφη φορτίου"
+              aria-label="3D Μόριο"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center text-[10px] font-bold">
@@ -275,7 +275,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredChemMode === 'atom2d' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
               } text-[#234978]`}
-              title="2D (Άτομο): Μετατροπή του σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου"
+              aria-label="2D Άτομο"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
                 <span className="w-5 h-5 rounded-md bg-[#efebe3] border border-[#dfd8cb] flex items-center justify-center">
