@@ -961,16 +961,41 @@ export function renderGravityOverlay(
       }
     }
 
-    // 1. Live Trajectory Trail
+    // 1. Live Trajectory Trail (same length/duration, with smooth fade-out on the oldest tail end)
     if (config.showTrail && b.trail.length >= 2) {
       ctx.save();
       ctx.strokeStyle = b.color || '#16a34a';
-      ctx.globalAlpha = 0.45;
       ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.setLineDash([4, 4]);
+
+      const n = b.trail.length;
+      const fadeEndIdx = n >= 16 ? Math.floor(n * 0.38) : 0;
+
+      if (fadeEndIdx >= 6) {
+        const BANDS = 6;
+        const step = Math.max(1, Math.floor(fadeEndIdx / BANDS));
+        for (let band = 0; band < BANDS; band++) {
+          const sIdx = band * step;
+          const eIdx = band === BANDS - 1 ? fadeEndIdx : Math.min(fadeEndIdx, (band + 1) * step);
+          if (eIdx <= sIdx) continue;
+          const frac = (band + 0.5) / BANDS; // 0 (oldest tail) -> 1 (joins full-opacity body)
+          ctx.globalAlpha = 0.04 + 0.42 * (frac * frac);
+          ctx.beginPath();
+          ctx.moveTo(b.trail[sIdx].x, b.trail[sIdx].y);
+          for (let i = sIdx + 1; i <= eIdx; i++) {
+            ctx.lineTo(b.trail[i].x, b.trail[i].y);
+          }
+          ctx.stroke();
+        }
+      }
+
+      // Main recent portion of trail at crisp 0.46 opacity
+      ctx.globalAlpha = 0.46;
       ctx.beginPath();
-      ctx.moveTo(b.trail[0].x, b.trail[0].y);
-      for (let i = 1; i < b.trail.length; i++) {
+      ctx.moveTo(b.trail[fadeEndIdx].x, b.trail[fadeEndIdx].y);
+      for (let i = fadeEndIdx + 1; i < n; i++) {
         ctx.lineTo(b.trail[i].x, b.trail[i].y);
       }
       ctx.stroke();
