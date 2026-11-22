@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.1" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="atom-c" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="50%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <radialGradient id="atom-o" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="48%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="atom-h" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </radialGradient>
+    <radialGradient id="atom-n" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="atom-cl" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="50%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="atom-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <linearGradient id="glass-liq" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="orbital-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="orbital-red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fca5a5" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#dc2626" stop-opacity="0.65"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Αρχή Aufbau &amp; Κανόνας Hund (Ηλεκτρονιακή Δόμηση)</text>
+  <line x1="56" y1="252" x2="56" y2="42" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <text x="44" y="54" text-anchor="end" class="t-lbl">E</text>
+  <!-- 1s -->
+  <rect x="86" y="224" width="32" height="22" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+  <text x="102" y="240" text-anchor="middle" class="t-eq">↑↓</text>
+  <text x="78" y="239" text-anchor="end" class="t-lbl">1s</text>
+  <!-- 2s -->
+  <rect x="86" y="182" width="32" height="22" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+  <text x="102" y="198" text-anchor="middle" class="t-eq">↑↓</text>
+  <text x="78" y="197" text-anchor="end" class="t-lbl">2s</text>
+  <!-- 2p (3 boxes) -->
+  <g transform="translate(154,154)">
+    <rect x="0" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <rect x="36" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <rect x="72" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <text x="16" y="16" text-anchor="middle" class="t-eq">↑↓</text>
+    <text x="52" y="16" text-anchor="middle" class="t-eq">↑↓</text>
+    <text x="88" y="16" text-anchor="middle" class="t-eq">↑↓</text>
+    <text x="114" y="15" class="t-lbl">2p</text>
+  </g>
+  <!-- 3s -->
+  <rect x="86" y="124" width="32" height="22" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+  <text x="102" y="140" text-anchor="middle" class="t-eq">↑↓</text>
+  <text x="78" y="139" text-anchor="end" class="t-lbl">3s</text>
+  <!-- 3p -->
+  <g transform="translate(154,98)">
+    <rect x="0" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <rect x="36" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <rect x="72" y="0" width="32" height="22" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.6"/>
+    <text x="16" y="16" text-anchor="middle" class="t-eq" fill="#b91c1c">↑</text>
+    <text x="52" y="16" text-anchor="middle" class="t-eq" fill="#b91c1c">↑</text>
+    <text x="88" y="16" text-anchor="middle" class="t-eq" fill="#b91c1c">↑</text>
+    <text x="114" y="15" class="t-lbl">3p (Hund!)</text>
+  </g>
+  <!-- 4s lower than 3d -->
+  <rect x="86" y="68" width="32" height="22" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="78" y="83" text-anchor="end" class="t-lbl" fill="#15803d">4s</text>
+  <!-- 3d (5 boxes) -->
+  <g transform="translate(274,52)">
+    <rect x="0" y="0" width="26" height="20" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+    <rect x="29" y="0" width="26" height="20" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+    <rect x="58" y="0" width="26" height="20" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+    <rect x="87" y="0" width="26" height="20" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+    <rect x="116" y="0" width="26" height="20" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+    <text x="71" y="34" text-anchor="middle" class="t-lbl" fill="#6d28d9">3d (E_4s &lt; E_3d)</text>
+  </g>
+  <!-- Info box -->
+  <rect x="290" y="128" width="152" height="114" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="366" y="148" text-anchor="middle" class="t-sub">3 Βασικές Αρχές</text>
+  <text x="300" y="168" class="t-sm">1. Pauli: max 2 e⁻ (↑↓)</text>
+  <text x="300" y="188" class="t-sm">2. Aufbau: ελάχιστη E</text>
+  <text x="300" y="208" class="t-sm">3. Hund: παράλληλα spin</text>
+  <text x="300" y="228" class="t-sm">   (μέγιστο Σs)</text>
+  <rect x="24" y="264" width="412" height="32" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="284" text-anchor="middle" class="t-eq">Σειρά πλήρωσης: 1s → 2s → 2p → 3s → 3p → 4s → 3d → 4p</text>
+
+</svg>

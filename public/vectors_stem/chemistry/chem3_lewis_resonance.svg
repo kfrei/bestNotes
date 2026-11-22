@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.1" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="atom-c" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="50%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <radialGradient id="atom-o" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="48%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="atom-h" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </radialGradient>
+    <radialGradient id="atom-n" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="atom-cl" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="50%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="atom-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <linearGradient id="glass-liq" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="orbital-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="orbital-red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fca5a5" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#dc2626" stop-opacity="0.65"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Δομές Lewis &amp; Συντονισμός (Όζον O₃ &amp; CO₃²⁻)</text>
+  <!-- Ozone resonance -->
+  <rect x="20" y="38" width="420" height="106" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="56" class="t-sub">Όζον (O₃) — Δύο ισοδύναμες δομές συντονισμού</text>
+  <!-- Left O3 -->
+  <text x="122" y="88" text-anchor="middle" class="t-eq" font-size="14">O⁺</text>
+  <line x1="110" y1="92" x2="84" y2="114" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="114" y1="96" x2="88" y2="118" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="132" y1="94" x2="158" y2="116" stroke="#1e293b" stroke-width="2.4"/>
+  <text x="76" y="130" text-anchor="middle" class="t-eq">O</text>
+  <text x="166" y="130" text-anchor="middle" class="t-eq" fill="#b91c1c">O⁻</text>
+  <!-- Double arrow -->
+  <line x1="202" y1="104" x2="258" y2="104" stroke="#2563eb" stroke-width="2.2" marker-start="url(#arr-blue)" marker-end="url(#arr-blue)"/>
+  <!-- Right O3 -->
+  <text x="336" y="88" text-anchor="middle" class="t-eq" font-size="14">O⁺</text>
+  <line x1="324" y1="94" x2="298" y2="116" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="346" y1="92" x2="372" y2="114" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="342" y1="96" x2="368" y2="118" stroke="#1e293b" stroke-width="2.4"/>
+  <text x="290" y="130" text-anchor="middle" class="t-eq" fill="#b91c1c">O⁻</text>
+  <text x="380" y="130" text-anchor="middle" class="t-eq">O</text>
+
+  <!-- Carbonate hybrid -->
+  <rect x="20" y="154" width="420" height="106" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="172" class="t-sub">Ανθρακικό ανιόν (CO₃²⁻) — Υβρίδιο συντονισμού (3 ίσοι δεσμοί)</text>
+  <circle cx="230" cy="216" r="13" fill="url(#atom-c)"/><text x="230" y="220" text-anchor="middle" class="t-w">C</text>
+  <line x1="230" y1="202" x2="230" y2="180" stroke="#1e293b" stroke-width="2.2"/>
+  <line x1="234" y1="202" x2="234" y2="180" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="3,2"/>
+  <circle cx="230" cy="176" r="10" fill="url(#atom-o)"/><text x="230" y="180" text-anchor="middle" class="t-w">O</text>
+  <line x1="218" y1="224" x2="194" y2="238" stroke="#1e293b" stroke-width="2.2"/>
+  <line x1="216" y1="220" x2="192" y2="234" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="3,2"/>
+  <circle cx="188" cy="242" r="10" fill="url(#atom-o)"/><text x="188" y="246" text-anchor="middle" class="t-w">O</text>
+  <line x1="242" y1="224" x2="266" y2="238" stroke="#1e293b" stroke-width="2.2"/>
+  <line x1="244" y1="220" x2="268" y2="234" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="3,2"/>
+  <circle cx="272" cy="242" r="10" fill="url(#atom-o)"/><text x="272" y="246" text-anchor="middle" class="t-w">O</text>
+  <text x="348" y="218" text-anchor="middle" class="t-sm">Τάξη δεσμού = 1⅓</text>
+  <text x="348" y="234" text-anchor="middle" class="t-sm">Απεντοπισμένα π e⁻</text>
+
+  <rect x="20" y="268" width="420" height="30" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="287" text-anchor="middle" class="t-eq">Ο συντονισμός σταθεροποιεί το μόριο (μικρότερη ενέργεια)</text>
+
+</svg>

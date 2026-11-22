@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.1" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="atom-c" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="50%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <radialGradient id="atom-o" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="48%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="atom-h" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </radialGradient>
+    <radialGradient id="atom-n" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bfdbfe"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="atom-cl" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="50%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </radialGradient>
+    <radialGradient id="atom-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <linearGradient id="glass-liq" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="orbital-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="orbital-red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fca5a5" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#dc2626" stop-opacity="0.65"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Κατανομή Maxwell–Boltzmann (Θερμοκρασία &amp; Καταλύτης)</text>
+  <line x1="58" y1="232" x2="430" y2="232" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <line x1="58" y1="232" x2="58" y2="44" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <text x="434" y="236" class="t-lbl">E_κ</text>
+  <text x="48" y="52" text-anchor="end" class="t-lbl">N</text>
+  <!-- Ea lines -->
+  <line x1="286" y1="62" x2="286" y2="232" stroke="#16a34a" stroke-width="2" stroke-dasharray="5,3"/>
+  <text x="286" y="248" text-anchor="middle" class="t-eq" fill="#15803d">E_α(κατ)</text>
+  <line x1="342" y1="62" x2="342" y2="232" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,3"/>
+  <text x="342" y="248" text-anchor="middle" class="t-eq" fill="#b91c1c">E_α</text>
+  <!-- Shaded effective area -->
+  <rect x="286" y="182" width="128" height="50" fill="#16a34a" opacity="0.14"/>
+  <!-- Curves -->
+  <path d="M58.0,232.0 L62.0,231.6 L66.0,230.4 L70.0,228.4 L74.0,225.7 L78.0,222.2 L82.0,218.2 L86.0,213.5 L90.0,208.3 L94.0,202.6 L98.0,196.6 L102.0,190.3 L106.0,183.8 L110.0,177.2 L114.0,170.7 L118.0,164.2 L122.0,157.8 L126.0,151.8 L130.0,146.0 L134.0,140.7 L138.0,135.8 L142.0,131.3 L146.0,127.5 L150.0,124.2 L154.0,121.5 L158.0,119.5 L162.0,118.0 L166.0,117.2 L170.0,117.0 L174.0,117.4 L178.0,118.3 L182.0,119.8 L186.0,121.7 L190.0,124.2 L194.0,127.0 L198.0,130.2 L202.0,133.7 L206.0,137.5 L210.0,141.5 L214.0,145.7 L218.0,150.0 L222.0,154.4 L226.0,158.8 L230.0,163.2 L234.0,167.6 L238.0,172.0 L242.0,176.2 L246.0,180.3 L250.0,184.3 L254.0,188.2 L258.0,191.8 L262.0,195.3 L266.0,198.6 L270.0,201.7 L274.0,204.6 L278.0,207.3 L282.0,209.8 L286.0,212.1 L290.0,214.2 L294.0,216.2 L298.0,218.0 L302.0,219.6 L306.0,221.1 L310.0,222.4 L314.0,223.6 L318.0,224.6 L322.0,225.6 L326.0,226.4 L330.0,227.2 L334.0,227.8 L338.0,228.4 L342.0,228.9 L346.0,229.4 L350.0,229.8 L354.0,230.1 L358.0,230.4 L362.0,230.6 L366.0,230.9 L370.0,231.0 L374.0,231.2 L378.0,231.3 L382.0,231.4 L386.0,231.5 L390.0,231.6 L394.0,231.7 L398.0,231.7 L402.0,231.8 L406.0,231.8 L410.0,231.9 L414.0,231.9 L418.0,231.9" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <path d="M58.0,232.0 L62.0,231.8 L66.0,231.3 L70.0,230.4 L74.0,229.2 L78.0,227.7 L82.0,225.9 L86.0,223.7 L90.0,221.3 L94.0,218.6 L98.0,215.7 L102.0,212.5 L106.0,209.1 L110.0,205.6 L114.0,201.9 L118.0,198.0 L122.0,194.1 L126.0,190.1 L130.0,186.1 L134.0,182.0 L138.0,178.0 L142.0,174.0 L146.0,170.0 L150.0,166.2 L154.0,162.4 L158.0,158.8 L162.0,155.4 L166.0,152.1 L170.0,149.1 L174.0,146.2 L178.0,143.6 L182.0,141.2 L186.0,139.0 L190.0,137.1 L194.0,135.5 L198.0,134.1 L202.0,133.0 L206.0,132.2 L210.0,131.6 L214.0,131.3 L218.0,131.3 L222.0,131.5 L226.0,132.0 L230.0,132.7 L234.0,133.6 L238.0,134.7 L242.0,136.1 L246.0,137.6 L250.0,139.3 L254.0,141.2 L258.0,143.2 L262.0,145.4 L266.0,147.7 L270.0,150.1 L274.0,152.6 L278.0,155.1 L282.0,157.7 L286.0,160.4 L290.0,163.1 L294.0,165.8 L298.0,168.5 L302.0,171.3 L306.0,174.0 L310.0,176.7 L314.0,179.3 L318.0,182.0 L322.0,184.5 L326.0,187.0 L330.0,189.5 L334.0,191.9 L338.0,194.2 L342.0,196.5 L346.0,198.6 L350.0,200.7 L354.0,202.7 L358.0,204.7 L362.0,206.5 L366.0,208.3 L370.0,209.9 L374.0,211.5 L378.0,213.0 L382.0,214.4 L386.0,215.8 L390.0,217.0 L394.0,218.2 L398.0,219.3 L402.0,220.4 L406.0,221.3 L410.0,222.2 L414.0,223.1 L418.0,223.8" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+  <text x="164" y="88" class="t-eq" fill="#1d4ed8">T₁ (χαμηλή)</text>
+  <text x="228" y="128" class="t-eq" fill="#b91c1c">T₂ &gt; T₁ (υψηλή)</text>
+  <rect x="20" y="264" width="420" height="34" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="285" text-anchor="middle" class="t-eq">Αύξηση T ή προσθήκη καταλύτη ⇒ Περισσότερα μόρια με E ≥ E_α ⇒ ↑ u</text>
+
+</svg>
