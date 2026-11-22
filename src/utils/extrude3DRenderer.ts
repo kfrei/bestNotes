@@ -426,7 +426,12 @@ export function drawPolyExtruded3D(
     ctx.restore();
   }
 
-  const isUpright = dy < -4 && Math.abs(dx) <= Math.max(12, Math.abs(dy) * 0.28);
+  // Upright mode (top cap visible on top) makes geometric sense for curved bases (cylinders) & slanted bases (parallelograms/prisms),
+  // whereas an axis-aligned rectangle extruded straight up is a front face with a receding top ledge!
+  const isUpright =
+    s.shapeType !== 'rectangle' &&
+    dy < -4 &&
+    Math.abs(dx) <= Math.max(12, Math.abs(dy) * 0.28);
 
   // 2. Wireframe mode: textbook 3D stereometry hidden-line rendering!
   //    ONLY the truly occluded back/bottom edges are dashed; all visible outer & front edges are crisp solid!
