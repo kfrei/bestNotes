@@ -14957,6 +14957,19 @@ export default function App() {
     [buildGravityFromIds]
   );
 
+  // Live-sync bound Gravity Lab strokes whenever the user edits/rotates/stretches an arrow, body, or ramp while paused!
+  useEffect(() => {
+    if (
+      !showSimulationPanel ||
+      simActiveCategory !== 'gravity' ||
+      isGravityRunning ||
+      gravityBoundStrokeIdsRef.current.length === 0
+    ) {
+      return;
+    }
+    buildGravityFromIds(gravityBoundStrokeIdsRef.current);
+  }, [activePage.strokes, showSimulationPanel, simActiveCategory, isGravityRunning, buildGravityFromIds]);
+
   // Clean up Gravity offsets when switching away from Gravity tab, closing panel, or changing page
   useEffect(() => {
     if (!showSimulationPanel || simActiveCategory !== 'gravity') {
