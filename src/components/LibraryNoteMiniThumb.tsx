@@ -195,16 +195,22 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
       );
     });
 
-    const imageEls = (firstPage.images || []).slice(0, cfg.maxImages).map((im) => (
-      <image
-        key={im.id}
-        href={im.dataUrl}
-        x={Math.round(im.x)}
-        y={Math.round(im.y)}
-        width={Math.round(im.width)}
-        height={Math.round(im.height)}
-      />
-    ));
+    const imageEls = (firstPage.images || []).slice(0, cfg.maxImages).map((im) => {
+      const resolvedHref =
+        im.dataUrl && im.dataUrl.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
+          ? `${im.dataUrl.slice(0, -4)}.webp`
+          : im.dataUrl;
+      return (
+        <image
+          key={im.id}
+          href={resolvedHref}
+          x={Math.round(im.x)}
+          y={Math.round(im.y)}
+          width={Math.round(im.width)}
+          height={Math.round(im.height)}
+        />
+      );
+    });
 
     const textEls = (firstPage.texts || []).slice(0, cfg.maxTexts).map((tx) => {
       const raw = (tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '';

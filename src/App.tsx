@@ -59293,7 +59293,11 @@ export default function App() {
                                     {(p0.images || []).map((im) => (
                                       <image
                                         key={im.id}
-                                        href={im.dataUrl}
+                                        href={
+                                          im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
+                                            ? `${im.dataUrl.slice(0, -4)}.webp`
+                                            : im.dataUrl
+                                        }
                                         x={im.x}
                                         y={im.y}
                                         width={im.width}
@@ -68939,7 +68943,11 @@ export default function App() {
                           {(pageObj.images || []).map((im) => (
                             <image
                               key={im.id}
-                              href={im.dataUrl}
+                              href={
+                                im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
+                                  ? `${im.dataUrl.slice(0, -4)}.webp`
+                                  : im.dataUrl
+                              }
                               x={im.x}
                               y={im.y}
                               width={im.width}
@@ -72763,7 +72771,11 @@ export default function App() {
                               {(pObj.images || []).map((im) => (
                                 <image
                                   key={im.id}
-                                  href={im.dataUrl}
+                                  href={
+                                    im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
+                                      ? `${im.dataUrl.slice(0, -4)}.webp`
+                                      : im.dataUrl
+                                  }
                                   x={im.x}
                                   y={im.y}
                                   width={im.width}
