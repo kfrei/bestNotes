@@ -82,24 +82,43 @@ function sampleRingFromStroke(s: StrokeObject): { x: number; y: number }[] {
   const pts = s.points;
   if (!pts || pts.length < 3) return [];
 
-  // BestNotes stores circles & ellipses as 4 cardinal points: [Top, Right, Bottom, Left] (supports rotation & stretch!)
+  // BestNotes stores circles & ellipses as 4 cardinal nodes: [Top, Right, Bottom, Left].
+  // Sample 4 smooth closed cubic-Bézier quarter arcs passing EXACTLY through all 4 nodes
+  // (exact ellipse when symmetric, AND stays 100% attached if user drags any single node!).
   if ((s.shapeType === 'circle' || s.shapeType === 'ellipse') && pts.length === 4) {
-    const cx = (pts[0].x + pts[2].x) * 0.5;
-    const cy = (pts[0].y + pts[2].y) * 0.5;
-    const ux = pts[1].x - cx;
-    const uy = pts[1].y - cy;
-    const vx = pts[2].x - cx;
-    const vy = pts[2].y - cy;
+    const k = 0.55228475 * 0.5;
+    const tangents = pts.map((_, i) => {
+      const prev = pts[(i + 3) % 4];
+      const next = pts[(i + 1) % 4];
+      return { x: (next.x - prev.x) * k, y: (next.y - prev.y) * k };
+    });
     const ring: { x: number; y: number }[] = [];
-    const STEPS = 48;
-    for (let i = 0; i < STEPS; i++) {
-      const ang = (i / STEPS) * Math.PI * 2;
-      const c = Math.cos(ang);
-      const sn = Math.sin(ang);
-      ring.push({
-        x: cx + c * ux + sn * vx,
-        y: cy + c * uy + sn * vy,
-      });
+    const STEPS_PER_ARC = 12; // 4 * 12 = 48 smooth segments
+    for (let i = 0; i < 4; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % 4];
+      const ta = tangents[i];
+      const tb = tangents[(i + 1) % 4];
+      const cp1x = a.x + ta.x;
+      const cp1y = a.y + ta.y;
+      const cp2x = b.x - tb.x;
+      const cp2y = b.y - tb.y;
+      for (let st = 0; st < STEPS_PER_ARC; st++) {
+        const t = st / STEPS_PER_ARC;
+        const mt = 1 - t;
+        ring.push({
+          x:
+            mt * mt * mt * a.x +
+            3 * mt * mt * t * cp1x +
+            3 * mt * t * t * cp2x +
+            t * t * t * b.x,
+          y:
+            mt * mt * mt * a.y +
+            3 * mt * mt * t * cp1y +
+            3 * mt * t * t * cp2y +
+            t * t * t * b.y,
+        });
+      }
     }
     let signedArea = 0;
     for (let i = 0; i < ring.length; i++) {
