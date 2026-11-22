@@ -3052,10 +3052,11 @@ export function encodeCanvasOptimizedDataUrl(canvas: HTMLCanvasElement): string 
       data[i + 2] = 0;
       data[i + 3] = 0;
     } else {
-      data[i] = Math.min(255, (data[i] + 3) & 0xf8);
-      data[i + 1] = Math.min(255, (data[i + 1] + 3) & 0xf8);
-      data[i + 2] = Math.min(255, (data[i + 2] + 3) & 0xf8);
-      data[i + 3] = a > 246 ? 255 : (a + 7) & 0xf0;
+      // Guard >= 252 -> 255 so (253..255 + 3) never overflows bit 8 (256 & 0xf8 === 0 black/neon wrap-around!)
+      data[i] = data[i] >= 252 ? 255 : (data[i] + 3) & 0xf8;
+      data[i + 1] = data[i + 1] >= 252 ? 255 : (data[i + 1] + 3) & 0xf8;
+      data[i + 2] = data[i + 2] >= 252 ? 255 : (data[i + 2] + 3) & 0xf8;
+      data[i + 3] = a >= 248 ? 255 : (a + 7) & 0xf0;
     }
   }
   ctx.putImageData(imgData, 0, 0);
