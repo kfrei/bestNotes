@@ -12279,20 +12279,32 @@ export default function App() {
         s.shapeType === 'shaded-arrow') &&
       s.points.length >= 4
     ) {
-      if (drawShaded3DShapeStroke(ctx, s)) return;
+      if (drawShaded3DShapeStroke(ctx, s)) {
+        ctx.restore();
+        return;
+      }
     }
 
     // 0b3. Articulated Poseable Stickman ('stickman' & 'stickman-3d' — 11 draggable skeleton joint nodes!)
     if (s.shapeType === 'stickman' && s.points.length >= 11) {
-      if (drawStickmanStroke(ctx, s)) return;
+      if (drawStickmanStroke(ctx, s)) {
+        ctx.restore();
+        return;
+      }
     }
     if (s.shapeType === 'stickman-3d' && s.points.length >= 11) {
-      if (drawStickman3DStroke(ctx, s)) return;
+      if (drawStickman3DStroke(ctx, s)) {
+        ctx.restore();
+        return;
+      }
     }
 
     // 0b4. Mini-Blender 2.5D/3D Extruded Shapes (any 2D polygon/circle/triangle extruded to 3D)
     if (hasExtrude3D(s)) {
-      if (drawExtruded3DStroke(ctx, s)) return;
+      if (drawExtruded3DStroke(ctx, s)) {
+        ctx.restore();
+        return;
+      }
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
