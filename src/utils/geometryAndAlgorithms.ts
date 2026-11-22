@@ -1208,9 +1208,9 @@ function buildPresetShape(
     const rawLen = Math.hypot(dx, dy);
     if (
       preset === 'arrow' &&
-      (rawLen < 20 || (Math.abs(dx - 110) < 2 && Math.abs(dy - 75) < 2))
+      (rawLen < 6 || (Math.abs(dx - 110) < 2 && Math.abs(dy - 75) < 2))
     ) {
-      const defaultLen = 3 * 23; // 69px horizontal vector/pointer on single tap
+      const defaultLen = 36; // compact ~1.5-grid-square horizontal arrow on pure single tap (drags >= 6px keep exact length!)
       return {
         shapeType: 'arrow',
         points: [
