@@ -10198,16 +10198,36 @@ export default function App() {
     );
   };
 
+  // Always return a valid, sorted keyNodeIndices list for a freehand stroke that is GUARANTEED
+  // to stay within [0, n - 1] and ALWAYS include BOTH endpoints (0 and n - 1) even if saved keyNodeIndices became stale!
+  const getValidFreehandKeyNodeIndices = (s: StrokeObject): number[] => {
+    const n = s.points.length;
+    if (n === 0) return [];
+    if (n === 1) return [0];
+    if (n === 2) return [0, 1];
+    const raw = s.keyNodeIndices;
+    if (raw && raw.length >= 2) {
+      const valid = raw.filter((idx) => idx >= 0 && idx < n);
+      if (valid.length >= 2) {
+        const out = Array.from(new Set(valid)).sort((a, b) => a - b);
+        if (out[0] !== 0) out.unshift(0);
+        if (out[out.length - 1] !== n - 1) out.push(n - 1);
+        return out;
+      }
+    }
+    return computeFreehandKeyNodeIndices(s.points);
+  };
+
   // Returns true ONLY if the given node can actually be deleted (never on endpoints of an open line/curve or minimum-vertex polygons!)
   const canDeleteStrokeNode = (s: StrokeObject | undefined | null, nodeIdx: number | undefined): boolean => {
     if (!s || nodeIdx === undefined || nodeIdx < 0) return false;
     if (s.shapeType === 'stickman' || s.shapeType === 'stickman-3d') return false;
     if (!s.isShape) {
-      const kList =
-        s.keyNodeIndices && s.keyNodeIndices.length >= 2
-          ? s.keyNodeIndices
-          : computeFreehandKeyNodeIndices(s.points);
-      const isWeldedClosed = s.points[0]?.twist === 999 && kList.length >= 3;
+      const kList = getValidFreehandKeyNodeIndices(s);
+      const isWeldedClosed =
+        s.points[0]?.twist === 999 &&
+        kList.length >= 3 &&
+        distance(s.points[0], s.points[s.points.length - 1]) <= 8;
       if (isWeldedClosed) {
         return kList.length > 4;
       }
@@ -14716,11 +14736,11 @@ export default function App() {
             }
 
             if (!target.isShape) {
-              const keyIndices =
-                target.keyNodeIndices && target.keyNodeIndices.length >= 2
-                  ? target.keyNodeIndices
-                  : computeFreehandKeyNodeIndices(target.points);
-              const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+              const keyIndices = getValidFreehandKeyNodeIndices(target);
+              const isWeldedClosed =
+                target.points[0]?.twist === 999 &&
+                keyIndices.length >= 3 &&
+                distance(target.points[0], target.points[target.points.length - 1]) <= 8;
               for (let k = 0; k < keyIndices.length; k++) {
                 // If endpoints were magnetically welded into 1 single node, skip the duplicate last endpoint node!
                 if (isWeldedClosed && k === keyIndices.length - 1) continue;
@@ -37682,11 +37702,11 @@ export default function App() {
     // 1. Freehand Stroke / Curve (!target.isShape): evaluate continuous Quadratic Bézier & linear segments along the entire curve!
     if (!target.isShape) {
       if (target.points.length < 2) return null;
-      const keyIndices =
-        target.keyNodeIndices && target.keyNodeIndices.length >= 2
-          ? target.keyNodeIndices
-          : computeFreehandKeyNodeIndices(target.points);
-      const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+      const keyIndices = getValidFreehandKeyNodeIndices(target);
+      const isWeldedClosed =
+        target.points[0]?.twist === 999 &&
+        keyIndices.length >= 3 &&
+        distance(target.points[0], target.points[target.points.length - 1]) <= 8;
       for (let k = 0; k < keyIndices.length; k++) {
         if (isWeldedClosed && k === keyIndices.length - 1) continue;
         const p = target.points[keyIndices[k]];
@@ -38158,11 +38178,11 @@ export default function App() {
     if (!target || isShapeWithoutNodes(target) || target.shapeType === 'stickman' || target.shapeType === 'stickman-3d') return null;
 
     if (!target.isShape) {
-      const keyIndices =
-        target.keyNodeIndices && target.keyNodeIndices.length >= 2
-          ? target.keyNodeIndices
-          : computeFreehandKeyNodeIndices(target.points);
-      const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+      const keyIndices = getValidFreehandKeyNodeIndices(target);
+      const isWeldedClosed =
+        target.points[0]?.twist === 999 &&
+        keyIndices.length >= 3 &&
+        distance(target.points[0], target.points[target.points.length - 1]) <= 8;
       let bestK = -1;
       let bestDist = hitRadius;
       for (let k = 0; k < keyIndices.length; k++) {
@@ -41864,11 +41884,11 @@ export default function App() {
           }
 
           if (!target.isShape) {
-            const keyIndices =
-              target.keyNodeIndices && target.keyNodeIndices.length >= 2
-                ? target.keyNodeIndices
-                : computeFreehandKeyNodeIndices(target.points);
-            const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+            const keyIndices = getValidFreehandKeyNodeIndices(target);
+            const isWeldedClosed =
+              target.points[0]?.twist === 999 &&
+              keyIndices.length >= 3 &&
+              distance(target.points[0], target.points[target.points.length - 1]) <= 8;
             let bestK = -1;
             let bestDist = nodeHitRadius;
             for (let k = 0; k < keyIndices.length; k++) {
@@ -45542,11 +45562,13 @@ export default function App() {
         let canSelfClose = false;
 
         if (!activeTargetStroke.isShape) {
-          const keyIndices =
-            activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
-              ? activeTargetStroke.keyNodeIndices
-              : computeFreehandKeyNodeIndices(activeTargetStroke.points);
-          const isAlreadyWelded = activeTargetStroke.points[0]?.twist === 999;
+          const keyIndices = getValidFreehandKeyNodeIndices(activeTargetStroke);
+          const isAlreadyWelded =
+            activeTargetStroke.points[0]?.twist === 999 &&
+            distance(
+              activeTargetStroke.points[0],
+              activeTargetStroke.points[activeTargetStroke.points.length - 1]
+            ) <= 8;
           if (!isAlreadyWelded && activeTargetStroke.points.length >= 2) {
             if (draggingNodeIdx.index === 0) draggedEndSide = 'start';
             else if (draggingNodeIdx.index === keyIndices.length - 1) draggedEndSide = 'end';
@@ -46187,10 +46209,7 @@ export default function App() {
 
             // Freehand Line / Curve (!s.isShape): smoothly deform around the dragged Key Node!
             if (!s.isShape) {
-              const keyIndices =
-                s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                  ? s.keyNodeIndices
-                  : computeFreehandKeyNodeIndices(s.points);
+              const keyIndices = getValidFreehandKeyNodeIndices(s);
               const deformedPts = deformStrokeAtKeyNode(
                 s.points,
                 keyIndices,
