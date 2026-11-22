@@ -1002,14 +1002,37 @@ export function renderGravityOverlay(
       ctx.restore();
     }
 
-    // 3. Live Velocity & Force Vectors (v, W, N)
-    if (config.showVectors) {
-      const drewV0Preview = !isRunning && b.trail.length <= 1 && Math.hypot(b.initVx, b.initVy) > 12;
-      // Velocity vector v (blue)
-      if (!drewV0Preview) {
-        drawVectorArrow(ctx, b.cx, b.cy, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'v');
+    // 3. Independent Vector Overlays: Velocity (outside, slightly above & ahead), Forces (W, N, F, T), OR Net Force (Fολ)
+    const drewV0Preview = !isRunning && b.trail.length <= 1 && Math.hypot(b.initVx, b.initVy) > 12;
+
+    // 3a. Velocity vector v (blue) — positioned OUTSIDE the body, slightly above & ahead along direction of motion!
+    if (config.showVelocity && !drewV0Preview) {
+      const speedPx = Math.hypot(b.vx, b.vy);
+      if (speedPx > 8) {
+        const ux = b.vx / speedPx;
+        const uy = b.vy / speedPx;
+        const outerR = b.shapeKind === 'ball' ? b.radius : Math.max(b.halfW, b.halfH);
+        const topClearY = b.cy - (b.shapeKind === 'ball' ? b.radius : b.halfH) - 10;
+        const vOriginX = b.cx + ux * (outerR * 0.55);
+        const vOriginY = Math.min(topClearY, b.cy + uy * (outerR * 0.35) - outerR * 0.72);
+        drawVectorArrow(ctx, vOriginX, vOriginY, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'v');
       }
-      // Weight W = mg (crimson/slate)
+    }
+
+    // Compute sum of Stickmen applied horizontal forces (needed for both Forces & Net Force modes)
+    let netAppliedForceN = 0;
+    if (b.pushers && b.pushers.length > 0) {
+      for (const p of b.pushers) {
+        netAppliedForceN +=
+          config.pusherForcesN[p.strokeId] !== undefined
+            ? config.pusherForcesN[p.strokeId]
+            : p.dir * (Math.abs(config.pushForceN) || 14);
+      }
+    }
+
+    // 3b. Individual Forces (W, N, F / F₁,F₂, T) — mutually exclusive with Net Force Fολ
+    if (config.showForces) {
+      // Weight W = mg (crimson)
       if (config.gravity > 0.1) {
         drawVectorArrow(ctx, b.cx, b.cy, 0, Math.min(58, config.gravity * 3.6), '#dc2626', 'W');
       }
@@ -1018,8 +1041,7 @@ export function renderGravityOverlay(
         const nLen = Math.min(58, b.normalForceN * 3.4);
         drawVectorArrow(ctx, b.cx, b.cy, b.normalX * nLen, b.normalY * nLen, '#059669', 'N');
       }
-      // Individual Stickman signed horizontal forces (F, or F₁ & F₂ color-coded + Net Fολ when 2+!)
-      let netAppliedForceN = 0;
+      // Individual Stickman signed horizontal forces (F, or F₁ & F₂ color-coded)
       if (b.pushers && b.pushers.length > 0) {
         const multi = b.pushers.length >= 2;
         b.pushers.forEach((p, idx) => {
@@ -1027,7 +1049,6 @@ export function renderGravityOverlay(
             config.pusherForcesN[p.strokeId] !== undefined
               ? config.pusherForcesN[p.strokeId]
               : p.dir * (Math.abs(config.pushForceN) || 14);
-          netAppliedForceN += fVal;
           if (Math.abs(fVal) > 0.2) {
             const fDir = fVal >= 0 ? 1 : -1;
             const fLen = Math.min(76, 22 + Math.abs(fVal) * 1.35);
@@ -1045,32 +1066,6 @@ export function renderGravityOverlay(
             );
           }
         });
-
-        // Show Net Resultant Force Fολ cleanly above the box when 2+ Stickmen act on it!
-        if (multi) {
-          const badgeY = b.cy - b.halfH - 18;
-          ctx.save();
-          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          const isEq = Math.abs(netAppliedForceN) < 0.2;
-          const badgeText = isEq
-            ? 'Fολ = 0 N (Ισορροπία)'
-            : `Fολ = ${netAppliedForceN > 0 ? '+' : ''}${netAppliedForceN.toFixed(0)} N (${
-                netAppliedForceN > 0 ? '→' : '←'
-              })`;
-          const tw = ctx.measureText(badgeText).width + 14;
-          ctx.fillStyle = isEq ? 'rgba(236, 253, 245, 0.94)' : 'rgba(239, 246, 255, 0.94)';
-          ctx.strokeStyle = isEq ? '#10b981' : '#234978';
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.roundRect(b.cx - tw / 2, badgeY - 10, tw, 20, 6);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = isEq ? '#047857' : '#1e3a8a';
-          ctx.fillText(badgeText, b.cx, badgeY + 0.5);
-          ctx.restore();
-        }
       }
       // Friction force T (amber) opposing horizontal motion / net applied force
       if (config.frictionEnabled && b.onGround && b.frictionForceN > 0.2) {
@@ -1088,6 +1083,76 @@ export function renderGravityOverlay(
           const tLen = Math.min(64, 18 + b.frictionForceN * 1.4);
           drawVectorArrow(ctx, b.cx, b.cy + 8, -motionDir * tLen, 0, '#d97706', 'T');
         }
+      }
+    }
+
+    // 3c. Net Resultant Force Fολ = W + N + ΣF + T (exact 2D vector sum!) — mutually exclusive with Forces
+    if (config.showNetForce) {
+      let fx = netAppliedForceN;
+      let fy = b.mass * config.gravity;
+
+      if (b.onGround && Math.hypot(b.normalX, b.normalY) > 0.1) {
+        const nx = b.normalX;
+        const ny = b.normalY;
+        const fn = fx * nx + fy * ny;
+        if (fn < 0) {
+          // Add exact Normal reaction N cancelling inward force component
+          fx -= fn * nx;
+          fy -= fn * ny;
+        }
+        if (config.frictionEnabled && config.frictionMu > 0 && b.frictionForceN > 0.05) {
+          const tx = -ny;
+          const ty = nx;
+          const vt = b.vx * tx + b.vy * ty;
+          const ft = fx * tx + fy * ty;
+          const maxFric = b.frictionForceN;
+          if (Math.abs(vt) > 2) {
+            const sign = vt > 0 ? 1 : -1;
+            fx -= sign * maxFric * tx;
+            fy -= sign * maxFric * ty;
+          } else if (Math.abs(ft) <= maxFric + 0.2) {
+            // Static friction balances tangential force -> equilibrium!
+            fx -= ft * tx;
+            fy -= ft * ty;
+          } else {
+            const sign = ft > 0 ? 1 : -1;
+            fx -= sign * maxFric * tx;
+            fy -= sign * maxFric * ty;
+          }
+        }
+      }
+
+      const fNetMag = Math.hypot(fx, fy);
+      if (fNetMag > 0.35) {
+        const scale = Math.min(72, 20 + fNetMag * 2.4) / fNetMag;
+        drawVectorArrow(
+          ctx,
+          b.cx,
+          b.cy,
+          fx * scale,
+          fy * scale,
+          '#7c3aed',
+          `Fολ = ${fNetMag.toFixed(1)} N`
+        );
+      } else {
+        // Equilibrium badge when Fολ = 0
+        const badgeY = b.cy - (b.shapeKind === 'ball' ? b.radius : b.halfH) - 16;
+        ctx.save();
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const badgeText = 'Fολ = 0 N';
+        const tw = ctx.measureText(badgeText).width + 12;
+        ctx.fillStyle = 'rgba(245, 243, 255, 0.94)';
+        ctx.strokeStyle = '#7c3aed';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(b.cx - tw / 2, badgeY - 9, tw, 18, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#5b21b6';
+        ctx.fillText(badgeText, b.cx, badgeY + 0.5);
+        ctx.restore();
       }
     }
   }

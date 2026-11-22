@@ -325,30 +325,65 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </div>
       )}
 
-      {/* Visual Options */}
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setConfig((c) => ({ ...c, showVectors: !c.showVectors }))}
-          className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
-            config.showVectors
-              ? 'bg-[#d6cbb8] text-[#2c251d] border border-[#bfb097]'
-              : 'bg-[#efebe3] text-[#64748b]'
-          }`}
-        >
-          Διανύσματα (v,W,N)
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfig((c) => ({ ...c, showTrail: !c.showTrail }))}
-          className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
-            config.showTrail
-              ? 'bg-[#d6cbb8] text-[#2c251d] border border-[#bfb097]'
-              : 'bg-[#efebe3] text-[#64748b]'
-          }`}
-        >
-          Ίχνος Τροχιάς
-        </button>
+      {/* Vector Overlay Checkboxes (all unchecked by default; Forces <-> Net Force mutually exclusive!) + Trail */}
+      <div className="space-y-1.5 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
+        <div className="text-[10px] font-bold text-[#64748b] uppercase">Διανύσματα</div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.showVelocity}
+              onChange={(e) =>
+                setConfig((c) => ({ ...c, showVelocity: e.target.checked }))
+              }
+              className="accent-[#2563eb] rounded"
+            />
+            <span>Ταχύτητα</span>
+          </label>
+          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.showForces}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  showForces: e.target.checked,
+                  showNetForce: e.target.checked ? false : c.showNetForce,
+                }))
+              }
+              className="accent-[#234978] rounded"
+            />
+            <span>Δυνάμεις</span>
+          </label>
+          <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.showNetForce}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  showNetForce: e.target.checked,
+                  showForces: e.target.checked ? false : c.showForces,
+                }))
+              }
+              className="accent-[#7c3aed] rounded"
+            />
+            <span>Συνισταμένη</span>
+          </label>
+        </div>
+        <div className="pt-1.5 border-t border-[#ece7dc]">
+          <button
+            type="button"
+            onClick={() => setConfig((c) => ({ ...c, showTrail: !c.showTrail }))}
+            className={`w-full py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+              config.showTrail
+                ? 'bg-[#d6cbb8] text-[#2c251d] border border-[#bfb097]'
+                : 'bg-[#efebe3] text-[#64748b]'
+            }`}
+          >
+            Ίχνος Τροχιάς
+          </button>
+        </div>
       </div>
 
       {/* 1-Click Dynamic <-> Pinned Body List */}

@@ -63,7 +63,10 @@ export interface GravityLabConfig {
   pageBoundsEnabled: boolean; // true = bounce off page edges; false = fly/fall freely off-page
   pushForceN: number; // Legacy/default magnitude in Newtons (-40 .. +40 N)
   pusherForcesN: Record<string, number>; // Per-Stickman signed force F (-40 .. +40 N) keyed by strokeId
-  showVectors: boolean;
+  showVelocity: boolean; // Velocity vector v (drawn outside, slightly above & ahead of body)
+  showForces: boolean; // Individual forces (W, N, F, T) — mutually exclusive with showNetForce
+  showNetForce: boolean; // Net resultant force F_ol — mutually exclusive with showForces
+  showVectors: boolean; // Legacy alias kept for compatibility
   showTrail: boolean;
   showEnergy: boolean;
 }
@@ -78,7 +81,10 @@ export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   pageBoundsEnabled: true,
   pushForceN: 14,
   pusherForcesN: {},
-  showVectors: true,
+  showVelocity: false,
+  showForces: false,
+  showNetForce: false,
+  showVectors: false,
   showTrail: true,
   showEnergy: true,
 };
