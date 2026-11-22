@@ -201,11 +201,12 @@ export function getCircuitComponentsWithTerminals(
         if (seedGrp && candGrp && seedGrp !== candGrp) continue;
         if (isDedicatedCompGroup && candGrp !== seedGrp) continue;
 
+        const sameDedicatedGroup = isDedicatedCompGroup && candGrp === seedGrp;
         const gapX = Math.max(0, cMinX - cand.maxX, cand.minX - cMaxX);
         const gapY = Math.max(0, cMinY - cand.maxY, cand.minY - cMaxY);
         const spatiallyClose = gapX <= 16 && gapY <= 16;
 
-        if (spatiallyClose) {
+        if (spatiallyClose || sameDedicatedGroup) {
           visited[j] = 1;
           clusterStrokes.push(cand.stroke);
           cMinX = Math.min(cMinX, cand.minX);
@@ -4355,9 +4356,19 @@ export function autoAlignAndConnectCircuit(
   let repairedOversizedComp = false;
   for (const comp of preComps) {
     if (comp.kind === 'fan') {
-      const hasModernBlades = currentStrokes.some(
-        (s) => comp.strokeIds.includes(s.id) && s.shapeType === 'fan-blade'
+      const compStrokes = currentStrokes.filter((s) => comp.strokeIds.includes(s.id));
+      const hasFanBody = compStrokes.some(
+        (s) => s.points.length > 2 || s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub'
       );
+      // Never spawn a mini-fan from an orphaned 2-point wire lead (`fan-wl` / `fan-wr`)!
+      if (!hasFanBody) {
+        const leadSet = new Set(comp.strokeIds);
+        currentStrokes = currentStrokes.map((s) =>
+          leadSet.has(s.id) ? { ...s, shapeType: 'line' } : s
+        );
+        continue;
+      }
+      const hasModernBlades = compStrokes.some((s) => s.shapeType === 'fan-blade');
       const isOversizedFan = comp.w > 135 || comp.h > 110;
       if (!hasModernBlades || isOversizedFan) {
         if (isOversizedFan) repairedOversizedComp = true;
