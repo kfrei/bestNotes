@@ -16628,16 +16628,91 @@ export default function App() {
                 resolve(srcUrl);
                 return;
               }
-              ctx.save();
-              if (axis === 'horizontal') {
+
+              // For horizontal mirror on captioned scientist portraits (transparent gap ~70-85px from bottom
+              // separating bust above from Name + Years caption below), flip ONLY the portrait bust
+              // and keep the Name + Years caption upright & readable!
+              let captionSplitY = -1;
+              if (axis === 'horizontal' && w >= 240 && h >= 320) {
+                try {
+                  ctx.drawImage(img, 0, 0, w, h);
+                  const scanTop = Math.max(0, h - Math.round(h * 0.22));
+                  const scanH = h - scanTop;
+                  const data = ctx.getImageData(0, scanTop, w, scanH).data;
+                  const rowHasInk = new Uint8Array(scanH);
+                  for (let r = 0; r < scanH; r++) {
+                    const rowOff = r * w * 4;
+                    for (let x = 0; x < w; x++) {
+                      if (data[rowOff + x * 4 + 3] > 18) {
+                        rowHasInk[r] = 1;
+                        break;
+                      }
+                    }
+                  }
+                  // Find a >= 4px completely transparent horizontal gap that has ink both above and below it
+                  let firstInk = -1;
+                  let lastInk = -1;
+                  for (let r = 0; r < scanH; r++) {
+                    if (rowHasInk[r]) {
+                      if (firstInk === -1) firstInk = r;
+                      lastInk = r;
+                    }
+                  }
+                  if (firstInk !== -1 && lastInk > firstInk + 24) {
+                    let runStart = -1;
+                    for (let r = firstInk + 1; r < lastInk; r++) {
+                      if (!rowHasInk[r]) {
+                        if (runStart === -1) runStart = r;
+                      } else {
+                        if (runStart !== -1 && r - runStart >= 4) {
+                          const belowH = lastInk - r + 1;
+                          if (belowH >= 28 && belowH <= Math.round(h * 0.17)) {
+                            captionSplitY = scanTop + Math.floor((runStart + r) / 2);
+                            break;
+                          }
+                        }
+                        runStart = -1;
+                      }
+                    }
+                  }
+                  ctx.clearRect(0, 0, w, h);
+                } catch {
+                  ctx.clearRect(0, 0, w, h);
+                  captionSplitY = -1;
+                }
+              }
+
+              if (axis === 'horizontal' && captionSplitY > 0 && captionSplitY < h) {
+                // 1. Flip ONLY the portrait bust above captionSplitY
+                ctx.save();
                 ctx.translate(w, 0);
                 ctx.scale(-1, 1);
+                ctx.drawImage(img, 0, 0, w, captionSplitY, 0, 0, w, captionSplitY);
+                ctx.restore();
+                // 2. Keep the bottom Name + Years caption un-flipped and readable!
+                ctx.drawImage(
+                  img,
+                  0,
+                  captionSplitY,
+                  w,
+                  h - captionSplitY,
+                  0,
+                  captionSplitY,
+                  w,
+                  h - captionSplitY
+                );
               } else {
-                ctx.translate(0, h);
-                ctx.scale(1, -1);
+                ctx.save();
+                if (axis === 'horizontal') {
+                  ctx.translate(w, 0);
+                  ctx.scale(-1, 1);
+                } else {
+                  ctx.translate(0, h);
+                  ctx.scale(1, -1);
+                }
+                ctx.drawImage(img, 0, 0, w, h);
+                ctx.restore();
               }
-              ctx.drawImage(img, 0, 0, w, h);
-              ctx.restore();
               resolve(c.toDataURL('image/png'));
             };
             img.onerror = () => resolve(srcUrl);
