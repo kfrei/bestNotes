@@ -535,14 +535,21 @@ export function stepGravityScene(
           const nx = dx / dist;
           const ny = dy / dist;
           const overlap = r - dist;
+          const yBefore = b.cy;
+          const speedBeforeSq = b.vx * b.vx + b.vy * b.vy;
+
           b.cx += nx * overlap;
           b.cy += ny * overlap;
 
           const vn = b.vx * nx + b.vy * ny;
           if (vn < 0) {
-            // Suppress micro-bounces during smooth rolling/resting contact so U-bowls & ramps are silky smooth!
-            const isResting = Math.abs(vn) < 26;
-            const eEff = isResting ? 0 : config.restitution;
+            const tx = -ny;
+            const ty = nx;
+            const vtBefore = b.vx * tx + b.vy * ty;
+            // Smooth grazing/rolling contact on curved U-bowls & ramps vs genuine drop/wall bounce
+            const isGrazingSlide =
+              Math.abs(vn) < 26 || Math.abs(vn) < Math.abs(vtBefore) * 0.38;
+            const eEff = isGrazingSlide ? 0 : config.restitution;
             const jn = -(1 + eEff) * vn;
             b.vx += jn * nx;
             b.vy += jn * ny;
@@ -556,10 +563,8 @@ export function stepGravityScene(
             }
             b.onGround = true;
 
-            // Coulomb Friction along tangent (ONLY when frictionEnabled === true!)
             if (config.frictionEnabled && config.frictionMu > 0) {
-              const tx = -ny;
-              const ty = nx;
+              // Coulomb Friction along tangent (ONLY when frictionEnabled === true!)
               const vt = b.vx * tx + b.vy * ty;
               const maxFricDeltaV = config.frictionMu * Math.abs(jn);
               if (Math.abs(vt) <= maxFricDeltaV + 0.6) {
@@ -569,6 +574,18 @@ export function stepGravityScene(
                 const sign = vt > 0 ? 1 : -1;
                 b.vx -= sign * maxFricDeltaV * tx;
                 b.vy -= sign * maxFricDeltaV * ty;
+              }
+            } else if (!config.airDragEnabled && isGrazingSlide) {
+              // Ideal conservative mode (Friction OFF & Air Drag OFF):
+              // Rotate velocity smoothly onto the curved tangent WITHOUT losing cos(dTheta) energy
+              // across polyline chord transitions, accounting for exact ΔU = -mgΔy from push-out!
+              const vt = b.vx * tx + b.vy * ty;
+              const targetSpeedSq = speedBeforeSq + 2 * gPx * (b.cy - yBefore);
+              if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
+                const targetSpeed = Math.sqrt(targetSpeedSq);
+                const sign = vt >= 0 ? 1 : -1;
+                b.vx = sign * targetSpeed * tx;
+                b.vy = sign * targetSpeed * ty;
               }
             }
           }
