@@ -366,17 +366,44 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
 
       {id === 'tool-lasso' && (
         <g>
-          <circle cx="48" cy="31" r="10" fill="#2563eb" fillOpacity="0.55" />
-          <ellipse
+          {/* Target object that lights up once caught by the closed lasso */}
+          <circle
             cx="48"
             cy="31"
-            rx="28"
-            ry="18"
+            r="10"
+            fill="#2563eb"
+            style={{ transformOrigin: '48px 31px', animation: 'rtLassoCatchObj 2.6s ease-in-out infinite' }}
+          />
+          {/* Selection bounding box + corner handles that appear when the loop closes */}
+          <g style={{ transformOrigin: '48px 31px', animation: 'rtLassoCatchBox 2.6s ease-in-out infinite' }}>
+            <rect
+              x="34"
+              y="17"
+              width="28"
+              height="28"
+              rx="2.5"
+              fill="#2563eb"
+              fillOpacity="0.1"
+              stroke="#2563eb"
+              strokeWidth="1.4"
+              strokeDasharray="3.5 2.5"
+            />
+            <circle cx="34" cy="17" r="2.2" fill="#234978" />
+            <circle cx="62" cy="17" r="2.2" fill="#234978" />
+            <circle cx="34" cy="45" r="2.2" fill="#234978" />
+            <circle cx="62" cy="45" r="2.2" fill="#234978" />
+          </g>
+          {/* Freehand closed lasso loop drawn from 0 to 100% */}
+          <path
+            d="M 23 34 C 18 19, 34 9, 51 11 C 70 13, 79 23, 74 36 C 69 48, 52 53, 35 49 C 26 47, 25 41, 23 34 Z"
+            pathLength={100}
             fill="none"
             stroke="#234978"
-            strokeWidth="1.8"
-            strokeDasharray="5 3"
-            style={{ animation: 'rtDashMarch 1.4s linear infinite' }}
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="100"
+            style={{ animation: 'rtLassoDraw 2.6s ease-in-out infinite' }}
           />
         </g>
       )}
@@ -590,6 +617,9 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
         @keyframes rtDashMarch { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -16; } }
         @keyframes rtRectSelectGrow { 0%, 14% { transform: scale(0.18); opacity: 0.7; } 56%, 86% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.18); opacity: 0.7; } }
+        @keyframes rtLassoDraw { 0%, 8% { stroke-dashoffset: 100; opacity: 1; } 54% { stroke-dashoffset: 0; opacity: 1; } 64%, 92% { stroke-dashoffset: 0; opacity: 0; } 100% { stroke-dashoffset: 100; opacity: 0; } }
+        @keyframes rtLassoCatchBox { 0%, 52% { opacity: 0; transform: scale(0.86); } 60%, 86% { opacity: 1; transform: scale(1); } 94%, 100% { opacity: 0; transform: scale(0.86); } }
+        @keyframes rtLassoCatchObj { 0%, 52% { opacity: 0.45; transform: scale(1); } 60%, 86% { opacity: 0.92; transform: scale(1.06); } 94%, 100% { opacity: 0.45; transform: scale(1); } }
         @keyframes rtNodeBounce { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-4px); } }
         @keyframes rtTapePeek { 0%, 25% { opacity: 0.96; } 55%, 82% { opacity: 0.16; } 100% { opacity: 0.96; } }
         @keyframes rtSpinSlow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
