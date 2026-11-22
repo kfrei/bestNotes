@@ -339,10 +339,51 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
       {id === 'tool-text' && (
         <g>
           <rect x="14" y="16" width="68" height="30" rx="4" fill="#f8fafc" stroke="#2563eb" strokeWidth="1.4" strokeDasharray="3 2" />
-          <text x="44" y="36" textAnchor="middle" fill="#1b2a4a" fontSize="15" fontWeight="700" fontFamily="Georgia, serif">
-            Αβγ
+          <text
+            x="32"
+            y="36"
+            textAnchor="middle"
+            fill="#1b2a4a"
+            fontSize="16"
+            fontWeight="700"
+            fontFamily="Georgia, serif"
+            style={{ animation: 'rtTypeCh1 2.4s steps(1) infinite' }}
+          >
+            α
           </text>
-          <line x1="64" y1="22" x2="64" y2="40" stroke="#2563eb" strokeWidth="2" style={{ animation: 'rtBlink 1.1s steps(2) infinite' }} />
+          <text
+            x="45"
+            y="36"
+            textAnchor="middle"
+            fill="#1b2a4a"
+            fontSize="16"
+            fontWeight="700"
+            fontFamily="Georgia, serif"
+            style={{ animation: 'rtTypeCh2 2.4s steps(1) infinite' }}
+          >
+            β
+          </text>
+          <text
+            x="58"
+            y="36"
+            textAnchor="middle"
+            fill="#1b2a4a"
+            fontSize="16"
+            fontWeight="700"
+            fontFamily="Georgia, serif"
+            style={{ animation: 'rtTypeCh3 2.4s steps(1) infinite' }}
+          >
+            γ
+          </text>
+          <line
+            x1="25"
+            y1="22"
+            x2="25"
+            y2="40"
+            stroke="#2563eb"
+            strokeWidth="2"
+            style={{ animation: 'rtTypeCursor 2.4s steps(1) infinite' }}
+          />
         </g>
       )}
 
@@ -714,6 +755,10 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtEraseSweep { 0%, 14% { transform: translateX(-6px); opacity: 0.95; } 64%, 82% { transform: translateX(58px); opacity: 0.95; } 90% { transform: translateX(62px); opacity: 0; } 100% { transform: translateX(-6px); opacity: 0; } }
         @keyframes rtEraseClipWipe { 0%, 14% { transform: translateX(0px); } 64%, 88% { transform: translateX(74px); } 92%, 100% { transform: translateX(0px); } }
         @keyframes rtBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+        @keyframes rtTypeCh1 { 0%, 17% { opacity: 0; } 18%, 89% { opacity: 1; } 90%, 100% { opacity: 0; } }
+        @keyframes rtTypeCh2 { 0%, 37% { opacity: 0; } 38%, 89% { opacity: 1; } 90%, 100% { opacity: 0; } }
+        @keyframes rtTypeCh3 { 0%, 57% { opacity: 0; } 58%, 89% { opacity: 1; } 90%, 100% { opacity: 0; } }
+        @keyframes rtTypeCursor { 0%, 17% { transform: translateX(0px); opacity: 1; } 18%, 37% { transform: translateX(13px); opacity: 1; } 38%, 57% { transform: translateX(26px); opacity: 1; } 58%, 73% { transform: translateX(39px); opacity: 1; } 74%, 81% { transform: translateX(39px); opacity: 0; } 82%, 89% { transform: translateX(39px); opacity: 1; } 90%, 100% { transform: translateX(0px); opacity: 1; } }
         @keyframes rtDashMarch { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -16; } }
         @keyframes rtRectSelectGrow { 0%, 14% { transform: scale(0.18); opacity: 0.7; } 56%, 86% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.18); opacity: 0.7; } }
         @keyframes rtLassoDraw { 0%, 8% { stroke-dashoffset: 100; opacity: 1; } 54% { stroke-dashoffset: 0; opacity: 1; } 64%, 92% { stroke-dashoffset: 0; opacity: 0; } 100% { stroke-dashoffset: 100; opacity: 0; } }
