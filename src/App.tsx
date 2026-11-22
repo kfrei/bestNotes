@@ -14750,9 +14750,9 @@ export default function App() {
                 const isEndpoint = k === 0 || k === keyIndices.length - 1;
                 ctx.fillStyle = isWeldedClosed && k === 0 ? '#d1fae5' : isEndpoint ? '#ffffff' : '#fef08a';
                 ctx.strokeStyle = isWeldedClosed && k === 0 ? '#059669' : '#2563eb';
-                ctx.lineWidth = 2.4;
-                ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
-                ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
+                ctx.lineWidth = 1.9;
+                ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
+                ctx.strokeRect(p.x - 5, p.y - 5, 10, 10);
               }
             } else {
               const isThreePtCurve =
@@ -14792,9 +14792,9 @@ export default function App() {
                     ? '#fef08a'
                     : '#ffffff';
                 ctx.strokeStyle = isWeldedSplineClosed && i === 0 ? '#059669' : '#2563eb';
-                ctx.lineWidth = 2.4;
-                ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
-                ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
+                ctx.lineWidth = 1.9;
+                ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
+                ctx.strokeRect(p.x - 5, p.y - 5, 10, 10);
               }
             }
 
@@ -44120,7 +44120,7 @@ export default function App() {
           clearActiveOverlay();
           const aCtx = activeCtxRef.current;
           if (aCtx) {
-            const boxSize = 15;
+            const boxSize = 12;
             const half = boxSize / 2;
             aCtx.save();
             aCtx.shadowColor = 'rgba(15, 23, 42, 0.14)';
@@ -44128,7 +44128,7 @@ export default function App() {
             aCtx.shadowOffsetY = 1;
             aCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
             aCtx.strokeStyle = '#94a3b8';
-            aCtx.lineWidth = 1.6;
+            aCtx.lineWidth = 1.5;
             aCtx.beginPath();
             aCtx.rect(preview.x - half, preview.y - half, boxSize, boxSize);
             aCtx.fill();
@@ -44137,9 +44137,9 @@ export default function App() {
             // Draw the "+" sign inside the faint white box
             aCtx.shadowColor = 'transparent';
             aCtx.strokeStyle = '#475569';
-            aCtx.lineWidth = 1.7;
+            aCtx.lineWidth = 1.5;
             aCtx.lineCap = 'round';
-            const arm = 3.6;
+            const arm = 2.9;
             aCtx.beginPath();
             aCtx.moveTo(preview.x - arm, preview.y);
             aCtx.lineTo(preview.x + arm, preview.y);
