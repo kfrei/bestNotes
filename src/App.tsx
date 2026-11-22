@@ -10372,7 +10372,7 @@ export default function App() {
       (s.arrowStart || s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') &&
       s.points.length >= 2
     ) {
-      const headLen = Math.max(12, s.width * 4.2);
+      const headLen = Math.max(8.5, s.width * 3.1);
       const spread = Math.PI / 6;
       if (s.arrowStart || s.shapeType === 'double-arrow') {
         const first = s.points[0];
@@ -10659,7 +10659,7 @@ export default function App() {
       (s.arrowStart || s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') &&
       s.points.length >= 2
     ) {
-      const headLen = Math.max(12, s.width * 4.2);
+      const headLen = Math.max(8.5, s.width * 3.1);
       const spread = Math.PI / 6;
       if (s.arrowStart || s.shapeType === 'double-arrow') {
         const first = s.points[0];
@@ -12876,7 +12876,7 @@ export default function App() {
           ? { x: cubicStart.cp1x, y: cubicStart.cp1y }
           : second;
       const angle = Math.atan2(first.y - refStart.y, first.x - refStart.x);
-      const headLen = Math.max(12, s.width * 4.2);
+      const headLen = Math.max(8.5, s.width * 3.1);
       const spread = Math.PI / 6;
       const w1x = first.x - headLen * Math.cos(angle - spread);
       const w1y = first.y - headLen * Math.sin(angle - spread);
@@ -12906,7 +12906,7 @@ export default function App() {
           ? { x: cubicEnd.cp2x, y: cubicEnd.cp2y }
           : prev;
       const angle = Math.atan2(last.y - refEnd.y, last.x - refEnd.x);
-      const headLen = Math.max(12, s.width * 4.2);
+      const headLen = Math.max(8.5, s.width * 3.1);
       const spread = Math.PI / 6;
       const w1x = last.x - headLen * Math.cos(angle - spread);
       const w1y = last.y - headLen * Math.sin(angle - spread);

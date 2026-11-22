@@ -786,7 +786,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         ? { x: cubicStart.cp1x, y: cubicStart.cp1y }
         : second;
     const angle = Math.atan2(first.y - refStart.y, first.x - refStart.x);
-    const headLen = Math.max(12, s.width * 4);
+    const headLen = Math.max(8.5, s.width * 3.1);
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
@@ -811,7 +811,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         ? { x: cubicEnd.cp2x, y: cubicEnd.cp2y }
         : prev;
     const angle = Math.atan2(last.y - refEnd.y, last.x - refEnd.x);
-    const headLen = Math.max(12, s.width * 4);
+    const headLen = Math.max(8.5, s.width * 3.1);
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(last.x, last.y);
