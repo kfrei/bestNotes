@@ -287,22 +287,49 @@ export function getAngleGeometry(
   };
 }
 
+function distToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+): { dist: number; t: number } {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lenSq = abx * abx + aby * aby;
+  if (lenSq < 1e-6) return { dist: Math.hypot(px - ax, py - ay), t: 0 };
+  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / lenSq));
+  return { dist: Math.hypot(px - (ax + t * abx), py - (ay + t * aby)), t };
+}
+
 export function hitTestAngleArmHandle(
   pt: { x: number; y: number },
   strokes: StrokeObject[],
   editor: ActiveAngleEditor,
-  hitRadius = 20
+  hitRadius = 26
 ): 'A' | 'B' | 'vertex' | null {
   const geom = getAngleGeometry(strokes, editor);
   if (!geom) return null;
 
+  // 1. Direct hit near arm endpoints
   const dA = Math.hypot(pt.x - geom.armA.x, pt.y - geom.armA.y);
   const dB = Math.hypot(pt.x - geom.armB.x, pt.y - geom.armB.y);
   if (dA <= hitRadius && dA <= dB) return 'A';
   if (dB <= hitRadius) return 'B';
 
+  // 2. Hit near the vertex itself
   const dV = Math.hypot(pt.x - geom.vertex.x, pt.y - geom.vertex.y);
-  if (dV <= hitRadius) return 'vertex';
+  if (dV <= 18) return 'vertex';
+
+  // 3. Also allow grabbing along the outer 70% of either arm side directly!
+  const segA = distToSegment(pt.x, pt.y, geom.vertex.x, geom.vertex.y, geom.armA.x, geom.armA.y);
+  const segB = distToSegment(pt.x, pt.y, geom.vertex.x, geom.vertex.y, geom.armB.x, geom.armB.y);
+  const validA = segA.t >= 0.25 && segA.dist <= 16;
+  const validB = segB.t >= 0.25 && segB.dist <= 16;
+  if (validA && (!validB || segA.dist <= segB.dist)) return 'A';
+  if (validB) return 'B';
+
   return null;
 }
 
@@ -361,7 +388,8 @@ export function computeSnappedAngleArmPosition(
 }
 
 /**
- * Returns updated strokes with the chosen angle arm endpoint moved to `newPos`.
+ * Returns updated strokes with the chosen angle arm endpoint moved to `newPos`,
+ * clearing any quadratic/cubic curve control handles on that edge so the arm ALWAYS stays 100% straight!
  */
 export function applyAngleArmMoveToStrokes(
   strokes: StrokeObject[],
@@ -370,24 +398,63 @@ export function applyAngleArmMoveToStrokes(
   newPos: { x: number; y: number }
 ): StrokeObject[] {
   const ref = arm === 'A' ? editor.armA : editor.armB;
+  const vIdx = ref.vertexPointIdx;
+  const aIdx = ref.armPointIdx;
+  const dupIdx = ref.closedDuplicateArmIdx;
+  const highIdx = Math.max(vIdx, aIdx);
+  const lowIdx = Math.min(vIdx, aIdx);
+
   return strokes.map((s) => {
     if (s.id !== ref.strokeId) return s;
+    const isTwoPointLine = s.points.length === 2;
     const nextPoints = s.points.map((p, idx) => {
-      if (
-        idx === ref.armPointIdx ||
-        (ref.closedDuplicateArmIdx !== undefined && idx === ref.closedDuplicateArmIdx)
-      ) {
-        return { ...p, x: newPos.x, y: newPos.y };
+      const isMovedArm = idx === aIdx || (dupIdx !== undefined && idx === dupIdx);
+      const isVertex = idx === vIdx;
+      if (!isMovedArm && !isVertex) return p;
+
+      const updated = isMovedArm ? { ...p, x: newPos.x, y: newPos.y } : { ...p };
+      if (isTwoPointLine) {
+        // Straight 2-point segment: strip all quadratic/cubic curvature so it renders as a pure straight line
+        updated.cx = undefined;
+        updated.cy = undefined;
+        updated.inDx = undefined;
+        updated.inDy = undefined;
+        updated.outDx = undefined;
+        updated.outDy = undefined;
+        updated.smooth = false;
+      } else {
+        // Polygon / polyline: strip curvature on the moved segment (between lowIdx and highIdx)
+        if (idx === highIdx || (dupIdx !== undefined && idx === dupIdx)) {
+          updated.cx = undefined;
+          updated.cy = undefined;
+          updated.inDx = undefined;
+          updated.inDy = undefined;
+          updated.smooth = false;
+        }
+        if (idx === lowIdx) {
+          updated.outDx = undefined;
+          updated.outDy = undefined;
+          updated.smooth = false;
+        }
+        if (isMovedArm) {
+          updated.cx = undefined;
+          updated.cy = undefined;
+          updated.inDx = undefined;
+          updated.inDy = undefined;
+          updated.outDx = undefined;
+          updated.outDy = undefined;
+          updated.smooth = false;
+        }
       }
-      return p;
+      return updated;
     });
     return { ...s, points: nextPoints };
   });
 }
 
 /**
- * Renders the soft emerald-green angle wedge/right-angle square, live degree pill,
- * and draggable arm endpoint handles onto the canvas.
+ * Renders the soft emerald-green angle wedge (or right-angle square at 90°)
+ * and clean green degree text (no pill box, no endpoint circles).
  */
 export function drawInteractiveAngleOverlay(
   ctx: CanvasRenderingContext2D,
@@ -397,7 +464,7 @@ export function drawInteractiveAngleOverlay(
   const geom = getAngleGeometry(strokes, editor);
   if (!geom) return;
 
-  const { vertex, armA, armB, angleA, angleB, diffRad, deg, lenA, lenB } = geom;
+  const { vertex, angleA, angleB, diffRad, deg, lenA, lenB } = geom;
   const anticlockwise = diffRad < 0;
   const isRightAngle = Math.abs(deg - 90) < 0.45;
   const isSnapped =
@@ -434,7 +501,7 @@ export function drawInteractiveAngleOverlay(
     ctx.fill();
 
     ctx.strokeStyle = '#059669';
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2.1;
     ctx.beginPath();
     ctx.moveTo(p1x, p1y);
     ctx.lineTo(p2x, p2y);
@@ -447,7 +514,7 @@ export function drawInteractiveAngleOverlay(
     ctx.arc(
       vertex.x + (uAx + uBx) * (sq * 0.48),
       vertex.y + (uAy + uBy) * (sq * 0.48),
-      2.4,
+      2.3,
       0,
       Math.PI * 2
     );
@@ -463,15 +530,15 @@ export function drawInteractiveAngleOverlay(
     ctx.fill();
 
     ctx.strokeStyle = isSnapped ? '#059669' : '#10b981';
-    ctx.lineWidth = isSnapped ? 2.5 : 2.1;
+    ctx.lineWidth = isSnapped ? 2.4 : 2.0;
     ctx.beginPath();
     ctx.arc(vertex.x, vertex.y, arcR, angleA, angleB, anticlockwise);
     ctx.stroke();
   }
 
-  // 2. Live Degree Pill positioned along the angle bisector
+  // 2. Clean green degree text only (no background box/pill, no endpoint circles)
   const midAngle = angleA + diffRad / 2;
-  const labelDist = isRightAngle ? Math.max(42, arcR + 12) : arcR + 22;
+  const labelDist = isRightAngle ? Math.max(38, arcR + 10) : arcR + 17;
   const lx = vertex.x + labelDist * Math.cos(midAngle);
   const ly = vertex.y + labelDist * Math.sin(midAngle);
 
@@ -479,62 +546,15 @@ export function drawInteractiveAngleOverlay(
   const labelText =
     Math.abs(deg - rounded) < 0.15 ? `${rounded}°` : `${deg.toFixed(1)}°`;
 
-  ctx.font = '700 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  const tw = ctx.measureText(labelText).width;
-  const pillW = Math.max(38, tw + 16);
-  const pillH = 22;
-
-  ctx.save();
-  ctx.shadowColor = 'rgba(5, 150, 105, 0.20)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 2;
-  ctx.fillStyle = isSnapped ? '#059669' : 'rgba(236, 253, 245, 0.96)';
-  ctx.strokeStyle = isSnapped ? '#047857' : '#10b981';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.roundRect(lx - pillW / 2, ly - pillH / 2, pillW, pillH, 11);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.fillStyle = isSnapped ? '#ffffff' : '#065f46';
+  ctx.font = `${isSnapped ? '700' : '600'} 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(labelText, lx, ly + 0.5);
-
-  // 3. Subtle vertex anchor dot
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#059669';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(vertex.x, vertex.y, 4.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // 4. Draggable Arm Endpoint Handles (P1 and P2)
-  const handles: Array<{ pt: { x: number; y: number }; active: boolean }> = [
-    { pt: armA, active: editor.draggingArm === 'A' },
-    { pt: armB, active: editor.draggingArm === 'B' },
-  ];
-
-  for (const h of handles) {
-    // Soft green halo
-    ctx.fillStyle = h.active
-      ? 'rgba(16, 185, 129, 0.34)'
-      : 'rgba(16, 185, 129, 0.20)';
-    ctx.beginPath();
-    ctx.arc(h.pt.x, h.pt.y, h.active ? 15 : 12.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Crisp draggable knob
-    ctx.fillStyle = h.active ? '#059669' : '#ffffff';
-    ctx.strokeStyle = '#059669';
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.arc(h.pt.x, h.pt.y, h.active ? 8 : 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+  // Subtle crisp white halo so green digits read effortlessly over any grid line
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.lineWidth = 3.5;
+  ctx.strokeText(labelText, lx, ly);
+  ctx.fillStyle = isSnapped ? '#047857' : '#059669';
+  ctx.fillText(labelText, lx, ly);
 
   ctx.restore();
 }

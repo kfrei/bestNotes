@@ -3117,7 +3117,11 @@ export default function App() {
   const [activeAngleEditor, setActiveAngleEditor] = useState<ActiveAngleEditor | null>(null);
   const activeAngleEditorRef = useRef<ActiveAngleEditor | null>(null);
   activeAngleEditorRef.current = activeAngleEditor;
-  const draggingAngleArmRef = useRef<{ arm: 'A' | 'B'; pageId: string } | null>(null);
+  const draggingAngleArmRef = useRef<{
+    arm: 'A' | 'B';
+    pageId: string;
+    recordedUndo: boolean;
+  } | null>(null);
   const lastAngleTapRef = useRef<{ time: number; x: number; y: number; pageId: string } | null>(
     null
   );
@@ -41061,12 +41065,15 @@ export default function App() {
     // 0-angle. Interactive Angle Measurement & Arm Dragging (Double-click / Double-tap on any angle vertex)
     if (activeAngleEditorRef.current && activeAngleEditorRef.current.pageId === targetPage.id) {
       const curAngleEd = activeAngleEditorRef.current;
-      const angleHit = hitTestAngleArmHandle(pt, targetPage.strokes, curAngleEd, 22);
+      const angleHit = hitTestAngleArmHandle(pt, targetPage.strokes, curAngleEd, 26);
       if (angleHit === 'A' || angleHit === 'B') {
         e.preventDefault();
-        suppressNextUndoRecordRef.current = false;
-        pushUndoSnapshot(targetPage);
-        draggingAngleArmRef.current = { arm: angleHit, pageId: targetPage.id };
+        activeDrawingPageIndexRef.current = pageIdx;
+        draggingAngleArmRef.current = {
+          arm: angleHit,
+          pageId: targetPage.id,
+          recordedUndo: false,
+        };
         setActiveAngleEditor({ ...curAngleEd, draggingArm: angleHit });
         isDrawingRef.current = true;
         activePointerIdRef.current = e.pointerId;
@@ -44600,16 +44607,26 @@ export default function App() {
     if (draggingAngleArmRef.current && activeAngleEditorRef.current) {
       const dragAng = draggingAngleArmRef.current;
       const curAngleEd = activeAngleEditorRef.current;
-      const geom = getAngleGeometry(activePage.strokes, curAngleEd);
+      const liveNb = activeNotebookLiveRef.current;
+      const livePage =
+        liveNb.pages.find((p) => p.id === dragAng.pageId) ||
+        liveNb.pages[activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current] ||
+        activePage;
+      const geom = getAngleGeometry(livePage.strokes, curAngleEd);
       if (geom) {
         const fixedArmPt = dragAng.arm === 'A' ? geom.armB : geom.armA;
         const snapped = computeSnappedAngleArmPosition(latestPt, geom.vertex, fixedArmPt);
+        const shouldRecordUndo = !dragAng.recordedUndo;
+        if (shouldRecordUndo) {
+          dragAng.recordedUndo = true;
+          suppressNextUndoRecordRef.current = false;
+        }
         updateActivePage(
           (page) => ({
             ...page,
             strokes: applyAngleArmMoveToStrokes(page.strokes, curAngleEd, dragAng.arm, snapped),
           }),
-          false
+          shouldRecordUndo
         );
         if (curAngleEd.snappedDeg !== snapped.snappedDeg) {
           setActiveAngleEditor((prev) =>
