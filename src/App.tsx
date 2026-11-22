@@ -170,6 +170,7 @@ import {
   type BooleanShapeOp,
 } from './utils/shapeBooleanOps';
 import { ShapeBooleanDropdown } from './components/ShapeBooleanDropdown';
+import { RichHoverTooltipHost } from './components/RichHoverTooltip';
 import {
   importGoodnotesFile,
   exportBestnotesFile,
@@ -61893,16 +61894,16 @@ export default function App() {
       {/* Center: Goodnotes 6 Iconic Pill Toolbar (Lightweight Reader & Highlighter Mode when isLightweightDocMode is true) */}
             <div className="flex items-center gap-1 bg-[#fdfbf7] px-2 py-1 rounded-lg shadow-xs border border-[#dfd8cb]">
               {[
-                { id: 'pen', title: 'Pen (Μολύβι / Στυλό + Αυτόματο Πλαίσιο/Κύκλος με κράτημα) — P / Π', icon: Pen },
-                { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', icon: Eraser },
-                { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', icon: Highlighter },
-                { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', icon: Shapes },
-                { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
-                { id: 'rect-lasso', title: 'Rectangular Select (Επιλογή με Ορθογώνιο πλαίσιο)', icon: RectSelectIcon },
-                { id: 'lasso', title: 'Select (Ελεύθερη Επιλογή Λάσο) — S / Σ', icon: Lasso },
-                { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
-                { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', icon: AlignObjectsIcon },
-                { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
+                { id: 'pen', title: 'Pen (Μολύβι / Στυλό + Αυτόματο Πλαίσιο/Κύκλος με κράτημα) — P / Π', tip: 'tool-pen', icon: Pen },
+                { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', tip: 'tool-eraser', icon: Eraser },
+                { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', tip: 'tool-highlighter', icon: Highlighter },
+                { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', tip: 'tool-shape', icon: Shapes },
+                { id: 'text', title: 'Text (Κείμενο) — T / Τ', tip: 'tool-text', icon: Type },
+                { id: 'rect-lasso', title: 'Rectangular Select (Επιλογή με Ορθογώνιο πλαίσιο)', tip: 'tool-lasso', icon: RectSelectIcon },
+                { id: 'lasso', title: 'Select (Ελεύθερη Επιλογή Λάσο) — S / Σ', tip: 'tool-lasso', icon: Lasso },
+                { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', tip: 'tool-direct-node', icon: BezierNodesIcon },
+                { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', tip: 'align-center-xy', icon: AlignObjectsIcon },
+                { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', tip: 'tool-laser', icon: Radio },
               ]
                 .filter((tool) =>
                   isLightweightDocMode
@@ -62061,7 +62062,8 @@ export default function App() {
                         ? 'bg-[#234978] text-white shadow-xs scale-105'
                         : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title={tool.title}
+                    data-rich-tip={tool.tip}
+                    aria-label={tool.title}
                   >
                     <Icon className="w-4 h-4" />
                   </button>
@@ -62083,7 +62085,8 @@ export default function App() {
                   <button
                     onClick={() => fileInputImageRef.current?.click()}
                     className="p-2 rounded-lg text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978] transition cursor-pointer"
-                    title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
+                    data-rich-tip="tool-import"
+                    aria-label="Εισαγωγή Εικόνας, PDF ή .goodnotes"
                   >
                     <Upload className="w-4 h-4" />
                   </button>
@@ -62091,7 +62094,8 @@ export default function App() {
                   <button
                     onClick={handlePaste}
                     className="p-2 rounded-lg text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978] transition cursor-pointer"
-                    title="Άμεση Επικόλληση (Paste — Ctrl+V / Cmd+V) εικόνας, κειμένου ή αντικειμένου"
+                    data-rich-tip="tool-paste"
+                    aria-label="Άμεση Επικόλληση"
                   >
                     <ClipboardPaste className="w-4 h-4" />
                   </button>
@@ -62104,7 +62108,8 @@ export default function App() {
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="Συλλογή Εικόνων & Σχημάτων (Images — I / Ι)"
+                    data-rich-tip="tool-stickers"
+                    aria-label="Συλλογή Εικόνων & Σχημάτων"
                   >
                     <ImageIcon className="w-4 h-4" />
                     {shapeLibrary.length > 0 && (
@@ -62119,7 +62124,8 @@ export default function App() {
                     className={`p-2 rounded-lg transition cursor-pointer ${
                       rulerState.visible ? 'bg-[#234978] text-white shadow-xs' : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="Χάρακας (Ruler — R / Ρ) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
+                    data-rich-tip="tool-ruler"
+                    aria-label="Χάρακας"
                   >
                     <Ruler className="w-4 h-4" />
                   </button>
@@ -62145,7 +62151,8 @@ export default function App() {
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="LaTeX & Επίλυση Εξίσωσης (CAS)"
+                    data-rich-tip="tool-calc"
+                    aria-label="LaTeX & Επίλυση Εξίσωσης (CAS)"
                   >
                     <Calculator className="w-4 h-4" />
                   </button>
@@ -62175,7 +62182,8 @@ export default function App() {
                     className={`p-2 rounded-lg transition cursor-pointer ${
                       showLayersPanel ? 'bg-[#234978] text-white shadow-xs' : 'text-[#475569] hover:bg-[#ece7dc] hover:text-[#234978]'
                     }`}
-                    title="Layers (Επίπεδα με Κλείδωμα & Απόκρυψη)"
+                    data-rich-tip="tool-layers"
+                    aria-label="Layers (Επίπεδα)"
                   >
                     <Layers className="w-4 h-4" />
                   </button>
@@ -62230,7 +62238,8 @@ export default function App() {
                         ? 'bg-[#234978] text-white shadow-xs'
                         : 'bg-[#efebe3] text-[#2c3e50] hover:bg-[#e4ded2] border border-[#dfd8cb]'
                     }`}
-                    title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια"
+                    data-rich-tip="tool-sim"
+                    aria-label="Προσομοίωση Φυσικής"
                   >
                     <svg
                       className="w-4 h-4 shrink-0"
@@ -64090,7 +64099,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('left')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Στοίχιση Όλων Αριστερά (Align Left Edges)"
+                        data-rich-tip="align-left"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="4" y1="3" x2="4" y2="21" />
@@ -64102,7 +64111,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('center-x')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Κεντράρισμα Οριζόντια (Align Horizontal Centers — X)"
+                        data-rich-tip="align-center-x"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="12" y1="3" x2="12" y2="21" />
@@ -64114,7 +64123,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('right')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Στοίχιση Όλων Δεξιά (Align Right Edges)"
+                        data-rich-tip="align-right"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="20" y1="3" x2="20" y2="21" />
@@ -64130,7 +64139,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('top')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Στοίχιση Όλων Πάνω (Align Top Edges)"
+                        data-rich-tip="align-top"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="4" x2="21" y2="4" />
@@ -64142,7 +64151,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('center-y')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Κεντράρισμα Κατακόρυφα (Align Vertical Centers — Y)"
+                        data-rich-tip="align-center-y"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="12" x2="21" y2="12" />
@@ -64154,7 +64163,7 @@ export default function App() {
                       <button
                         onClick={() => handleAlignSelected('bottom')}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-normal transition cursor-pointer"
-                        title="Στοίχιση Όλων Κάτω (Align Bottom Edges)"
+                        data-rich-tip="align-bottom"
                       >
                         <svg className="w-3.5 h-3.5 text-[#234978]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                           <line x1="3" y1="20" x2="21" y2="20" />
@@ -64169,7 +64178,7 @@ export default function App() {
                     <button
                       onClick={() => handleAlignSelected('center-both')}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-medium shadow-2xs transition cursor-pointer"
-                      title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y — J / Ξ)"
+                      data-rich-tip="align-center-xy"
                     >
                       <Target className="w-3.5 h-3.5" />
                       <span>Κέντρο X+Y</span>
@@ -64227,7 +64236,7 @@ export default function App() {
                             <button
                               onClick={handleGroupSelected}
                               className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#234978] hover:bg-[#1c3c63] text-white font-medium cursor-pointer"
-                              title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
+                              data-rich-tip="group-toggle"
                             >
                               <Group className="w-3.5 h-3.5" />
                               <span>Group ({totalSelCount})</span>
@@ -64304,7 +64313,7 @@ export default function App() {
                         <button
                           onClick={() => handleMirrorSelected('horizontal')}
                           className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium transition cursor-pointer"
-                          title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                          data-rich-tip="mirror-h"
                         >
                           <MirrorHorizontalIcon className="w-4 h-4 text-[#475569]" />
                           <span>Mirror</span>
@@ -64312,7 +64321,7 @@ export default function App() {
                         <button
                           onClick={() => handleMirrorSelected('vertical')}
                           className="flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium transition cursor-pointer"
-                          title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                          data-rich-tip="mirror-v"
                         >
                           <MirrorVerticalIcon className="w-4 h-4 text-[#475569]" />
                           <span>Mirror</span>
@@ -64325,7 +64334,7 @@ export default function App() {
                         data-popover-trigger="library"
                         onClick={handleAddSelectedToShapeLibrary}
                         className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                        title="Προσθήκη του επιλεγμένου αντικειμένου στη Βιβλιοθήκη Σχημάτων (με όνομα & tags)"
+                        data-rich-tip="add-library"
                       >
                         <span>+Βιβλιοθήκη</span>
                       </button>
@@ -64580,28 +64589,28 @@ export default function App() {
                       <button
                         onClick={() => handleZOrderSelected('to-back')}
                         className="px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                        title="Send to Back (Εντελώς πίσω)"
+                        data-rich-tip="z-back"
                       >
                         Πίσω
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-back')}
                         className="px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                        title="Send Backward (1 βήμα πίσω)"
+                        data-rich-tip="z-down"
                       >
                         -1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-front')}
                         className="px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                        title="Bring Forward (1 βήμα μπροστά)"
+                        data-rich-tip="z-up"
                       >
                         +1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('to-front')}
                         className="px-2 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#2c3e50] font-medium cursor-pointer whitespace-nowrap transition"
-                        title="Bring to Front (Εντελώς μπροστά)"
+                        data-rich-tip="z-front"
                       >
                         Μπροστά
                       </button>
@@ -75717,6 +75726,7 @@ export default function App() {
         onPointerUp={handleGlobalLaserPointerUp}
         dpr={CANVAS_DPR}
       />
+      <RichHoverTooltipHost />
     </div>
   );
 }
