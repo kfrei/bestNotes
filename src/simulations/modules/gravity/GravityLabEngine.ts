@@ -302,16 +302,19 @@ export function buildGravitySceneFromStrokes(
       continue;
     }
 
-    const defaultPinned = isFlatPlatform;
-    const isPinned =
-      pinnedOverrides[s.id] !== undefined ? pinnedOverrides[s.id] : defaultPinned;
-
     const isBall =
       s.shapeType === 'circle' ||
       s.shapeType === 'ellipse' ||
       s.shapeType === 'sphere' ||
       s.shapeType === 'shaded-sphere' ||
       s.extrudeShape3D === 'sphere';
+
+    // Default pinning heuristic:
+    // - Flat wide platforms (width > 2.6 * height) -> static floor
+    // - Large non-ball shapes (e.g. a wedge/ramp/box > 130px wide) -> static ramp/floor
+    const defaultPinned = isFlatPlatform || (!isBall && b.w > 130);
+    const isPinned =
+      pinnedOverrides[s.id] !== undefined ? pinnedOverrides[s.id] : defaultPinned;
 
     const radius = isBall
       ? Math.max(8, (b.w + b.h) * 0.25)
@@ -347,6 +350,28 @@ export function buildGravitySceneFromStrokes(
       segments.push(...sampleStrokeToSegments(s));
     } else {
       consumedStrokeIds.add(s.id);
+    }
+  }
+
+  // Second pass: if a non-ball body (e.g. trapezoid/wedge/step) is BELOW and >= 2x larger in area
+  // than another dynamic body in the same Lasso selection, automatically pin it as a static ramp/floor!
+  if (bodies.length >= 2) {
+    const strokeById = new Map(strokes.map((st) => [st.id, st]));
+    for (const candidate of bodies) {
+      if (candidate.pinned || candidate.shapeKind === 'ball') continue;
+      if (pinnedOverrides[candidate.strokeId] !== undefined) continue;
+      const candArea = candidate.halfW * candidate.halfH * 4;
+      const supportsSmallerAbove = bodies.some((other) => {
+        if (other.strokeId === candidate.strokeId || other.pinned) return false;
+        const otherArea = other.halfW * other.halfH * 4;
+        return candArea >= otherArea * 2.0 && candidate.initCy > other.initCy;
+      });
+      if (supportsSmallerAbove) {
+        candidate.pinned = true;
+        consumedStrokeIds.delete(candidate.strokeId);
+        const st = strokeById.get(candidate.strokeId);
+        if (st) segments.push(...sampleStrokeToSegments(st));
+      }
     }
   }
 
