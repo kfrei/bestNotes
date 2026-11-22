@@ -72054,7 +72054,7 @@ export default function App() {
                                     y1={handleInfo.anchor.y}
                                     x2={handleInfo.handle.x}
                                     y2={handleInfo.handle.y}
-                                    stroke="#0ea5e9"
+                                    stroke="#234978"
                                     strokeWidth={1.6}
                                     strokeDasharray="4 3"
                                   />
@@ -72062,7 +72062,7 @@ export default function App() {
                                     cx={handleInfo.anchor.x}
                                     cy={handleInfo.anchor.y}
                                     r={3.5}
-                                    fill="#0ea5e9"
+                                    fill="#234978"
                                   />
                                 </svg>
                                 <div
@@ -72119,7 +72119,7 @@ export default function App() {
                                     window.addEventListener('pointerup', onUp);
                                     window.addEventListener('pointercancel', onUp);
                                   }}
-                                  className="absolute z-[62] -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-indigo-600 text-white shadow-lg border-2 border-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 transition-transform select-none text-[10px] font-black"
+                                  className="absolute z-[62] -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#234978] hover:bg-[#1b3a61] text-white shadow-lg border-2 border-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 transition-transform select-none text-[10px] font-black"
                                 >
                                   3D
                                 </div>
