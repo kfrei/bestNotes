@@ -57760,7 +57760,7 @@ export default function App() {
             backgroundSize: '20px 20px',
           }}
         >
-          <div className="max-w-5xl mx-auto space-y-5">
+          <div className="w-full max-w-[1680px] mx-auto px-1 sm:px-2 lg:px-4 space-y-5">
             {(() => {
               const normalizeFolderPath = (rawPath: string) =>
                 rawPath
@@ -58029,7 +58029,7 @@ export default function App() {
                         );
                         return bMs - aMs;
                       })
-                      .slice(0, 4)
+                      .slice(0, 6)
                   : [];
 
               const hasValidNotebooks = notebooks.some(
@@ -59194,7 +59194,7 @@ export default function App() {
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                             Φάκελοι ({visibleFolders.length})
                           </h2>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+                          <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4 sm:gap-5">
                             {visibleFolders.map((folder) => {
                               const isDropHover = dragOverFolderName === folder.path;
                               const folderColor = folder.color || '#f59e0b';
@@ -59477,7 +59477,7 @@ export default function App() {
                               : `Σύνολο: ${formatNotebookSizeLabel(totalVisibleBytes)}`}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(195px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(215px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(225px,1fr))] gap-4 sm:gap-5">
                           {/* Symmetrical Faint-Gray Drag & Drop New Document Card right before the first Note! */}
                           <div
                             onClick={() => {
@@ -60090,9 +60090,9 @@ export default function App() {
                       key={`list-${activeLibraryFolder || 'root'}`}
                       className="space-y-3"
                     >
-                      {/* Folders in List Mode */}
+                      {/* Folders in List Mode — Adaptive 1-col / 2-col on wide screens */}
                       {visibleFolders.length > 0 && (
-                        <div className="space-y-2 bn-library-cascade-4">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5 bn-library-cascade-4">
                           {visibleFolders.map((folder) => {
                         const isDropHover = dragOverFolderName === folder.path;
                         const folderColor = folder.color || '#f59e0b';
@@ -60336,8 +60336,8 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Notes in List Mode */}
-                      <div className="space-y-2 bn-library-cascade-5">
+                      {/* Notes in List Mode — Option A: Adaptive 1-col (iPad) / 2-col (Wide Desktop >= 1280px) */}
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5 bn-library-cascade-5">
                         {/* Unified Drag & Drop / Open File Row in List Mode (.bestNotes, .pdf, .png, .jpg, .gif) */}
                       <div
                         onClick={() => {
@@ -60373,7 +60373,7 @@ export default function App() {
                           }
                         }}
                         title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
-                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
+                        className={`xl:col-span-2 flex items-center justify-between px-4 py-2.5 rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
                           isLibraryDropZoneActive
                             ? 'bg-sky-100/90 border-[#234978] ring-2 ring-inset ring-[#234978]'
                             : 'bg-white/75 border-slate-300/90 hover:bg-white hover:border-slate-400'

@@ -43,8 +43,8 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
           </h2>
           <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {[0, 1, 2, 3].map((idx) => (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3.5">
+          {[0, 1, 2, 3, 4, 5].map((idx) => (
             <div
               key={`recent-skel-${idx}`}
               className="bg-white/95 rounded-2xl border border-slate-200/90 p-3 shadow-2xs flex items-center gap-3.5"
@@ -74,7 +74,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
         Πρόσφατα Ανοιγμένα
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3.5">
         {recentlyOpenedNotebooks.map((rNb) => {
           const recentTs = Math.max(
             recentOpenedAtMap[rNb.id] || 0,
