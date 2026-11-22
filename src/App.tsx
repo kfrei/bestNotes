@@ -64262,7 +64262,7 @@ export default function App() {
                           ? 'bg-[#234978] text-white shadow-xs'
                           : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
                       }`}
-                      title="Stroke Σβήστρα (σβήνει ολόκληρη τη γραμμή ή τον μαρκαδόρο με ένα άγγιγμα)"
+                      data-rich-tip="eraser-stroke"
                     >
                       <Eraser className="w-3.5 h-3.5 shrink-0" />
                       <span>Stroke</span>
@@ -64280,7 +64280,7 @@ export default function App() {
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'bg-[#fdfbf7] border border-[#dfd8cb] text-[#2c3e50] hover:bg-[#ece7dc]'
                         }`}
-                        title="Pixel Σβήστρα (Επιλογή μεγέθους: Μικρή, Μεσαία, Μεγάλη)"
+                        data-rich-tip="eraser-pixel"
                       >
                         <svg className="w-4 h-4 shrink-0" viewBox="0 0 18 18" fill="none">
                           <circle

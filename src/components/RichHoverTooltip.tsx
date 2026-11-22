@@ -23,6 +23,8 @@ export type RichTipId =
   // Main Toolbar
   | 'tool-pen'
   | 'tool-eraser'
+  | 'eraser-stroke'
+  | 'eraser-pixel'
   | 'tool-highlighter'
   | 'tool-shape'
   | 'tool-text'
@@ -64,6 +66,8 @@ const TIP_DEFS: Record<RichTipId, TipDef> = {
   'group-toggle': { title: 'Ομαδοποίηση (Group)', subtitle: 'Ένωση επιλεγμένων σε ενιαίο σύνολο' },
   'tool-pen': { title: 'Πένα / Μολύβι', subtitle: 'Ελεύθερη γραφή & Hold-to-Snap', shortcut: 'P / Π' },
   'tool-eraser': { title: 'Σβήστρα', subtitle: 'Σβήσιμο γραμμών ή τμημάτων', shortcut: 'E / Ε' },
+  'eraser-stroke': { title: 'Stroke Σβήστρα', subtitle: 'Αγγίζει μια γωνία/γραμμή & σβήνει όλο το σχήμα' },
+  'eraser-pixel': { title: 'Pixel Σβήστρα', subtitle: 'Σβήνει με ακρίβεια μόνο το τμήμα που ακουμπάει' },
   'tool-highlighter': { title: 'Υπογραμμιστής', subtitle: 'Ημιδιαφανής τονισμός κειμένου', shortcut: 'H / Η' },
   'tool-shape': { title: 'Σχήματα & Γεωμετρία', subtitle: 'Ευθείες, κύκλοι, βελάκια, τεταρτοκύκλιο', shortcut: 'O / Ο' },
   'tool-text': { title: 'Κείμενο', subtitle: 'Πλαίσια κειμένου, LaTeX & ελληνικές γραμματοσειρές', shortcut: 'T / Τ' },
@@ -519,6 +523,94 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
           <circle cx="30" cy="36" r="6" fill="#2563eb" style={{ animation: 'rtSimRoll 2s ease-in-out infinite' }} />
         </g>
       )}
+
+      {id === 'eraser-stroke' && (
+        <g>
+          {/* Full rectangle that disappears completely the moment the eraser touches its corner */}
+          <rect
+            x="18"
+            y="18"
+            width="52"
+            height="30"
+            rx="2"
+            fill="#2563eb"
+            fillOpacity="0.10"
+            stroke="#1b2a4a"
+            strokeWidth="2.3"
+            style={{ transformOrigin: '44px 33px', animation: 'rtStrokeRectVanish 2.3s ease-in-out infinite' }}
+          />
+          {/* Touch-spark ripple right on the top-right corner (70, 18) */}
+          <circle
+            cx="70"
+            cy="18"
+            r="6"
+            fill="none"
+            stroke="#e11d48"
+            strokeWidth="1.6"
+            style={{ transformOrigin: '70px 18px', animation: 'rtCornerTapRing 2.3s ease-out infinite' }}
+          />
+          {/* Pink eraser approaching and tapping the top-right corner */}
+          <g style={{ animation: 'rtStrokeEraserTap 2.3s ease-in-out infinite' }}>
+            <rect
+              x="64"
+              y="8"
+              width="17"
+              height="11"
+              rx="2.5"
+              fill="#fda4af"
+              stroke="#e11d48"
+              strokeWidth="1.6"
+              transform="rotate(-24 72 13)"
+            />
+          </g>
+        </g>
+      )}
+
+      {id === 'eraser-pixel' && (
+        <g>
+          <defs>
+            <mask id="rtPixelSideMask">
+              <rect x="0" y="0" width="96" height="62" fill="white" />
+              {/* Black erase bite on a small section of the top side of the rectangle */}
+              <rect
+                x="39"
+                y="11"
+                width="18"
+                height="13"
+                rx="3"
+                fill="black"
+                style={{ transformOrigin: '39px 17px', animation: 'rtPixelBiteGrow 2.3s ease-in-out infinite' }}
+              />
+            </mask>
+          </defs>
+          {/* Rectangle with only a small section of its top side erased */}
+          <rect
+            x="18"
+            y="18"
+            width="60"
+            height="30"
+            rx="2"
+            fill="none"
+            stroke="#1b2a4a"
+            strokeWidth="2.4"
+            mask="url(#rtPixelSideMask)"
+          />
+          {/* Circular dashed pixel eraser wiping across that small portion of the top side */}
+          <g style={{ animation: 'rtPixelBrushMove 2.3s ease-in-out infinite' }}>
+            <circle
+              cx="41"
+              cy="18"
+              r="6.2"
+              fill="#fda4af"
+              fillOpacity="0.42"
+              stroke="#e11d48"
+              strokeWidth="1.5"
+              strokeDasharray="2.5 2"
+            />
+            <circle cx="41" cy="18" r="1.4" fill="#e11d48" />
+          </g>
+        </g>
+      )}
     </svg>
   );
 }
@@ -633,6 +725,11 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtSimRoll { 0%, 100% { transform: translate(-10px, -16px); } 50% { transform: translate(38px, 6px); } }
         @keyframes rtCylGrow { 0%, 20% { transform: scaleY(0); opacity: 0; } 55%, 85% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(0); opacity: 0; } }
         @keyframes rtCylTopRise { 0%, 20% { transform: translateY(0px); } 55%, 85% { transform: translateY(-30px); } 100% { transform: translateY(0px); } }
+        @keyframes rtStrokeEraserTap { 0%, 10% { transform: translate(14px, -10px); opacity: 0.9; } 38%, 48% { transform: translate(0px, 2px); opacity: 1; } 70%, 92% { transform: translate(12px, -8px); opacity: 0.7; } 100% { transform: translate(14px, -10px); opacity: 0.9; } }
+        @keyframes rtStrokeRectVanish { 0%, 40% { opacity: 1; transform: scale(1); } 50%, 84% { opacity: 0; transform: scale(0.92); } 94%, 100% { opacity: 1; transform: scale(1); } }
+        @keyframes rtCornerTapRing { 0%, 38% { opacity: 0; transform: scale(0.4); } 44% { opacity: 0.95; transform: scale(1); } 58%, 100% { opacity: 0; transform: scale(1.65); } }
+        @keyframes rtPixelBrushMove { 0%, 12% { transform: translate(-2px, -9px); opacity: 0.85; } 24% { transform: translate(0px, 0px); opacity: 1; } 58% { transform: translate(14px, 0px); opacity: 1; } 72%, 88% { transform: translate(16px, -8px); opacity: 0.6; } 100% { transform: translate(-2px, -9px); opacity: 0.85; } }
+        @keyframes rtPixelBiteGrow { 0%, 22% { transform: scaleX(0); } 58%, 86% { transform: scaleX(1); } 94%, 100% { transform: scaleX(0); } }
       `}</style>
       <div className="w-[248px] rounded-xl bg-[#fdfbf7]/96 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_14px_34px_-8px_rgba(15,23,42,0.22)] p-2 flex items-center gap-2.5">
         <TipAnimationSvg id={activeTip.id} />
