@@ -283,9 +283,22 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
 
       {id === 'tool-eraser' && (
         <g>
-          <path d="M 14 38 Q 48 16, 82 36" fill="none" stroke="#94a3b8" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="3 3" />
-          <g style={{ animation: 'rtEraseSweep 2.1s ease-in-out infinite' }}>
-            <rect x="34" y="20" width="20" height="13" rx="3" fill="#fda4af" stroke="#e11d48" strokeWidth="1.6" transform="rotate(-18 44 26)" />
+          <defs>
+            <clipPath id="rtEraseClip">
+              <rect x="0" y="0" width="96" height="62" style={{ animation: 'rtEraseClipWipe 2.2s ease-in-out infinite' }} />
+            </clipPath>
+          </defs>
+          {/* Inked letters + underline that actually get wiped away as the eraser passes over */}
+          <g clipPath="url(#rtEraseClip)">
+            <text x="48" y="34" textAnchor="middle" fill="#1b2a4a" fontSize="16" fontWeight="700" fontFamily="Georgia, serif">
+              Αβγ
+            </text>
+            <path d="M 18 42 Q 48 38, 78 42" fill="none" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" />
+          </g>
+          {/* Pink eraser gliding across left -> right synchronously with the wipe clip */}
+          <g style={{ animation: 'rtEraseSweep 2.2s ease-in-out infinite' }}>
+            <rect x="14" y="21" width="18" height="22" rx="3.5" fill="#fda4af" stroke="#e11d48" strokeWidth="1.6" transform="rotate(-14 23 32)" />
+            <rect x="15.5" y="22" width="15" height="7" rx="2" fill="#ffe4e6" transform="rotate(-14 23 32)" />
           </g>
         </g>
       )}
@@ -548,7 +561,8 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtCenterXY2 { 0%, 20% { transform: translate(10px, 6px); } 55%, 86% { transform: translate(0, 0); } 100% { transform: translate(10px, 6px); } }
         @keyframes rtFadePulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
         @keyframes rtDrawLine { 0%, 15% { stroke-dashoffset: 110; } 60%, 88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 110; } }
-        @keyframes rtEraseSweep { 0%, 100% { transform: translateX(-14px); } 50% { transform: translateX(14px); } }
+        @keyframes rtEraseSweep { 0%, 14% { transform: translateX(-6px); opacity: 0.95; } 64%, 82% { transform: translateX(58px); opacity: 0.95; } 90% { transform: translateX(62px); opacity: 0; } 100% { transform: translateX(-6px); opacity: 0; } }
+        @keyframes rtEraseClipWipe { 0%, 14% { transform: translateX(0px); } 64%, 88% { transform: translateX(74px); } 92%, 100% { transform: translateX(0px); } }
         @keyframes rtBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
         @keyframes rtDashMarch { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -16; } }
         @keyframes rtNodeBounce { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-4px); } }
