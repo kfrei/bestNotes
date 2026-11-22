@@ -165,6 +165,12 @@ import {
   getPaperRuleColors,
 } from './types/note';
 import {
+  applyBooleanShapeOp,
+  isClosedBooleanShape,
+  type BooleanShapeOp,
+} from './utils/shapeBooleanOps';
+import { ShapeBooleanDropdown } from './components/ShapeBooleanDropdown';
+import {
   importGoodnotesFile,
   exportBestnotesFile,
   createBestnotesFileBlob,
@@ -16867,6 +16873,49 @@ export default function App() {
       updateActivePage,
       showToast,
     ]
+  );
+
+  // Photoshop / Illustrator Pathfinder Boolean Shape Operations (Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός)
+  const handleApplyBooleanShapeOp = useCallback(
+    (op: BooleanShapeOp) => {
+      if (selectedStrokeIds.length < 2) {
+        showToast('ℹ️ Επίλεξε τουλάχιστον 2 κλειστά σχήματα με το Lasso!');
+        return;
+      }
+      const selectedSet = new Set(selectedStrokeIds);
+      const targetStrokes = activePage.strokes.filter(
+        (s) => selectedSet.has(s.id) && isClosedBooleanShape(s)
+      );
+      if (targetStrokes.length < 2) {
+        showToast('ℹ️ Χρειάζονται τουλάχιστον 2 κλειστά σχήματα (π.χ. ορθογώνιο & κύκλος)!');
+        return;
+      }
+      const baseZ = Math.max(...targetStrokes.map((s) => s.zOrder ?? 0), getNextPageZOrder(activePage));
+      const resultStrokes = applyBooleanShapeOp(targetStrokes, op, baseZ);
+      if (resultStrokes.length === 0) {
+        showToast(
+          op === 'intersect'
+            ? 'ℹ️ Τα επιλεγμένα σχήματα δεν έχουν κοινό τμήμα!'
+            : 'ℹ️ Δεν προέκυψε νέο σχήμα από αυτή την πράξη.'
+        );
+        return;
+      }
+      const removedIds = new Set(targetStrokes.map((s) => s.id));
+      updateActivePage((page) => ({
+        ...page,
+        strokes: [...page.strokes.filter((s) => !removedIds.has(s.id)), ...resultStrokes],
+      }));
+      setSelectedStrokeIds(resultStrokes.map((s) => s.id));
+      const labels: Record<BooleanShapeOp, string> = {
+        union: 'Ένωση (εξωτερικό περίγραμμα)',
+        intersect: 'Τομή (κοινό μέρος)',
+        subtract: 'Αφαίρεση σχήματος',
+        exclude: 'Εκτός Τομής',
+        divide: `Τεμαχισμός σε ${resultStrokes.length} ανεξάρτητα κομμάτια`,
+      };
+      showToast(`✨ ${labels[op]}!`);
+    },
+    [activePage, selectedStrokeIds, updateActivePage, showToast]
   );
 
   // Illustrator / Photoshop Multi-Object Align & Distribute
@@ -64115,6 +64164,20 @@ export default function App() {
                     Boolean(selectedTextId) ||
                     Boolean(heatSim.activeHeatSim?.selectedObjectId || heatSim.activeHeatSim?.selectedObjectIds?.length)) && (
                   <div className="flex items-center gap-1.5">
+                    {(() => {
+                      if (selectedStrokeIds.length < 2) return null;
+                      const selSet = new Set(selectedStrokeIds);
+                      const closedCount = activePage.strokes.filter(
+                        (s) => selSet.has(s.id) && isClosedBooleanShape(s)
+                      ).length;
+                      if (closedCount < 2) return null;
+                      return (
+                        <ShapeBooleanDropdown
+                          shapeCount={closedCount}
+                          onSelectOp={handleApplyBooleanShapeOp}
+                        />
+                      );
+                    })()}
                     <div className="flex items-center gap-1 bg-[#ece7dc] p-0.5 rounded-lg border border-[#dfd8cb]">
                       <button
                         onClick={handleCutSelected}
