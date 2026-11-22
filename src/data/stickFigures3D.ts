@@ -35,8 +35,13 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
   const torsoLen = Math.hypot(hip.x - neck.x, hip.y - neck.y) || 40;
   const headNeckLen = Math.hypot(head.x - neck.x, head.y - neck.y) || 26;
   const limbW = Math.max(9, (s.width || 6) * 2.05);
-  const torsoW = limbW * 1.72;
+  const torsoW = limbW * 1.44;
   const headR = Math.max(12, Math.min(torsoLen * 0.42, headNeckLen * 0.8 || 21));
+  // Attach arms slightly below the neck tip on the upper chest for a natural, clean shoulder junction
+  const shoulder = {
+    x: neck.x + (hip.x - neck.x) * 0.14,
+    y: neck.y + (hip.y - neck.y) * 0.14,
+  };
 
   const traceUnifiedSkeleton = (
     offsetX: number,
@@ -51,34 +56,39 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Smooth curved limbs using quadratic curve through elbow/knee so bends look organic
-    ctx.lineWidth = limbW * 1.04 * widthScale;
+    // Crisp anatomical leg joints at knees (straight upper/lower segments with smooth round join)
+    ctx.lineWidth = limbW * 1.02 * widthScale;
     ctx.beginPath();
     ctx.moveTo(hip.x, hip.y);
-    ctx.quadraticCurveTo(lKnee.x, lKnee.y, lFoot.x, lFoot.y);
+    ctx.lineTo(lKnee.x, lKnee.y);
+    ctx.lineTo(lFoot.x, lFoot.y);
     ctx.moveTo(hip.x, hip.y);
-    ctx.quadraticCurveTo(rKnee.x, rKnee.y, rFoot.x, rFoot.y);
+    ctx.lineTo(rKnee.x, rKnee.y);
+    ctx.lineTo(rFoot.x, rFoot.y);
     ctx.stroke();
 
-    ctx.lineWidth = limbW * 0.9 * widthScale;
+    // Crisp anatomical arm joints at elbows anchored cleanly at the upper-chest shoulder point
+    ctx.lineWidth = limbW * 0.88 * widthScale;
     ctx.beginPath();
-    ctx.moveTo(neck.x, neck.y);
-    ctx.quadraticCurveTo(lElbow.x, lElbow.y, lHand.x, lHand.y);
-    ctx.moveTo(neck.x, neck.y);
-    ctx.quadraticCurveTo(rElbow.x, rElbow.y, rHand.x, rHand.y);
+    ctx.moveTo(shoulder.x, shoulder.y);
+    ctx.lineTo(lElbow.x, lElbow.y);
+    ctx.lineTo(lHand.x, lHand.y);
+    ctx.moveTo(shoulder.x, shoulder.y);
+    ctx.lineTo(rElbow.x, rElbow.y);
+    ctx.lineTo(rHand.x, rHand.y);
     ctx.stroke();
 
-    // Sculpted neck + fuller organic torso (sleek round limb endings, zero bulbous hand/foot blobs)
+    // Balanced organic torso + sculpted neck
     ctx.lineWidth = torsoW * widthScale;
     ctx.beginPath();
-    ctx.moveTo(neck.x, neck.y);
+    ctx.moveTo(shoulder.x, shoulder.y);
     ctx.lineTo(hip.x, hip.y);
     ctx.stroke();
 
     ctx.lineWidth = limbW * 0.72 * widthScale;
     ctx.beginPath();
     ctx.moveTo(head.x, head.y);
-    ctx.lineTo(neck.x, neck.y);
+    ctx.lineTo(shoulder.x, shoulder.y);
     ctx.stroke();
     ctx.restore();
   };
@@ -98,20 +108,19 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
   ctx.ellipse(midFootX, groundY, spreadX, Math.max(5.5, limbW * 0.52), 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 7-layer 100%-OPAQUE stepped 3D satin clay shading:
-  //    Because every pass is 100% opaque (no semi-transparent alpha overlaps),
-  //    overlapping shoulders and hips fuse into ONE silky-smooth seamless 3D volume!
-  const layers: { scale: number; ox: number; oy: number; color: string }[] = [
-    { scale: 1.04, ox: 0, oy: 0, color: mixRgb(baseRgb, [9, 13, 24], 0.68) },
-    { scale: 0.94, ox: -0.04, oy: -0.03, color: mixRgb(baseRgb, [15, 23, 42], 0.44) },
-    { scale: 0.82, ox: -0.08, oy: -0.06, color: mixRgb(baseRgb, [15, 23, 42], 0.18) },
-    { scale: 0.68, ox: -0.12, oy: -0.09, color: mixRgb(baseRgb, [255, 255, 255], 0.08) },
-    { scale: 0.52, ox: -0.16, oy: -0.12, color: mixRgb(baseRgb, [255, 255, 255], 0.24) },
-    { scale: 0.34, ox: -0.20, oy: -0.15, color: mixRgb(baseRgb, [255, 255, 255], 0.40) },
-    { scale: 0.16, ox: -0.23, oy: -0.17, color: mixRgb(baseRgb, [255, 255, 255], 0.56) },
-  ];
-  for (const l of layers) {
-    traceUnifiedSkeleton(l.ox * limbW, l.oy * limbW, l.scale, l.color);
+  // 2. 14-layer 100%-OPAQUE airbrushed 3D satin-clay shading (zero visible banding, zero joint seams!)
+  const STEPS = 14;
+  for (let i = 0; i < STEPS; i++) {
+    const t = i / (STEPS - 1); // 0 = outer dark rim, 1 = inner satin specular ridge
+    const ease = 1 - Math.pow(1 - t, 1.35);
+    const scale = 1.04 - ease * 0.88; // 1.04 -> 0.16
+    const ox = -0.22 * ease * limbW;
+    const oy = -0.16 * ease * limbW;
+    const col =
+      t < 0.45
+        ? mixRgb(baseRgb, [9, 13, 24], 0.68 * (1 - t / 0.45))
+        : mixRgb(baseRgb, [255, 255, 255], 0.54 * ((t - 0.45) / 0.55));
+    traceUnifiedSkeleton(ox, oy, scale, col);
   }
 
   // 3. Subtle chin ambient occlusion shadow on upper chest/neck
@@ -217,11 +226,11 @@ export function buildStickman3DSvgMarkup(shapeKind: string, colorHex: string): s
     const body = `
       <ellipse cx="${(lF[0] + rF[0]) / 2}" cy="205" rx="40" ry="7" fill="#0f172a" opacity="0.18"/>
       <g filter="url(#clay3d)" stroke="${cBase}" fill="${cBase}" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M${hip[0]},${hip[1]} Q${lK[0]},${lK[1]} ${lF[0]},${lF[1]}" fill="none" stroke-width="16"/>
-        <path d="M${hip[0]},${hip[1]} Q${rK[0]},${rK[1]} ${rF[0]},${rF[1]}" fill="none" stroke-width="16"/>
-        <path d="M${neck[0]},${neck[1]} Q${lE[0]},${lE[1]} ${lH[0]},${lH[1]}" fill="none" stroke-width="13"/>
-        <path d="M${neck[0]},${neck[1]} Q${rE[0]},${rE[1]} ${rH[0]},${rH[1]}" fill="none" stroke-width="13"/>
-        <line x1="${neck[0]}" y1="${neck[1]}" x2="${hip[0]}" y2="${hip[1]}" stroke-width="25"/>
+        <path d="M${hip[0]},${hip[1]} L${lK[0]},${lK[1]} L${lF[0]},${lF[1]}" fill="none" stroke-width="15"/>
+        <path d="M${hip[0]},${hip[1]} L${rK[0]},${rK[1]} L${rF[0]},${rF[1]}" fill="none" stroke-width="15"/>
+        <path d="M${neck[0]},${neck[1]} L${lE[0]},${lE[1]} L${lH[0]},${lH[1]}" fill="none" stroke-width="13"/>
+        <path d="M${neck[0]},${neck[1]} L${rE[0]},${rE[1]} L${rH[0]},${rH[1]}" fill="none" stroke-width="13"/>
+        <line x1="${neck[0]}" y1="${neck[1]}" x2="${hip[0]}" y2="${hip[1]}" stroke-width="22"/>
         <line x1="${head[0]}" y1="${head[1]}" x2="${neck[0]}" y2="${neck[1]}" stroke-width="11"/>
       </g>
       <circle cx="${head[0]}" cy="${head[1]}" r="22" fill="url(#g-head-dark)" filter="url(#prop-sh)"/>`;
