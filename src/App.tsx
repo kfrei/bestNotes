@@ -3168,6 +3168,7 @@ export default function App() {
     endIdx: 0 | 1;
     dotStrokeId: string;
   } | null>(null);
+  const lastPenLiftTimeRef = useRef<number>(0);
   const cancelEndpointSnapPulse = useCallback(() => {
     const cur = endpointSnapHoverRef.current;
     if (cur && cur.rafId !== null) {
@@ -3182,7 +3183,12 @@ export default function App() {
     endpointSnapHoverRef.current = null;
   }, []);
   const findNearestStrokeEndpoint = useCallback(
-    (pt: { x: number; y: number }, strokes: StrokeObject[], maxDist = 13) => {
+    (
+      pt: { x: number; y: number },
+      strokes: StrokeObject[],
+      maxDist = 8,
+      onlyJoinableLines = false
+    ) => {
       const CLOSED_SHAPES = new Set([
         'ellipse',
         'circle',
@@ -3219,8 +3225,18 @@ export default function App() {
         if (s.isShape && s.shapeType && CLOSED_SHAPES.has(s.shapeType)) continue;
         const p0 = s.points[0];
         const p1 = s.points[s.points.length - 1];
-        // Skip closed freehand loops
-        if (Math.hypot(p1.x - p0.x, p1.y - p0.y) <= 6) continue;
+        const chord = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        // Skip closed loops
+        if (chord <= 6) continue;
+        // When checking for magnetic line-joining hover/snap, ignore short handwriting strokes (e.g. "p =", digits, letters)!
+        // Match snapped geometric lines/curves/arrows/polylines (chord >= 18px) OR long freehand curves (chord >= 85px).
+        if (onlyJoinableLines) {
+          if (s.isShape) {
+            if (chord < 18) continue;
+          } else {
+            if (chord < 85) continue;
+          }
+        }
         const d0 = Math.hypot(pt.x - p0.x, pt.y - p0.y);
         if (d0 <= maxDist && (!best || d0 < best.dist)) {
           best = { x: p0.x, y: p0.y, strokeId: s.id, endIdx: 0, dist: d0 };
@@ -3241,7 +3257,7 @@ export default function App() {
         window.cancelAnimationFrame(prev.rafId);
       }
       const startTime = performance.now();
-      const DURATION_MS = 340;
+      const DURATION_MS = 300;
       const state = { key, x, y, rafId: null as number | null };
       endpointSnapHoverRef.current = state;
 
@@ -3265,10 +3281,10 @@ export default function App() {
           return;
         }
 
-        const ease = 1 - Math.pow(1 - t, 3); // fast smooth convergence into the point
-        const ringR = 15.5 * (1 - ease) + 2.2;
+        const ease = 1 - Math.pow(1 - t, 3); // fast smooth convergence right into the exact join point
+        const ringR = 11.5 * (1 - ease) + 1.8;
         const alpha = (1 - t) * 0.9;
-        const dotR = 2.8 * (1 - t * 0.65);
+        const dotR = 2.4 * (1 - t * 0.65);
 
         ctx.save();
         // Subtle white outer contrast halo
@@ -42903,10 +42919,11 @@ export default function App() {
     let startPt = pt;
     let downSnapHit: { strokeId: string; endIdx: 0 | 1; x: number; y: number; dist: number } | null = null;
     if (effectiveTool === 'pen' || effectiveTool === 'pencil' || effectiveTool === 'shape') {
-      downSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 14);
-      if (downSnapHit) {
-        startPt = { ...pt, x: downSnapHit.x, y: downSnapHit.y };
+      const joinSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 9, true);
+      if (joinSnapHit) {
+        startPt = { ...pt, x: joinSnapHit.x, y: joinSnapHit.y };
       }
+      downSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 14, false);
       endpointTapDownRef.current = {
         startTime: performance.now(),
         startX: pt.x,
@@ -44162,14 +44179,16 @@ export default function App() {
         clearActiveOverlay();
       }
 
-      // Magnetic endpoint hover indicator: brief ~340ms converging ring when approaching an open line/stroke endpoint
+      // Magnetic endpoint hover indicator: brief ~300ms converging ring ONLY when approaching very close (<= 8px)
+      // to a real geometric line/curve endpoint (never on short handwriting letters, and never right after lifting pen!)
       if (
         (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'shape') &&
         e.pointerType !== 'touch' &&
-        activePage.strokes.length > 0
+        activePage.strokes.length > 0 &&
+        performance.now() - lastPenLiftTimeRef.current >= 380
       ) {
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
-        const hit = findNearestStrokeEndpoint(hoverPt, activePage.strokes, 13);
+        const hit = findNearestStrokeEndpoint(hoverPt, activePage.strokes, 8, true);
         if (hit) {
           const key = `${hit.strokeId}:${hit.endIdx}`;
           if (!endpointSnapHoverRef.current || endpointSnapHoverRef.current.key !== key) {
@@ -44178,11 +44197,11 @@ export default function App() {
           }
         } else if (endpointSnapHoverRef.current) {
           const prev = endpointSnapHoverRef.current;
-          if (Math.hypot(hoverPt.x - prev.x, hoverPt.y - prev.y) > 17) {
+          if (Math.hypot(hoverPt.x - prev.x, hoverPt.y - prev.y) > 12) {
             cancelEndpointSnapPulse();
           }
         }
-      } else if (endpointSnapHoverRef.current) {
+      } else if (endpointSnapHoverRef.current && endpointSnapHoverRef.current.rafId !== null) {
         cancelEndpointSnapPulse();
       }
       return;
@@ -51520,6 +51539,17 @@ export default function App() {
           attachPointerToSpring(sid, newStroke.id);
         }, 10);
       }
+    }
+
+    lastPenLiftTimeRef.current = nowUp;
+    if (newStroke.points.length >= 2) {
+      const endPt = newStroke.points[newStroke.points.length - 1];
+      endpointSnapHoverRef.current = {
+        key: `${newStroke.id}:1`,
+        x: endPt.x,
+        y: endPt.y,
+        rafId: null,
+      };
     }
 
     if (isEndpointMicroTap && lastEndpointTapRef.current) {
