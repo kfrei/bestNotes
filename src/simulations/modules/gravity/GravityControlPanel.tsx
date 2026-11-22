@@ -118,7 +118,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
           <div className="flex items-center justify-between">
             <span className="font-semibold">
-              Δύναμη Ώθησης F{' '}
+              Δύναμη{' '}
               <span className="text-[#64748b] font-normal">
                 ({bodies.find((b) => !b.pinned && b.pusher)?.pusher?.dir === 1 ? '→' : '←'})
               </span>
