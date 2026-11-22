@@ -383,18 +383,28 @@ export function drawPolyExtruded3D(
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  // 1. Soft Studio Ground Shadow (for 'studio' and 'flat' styles)
+  // 1. Subtle, Natural Elliptical Contact Shadow (properly scaled radial falloff -> zero hard oval edge!)
   if (style === 'studio' || style === 'flat') {
-    const shCx = (minX + maxX) * 0.5 - lx * 6;
-    const shRx = Math.max(16, (maxX - minX) * 0.52);
-    const shRy = Math.max(5, Math.min(16, depthLen * 0.28));
-    const shG = ctx.createRadialGradient(shCx, maxY + 2, 2, shCx, maxY + 2, shRx);
-    shG.addColorStop(0, style === 'studio' ? 'rgba(15, 23, 42, 0.22)' : 'rgba(15, 23, 42, 0.12)');
+    const shCx = (minX + maxX) * 0.5 - lx * 3;
+    const shRx = Math.max(14, (maxX - minX) * 0.46);
+    const shRy = Math.max(3, Math.min(7.5, depthLen * 0.14));
+    const shAlpha =
+      (style === 'studio' ? 0.15 : 0.09) *
+      (s.fillTransparency !== undefined
+        ? Math.max(0.15, (100 - s.fillTransparency) / 100)
+        : 1);
+    ctx.save();
+    ctx.translate(shCx, maxY + 1.5);
+    ctx.scale(1, shRy / shRx);
+    const shG = ctx.createRadialGradient(0, 0, 0, 0, 0, shRx);
+    shG.addColorStop(0, `rgba(15, 23, 42, ${shAlpha.toFixed(3)})`);
+    shG.addColorStop(0.55, `rgba(15, 23, 42, ${(shAlpha * 0.42).toFixed(3)})`);
     shG.addColorStop(1, 'rgba(15, 23, 42, 0)');
     ctx.fillStyle = shG;
     ctx.beginPath();
-    ctx.ellipse(shCx, maxY + 2, shRx, shRy, 0, 0, Math.PI * 2);
+    ctx.arc(0, 0, shRx, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   // 2. Wireframe mode: draw subtle translucent back + dashed back edges first
