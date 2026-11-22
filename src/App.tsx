@@ -375,6 +375,7 @@ import {
   type MindMapGrade,
 } from './data/mindMapsCatalog';
 import { STEM_VECTORS_CATALOG } from './data/vectors';
+import { createStickmanStrokePoints, drawStickmanStroke } from './data/stickFiguresSvg';
 
 // Unified Science catalog: keeps Native Vector SVGs modular on disk (src/data/vectors/)
 // while presenting them seamlessly inside «Επιστήμες» alongside upgraded HD WebP diagrams.
@@ -9969,6 +9970,7 @@ export default function App() {
   // Returns true ONLY if the given node can actually be deleted (never on endpoints of an open line/curve or minimum-vertex polygons!)
   const canDeleteStrokeNode = (s: StrokeObject | undefined | null, nodeIdx: number | undefined): boolean => {
     if (!s || nodeIdx === undefined || nodeIdx < 0) return false;
+    if (s.shapeType === 'stickman') return false;
     if (!s.isShape) {
       const kList =
         s.keyNodeIndices && s.keyNodeIndices.length >= 2
@@ -12214,6 +12216,11 @@ export default function App() {
       s.points.length >= 4
     ) {
       if (drawShaded3DShapeStroke(ctx, s)) return;
+    }
+
+    // 0b3. Articulated Poseable Stickman ('stickman' — 11 draggable skeleton joint nodes!)
+    if (s.shapeType === 'stickman' && s.points.length >= 11) {
+      if (drawStickmanStroke(ctx, s)) return;
     }
 
     // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
@@ -63969,6 +63976,39 @@ export default function App() {
                     };
 
                     const handleInsertStickerFromAll = async (stItem: StickerCatalogItem) => {
+                      if (stItem.iconifyId.startsWith('custom-svg:stickman-')) {
+                        const parts = stItem.iconifyId.split(':');
+                        const poseKey = parts[1] || 'stickman-standing';
+                        const effectiveColor = stickerCustomColor || strokeColor || '#1e293b';
+                        const effectiveWidth = Math.max(3, Math.round((stickerCustomWidth || 10) * 0.65));
+                        const tapPt = lastLassoEmptyTapPtRef.current;
+                        const cx = tapPt ? tapPt.x : 340;
+                        const cy = tapPt ? tapPt.y : 280;
+                        if (tapPt) {
+                          lastLassoEmptyTapPtRef.current = { x: tapPt.x + 28, y: tapPt.y + 28 };
+                        }
+                        const newStickStroke: StrokeObject = {
+                          id: `stk-man-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          tool: 'pen',
+                          color: effectiveColor,
+                          width: effectiveWidth,
+                          opacity: 1,
+                          layerId: activeLayerId,
+                          isShape: true,
+                          shapeType: 'stickman',
+                          points: createStickmanStrokePoints(poseKey, cx, cy, 165),
+                        };
+                        updateActivePage((page) => ({
+                          ...page,
+                          strokes: [...page.strokes, { ...newStickStroke, zOrder: getNextPageZOrder(page) }],
+                        }));
+                        setSelectedImageId(null);
+                        setSelectedTextId(null);
+                        setSelectedStrokeIds([newStickStroke.id]);
+                        setActiveTool('lasso');
+                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα nodes για να κινήσεις χέρια/πόδια!`);
+                        return;
+                      }
                       const svgUrl = getIconifySvgUrl(
                         stItem.iconifyId,
                         stItem.colorStyle,
@@ -64681,6 +64721,39 @@ export default function App() {
                     };
 
                     const handleInsertStickerItem = async (stItem: StickerCatalogItem) => {
+                      if (stItem.iconifyId.startsWith('custom-svg:stickman-')) {
+                        const parts = stItem.iconifyId.split(':');
+                        const poseKey = parts[1] || 'stickman-standing';
+                        const effectiveColor = stickerCustomColor || strokeColor || '#1e293b';
+                        const effectiveWidth = Math.max(3, Math.round((stickerCustomWidth || 10) * 0.65));
+                        const tapPt = lastLassoEmptyTapPtRef.current;
+                        const cx = tapPt ? tapPt.x : 340;
+                        const cy = tapPt ? tapPt.y : 280;
+                        if (tapPt) {
+                          lastLassoEmptyTapPtRef.current = { x: tapPt.x + 28, y: tapPt.y + 28 };
+                        }
+                        const newStickStroke: StrokeObject = {
+                          id: `stk-man-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          tool: 'pen',
+                          color: effectiveColor,
+                          width: effectiveWidth,
+                          opacity: 1,
+                          layerId: activeLayerId,
+                          isShape: true,
+                          shapeType: 'stickman',
+                          points: createStickmanStrokePoints(poseKey, cx, cy, 165),
+                        };
+                        updateActivePage((page) => ({
+                          ...page,
+                          strokes: [...page.strokes, { ...newStickStroke, zOrder: getNextPageZOrder(page) }],
+                        }));
+                        setSelectedImageId(null);
+                        setSelectedTextId(null);
+                        setSelectedStrokeIds([newStickStroke.id]);
+                        setActiveTool('lasso');
+                        showToast(`🤸 Προστέθηκε «${stItem.title}» — σύρε τα nodes για να κινήσεις χέρια/πόδια!`);
+                        return;
+                      }
                       const svgUrl = getIconifySvgUrl(
                         stItem.iconifyId,
                         stItem.colorStyle,

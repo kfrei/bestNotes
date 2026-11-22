@@ -1,10 +1,178 @@
 import type { StickerCatalogItem } from './stickersCatalog';
+import type { StrokeObject } from '../types/note';
 
 /**
- * 20 Minimalist Stick Figures (Ανθρωπάκια / Stickmen) — 5–6 clean rounded lines + head circle
- * Designed so students can easily copy them by hand in Physics & STEM notebooks.
- * Supports live color & stroke-width customization in the Σκίτσα panel.
+ * 20 Minimalist Articulated Stick Figures (Ανθρωπάκια / Stickmen)
+ * 11-joint skeleton: [head, neck, hip, lElbow, lHand, rElbow, rHand, lKnee, lFoot, rKnee, rFoot]
+ * - Previewed in Σκίτσα as crisp live-colored SVGs
+ * - Inserted on canvas as native `shapeType: 'stickman'` StrokeObjects with 11 draggable nodes
+ *   so users can bend or lengthen any arm, leg, torso, or head directly on the page!
  */
+export const STICKMAN_POSE_JOINTS: Record<string, [number, number][]> = {
+  'stickman-standing': [
+    [110, 44], [110, 74], [110, 132],
+    [93, 98], [76, 118], [127, 98], [144, 118],
+    [98, 164], [86, 196], [122, 164], [134, 196],
+  ],
+  'stickman-walking': [
+    [114, 42], [111, 72], [106, 128],
+    [93, 96], [76, 112], [127, 94], [144, 108],
+    [82, 162], [66, 196], [138, 162], [146, 196],
+  ],
+  'stickman-running': [
+    [134, 42], [122, 72], [102, 122],
+    [80, 96], [64, 116], [156, 94], [168, 78],
+    [70, 152], [44, 142], [142, 144], [158, 188],
+  ],
+  'stickman-pushing': [
+    [138, 50], [120, 78], [94, 132],
+    [144, 86], [172, 88], [142, 100], [172, 104],
+    [64, 164], [44, 196], [132, 162], [136, 196],
+  ],
+  'stickman-pulling': [
+    [80, 50], [95, 78], [116, 132],
+    [126, 92], [160, 100], [126, 104], [160, 110],
+    [88, 164], [78, 196], [144, 164], [164, 196],
+  ],
+  'stickman-lifting': [
+    [110, 62], [110, 88], [110, 136],
+    [74, 76], [74, 40], [146, 76], [146, 40],
+    [82, 164], [82, 196], [138, 164], [138, 196],
+  ],
+  'stickman-carrying': [
+    [110, 44], [107, 74], [102, 130],
+    [138, 104], [162, 94], [132, 116], [156, 108],
+    [78, 164], [68, 196], [132, 164], [138, 196],
+  ],
+  'stickman-sitting': [
+    [92, 52], [92, 82], [92, 136],
+    [110, 104], [130, 118], [104, 112], [124, 126],
+    [146, 136], [152, 194], [138, 144], [142, 194],
+  ],
+  'stickman-hanging': [
+    [110, 74], [110, 100], [110, 152],
+    [82, 66], [82, 30], [138, 66], [138, 30],
+    [102, 174], [96, 196], [118, 174], [126, 194],
+  ],
+  'stickman-jumping': [
+    [110, 38], [110, 66], [110, 116],
+    [86, 56], [68, 42], [134, 56], [152, 42],
+    [80, 148], [92, 178], [140, 144], [152, 172],
+  ],
+  'stickman-falling': [
+    [122, 58], [110, 84], [94, 132],
+    [86, 76], [64, 66], [134, 82], [156, 76],
+    [64, 162], [52, 188], [124, 158], [146, 178],
+  ],
+  'stickman-throwing': [
+    [106, 44], [103, 74], [100, 130],
+    [84, 92], [68, 106], [142, 64], [164, 46],
+    [74, 164], [60, 196], [134, 162], [144, 196],
+  ],
+  'stickman-kicking': [
+    [96, 44], [99, 74], [104, 130],
+    [82, 94], [66, 108], [120, 92], [138, 104],
+    [94, 164], [84, 196], [144, 152], [170, 134],
+  ],
+  'stickman-climbing': [
+    [114, 42], [111, 72], [104, 126],
+    [90, 88], [74, 98], [128, 60], [144, 44],
+    [78, 162], [84, 198], [138, 140], [134, 178],
+  ],
+  'stickman-waving': [
+    [110, 44], [110, 74], [110, 132],
+    [92, 98], [76, 118], [144, 58], [164, 38],
+    [98, 164], [86, 196], [122, 164], [134, 196],
+  ],
+  'stickman-thinking': [
+    [106, 46], [106, 76], [106, 134],
+    [74, 114], [94, 130], [138, 94], [126, 64],
+    [96, 166], [86, 196], [116, 166], [126, 196],
+  ],
+  'stickman-balancing': [
+    [110, 42], [110, 72], [110, 126],
+    [76, 76], [44, 72], [144, 84], [176, 88],
+    [110, 162], [110, 196], [146, 144], [156, 168],
+  ],
+  'stickman-sliding': [
+    [128, 52], [116, 80], [98, 124],
+    [94, 90], [72, 98], [136, 94], [156, 102],
+    [76, 154], [94, 186], [132, 148], [120, 182],
+  ],
+  'stickman-cycling': [
+    [122, 46], [112, 74], [94, 114],
+    [132, 86], [152, 96], [126, 94], [148, 102],
+    [82, 148], [68, 166], [122, 136], [112, 162],
+  ],
+  'stickman-celebrating': [
+    [110, 44], [110, 74], [110, 130],
+    [74, 56], [60, 34], [146, 56], [160, 34],
+    [96, 164], [84, 196], [124, 164], [136, 196],
+  ],
+};
+
+export function createStickmanStrokePoints(
+  poseKey: string,
+  centerX: number,
+  centerY: number,
+  targetHeight = 165
+): StrokeObject['points'] {
+  const joints = STICKMAN_POSE_JOINTS[poseKey] || STICKMAN_POSE_JOINTS['stickman-standing'];
+  const scale = targetHeight / 170;
+  return joints.map(([jx, jy]) => ({
+    x: Math.round((centerX + (jx - 110) * scale) * 10) / 10,
+    y: Math.round((centerY + (jy - 115) * scale) * 10) / 10,
+    pressure: 0.5,
+  }));
+}
+
+export function drawStickmanStroke(ctx: CanvasRenderingContext2D, s: StrokeObject): boolean {
+  if (s.shapeType !== 'stickman' || !s.points || s.points.length < 11) return false;
+  const [head, neck, hip, lElbow, lHand, rElbow, rHand, lKnee, lFoot, rKnee, rFoot] = s.points;
+  const torsoLen = Math.hypot(hip.x - neck.x, hip.y - neck.y);
+  const headNeckLen = Math.hypot(head.x - neck.x, head.y - neck.y);
+  const headR = Math.max(7, Math.min(torsoLen * 0.36, headNeckLen * 0.68 || 16));
+  const lw = Math.max(2.5, s.width || 6);
+
+  ctx.save();
+  ctx.globalAlpha = s.opacity ?? 1;
+  ctx.strokeStyle = s.color;
+  ctx.fillStyle = s.color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Head (solid filled circle, just like classic stickman)
+  ctx.beginPath();
+  ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Skeleton limbs (neck->head, torso, left arm, right arm, left leg, right leg)
+  ctx.beginPath();
+  ctx.moveTo(head.x, head.y);
+  ctx.lineTo(neck.x, neck.y);
+  ctx.lineTo(hip.x, hip.y);
+
+  ctx.moveTo(neck.x, neck.y);
+  ctx.lineTo(lElbow.x, lElbow.y);
+  ctx.lineTo(lHand.x, lHand.y);
+
+  ctx.moveTo(neck.x, neck.y);
+  ctx.lineTo(rElbow.x, rElbow.y);
+  ctx.lineTo(rHand.x, rHand.y);
+
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(lKnee.x, lKnee.y);
+  ctx.lineTo(lFoot.x, lFoot.y);
+
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(rKnee.x, rKnee.y);
+  ctx.lineTo(rFoot.x, rFoot.y);
+
+  ctx.stroke();
+  ctx.restore();
+  return true;
+}
 
 export function buildStickFigureSvgMarkup(
   shapeKind: string,
