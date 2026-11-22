@@ -38,14 +38,6 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
   const torsoW = limbW * 1.72;
   const headR = Math.max(12, Math.min(torsoLen * 0.42, headNeckLen * 0.8 || 21));
 
-  // Compute bounding box for global studio lighting gradient across the entire seamless figure
-  const xs = s.points.map((p) => p.x);
-  const ys = s.points.map((p) => p.y);
-  const minX = Math.min(...xs) - headR;
-  const maxX = Math.max(...xs) + headR;
-  const minY = Math.min(...ys) - headR;
-  const maxY = Math.max(...ys) + limbW;
-
   const traceUnifiedSkeleton = (
     offsetX: number,
     offsetY: number,
@@ -76,7 +68,7 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
     ctx.quadraticCurveTo(rElbow.x, rElbow.y, rHand.x, rHand.y);
     ctx.stroke();
 
-    // Sculpted neck + fuller organic torso
+    // Sculpted neck + fuller organic torso (sleek round limb endings, zero bulbous hand/foot blobs)
     ctx.lineWidth = torsoW * widthScale;
     ctx.beginPath();
     ctx.moveTo(neck.x, neck.y);
@@ -88,21 +80,6 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
     ctx.moveTo(head.x, head.y);
     ctx.lineTo(neck.x, neck.y);
     ctx.stroke();
-
-    // Rounded sculpted hands & feet
-    const handR = limbW * 0.56 * widthScale;
-    const footRx = limbW * 0.78 * widthScale;
-    const footRy = limbW * 0.44 * widthScale;
-    for (const hPt of [lHand, rHand]) {
-      ctx.beginPath();
-      ctx.arc(hPt.x, hPt.y, handR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    for (const fPt of [lFoot, rFoot]) {
-      ctx.beginPath();
-      ctx.ellipse(fPt.x + footRx * 0.22, fPt.y + footRy * 0.15, footRx, footRy, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
     ctx.restore();
   };
 
@@ -121,45 +98,44 @@ export function drawStickman3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
   ctx.ellipse(midFootX, groundY, spreadX, Math.max(5.5, limbW * 0.52), 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. Unified dark ambient rim (entire body drawn together -> ZERO joint seams!)
-  traceUnifiedSkeleton(0, 0, 1.06, mixRgb(baseRgb, [15, 23, 42], 0.52));
+  // 2. 7-layer 100%-OPAQUE stepped 3D satin clay shading:
+  //    Because every pass is 100% opaque (no semi-transparent alpha overlaps),
+  //    overlapping shoulders and hips fuse into ONE silky-smooth seamless 3D volume!
+  const layers: { scale: number; ox: number; oy: number; color: string }[] = [
+    { scale: 1.04, ox: 0, oy: 0, color: mixRgb(baseRgb, [9, 13, 24], 0.68) },
+    { scale: 0.94, ox: -0.04, oy: -0.03, color: mixRgb(baseRgb, [15, 23, 42], 0.44) },
+    { scale: 0.82, ox: -0.08, oy: -0.06, color: mixRgb(baseRgb, [15, 23, 42], 0.18) },
+    { scale: 0.68, ox: -0.12, oy: -0.09, color: mixRgb(baseRgb, [255, 255, 255], 0.08) },
+    { scale: 0.52, ox: -0.16, oy: -0.12, color: mixRgb(baseRgb, [255, 255, 255], 0.24) },
+    { scale: 0.34, ox: -0.20, oy: -0.15, color: mixRgb(baseRgb, [255, 255, 255], 0.40) },
+    { scale: 0.16, ox: -0.23, oy: -0.17, color: mixRgb(baseRgb, [255, 255, 255], 0.56) },
+  ];
+  for (const l of layers) {
+    traceUnifiedSkeleton(l.ox * limbW, l.oy * limbW, l.scale, l.color);
+  }
 
-  // 3. Unified base 3D studio clay gradient across the whole connected body
-  const bodyGrad = ctx.createLinearGradient(minX, minY, maxX, maxY);
-  bodyGrad.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.48));
-  bodyGrad.addColorStop(0.45, mixRgb(baseRgb, [255, 255, 255], 0.12));
-  bodyGrad.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.42));
-  traceUnifiedSkeleton(0, 0, 0.96, bodyGrad);
-
-  // 4. Inner soft key-light volume highlight (shifted slightly up-left for smooth 3D roundness)
-  const hiGrad = ctx.createLinearGradient(minX, minY, maxX, maxY);
-  hiGrad.addColorStop(0, 'rgba(255, 255, 255, 0.48)');
-  hiGrad.addColorStop(0.55, 'rgba(255, 255, 255, 0.16)');
-  hiGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-  traceUnifiedSkeleton(-limbW * 0.15, -limbW * 0.14, 0.58, hiGrad);
-
-  // 5. Subtle chin ambient occlusion shadow on upper chest/neck
-  const aoGrad = ctx.createRadialGradient(neck.x, neck.y, 1, neck.x, neck.y, headR * 0.65);
-  aoGrad.addColorStop(0, 'rgba(15, 23, 42, 0.28)');
-  aoGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+  // 3. Subtle chin ambient occlusion shadow on upper chest/neck
+  const aoGrad = ctx.createRadialGradient(neck.x, neck.y, 1, neck.x, neck.y, headR * 0.62);
+  aoGrad.addColorStop(0, 'rgba(9, 13, 24, 0.32)');
+  aoGrad.addColorStop(1, 'rgba(9, 13, 24, 0)');
   ctx.fillStyle = aoGrad;
   ctx.beginPath();
-  ctx.arc(neck.x, neck.y, headR * 0.65, 0, Math.PI * 2);
+  ctx.arc(neck.x, neck.y, headR * 0.62, 0, Math.PI * 2);
   ctx.fill();
 
-  // 6. Sculpted 3D Sphere Head (smooth 4-stop studio gradient)
+  // 4. Sculpted 3D Satin Clay Sphere Head (matching the body's matte-satin studio palette)
   const hGrad = ctx.createRadialGradient(
-    head.x - headR * 0.34,
-    head.y - headR * 0.36,
-    headR * 0.08,
+    head.x - headR * 0.32,
+    head.y - headR * 0.34,
+    headR * 0.10,
     head.x,
     head.y,
-    headR
+    headR * 1.02
   );
-  hGrad.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.78));
-  hGrad.addColorStop(0.42, mixRgb(baseRgb, [255, 255, 255], 0.18));
-  hGrad.addColorStop(0.84, mixRgb(baseRgb, [15, 23, 42], 0.26));
-  hGrad.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.52));
+  hGrad.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.58));
+  hGrad.addColorStop(0.38, mixRgb(baseRgb, [255, 255, 255], 0.16));
+  hGrad.addColorStop(0.76, mixRgb(baseRgb, [15, 23, 42], 0.34));
+  hGrad.addColorStop(1, mixRgb(baseRgb, [9, 13, 24], 0.68));
   ctx.fillStyle = hGrad;
   ctx.beginPath();
   ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
@@ -247,10 +223,6 @@ export function buildStickman3DSvgMarkup(shapeKind: string, colorHex: string): s
         <path d="M${neck[0]},${neck[1]} Q${rE[0]},${rE[1]} ${rH[0]},${rH[1]}" fill="none" stroke-width="13"/>
         <line x1="${neck[0]}" y1="${neck[1]}" x2="${hip[0]}" y2="${hip[1]}" stroke-width="25"/>
         <line x1="${head[0]}" y1="${head[1]}" x2="${neck[0]}" y2="${neck[1]}" stroke-width="11"/>
-        <circle cx="${lH[0]}" cy="${lH[1]}" r="7.5" stroke="none"/>
-        <circle cx="${rH[0]}" cy="${rH[1]}" r="7.5" stroke="none"/>
-        <ellipse cx="${lF[0] + 3}" cy="${lF[1] + 2}" rx="11" ry="6.5" stroke="none"/>
-        <ellipse cx="${rF[0] + 3}" cy="${rF[1] + 2}" rx="11" ry="6.5" stroke="none"/>
       </g>
       <circle cx="${head[0]}" cy="${head[1]}" r="22" fill="url(#g-head-dark)" filter="url(#prop-sh)"/>`;
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" width="220" height="220">${defs}${body}</svg>`;
