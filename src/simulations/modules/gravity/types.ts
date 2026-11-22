@@ -13,6 +13,11 @@ export interface GravityTether {
   length: number;
 }
 
+export interface GravityPusher {
+  strokeId: string;
+  dir: 1 | -1; // +1 = pushing right, -1 = pushing left
+}
+
 export interface GravityBodyState {
   strokeId: string;
   label: string;
@@ -35,9 +40,11 @@ export interface GravityBodyState {
   normalX: number;
   normalY: number;
   normalForceN: number;
+  frictionForceN: number;
   onGround: boolean;
   trail: { x: number; y: number }[];
   tether?: GravityTether;
+  pusher?: GravityPusher;
   v0ArrowStrokeId?: string;
 }
 
@@ -48,6 +55,7 @@ export interface GravityLabConfig {
   frictionMu: number; // 0.02 .. 0.80
   airDragEnabled: boolean;
   airDragCoeff: number; // 0.02 .. 0.30
+  pushForceN: number; // Stickman horizontal pushing force in Newtons (0 .. 40 N)
   showVectors: boolean;
   showTrail: boolean;
   showEnergy: boolean;
@@ -60,6 +68,7 @@ export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   frictionMu: 0.18,
   airDragEnabled: false,
   airDragCoeff: 0.08,
+  pushForceN: 14,
   showVectors: true,
   showTrail: true,
   showEnergy: true,

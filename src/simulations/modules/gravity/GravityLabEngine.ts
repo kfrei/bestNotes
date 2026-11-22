@@ -224,6 +224,7 @@ export function buildGravitySceneFromStrokes(
   const segments: GravitySegment[] = [];
   const consumedStrokeIds = new Set<string>();
   const arrows: StrokeObject[] = [];
+  const stickmen: StrokeObject[] = [];
   const potentialTethers: StrokeObject[] = [];
   const staticCandidates: StrokeObject[] = [];
 
@@ -231,12 +232,11 @@ export function buildGravitySceneFromStrokes(
 
   for (const s of strokes) {
     if (!s.points || s.points.length < 2) continue;
-    if (
-      s.shapeType === 'stickman' ||
-      s.shapeType === 'stickman-3d' ||
-      s.shapeType === 'title-box' ||
-      s.tool === 'highlighter'
-    ) {
+    if (s.shapeType === 'stickman' || s.shapeType === 'stickman-3d') {
+      stickmen.push(s);
+      continue;
+    }
+    if (s.shapeType === 'title-box' || s.tool === 'highlighter') {
       continue;
     }
 
@@ -310,15 +310,18 @@ export function buildGravitySceneFromStrokes(
       s.extrudeShape3D === 'sphere';
 
     // Default pinning heuristic:
-    // - Flat wide platforms (width > 2.6 * height) -> static floor
-    // - Large non-ball shapes (e.g. a wedge/ramp/box > 130px wide) -> static ramp/floor
-    const defaultPinned = isFlatPlatform || (!isBall && b.w > 130);
+    // - Flat wide platforms (width > 3.0 * height) -> static floor
+    // - Large ramps/wedges sitting BELOW a smaller ball/box are auto-pinned in Pass 2 below!
+    const defaultPinned = isFlatPlatform;
     const isPinned =
       pinnedOverrides[s.id] !== undefined ? pinnedOverrides[s.id] : defaultPinned;
 
     const radius = isBall
       ? Math.max(8, (b.w + b.h) * 0.25)
       : Math.max(8, Math.min(b.w, b.h) * 0.5);
+
+    const rawMass = Math.max(0.5, Math.round(((radius * radius) / 400) * 10) / 10);
+    const mass = isBall ? rawMass : Math.max(1.5, Math.min(5.0, rawMass));
 
     const body: GravityBodyState = {
       strokeId: s.id,
@@ -337,10 +340,11 @@ export function buildGravitySceneFromStrokes(
       radius,
       halfW: b.w * 0.5,
       halfH: b.h * 0.5,
-      mass: Math.max(0.5, Math.round(((radius * radius) / 400) * 10) / 10),
+      mass,
       normalX: 0,
       normalY: 0,
       normalForceN: 0,
+      frictionForceN: 0,
       onGround: false,
       trail: [{ x: b.cx, y: b.cy }],
     };
@@ -442,6 +446,30 @@ export function buildGravitySceneFromStrokes(
     }
   }
 
+  // Bind pushing Stickmen (2D 'stickman' & 3D 'stickman-3d') to the nearest dynamic body!
+  // Stickman on LEFT of body -> pushes RIGHT (+1); Stickman on RIGHT of body -> pushes LEFT (-1).
+  for (const st of stickmen) {
+    const sb = getStrokeBounds(st);
+    let bestBody: GravityBodyState | null = null;
+    let bestDist = Infinity;
+    for (const bd of dynamicBodies) {
+      if (bd.pusher) continue;
+      const dx = Math.abs(sb.cx - bd.initCx);
+      const dy = Math.abs(sb.cy - bd.initCy);
+      if (dx <= bd.halfW + sb.w + 90 && dy <= bd.halfH + sb.h * 0.9 + 50 && dx < bestDist) {
+        bestDist = dx;
+        bestBody = bd;
+      }
+    }
+    if (!bestBody && dynamicBodies.length === 1 && !dynamicBodies[0].pusher) {
+      bestBody = dynamicBodies[0];
+    }
+    if (bestBody) {
+      const dir: 1 | -1 = sb.cx <= bestBody.initCx ? 1 : -1;
+      bestBody.pusher = { strokeId: st.id, dir };
+    }
+  }
+
   return { bodies, segments, consumedStrokeIds };
 }
 
@@ -468,14 +496,21 @@ export function stepGravityScene(
     b.normalX = 0;
     b.normalY = 0;
     b.normalForceN = 0;
+    b.frictionForceN = 0;
     b.onGround = false;
   }
 
   for (let step = 0; step < SUB_STEPS; step++) {
-    // 1. Apply Gravity & Air Drag + integrate velocity & position
+    // 1. Apply Gravity, Stickman Pushing Force F & Air Drag + integrate velocity & position
     for (const b of bodies) {
       if (b.pinned) continue;
       b.vy += gPx * subDt;
+
+      // Stickman horizontal pushing force F (a = F / m)
+      if (b.pusher && config.pushForceN > 0) {
+        const axPx = ((b.pusher.dir * config.pushForceN) / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
+        b.vx += axPx * subDt;
+      }
 
       if (config.airDragEnabled && config.airDragCoeff > 0) {
         const speed = Math.hypot(b.vx, b.vy);
@@ -570,10 +605,14 @@ export function stepGravityScene(
               if (Math.abs(vt) <= maxFricDeltaV + 0.6) {
                 b.vx -= vt * tx;
                 b.vy -= vt * ty;
+                const appliedFricN = (Math.abs(vt) / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
+                b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
               } else {
                 const sign = vt > 0 ? 1 : -1;
                 b.vx -= sign * maxFricDeltaV * tx;
                 b.vy -= sign * maxFricDeltaV * ty;
+                const appliedFricN = (maxFricDeltaV / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
+                b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
               }
             } else if (!config.airDragEnabled && isGrazingSlide) {
               // Ideal conservative mode (Friction OFF & Air Drag OFF):
@@ -593,12 +632,14 @@ export function stepGravityScene(
       }
 
       // Keep inside A4 page bounds gently
-      if (b.cx - r < 8) {
-        b.cx = 8 + r;
-        if (b.vx < 0) b.vx = -b.vx * config.restitution;
-      } else if (b.cx + r > pageW - 8) {
-        b.cx = pageW - 8 - r;
-        if (b.vx > 0) b.vx = -b.vx * config.restitution;
+      const halfWBound = b.shapeKind === 'ball' ? r : b.halfW;
+      const wallRestitution = b.pusher ? 0 : config.restitution;
+      if (b.cx - halfWBound < 8) {
+        b.cx = 8 + halfWBound;
+        if (b.vx < 0) b.vx = -b.vx * wallRestitution;
+      } else if (b.cx + halfWBound > pageW - 8) {
+        b.cx = pageW - 8 - halfWBound;
+        if (b.vx > 0) b.vx = -b.vx * wallRestitution;
       }
       if (b.cy - r < 8) {
         b.cy = 8 + r;
@@ -867,6 +908,28 @@ export function renderGravityOverlay(
       if (b.onGround && b.normalForceN > 0.2) {
         const nLen = Math.min(58, b.normalForceN * 3.4);
         drawVectorArrow(ctx, b.cx, b.cy, b.normalX * nLen, b.normalY * nLen, '#059669', 'N');
+      }
+      // Stickman horizontal pushing force F (royal blue)
+      if (b.pusher && config.pushForceN > 0.2) {
+        const fLen = Math.min(72, 22 + config.pushForceN * 1.4);
+        drawVectorArrow(
+          ctx,
+          b.cx,
+          b.cy,
+          b.pusher.dir * fLen,
+          0,
+          '#1d4ed8',
+          `F = ${config.pushForceN.toFixed(0)} N`
+        );
+      }
+      // Friction force T (amber) opposing horizontal motion / push
+      if (config.frictionEnabled && b.onGround && b.frictionForceN > 0.2) {
+        const motionDir =
+          Math.abs(b.vx) > 2 ? (b.vx > 0 ? 1 : -1) : b.pusher ? b.pusher.dir : 0;
+        if (motionDir !== 0) {
+          const tLen = Math.min(64, 18 + b.frictionForceN * 1.4);
+          drawVectorArrow(ctx, b.cx, b.cy + 6, -motionDir * tLen, 0, '#d97706', 'T');
+        }
       }
     }
   }

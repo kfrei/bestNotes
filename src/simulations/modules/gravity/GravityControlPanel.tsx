@@ -113,6 +113,30 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </span>
       </div>
 
+      {/* Contextual Stickman Pushing Force F (shown automatically when a Stickman is in the scene!) */}
+      {bodies.some((b) => !b.pinned && b.pusher) && (
+        <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">
+              Δύναμη Ώθησης F{' '}
+              <span className="text-[#64748b] font-normal">
+                ({bodies.find((b) => !b.pinned && b.pusher)?.pusher?.dir === 1 ? '→' : '←'})
+              </span>
+            </span>
+            <span className="font-bold text-[#234978]">{config.pushForceN.toFixed(0)} N</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={40}
+            step={1}
+            value={config.pushForceN}
+            onChange={(e) => setConfig((c) => ({ ...c, pushForceN: parseFloat(e.target.value) }))}
+            className="w-full accent-[#234978]"
+          />
+        </div>
+      )}
+
       {/* Elastic Collisions, Friction & Air Drag Toggles */}
       <div className="space-y-2 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
         <div className="flex items-center justify-between">

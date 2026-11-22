@@ -15011,7 +15011,12 @@ export default function App() {
       offsets.clear();
       for (const b of gravityBodiesRef.current) {
         if (!b.pinned) {
-          offsets.set(b.strokeId, { dx: b.cx - b.initCx, dy: b.cy - b.initCy });
+          const dx = b.cx - b.initCx;
+          const dy = b.cy - b.initCy;
+          offsets.set(b.strokeId, { dx, dy });
+          if (b.pusher) {
+            offsets.set(b.pusher.strokeId, { dx, dy });
+          }
         }
       }
 
