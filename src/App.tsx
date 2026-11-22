@@ -53566,6 +53566,14 @@ export default function App() {
         return;
       }
 
+      // A / Α -> Arrow (Βελάκι)
+      if (code === 'KeyA' || key === 'a' || key === 'α' || key === 'ά') {
+        setShapePreset('arrow');
+        lastCreatedShapeIdsRef.current = [];
+        switchToTool('shape', '➡️ Arrow (Βελάκι) — A / Α');
+        return;
+      }
+
       // N / Ν -> Nodes (Κόμβοι)
       if (code === 'KeyN' || key === 'n' || key === 'ν') {
         e.preventDefault();
@@ -63127,12 +63135,12 @@ export default function App() {
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
                               <defs>
                                 <linearGradient id="bn-sh-arr" x1="0%" y1="0%" x2="0%" y2="100%">
-                                  <stop offset="0%" stopColor="#fca5a5" />
-                                  <stop offset="50%" stopColor="#ef4444" />
-                                  <stop offset="100%" stopColor="#991b1b" />
+                                  <stop offset="0%" stopColor="#f1f5f9" />
+                                  <stop offset="52%" stopColor="#cbd5e1" />
+                                  <stop offset="100%" stopColor="#64748b" />
                                 </linearGradient>
                               </defs>
-                              <polygon points="2,8 20,8 20,3.5 30,11 20,18.5 20,14 2,14" fill="url(#bn-sh-arr)" stroke="#991b1b" strokeWidth="1" strokeLinejoin="round" />
+                              <polygon points="2,8 20,8 20,3.5 30,11 20,18.5 20,14 2,14" fill="url(#bn-sh-arr)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
                             </svg>
                           ),
                         },
@@ -74873,6 +74881,16 @@ export default function App() {
                   { keys: 'P / Π', label: 'Pen (Μολύβι)', icon: <Pen className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'E / Ε', label: 'Erase (Σβήστρα)', icon: <Eraser className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'O / Ο', label: 'Objects (Σχήματα)', icon: <Shapes className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  {
+                    keys: 'A / Α',
+                    label: 'Arrow (Βελάκι)',
+                    icon: (
+                      <svg className="w-3.5 h-3.5 text-[#64748b] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="2.5" y1="8" x2="13.5" y2="8" />
+                        <polyline points="9.5 4 13.5 8 9.5 12" />
+                      </svg>
+                    ),
+                  },
                   { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
