@@ -156,7 +156,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
           </label>
           <span className="text-[11px] font-bold text-[#234978]">
             {config.restitution >= 0.99
-              ? 'ON (e=1 · ΑΔΜΕ)'
+              ? 'ON (Ιδανικό)'
               : `e=${config.restitution.toFixed(2)}`}
           </span>
         </div>
