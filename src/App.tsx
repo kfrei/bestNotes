@@ -40110,55 +40110,73 @@ export default function App() {
             return;
           }
         }
-        // In Lasso mode, let Lasso tool select & drag selections instead of force handles capturing the touch,
-        // BUT ALWAYS allow grabbing the pendulum bob or the green incline peak handle directly!
+        // Always allow dragging active Force Sim vector tips (F1, F2, F), origin dot, pendulum bob & incline peak
+        // even while in Lasso mode (so right after creating a force sim, dragging any arrow tip smoothly changes its angle
+        // while keeping its F₁/F₂/F name fixed!). Pick the CLOSEST matching handle so closely-spaced arrows never collide.
+        let bestHandle: (typeof fHit.handles)[number] | null = null;
+        let bestHandleDist = Infinity;
         for (const h of fHit.handles) {
           if (h.kind === 'calc-box') continue;
-          if (effectiveTool === 'lasso' && h.kind !== 'pendulum-bob' && h.kind !== 'incline-peak') continue;
-          const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
-          if (isHit) {
-              e.preventDefault();
-              if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
-              if (activeNodeStrokeId) setActiveNodeStrokeId(null);
-              forceSimAnimRef.current = null;
-              setForceSimAnim(null);
-              pushUndoSnapshot(targetPage);
-              const targetVecStroke = h.strokeId
-                ? targetPage.strokes.find((s) => s.id === h.strokeId)
-                : curForceSim?.primaryStrokeId
-                ? targetPage.strokes.find((s) => s.id === curForceSim.primaryStrokeId)
-                : undefined;
-              const initOx =
-                targetVecStroke && targetVecStroke.points.length >= 2
-                  ? targetVecStroke.points[0].x
-                  : curForceSim?.originX ?? h.x;
-              const initOy =
-                targetVecStroke && targetVecStroke.points.length >= 2
-                  ? targetVecStroke.points[0].y
-                  : curForceSim?.originY ?? h.y;
-              draggingForceHandleRef.current = {
-                simId: fHit.simId,
-                kind: h.kind,
-                strokeId: h.strokeId,
-                startX: pt.x,
-                startY: pt.y,
-                origOriginX: initOx,
-                origOriginY: initOy,
-                origCalcX: h.x - (h.w || 236) / 2,
-                origCalcY: h.y - (h.h || 110) / 2,
-              };
-              activePointerIdRef.current = e.pointerId;
-              activePointerTypeRef.current = e.pointerType;
-              try {
-                e.currentTarget.setPointerCapture(e.pointerId);
-              } catch {
-                // ignore
-              }
-              isDrawingRef.current = true;
-              renderStaticSceneRef.current();
-              return;
-            }
+          if (
+            effectiveTool === 'lasso' &&
+            h.kind !== 'pendulum-bob' &&
+            h.kind !== 'incline-peak' &&
+            h.kind !== 'f1-tip' &&
+            h.kind !== 'f2-tip' &&
+            h.kind !== 'analysis-tip' &&
+            h.kind !== 'origin'
+          ) {
+            continue;
           }
+          const d = Math.hypot(pt.x - h.x, pt.y - h.y);
+          if (d <= h.r && d < bestHandleDist) {
+            bestHandleDist = d;
+            bestHandle = h;
+          }
+        }
+        if (bestHandle) {
+          const h = bestHandle;
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          forceSimAnimRef.current = null;
+          setForceSimAnim(null);
+          pushUndoSnapshot(targetPage);
+          const targetVecStroke = h.strokeId
+            ? targetPage.strokes.find((s) => s.id === h.strokeId)
+            : curForceSim?.primaryStrokeId
+            ? targetPage.strokes.find((s) => s.id === curForceSim.primaryStrokeId)
+            : undefined;
+          const initOx =
+            targetVecStroke && targetVecStroke.points.length >= 2
+              ? targetVecStroke.points[0].x
+              : curForceSim?.originX ?? h.x;
+          const initOy =
+            targetVecStroke && targetVecStroke.points.length >= 2
+              ? targetVecStroke.points[0].y
+              : curForceSim?.originY ?? h.y;
+          draggingForceHandleRef.current = {
+            simId: fHit.simId,
+            kind: h.kind,
+            strokeId: h.strokeId,
+            startX: pt.x,
+            startY: pt.y,
+            origOriginX: initOx,
+            origOriginY: initOy,
+            origCalcX: h.x - (h.w || 236) / 2,
+            origCalcY: h.y - (h.h || 110) / 2,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          renderStaticSceneRef.current();
+          return;
+        }
 
         if (hadOpenCalc) {
           e.preventDefault();
