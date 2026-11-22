@@ -63,7 +63,7 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
             type="button"
             onClick={onClearScene}
             className="px-2 py-1.5 rounded-lg bg-[#efebe3] hover:bg-rose-100 text-[#64748b] hover:text-rose-700 border border-[#dfd8cb] text-[11px] font-semibold transition cursor-pointer"
-            title="Καθαρισμός ενεργής σκηνής Βαρύτητας"
+            title="Καθαρισμός ενεργής σκηνής Μηχανικής"
           >
             ✕
           </button>

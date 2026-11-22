@@ -14918,7 +14918,7 @@ export default function App() {
     // Deselect lasso box so the scene looks clean & ready to play!
     setSelectedStrokeIds([]);
     if (ok) {
-      showToast(`✅ Φορτώθηκαν ${selectedStrokeIds.length} σχήματα στο Πεδίο Βαρύτητας!`);
+      showToast(`✅ Φορτώθηκαν ${selectedStrokeIds.length} σχήματα στη Μηχανική!`);
     } else {
       showToast('ℹ️ Δεν βρέθηκε κινούμενο σώμα (σφαίρα ή κύβος) στην επιλογή Λάσου.');
     }
@@ -66118,7 +66118,7 @@ export default function App() {
                         : 'text-[#475569] hover:text-[#234978] hover:bg-[#fdfbf7]'
                     }`}
                   >
-                    <span>Βαρύτητα</span>
+                    <span>Μηχανική</span>
                   </button>
                 </div>
 
