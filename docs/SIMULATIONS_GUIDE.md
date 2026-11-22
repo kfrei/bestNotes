@@ -306,6 +306,14 @@ src/simulations/
 │   │   ├── circuitHelpers.ts        // Helpers επιλογής, επέκτασης καλωδίων και πολλαπλών κυκλωμάτων
 │   │   ├── CircuitControlPanel.tsx  // Αυτόνομο Dashboard UI Ηλεκτρικών Κυκλωμάτων
 │   │   └── CircuitSimulationModule.ts // Module εγγραφής στο SimulationRegistry
+│   ├── gravity/
+│   │   ├── GravityLabEngine.ts      // Thin facade/barrel export Μηχανής Μηχανικής & Βαρύτητας (v1.15)
+│   │   ├── gravityGeometry.ts       // Bounds & δειγματοληψία 3D δαπέδων, loop-the-loop (64 τμήματα) & Bézier (Τεταρτοκύκλιο)
+│   │   ├── gravitySceneBuilder.ts   // Αναγνώριση σκηνής, auto-pin εγκλειόντων κύκλων, αυστηρό εκκρεμές, u₀ & πολλαπλοί Stickmen
+│   │   ├── gravityPhysicsStep.ts    // Symplectic sub-stepping, ακριβής διατήρηση E₀, Τροχιά-Οδηγός, εκτόξευση/επανείσοδος ελεύθερων άκρων
+│   │   ├── gravityRenderer.ts       // Fade-out ίχνος τροχιάς, διανύσματα u / Δυνάμεις / ΣF, πινέζα ακίνητου δαπέδου
+│   │   ├── GravityControlPanel.tsx  // Αυτόνομο Dashboard UI Μηχανικής (Play/Pause, Reset, 📌 Ακίνητο Δάπεδο, Τροχιά-Οδηγός)
+│   │   └── types.ts                 // Τύποι σωμάτων, παραμέτρων & ενεργειακών στατιστικών
 │   ├── heat/
 │   │   ├── index.ts                 // Barrel export Μηχανής Θερμότητας
 │   │   ├── types.ts                 // Τύποι δοχείων, υγρών (Νερό, Γάλα, Ελαιόλαδο), καμινέτου & διαγραμμάτων
