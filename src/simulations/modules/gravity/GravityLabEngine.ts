@@ -932,31 +932,10 @@ export function renderGravityOverlay(
       continue;
     }
 
-    // 0. Pre-launch parabolic trajectory preview (ONLY for upward projectile launches!) & v0 badge when paused at t = 0
+    // 0. Pre-launch u₀ arrow badge when paused at t = 0
     if (!isRunning && b.trail.length <= 1) {
       const v0Mag = Math.hypot(b.initVx, b.initVy);
       if (v0Mag > 12) {
-        if (b.initVy < -25) {
-          const gPx = config.gravity * GRAVITY_PX_PER_M;
-          ctx.save();
-          ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([5, 5]);
-          ctx.beginPath();
-          ctx.moveTo(b.cx, b.cy);
-          const dtPreview = 0.04;
-          const maxSteps = 42;
-          for (let s = 1; s <= maxSteps; s++) {
-            const t = s * dtPreview;
-            const px = b.cx + b.initVx * t;
-            const py = b.cy + b.initVy * t + 0.5 * gPx * t * t;
-            ctx.lineTo(px, py);
-            if (py > b.cy + b.radius + 24) break;
-          }
-          ctx.stroke();
-          ctx.restore();
-        }
-
         const v0Ms = (v0Mag / GRAVITY_PX_PER_M).toFixed(1);
         drawVectorArrow(
           ctx,
