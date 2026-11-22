@@ -12805,6 +12805,11 @@ export default function App() {
           for (let i = 1; i < s.points.length; i++) {
             const prevPt = s.points[i - 1];
             const pt = s.points[i];
+            if (pt.twist === 888) {
+              ctx.closePath();
+              ctx.moveTo(pt.x, pt.y);
+              continue;
+            }
             const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
             if (cubicCtrl) {
               ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
@@ -12885,7 +12890,13 @@ export default function App() {
             ? 0.85
             : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
         ctx.globalAlpha = baseFillAlpha * (s.opacity ?? 1);
-        ctx.fill();
+        const hasSubpathHoles = s.points.some((p) => p.twist === 888);
+        if (hasSubpathHoles) {
+          ctx.closePath();
+          ctx.fill('evenodd');
+        } else {
+          ctx.fill();
+        }
         ctx.restore();
       }
     }

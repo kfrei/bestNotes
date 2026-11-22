@@ -168,74 +168,9 @@ function ringAreaAbs(ring: Ring): number {
   return Math.abs(area) * 0.5;
 }
 
-/**
- * Connect an outer ring and one or more hole rings into a single continuous path via
- * minimal-distance keyhole bridges so a single-path canvas renderer fills holes cleanly.
- */
-function flattenPolygonWithHoles(poly: Polygon): Ring {
-  if (poly.length === 0) return [];
-  const outer = poly[0].slice();
-  if (poly.length === 1) return outer;
-
-  // Strip duplicate closing vertex while splicing
-  if (
-    outer.length > 1 &&
-    Math.hypot(outer[0][0] - outer[outer.length - 1][0], outer[0][1] - outer[outer.length - 1][1]) < 1e-3
-  ) {
-    outer.pop();
-  }
-
-  let current: [number, number][] = outer;
-
-  for (let h = 1; h < poly.length; h++) {
-    const hole = poly[h].slice();
-    if (
-      hole.length > 1 &&
-      Math.hypot(hole[0][0] - hole[hole.length - 1][0], hole[0][1] - hole[hole.length - 1][1]) < 1e-3
-    ) {
-      hole.pop();
-    }
-    if (hole.length < 3 || current.length < 3) continue;
-
-    // Find closest pair of vertices (outerIdx, holeIdx) for minimal invisible bridge
-    let bestO = 0;
-    let bestH = 0;
-    let bestDistSq = Infinity;
-    for (let oi = 0; oi < current.length; oi++) {
-      const ox = current[oi][0];
-      const oy = current[oi][1];
-      for (let hi = 0; hi < hole.length; hi++) {
-        const dx = ox - hole[hi][0];
-        const dy = oy - hole[hi][1];
-        const dSq = dx * dx + dy * dy;
-        if (dSq < bestDistSq) {
-          bestDistSq = dSq;
-          bestO = oi;
-          bestH = hi;
-        }
-      }
-    }
-
-    const rotatedHole: [number, number][] = [
-      ...hole.slice(bestH),
-      ...hole.slice(0, bestH),
-      hole[bestH],
-    ];
-    current = [
-      ...current.slice(0, bestO + 1),
-      ...rotatedHole,
-      current[bestO],
-      ...current.slice(bestO + 1),
-    ];
-  }
-
-  if (current.length >= 3) {
-    current.push([current[0][0], current[0][1]]);
-  }
-  return current;
-}
-
-/** Convert a Polygon (with optional holes) into a closed BestNotes vector StrokeObject. */
+/** Convert a Polygon (with optional holes) into a closed BestNotes vector StrokeObject.
+ *  Holes are encoded as clean independent subpaths marked with `twist: 888` on their start vertex
+ *  (zero visible keyhole bridge lines; rendered with `ctx.fill('evenodd')` & full move/scale/rotate/mirror support!). */
 function polygonToStroke(
   poly: Polygon,
   template: StrokeObject,
@@ -246,16 +181,35 @@ function polygonToStroke(
   if (!poly || poly.length === 0 || poly[0].length < 4) return null;
   if (ringAreaAbs(poly[0]) < 16) return null; // skip microscopic numerical slivers
 
-  const ring = flattenPolygonWithHoles(poly);
-  if (ring.length < 4) return null;
+  const points: BezierPoint[] = [];
+  const outer = poly[0];
+  for (let idx = 0; idx < outer.length; idx++) {
+    const [x, y] = outer[idx];
+    points.push({
+      x,
+      y,
+      pressure: 0.5,
+      smooth: false,
+      ...(idx === 0 || idx === outer.length - 1 ? { twist: 999 } : {}),
+    });
+  }
 
-  const points: BezierPoint[] = ring.map(([x, y], idx) => ({
-    x,
-    y,
-    pressure: 0.5,
-    smooth: false,
-    ...(idx === 0 || idx === ring.length - 1 ? { twist: 999 } : {}),
-  }));
+  for (let h = 1; h < poly.length; h++) {
+    const hole = poly[h];
+    if (!hole || hole.length < 4 || ringAreaAbs(hole) < 12) continue;
+    for (let idx = 0; idx < hole.length; idx++) {
+      const [x, y] = hole[idx];
+      points.push({
+        x,
+        y,
+        pressure: 0.5,
+        smooth: false,
+        ...(idx === 0 ? { twist: 888 } : {}),
+      });
+    }
+  }
+
+  if (points.length < 4) return null;
 
   return {
     id: `bool-${Date.now()}-${idSuffix}-${Math.random().toString(36).slice(2, 6)}`,
