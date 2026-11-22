@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Type, ChevronDown, FlaskConical, Atom, Code2 } from 'lucide-react';
+import { OcrHoverPreviewCard, type OcrHoverPreviewMode } from './OcrHoverPreviewCard';
 
 export interface LassoOcrButtonsProps {
   isConvertingHandwriting: boolean;
@@ -28,26 +29,42 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
   onConvert3DMoleculeOcr,
   onActivateAtomSim,
 }) => {
+  const [hoveredTextOcr, setHoveredTextOcr] = useState(false);
+  const [hoveredMathMode, setHoveredMathMode] = useState<OcrHoverPreviewMode>('equation');
+  const [hoveredChemMode, setHoveredChemMode] = useState<OcrHoverPreviewMode>('reaction');
+
   return (
     <div className="flex items-center gap-1 bg-[#efebe3] p-0.5 rounded-lg border border-[#dfd8cb] relative">
-      {/* 1. Direct textOCR (Single Tap) */}
-      <button
-        type="button"
-        onClick={() => {
-          setOpenMenu(null);
-          onConvertTextOcr();
-        }}
-        disabled={isConvertingHandwriting}
-        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
-          isConvertingHandwriting
-            ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
-            : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb] shadow-2xs'
-        }`}
-        title="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+      {/* 1. Direct textOCR (Single Tap) with Photoshop-style hover preview */}
+      <div
+        className="relative"
+        onMouseEnter={() => setHoveredTextOcr(true)}
+        onMouseLeave={() => setHoveredTextOcr(false)}
       >
-        <Type className="w-3.5 h-3.5" />
-        <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            setHoveredTextOcr(false);
+            setOpenMenu(null);
+            onConvertTextOcr();
+          }}
+          disabled={isConvertingHandwriting}
+          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
+            isConvertingHandwriting
+              ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
+              : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb] shadow-2xs'
+          }`}
+          title="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+        >
+          <Type className="w-3.5 h-3.5" />
+          <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
+        </button>
+        {hoveredTextOcr && !openMenu && !isConvertingHandwriting && (
+          <div className="hidden md:block absolute top-full left-0 mt-1.5 z-50 w-64 pointer-events-none bg-[#fdfbf7]/95 backdrop-blur-xl border border-[#dfd8cb] rounded-2xl shadow-xl px-2 pb-2 pt-0.5">
+            <OcrHoverPreviewCard mode="text" />
+          </div>
+        )}
+      </div>
 
       {/* 2. Math Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο, Κώδικας) */}
       <div className="relative">
@@ -82,12 +99,16 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </div>
             <button
               type="button"
+              onMouseEnter={() => setHoveredMathMode('equation')}
+              onFocus={() => setHoveredMathMode('equation')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvertMathOcr();
               }}
               disabled={isConvertingHandwriting}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredMathMode === 'equation' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=)"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -100,12 +121,16 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </button>
             <button
               type="button"
+              onMouseEnter={() => setHoveredMathMode('graph')}
+              onFocus={() => setHoveredMathMode('graph')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvertMathGraph();
               }}
               disabled={isConvertingHandwriting}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredMathMode === 'graph' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="Διάγραμμα OCR: Αναγνώριση χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9) και σχεδίαση σε σύστημα αξόνων"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -118,11 +143,15 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </button>
             <button
               type="button"
+              onMouseEnter={() => setHoveredMathMode('polygon')}
+              onFocus={() => setHoveredMathMode('polygon')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvertToPolygon();
               }}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredMathMode === 'polygon' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -135,12 +164,16 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </button>
             <button
               type="button"
+              onMouseEnter={() => setHoveredMathMode('code')}
+              onFocus={() => setHoveredMathMode('code')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvertCodeOcr();
               }}
               disabled={isConvertingHandwriting}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredMathMode === 'code' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="Κώδικας OCR: Αναγνώριση χειρόγραφου κώδικα & Ψευδογλώσσας ΑΕΠΠ (ΓΛΩΣΣΑ) με αυτόματες εσοχές"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -151,6 +184,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               </span>
               <span className="text-[10px] text-[#64748b] font-medium">ΑΕΠΠ / Εσοχές</span>
             </button>
+            <OcrHoverPreviewCard mode={hoveredMathMode} />
           </div>
         )}
       </div>
@@ -188,12 +222,16 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </div>
             <button
               type="button"
+              onMouseEnter={() => setHoveredChemMode('reaction')}
+              onFocus={() => setHoveredChemMode('reaction')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvertChemOcr();
               }}
               disabled={isConvertingHandwriting}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredChemMode === 'reaction' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="ChemOCR: Αναγνώριση χειρόγραφης χημικής αντίδρασης (π.χ. C + O₂ → CO₂) με δομή ατόμων & κίνηση ηλεκτρονίων"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -206,12 +244,16 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </button>
             <button
               type="button"
+              onMouseEnter={() => setHoveredChemMode('molecule3d')}
+              onFocus={() => setHoveredChemMode('molecule3d')}
               onClick={() => {
                 setOpenMenu(null);
                 onConvert3DMoleculeOcr();
               }}
               disabled={isConvertingHandwriting}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredChemMode === 'molecule3d' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="3D.OCR: Αναγνώριση χειρόγραφης ένωσης (H₂O, CH₄, CO₂...) και εμφάνιση Draggable 3D Μορίου με νέφη φορτίου"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -224,11 +266,15 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
             </button>
             <button
               type="button"
+              onMouseEnter={() => setHoveredChemMode('atom2d')}
+              onFocus={() => setHoveredChemMode('atom2d')}
               onClick={() => {
                 setOpenMenu(null);
                 onActivateAtomSim();
               }}
-              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left hover:bg-[#efebe3] text-[#234978] transition cursor-pointer"
+              className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
+                hoveredChemMode === 'atom2d' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
+              } text-[#234978]`}
               title="2D (Άτομο): Μετατροπή του σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -239,6 +285,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               </span>
               <span className="text-[10px] text-[#64748b] font-medium">Μοντέλο Bohr Sim</span>
             </button>
+            <OcrHoverPreviewCard mode={hoveredChemMode} />
           </div>
         )}
       </div>
