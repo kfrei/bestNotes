@@ -1337,10 +1337,13 @@ function buildPresetShape(
     preset === 'shaded-cuboid' ||
     preset === 'shaded-cylinder' ||
     preset === 'shaded-sphere' ||
-    preset === 'shaded-pyramid'
+    preset === 'shaded-pyramid' ||
+    preset === 'shaded-floor' ||
+    preset === 'shaded-wedge' ||
+    preset === 'shaded-arrow'
   ) {
-    const w3d = Math.max(72, maxX - minX);
-    const h3d = Math.max(72, maxY - minY);
+    const w3d = Math.max(preset === 'shaded-floor' ? 140 : 72, maxX - minX);
+    const h3d = Math.max(preset === 'shaded-floor' || preset === 'shaded-arrow' ? 32 : 72, maxY - minY);
     const cx = minX + w3d / 2;
     const cy = minY + h3d / 2;
     const isNearSquare = Math.abs(w3d - h3d) < Math.max(w3d, h3d) * 0.24;
@@ -17689,7 +17692,10 @@ export function drawShaded3DShapeStroke(
     (s.shapeType !== 'shaded-sphere' &&
       s.shapeType !== 'shaded-cuboid' &&
       s.shapeType !== 'shaded-cylinder' &&
-      s.shapeType !== 'shaded-pyramid') ||
+      s.shapeType !== 'shaded-pyramid' &&
+      s.shapeType !== 'shaded-floor' &&
+      s.shapeType !== 'shaded-wedge' &&
+      s.shapeType !== 'shaded-arrow') ||
     s.points.length < 4
   ) {
     return false;
@@ -17991,6 +17997,202 @@ export function drawShaded3DShapeStroke(
     ctx.lineTo(pBotL.x, pBotL.y);
     traceEllipseBilerp(0.5, 0.84, 0.5, 0.16, Math.PI, 0, false);
     ctx.lineTo(pTopR.x, pTopR.y);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+    return true;
+  }
+
+  // ── 5. SHADED 3D STUDIO FLOOR / PLATFORM ('shaded-floor') ───────────────────
+  if (s.shapeType === 'shaded-floor') {
+    const pBL = bilerp(0.02, 0.78);
+    const pBR = bilerp(0.86, 0.78);
+    const pTR = bilerp(0.98, 0.22);
+    const pTL = bilerp(0.14, 0.22);
+    const slabH = Math.max(4, Math.min(14, hLen * 0.22));
+    const pBLb = { x: pBL.x, y: pBL.y + slabH };
+    const pBRb = { x: pBR.x, y: pBR.y + slabH };
+    const pTRb = { x: pTR.x, y: pTR.y + slabH };
+
+    const shC = bilerp(0.5, 0.92);
+    drawGroundShadow(shC.x, shC.y + slabH * 0.4, wLen * 0.5, Math.max(6, slabH * 0.9), quadAngle);
+
+    ctx.save();
+    ctx.globalAlpha = bodyAlpha;
+    const topG = ctx.createLinearGradient(pTL.x, pTL.y, pBR.x, pBR.y);
+    topG.addColorStop(0, cSpec);
+    topG.addColorStop(0.55, cLight);
+    topG.addColorStop(1, cMid);
+    ctx.fillStyle = topG;
+    ctx.beginPath();
+    ctx.moveTo(pTL.x, pTL.y);
+    ctx.lineTo(pTR.x, pTR.y);
+    ctx.lineTo(pBR.x, pBR.y);
+    ctx.lineTo(pBL.x, pBL.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = cShade;
+    ctx.beginPath();
+    ctx.moveTo(pBL.x, pBL.y);
+    ctx.lineTo(pBR.x, pBR.y);
+    ctx.lineTo(pBRb.x, pBRb.y);
+    ctx.lineTo(pBLb.x, pBLb.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = cDeep;
+    ctx.beginPath();
+    ctx.moveTo(pBR.x, pBR.y);
+    ctx.lineTo(pTR.x, pTR.y);
+    ctx.lineTo(pTRb.x, pTRb.y);
+    ctx.lineTo(pBRb.x, pBRb.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = highlightAlpha;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
+    ctx.beginPath();
+    ctx.moveTo(pBL.x, pBL.y);
+    ctx.lineTo(pBR.x, pBR.y);
+    ctx.lineTo(pTR.x, pTR.y);
+    ctx.stroke();
+
+    ctx.globalAlpha = contourAlpha;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = Math.max(0.8, contourWidth * 0.8);
+    ctx.beginPath();
+    ctx.moveTo(pTL.x, pTL.y);
+    ctx.lineTo(pTR.x, pTR.y);
+    ctx.lineTo(pTRb.x, pTRb.y);
+    ctx.lineTo(pBRb.x, pBRb.y);
+    ctx.lineTo(pBLb.x, pBLb.y);
+    ctx.lineTo(pBL.x, pBL.y);
+    ctx.closePath();
+    ctx.moveTo(pBL.x, pBL.y);
+    ctx.lineTo(pBR.x, pBR.y);
+    ctx.lineTo(pTR.x, pTR.y);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+    return true;
+  }
+
+  // ── 6. SHADED 3D INCLINED PLANE / WEDGE ('shaded-wedge') ──────────────────
+  if (s.shapeType === 'shaded-wedge') {
+    const fBL = bilerp(0.04, 0.94);
+    const fBR = bilerp(0.76, 0.94);
+    const fTL = bilerp(0.04, 0.28);
+    const bTL = bilerp(0.28, 0.08);
+    const bBR = bilerp(0.96, 0.74);
+
+    const shC = bilerp(0.5, 0.95);
+    drawGroundShadow(shC.x, shC.y, wLen * 0.5, Math.max(7, hLen * 0.1), quadAngle);
+
+    ctx.save();
+    ctx.globalAlpha = bodyAlpha;
+    const slopeG = ctx.createLinearGradient(bTL.x, bTL.y, fBR.x, fBR.y);
+    slopeG.addColorStop(0, cSpec);
+    slopeG.addColorStop(0.55, cLight);
+    slopeG.addColorStop(1, cMid);
+    ctx.fillStyle = slopeG;
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(bTL.x, bTL.y);
+    ctx.lineTo(bBR.x, bBR.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.closePath();
+    ctx.fill();
+
+    const sideG = ctx.createLinearGradient(fTL.x, fTL.y, fBR.x, fBR.y);
+    sideG.addColorStop(0, cMid);
+    sideG.addColorStop(0.5, cShade);
+    sideG.addColorStop(1, cDeep);
+    ctx.fillStyle = sideG;
+    ctx.beginPath();
+    ctx.moveTo(fBL.x, fBL.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.lineTo(fTL.x, fTL.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = highlightAlpha;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = Math.max(0.9, contourWidth * 0.85);
+    ctx.beginPath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.stroke();
+
+    ctx.globalAlpha = contourAlpha;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = contourWidth;
+    ctx.beginPath();
+    ctx.moveTo(fBL.x, fBL.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.lineTo(bBR.x, bBR.y);
+    ctx.lineTo(bTL.x, bTL.y);
+    ctx.lineTo(fTL.x, fTL.y);
+    ctx.closePath();
+    ctx.moveTo(fTL.x, fTL.y);
+    ctx.lineTo(fBR.x, fBR.y);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.restore();
+    return true;
+  }
+
+  // ── 7. SHADED 3D FORCE VECTOR ARROW ('shaded-arrow') ──────────────────────
+  if (s.shapeType === 'shaded-arrow') {
+    const p1 = bilerp(0.04, 0.34);
+    const p2 = bilerp(0.66, 0.34);
+    const p3 = bilerp(0.66, 0.1);
+    const pTip = bilerp(0.96, 0.5);
+    const p5 = bilerp(0.66, 0.9);
+    const p6 = bilerp(0.66, 0.66);
+    const p7 = bilerp(0.04, 0.66);
+
+    ctx.save();
+    ctx.globalAlpha = bodyAlpha * 0.25;
+    ctx.translate(2, 4);
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(pTip.x, pTip.y);
+    ctx.lineTo(p5.x, p5.y);
+    ctx.lineTo(p6.x, p6.y);
+    ctx.lineTo(p7.x, p7.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = bodyAlpha;
+    const arrG = ctx.createLinearGradient(p3.x, p3.y, p5.x, p5.y);
+    arrG.addColorStop(0, cSpec);
+    arrG.addColorStop(0.45, cMid);
+    arrG.addColorStop(1, cDeep);
+    ctx.fillStyle = arrG;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(pTip.x, pTip.y);
+    ctx.lineTo(p5.x, p5.y);
+    ctx.lineTo(p6.x, p6.y);
+    ctx.lineTo(p7.x, p7.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = contourAlpha;
+    ctx.strokeStyle = contourColor;
+    ctx.lineWidth = Math.max(0.9, contourWidth * 0.9);
     ctx.stroke();
 
     ctx.restore();

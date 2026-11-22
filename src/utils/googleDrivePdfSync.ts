@@ -453,7 +453,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     (s.shapeType === 'shaded-sphere' ||
       s.shapeType === 'shaded-cuboid' ||
       s.shapeType === 'shaded-cylinder' ||
-      s.shapeType === 'shaded-pyramid') &&
+      s.shapeType === 'shaded-pyramid' ||
+      s.shapeType === 'shaded-floor' ||
+      s.shapeType === 'shaded-wedge' ||
+      s.shapeType === 'shaded-arrow') &&
     s.points.length >= 4
   ) {
     if (drawShaded3DShapeStroke(ctx, s)) return;

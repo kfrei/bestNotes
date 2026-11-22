@@ -9964,7 +9964,10 @@ export default function App() {
       s.shapeType === 'shaded-cuboid' ||
       s.shapeType === 'shaded-cylinder' ||
       s.shapeType === 'shaded-sphere' ||
-      s.shapeType === 'shaded-pyramid'
+      s.shapeType === 'shaded-pyramid' ||
+      s.shapeType === 'shaded-floor' ||
+      s.shapeType === 'shaded-wedge' ||
+      s.shapeType === 'shaded-arrow'
     );
   };
 
@@ -12213,7 +12216,10 @@ export default function App() {
       (s.shapeType === 'shaded-sphere' ||
         s.shapeType === 'shaded-cuboid' ||
         s.shapeType === 'shaded-cylinder' ||
-        s.shapeType === 'shaded-pyramid') &&
+        s.shapeType === 'shaded-pyramid' ||
+        s.shapeType === 'shaded-floor' ||
+        s.shapeType === 'shaded-wedge' ||
+        s.shapeType === 'shaded-arrow') &&
       s.points.length >= 4
     ) {
       if (drawShaded3DShapeStroke(ctx, s)) return;
@@ -21182,12 +21188,14 @@ export default function App() {
     }
 
     const bobShapes = ['circle', 'ellipse', 'sphere', 'shaded-sphere'];
-    const inclineShapes = ['incline-wedge', 'inclined-plane', 'triangle'];
+    const inclineShapes = ['incline-wedge', 'inclined-plane', 'triangle', 'shaded-wedge'];
     const blockShapes = [
       'incline-block',
       'rectangle',
       'parallelogram',
       'cuboid',
+      'shaded-cuboid',
+      'shaded-cylinder',
       'hooked-weight',
       'trapezoid',
     ];
@@ -49889,7 +49897,17 @@ export default function App() {
           ? [
               rawPts[0],
               {
-                x: rawPts[0].x + (shapePreset === 'title-box' ? 280 : 110),
+                x:
+                  rawPts[0].x +
+                  (shapePreset === 'title-box'
+                    ? 280
+                    : shapePreset === 'shaded-floor'
+                      ? 220
+                      : shapePreset === 'shaded-wedge'
+                        ? 140
+                        : shapePreset === 'shaded-arrow'
+                          ? 128
+                          : 110),
                 y:
                   rawPts[0].y +
                   (shapePreset === 'ellipse' ||
@@ -49899,7 +49917,13 @@ export default function App() {
                   shapePreset === 'shaded-cylinder' ||
                   shapePreset === 'shaded-pyramid'
                     ? 110
-                    : 75),
+                    : shapePreset === 'shaded-floor'
+                      ? 54
+                      : shapePreset === 'shaded-wedge'
+                        ? 96
+                        : shapePreset === 'shaded-arrow'
+                          ? 46
+                          : 75),
                 pressure: 0.7,
               },
             ]
@@ -50341,7 +50365,10 @@ export default function App() {
       shapeType === 'shaded-cuboid' ||
       shapeType === 'shaded-cylinder' ||
       shapeType === 'shaded-sphere' ||
-      shapeType === 'shaded-pyramid';
+      shapeType === 'shaded-pyramid' ||
+      shapeType === 'shaded-floor' ||
+      shapeType === 'shaded-wedge' ||
+      shapeType === 'shaded-arrow';
     const commitFillStyle: FillStyleType =
       isShaded3DShape
         ? 'gradient'
@@ -62300,6 +62327,43 @@ export default function App() {
                               </defs>
                               <polygon points="16,2.5 4.5,16 16,19.5" fill="url(#bn-sh-pyr-l)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
                               <polygon points="16,2.5 16,19.5 27.5,16" fill="url(#bn-sh-pyr-r)" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-floor',
+                          title: 'Φωτοσκιασμένο Δάπεδο 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <polygon points="5,8 30,8 26,15 2,15" fill="#e2e8f0" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <polygon points="2,15 26,15 26,18 2,18" fill="#94a3b8" stroke="#475569" strokeWidth="1" />
+                              <polygon points="26,15 30,8 30,11 26,18" fill="#64748b" stroke="#475569" strokeWidth="1" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-wedge',
+                          title: 'Φωτοσκιασμένο Κεκλιμένο 3D (Σφήνα)',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <polygon points="3,7 10,3 30,15 23,19" fill="#f1f5f9" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                              <polygon points="3,19 23,19 3,7" fill="#94a3b8" stroke="#475569" strokeWidth="1.1" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'shaded-arrow',
+                          title: 'Φωτοσκιασμένο Βέλος Δύναμης 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none">
+                              <defs>
+                                <linearGradient id="bn-sh-arr" x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#fca5a5" />
+                                  <stop offset="50%" stopColor="#ef4444" />
+                                  <stop offset="100%" stopColor="#991b1b" />
+                                </linearGradient>
+                              </defs>
+                              <polygon points="2,8 20,8 20,3.5 30,11 20,18.5 20,14 2,14" fill="url(#bn-sh-arr)" stroke="#991b1b" strokeWidth="1" strokeLinejoin="round" />
                             </svg>
                           ),
                         },

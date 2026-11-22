@@ -63,7 +63,10 @@ export type ShapePresetType =
   | 'shaded-cuboid'
   | 'shaded-cylinder'
   | 'shaded-sphere'
-  | 'shaded-pyramid';
+  | 'shaded-pyramid'
+  | 'shaded-floor'
+  | 'shaded-wedge'
+  | 'shaded-arrow';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';
