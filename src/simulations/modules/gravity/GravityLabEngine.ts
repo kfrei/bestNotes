@@ -836,7 +836,6 @@ export function stepGravityScene(
             (ny < -0.04 || Math.abs(vn) < Math.max(85, Math.abs(vtBefore) * 0.72));
           const speedNowBefore = Math.hypot(b.vx, b.vy);
           const isParallelTrackReentry =
-            config.guideRailEnabled &&
             speedNowBefore > 1e-3 &&
             Math.abs(b.vx * bestSegTx + b.vy * bestSegTy) >= 0.72 * speedNowBefore;
           // Smooth grazing/rolling contact on curved U-bowls, steep ramp->floor transitions, & tangential track re-entry!
