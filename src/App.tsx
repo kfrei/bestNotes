@@ -14635,43 +14635,46 @@ export default function App() {
                 const isBezActive =
                   activeBezierNodeRef.current?.strokeId === target.id &&
                   activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
+                const allowBezierOnNode = !hasExtrude3D(target);
 
                 ctx.save();
-                // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️)
-                ctx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
-                ctx.lineWidth = 1.4;
-                ctx.beginPath();
-                ctx.moveTo(liveNodePt.x - 7, liveNodePt.y - 5);
-                ctx.lineTo(bzX + 9, bzY + 5);
-                ctx.stroke();
+                // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
+                if (allowBezierOnNode) {
+                  ctx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
+                  ctx.lineWidth = 1.4;
+                  ctx.beginPath();
+                  ctx.moveTo(liveNodePt.x - 7, liveNodePt.y - 5);
+                  ctx.lineTo(bzX + 9, bzY + 5);
+                  ctx.stroke();
 
-                ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-                ctx.shadowBlur = 5;
-                ctx.shadowOffsetY = 1.5;
-                ctx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+                  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+                  ctx.shadowBlur = 5;
+                  ctx.shadowOffsetY = 1.5;
+                  ctx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
+                  ctx.strokeStyle = '#ffffff';
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
 
-                // White Bézier curve + tangent icon inside purple circle
-                ctx.shadowColor = 'transparent';
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1.6;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(bzX - 5.2, bzY + 2.8);
-                ctx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
-                ctx.moveTo(bzX - 5.5, bzY - 2.2);
-                ctx.lineTo(bzX + 5.5, bzY - 2.2);
-                ctx.stroke();
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-                ctx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-                ctx.fill();
+                  // White Bézier curve + tangent icon inside purple circle
+                  ctx.shadowColor = 'transparent';
+                  ctx.strokeStyle = '#ffffff';
+                  ctx.lineWidth = 1.6;
+                  ctx.lineCap = 'round';
+                  ctx.beginPath();
+                  ctx.moveTo(bzX - 5.2, bzY + 2.8);
+                  ctx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
+                  ctx.moveTo(bzX - 5.5, bzY - 2.2);
+                  ctx.lineTo(bzX + 5.5, bzY - 2.2);
+                  ctx.stroke();
+                  ctx.fillStyle = '#ffffff';
+                  ctx.beginPath();
+                  ctx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+                  ctx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+                  ctx.fill();
+                }
 
                 // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
                 if (canDeleteStrokeNode(target, delNode.nodeIdx)) {
@@ -37751,46 +37754,50 @@ export default function App() {
       activeBezierNodeRef.current?.strokeId === delNode.strokeId &&
       activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
 
-    aCtx.save();
-    // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️)
-    aCtx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
-    aCtx.lineWidth = 1.4;
-    aCtx.beginPath();
-    aCtx.moveTo(x - 7, y - 5);
-    aCtx.lineTo(bzX + 9, bzY + 5);
-    aCtx.stroke();
-
-    aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-    aCtx.shadowBlur = 5;
-    aCtx.shadowOffsetY = 1.5;
-    aCtx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
-    aCtx.strokeStyle = '#ffffff';
-    aCtx.lineWidth = 2;
-    aCtx.beginPath();
-    aCtx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
-    aCtx.fill();
-    aCtx.stroke();
-
-    aCtx.shadowColor = 'transparent';
-    aCtx.strokeStyle = '#ffffff';
-    aCtx.lineWidth = 1.6;
-    aCtx.lineCap = 'round';
-    aCtx.beginPath();
-    aCtx.moveTo(bzX - 5.2, bzY + 2.8);
-    aCtx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
-    aCtx.moveTo(bzX - 5.5, bzY - 2.2);
-    aCtx.lineTo(bzX + 5.5, bzY - 2.2);
-    aCtx.stroke();
-    aCtx.fillStyle = '#ffffff';
-    aCtx.beginPath();
-    aCtx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-    aCtx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-    aCtx.fill();
-
-    // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
     const targetStroke = delNode.strokeId
       ? activePage.strokes.find((s) => s.id === delNode.strokeId)
       : undefined;
+    const allowBezierOnNode = !targetStroke || !hasExtrude3D(targetStroke);
+
+    aCtx.save();
+    // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
+    if (allowBezierOnNode) {
+      aCtx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
+      aCtx.lineWidth = 1.4;
+      aCtx.beginPath();
+      aCtx.moveTo(x - 7, y - 5);
+      aCtx.lineTo(bzX + 9, bzY + 5);
+      aCtx.stroke();
+
+      aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+      aCtx.shadowBlur = 5;
+      aCtx.shadowOffsetY = 1.5;
+      aCtx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
+      aCtx.strokeStyle = '#ffffff';
+      aCtx.lineWidth = 2;
+      aCtx.beginPath();
+      aCtx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+      aCtx.fill();
+      aCtx.stroke();
+
+      aCtx.shadowColor = 'transparent';
+      aCtx.strokeStyle = '#ffffff';
+      aCtx.lineWidth = 1.6;
+      aCtx.lineCap = 'round';
+      aCtx.beginPath();
+      aCtx.moveTo(bzX - 5.2, bzY + 2.8);
+      aCtx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
+      aCtx.moveTo(bzX - 5.5, bzY - 2.2);
+      aCtx.lineTo(bzX + 5.5, bzY - 2.2);
+      aCtx.stroke();
+      aCtx.fillStyle = '#ffffff';
+      aCtx.beginPath();
+      aCtx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+      aCtx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+      aCtx.fill();
+    }
+
+    // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
     if (canDeleteStrokeNode(targetStroke, delNode.nodeIdx)) {
       aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
       aCtx.lineWidth = 1.4;
@@ -41277,9 +41284,11 @@ export default function App() {
         }
 
         // 0b. Check if user clicked/tapped the Purple Bézier Tangent Handle button (〰️) next to the hovered/active node!
+        const bezTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (
           activeDeleteNodeRef.current &&
           activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
+          (!bezTargetStroke || !hasExtrude3D(bezTargetStroke)) &&
           Math.hypot(
             pt.x - (activeDeleteNodeRef.current.bezierBtnX ?? activeDeleteNodeRef.current.x - 26),
             pt.y - (activeDeleteNodeRef.current.bezierBtnY ?? activeDeleteNodeRef.current.y - 18)
