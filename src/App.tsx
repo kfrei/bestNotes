@@ -4746,6 +4746,16 @@ export default function App() {
     setShowShapeLibraryPanel(false);
   }, [isLightweightDocMode, activeTool]);
 
+  // Whenever switching to plain Pen/Pencil (via toolbar, shortcut P, or Squeeze palette),
+  // reset any selected preset shape so the Shapes bar is cleanly deselected!
+  useEffect(() => {
+    if (activeTool === 'pen' || activeTool === 'pencil') {
+      setShapePreset((prev) => (prev === 'auto' ? prev : 'auto'));
+      snappedCurrentStrokeRef.current = null;
+      lastCreatedShapeIdsRef.current = [];
+    }
+  }, [activeTool]);
+
   // Keep activeLayerId synchronized with activePage.layers whenever switching pages or notebooks
   useEffect(() => {
     const layers = activePage?.layers || [];
@@ -49283,10 +49293,18 @@ export default function App() {
             }
             if (Math.hypot(maxX - minX, maxY - minY) < 18) return;
           }
-          const snapped = recognizeAndSnapShape(
+          const rawSnapped = recognizeAndSnapShape(
             ptsForSnap,
             activeTool === 'shape' ? shapePreset : 'auto'
           );
+          const isDisallowedPenMathCurve =
+            activeTool !== 'shape' &&
+            rawSnapped !== null &&
+            (rawSnapped.shapeType === 'sine' ||
+              rawSnapped.shapeType === 'cosine' ||
+              rawSnapped.shapeType === 'parabola' ||
+              rawSnapped.shapeType === 'hyperbola');
+          const snapped = isDisallowedPenMathCurve ? null : rawSnapped;
           if (snapped) {
             snappedCurrentStrokeRef.current = snapped;
             renderLiveOverlayStroke();
@@ -50633,8 +50651,16 @@ export default function App() {
         if (p.x > maxX) maxX = p.x;
         if (p.y > maxY) maxY = p.y;
       }
-      const snapped =
+      const rawSnapped =
         Math.hypot(maxX - minX, maxY - minY) >= 18 ? recognizeAndSnapShape(rawPts, 'auto') : null;
+      const snapped =
+        rawSnapped &&
+        rawSnapped.shapeType !== 'sine' &&
+        rawSnapped.shapeType !== 'cosine' &&
+        rawSnapped.shapeType !== 'parabola' &&
+        rawSnapped.shapeType !== 'hyperbola'
+          ? rawSnapped
+          : null;
       if (snapped) {
         finalPts = snapped.points;
         isShape = true;
@@ -61484,6 +61510,11 @@ export default function App() {
                       setShowAlignSubBar(false);
                       if (tool.id === 'pen' || tool.id === 'pencil' || tool.id === 'highlighter') {
                         setFillStyle('none');
+                        if (tool.id === 'pen' || tool.id === 'pencil') {
+                          setShapePreset('auto');
+                          snappedCurrentStrokeRef.current = null;
+                          lastCreatedShapeIdsRef.current = [];
+                        }
                         if (tool.id === 'pen' && activeTool !== 'pen') {
                           setActiveWidthSlotIdx(lastPenWidthRef.current.slotIdx);
                           setStrokeWidth(lastPenWidthRef.current.width);
