@@ -49967,10 +49967,11 @@ export default function App() {
     snappedCurrentStrokeRef.current = null;
     holdAnchorPtRef.current = null;
 
-    // Only chain straight lines into a polygon/corner when the endpoints are placed directly on top of each other (<= 8px),
-    // the user holds stationary for a sufficient time (>= 800ms), and the two segments are NOT parallel/collinear!
-    const ALMOST_TOUCH_LINE_TOL = 8;
-    const CLOSE_POLYGON_RING_TOL = 12;
+    // Auto-chain straight lines into a continuous polyline and auto-close into a fillable polygon
+    // whenever a new straight line starts (or ends) right at an open endpoint of an existing line of the same color/layer!
+    // Works immediately with the Shape tool ('line' / 'auto') AND with Hold-to-Snap (>= 520ms) in Pen/Pencil.
+    const ALMOST_TOUCH_LINE_TOL = activeTool === 'shape' ? 14 : 10;
+    const CLOSE_POLYGON_RING_TOL = activeTool === 'shape' ? 18 : 14;
     const isCandidateOpenLine = (s: StrokeObject): boolean =>
       Boolean(
         s.isShape &&
@@ -49980,6 +49981,7 @@ export default function App() {
           !s.arrowEnd &&
           s.points.length >= 2 &&
           s.points[0]?.twist !== 999 &&
+          s.color === strokeColor &&
           (s.layerId || 'layer-1') === activeLayerId
       );
 
@@ -50026,7 +50028,7 @@ export default function App() {
       finalPts.length === 2 &&
       !arrowEnd &&
       shapePreset !== 'arrow' &&
-      holdElapsedMs >= 800
+      (activeTool === 'shape' || holdElapsedMs >= 520)
     ) {
       const p0 = finalPts[0];
       const p1 = finalPts[1];
@@ -50050,8 +50052,9 @@ export default function App() {
         const sLen = Math.hypot(sDx, sDy);
         if (sLen < 1e-3) return false;
         const crossSin = Math.abs(newDx * sDy - newDy * sDx) / (newLen * sLen);
-        // Require >= ~20° angle between segments so two parallel/codirectional lines NEVER collapse into one line!
-        return crossSin >= 0.34;
+        // Require >= ~10° angle between segments so two parallel/codirectional lines NEVER collapse into one line,
+        // while allowing shallow obtuse polygon corners (up to 170°)!
+        return crossSin >= 0.18;
       };
 
       for (const s of activePage.strokes) {
@@ -55204,14 +55207,14 @@ export default function App() {
         if (s.points.length === 2) {
           const p0 = s.points[0];
           const p1 = s.points[1];
-          if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+          if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 3.5) {
             rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
           }
         } else {
           for (let i = 0; i < s.points.length - 1; i++) {
             const p0 = s.points[i];
             const p1 = s.points[i + 1];
-            if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+            if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 3.5) {
               rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
             }
           }
@@ -55225,7 +55228,7 @@ export default function App() {
         const chordLen = Math.hypot(chordDx, chordDy);
         let arcLen = 0;
         let maxDev = 0;
-        if (chordLen >= 10) {
+        if (chordLen >= 3.5) {
           const nx = -chordDy / chordLen;
           const ny = chordDx / chordLen;
           for (let i = 1; i < s.points.length; i++) {
@@ -55240,7 +55243,7 @@ export default function App() {
           }
         }
         if (
-          chordLen >= 12 &&
+          chordLen >= 3.5 &&
           maxDev <= Math.max(14, chordLen * 0.09) &&
           arcLen <= chordLen * 1.25
         ) {
@@ -55256,7 +55259,7 @@ export default function App() {
           for (let k = 0; k < keyIdx.length - 1; k++) {
             const p0 = s.points[keyIdx[k]];
             const p1 = s.points[keyIdx[k + 1]];
-            if (p0 && p1 && Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+            if (p0 && p1 && Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 3.5) {
               rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
             }
           }
@@ -55472,12 +55475,12 @@ export default function App() {
       rawVertices.push({ x: midX, y: midY });
     }
 
-    // Deduplicate any vertices that collapsed closer than 6px
+    // Deduplicate only vertices that collapsed closer than 3px (preserves thin 3D slabs / narrow polygons)
     const vertices: { x: number; y: number }[] = [];
     for (const v of rawVertices) {
       if (
         vertices.length === 0 ||
-        Math.hypot(v.x - vertices[vertices.length - 1].x, v.y - vertices[vertices.length - 1].y) >= 6
+        Math.hypot(v.x - vertices[vertices.length - 1].x, v.y - vertices[vertices.length - 1].y) >= 3
       ) {
         vertices.push(v);
       }
@@ -55487,7 +55490,7 @@ export default function App() {
       Math.hypot(
         vertices[0].x - vertices[vertices.length - 1].x,
         vertices[0].y - vertices[vertices.length - 1].y
-      ) < 6
+      ) < 3
     ) {
       vertices.pop();
     }

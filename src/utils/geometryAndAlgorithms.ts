@@ -672,14 +672,19 @@ export function recognizeAndSnapShape(
       rawPoints[farthestIdx],
     ];
 
-    const rdp = rdpSimplify(rotatedLoop, diag * 0.062);
+    const minDim = Math.max(4, Math.min(w, h));
+    const rdpEps = Math.max(3.5, Math.min(diag * 0.042, minDim * 0.14));
+    const minCornerGap = Math.max(7, Math.min(diag * 0.065, minDim * 0.22));
+    const closeCornerGap = Math.max(9, Math.min(diag * 0.085, minDim * 0.28));
+
+    const rdp = rdpSimplify(rotatedLoop, rdpEps);
     const mergedCorners: BezierPoint[] = [];
     for (const pt of rdp) {
-      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.14) {
+      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > minCornerGap) {
         mergedCorners.push(pt);
       }
     }
-    if (mergedCorners.length > 2 && distance(mergedCorners[0], mergedCorners[mergedCorners.length - 1]) < diag * 0.20) {
+    if (mergedCorners.length > 2 && distance(mergedCorners[0], mergedCorners[mergedCorners.length - 1]) < closeCornerGap) {
       mergedCorners.pop();
     }
 
@@ -754,7 +759,7 @@ export function recognizeAndSnapShape(
 
     if (isBoxLike) {
       if (trueCorners.length === 4) {
-        const [p0, p1, p2] = trueCorners;
+        const [p0, p1, p2, p3] = trueCorners;
         const v1x = p1.x - p0.x,
           v1y = p1.y - p0.y;
         const v2x = p2.x - p1.x,
@@ -762,17 +767,25 @@ export function recognizeAndSnapShape(
         const cosAngle =
           (v1x * v2x + v1y * v2y) / (Math.max(1, Math.hypot(v1x, v1y)) * Math.max(1, Math.hypot(v2x, v2y)));
 
-        // Tilted Parallelogram
-        if (Math.abs(cosAngle) >= 0.26 && polyEdgeErr < rectErr * 0.85) {
-          const paraPts = [
-            { x: p0.x, y: p0.y },
-            { x: p1.x, y: p1.y },
-            { x: p2.x, y: p2.y },
-            { x: p0.x + (p2.x - p1.x), y: p0.y + (p2.y - p1.y) },
-          ];
+        // Non-axis-aligned 4-gon: tilted parallelogram or custom trapezoid/quadrilateral
+        if (Math.abs(cosAngle) >= 0.22 && polyEdgeErr < rectErr * 0.85) {
+          const paraP3 = { x: p0.x + (p2.x - p1.x), y: p0.y + (p2.y - p1.y) };
+          const p3Err = distance(p3, paraP3);
+          if (p3Err <= Math.max(14, diag * 0.08)) {
+            return {
+              shapeType: 'parallelogram',
+              points: makePolygonBezier([
+                { x: p0.x, y: p0.y },
+                { x: p1.x, y: p1.y },
+                { x: p2.x, y: p2.y },
+                paraP3,
+              ]),
+            };
+          }
+          // Preserve exact 4 corners (e.g. perspective slab / trapezoid)
           return {
-            shapeType: 'parallelogram',
-            points: makePolygonBezier(paraPts),
+            shapeType: 'trapezoid',
+            points: makePolygonBezier([p0, p1, p2, p3]),
           };
         }
       }
@@ -790,6 +803,19 @@ export function recognizeAndSnapShape(
       return {
         shapeType: 'rectangle',
         points: makePolygonBezier(rectPts),
+      };
+    }
+
+    // B2. General Closed Polygon (5-8 corners with crisp straight edges)
+    if (
+      trueCorners.length >= 5 &&
+      trueCorners.length <= 8 &&
+      polyEdgeErr < ellipseDistErr * 0.82 &&
+      flatSideRatio >= 0.30
+    ) {
+      return {
+        shapeType: 'rectangle',
+        points: makePolygonBezier(trueCorners),
       };
     }
 
