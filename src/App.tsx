@@ -13602,10 +13602,9 @@ export default function App() {
               staticPageRenderCacheRef.current.clear();
               renderStaticSceneRef.current(true);
             };
-            imgEl.src =
-              imgObj.dataUrl.startsWith('/mind_maps/') && imgObj.dataUrl.endsWith('.png')
-                ? `${imgObj.dataUrl.slice(0, -4)}.webp`
-                : imgObj.dataUrl;
+            imgEl.src = imgObj.dataUrl.startsWith('/mind_maps/')
+              ? imgObj.dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
+              : imgObj.dataUrl;
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
 
@@ -53846,10 +53845,9 @@ export default function App() {
           resolve(img);
         };
         img.onerror = () => resolve(null);
-        img.src =
-          dataUrl.startsWith('/mind_maps/') && dataUrl.endsWith('.png')
-            ? `${dataUrl.slice(0, -4)}.webp`
-            : dataUrl;
+        img.src = dataUrl.startsWith('/mind_maps/')
+          ? dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
+          : dataUrl;
       });
     },
     []
@@ -60251,8 +60249,8 @@ export default function App() {
                                       <image
                                         key={im.id}
                                         href={
-                                          im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
-                                            ? `${im.dataUrl.slice(0, -4)}.webp`
+                                          im.dataUrl?.startsWith('/mind_maps/')
+                                            ? im.dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
                                             : im.dataUrl
                                         }
                                         x={im.x}
@@ -70186,8 +70184,8 @@ export default function App() {
                             <image
                               key={im.id}
                               href={
-                                im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
-                                  ? `${im.dataUrl.slice(0, -4)}.webp`
+                                im.dataUrl?.startsWith('/mind_maps/')
+                                  ? im.dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
                                   : im.dataUrl
                               }
                               x={im.x}
@@ -74253,8 +74251,8 @@ export default function App() {
                                 <image
                                   key={im.id}
                                   href={
-                                    im.dataUrl?.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
-                                      ? `${im.dataUrl.slice(0, -4)}.webp`
+                                    im.dataUrl?.startsWith('/mind_maps/')
+                                      ? im.dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
                                       : im.dataUrl
                                   }
                                   x={im.x}

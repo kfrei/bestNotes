@@ -197,8 +197,8 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
 
     const imageEls = (firstPage.images || []).slice(0, cfg.maxImages).map((im) => {
       const resolvedHref =
-        im.dataUrl && im.dataUrl.startsWith('/mind_maps/') && im.dataUrl.endsWith('.png')
-          ? `${im.dataUrl.slice(0, -4)}.webp`
+        im.dataUrl && im.dataUrl.startsWith('/mind_maps/')
+          ? im.dataUrl.replace(/\.png(\?.*)?$/i, '.webp$1')
           : im.dataUrl;
       return (
         <image
