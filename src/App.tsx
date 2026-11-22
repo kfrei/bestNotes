@@ -60382,9 +60382,8 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Notes in List Mode — Option A: Adaptive 1-col (iPad) / 2-col (Wide Desktop >= 1280px) */}
+                      {/* Unified Drag & Drop / Open File Card on its own 1-column row */}
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5 bn-library-cascade-5">
-                        {/* Unified Drag & Drop / Open File Row in List Mode (.bestNotes, .pdf, .png, .jpg, .gif) */}
                       <div
                         onClick={() => {
                           pdfImportModeRef.current = 'new-notebook';
@@ -60439,7 +60438,10 @@ export default function App() {
                           </div>
                         </div>
                       </div>
+                      </div>
 
+                      {/* Notes in List Mode — Option A: Adaptive 1-col (iPad) / 2-col (Wide Desktop >= 1280px) */}
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5 bn-library-cascade-5">
                       {/* Notes in List Mode */}
                       {isLibraryDataLoading && visibleNotebooks.length === 0
                         ? [0, 1, 2, 3, 4].map((skIdx) => (
