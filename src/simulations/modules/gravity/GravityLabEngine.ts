@@ -576,10 +576,18 @@ export function stepGravityScene(
     b.onGround = false;
   }
 
+  const preStepYMap = new Map<string, number>();
+  const preStepSpeedSqMap = new Map<string, number>();
+  const hasExternalPushMap = new Map<string, boolean>();
+
   for (let step = 0; step < SUB_STEPS; step++) {
     // 1. Apply Gravity, Stickman Pushing Force F & Air Drag + integrate velocity & position
     for (const b of bodies) {
       if (b.pinned) continue;
+      preStepYMap.set(b.strokeId, b.cy);
+      preStepSpeedSqMap.set(b.strokeId, b.vx * b.vx + b.vy * b.vy);
+      let hasExtPush = false;
+
       b.vy += gPx * subDt;
 
       // Sum all Stickmen signed horizontal forces F₁ + F₂ + ... (-40..+40 N each)
@@ -593,10 +601,12 @@ export function stepGravityScene(
           netForceN += fVal;
         }
         if (Math.abs(netForceN) > 0.05) {
+          hasExtPush = true;
           const axPx = (netForceN / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
           b.vx += axPx * subDt;
         }
       }
+      hasExternalPushMap.set(b.strokeId, hasExtPush);
 
       if (config.airDragEnabled && config.airDragCoeff > 0) {
         const speed = Math.hypot(b.vx, b.vy);
@@ -673,8 +683,6 @@ export function stepGravityScene(
 
         const nx = bestNx;
         const ny = bestNy;
-        const yBefore = b.cy;
-        const speedBeforeSq = b.vx * b.vx + b.vy * b.vy;
 
         b.cx += nx * bestOverlap;
         b.cy += ny * bestOverlap;
@@ -720,12 +728,16 @@ export function stepGravityScene(
               const appliedFricN = (maxFricDeltaV / Math.max(1e-4, subDt)) * (b.mass / GRAVITY_PX_PER_M);
               b.frictionForceN = Math.max(b.frictionForceN, appliedFricN);
             }
-          } else if (!config.airDragEnabled && isGrazingSlide) {
-            // Ideal conservative mode (Friction OFF & Air Drag OFF):
-            // Rotate velocity smoothly onto the curved tangent WITHOUT losing cos(dTheta) energy
-            // across polyline chord transitions, accounting for exact ΔU = -mgΔy from push-out!
+          } else if (!config.airDragEnabled && isGrazingSlide && !hasExternalPushMap.get(b.strokeId)) {
+            // Ideal conservative mode (Friction OFF, Air Drag OFF, no external pusher):
+            // Enforce exact mechanical energy conservation from the START of the substep:
+            // v²_after = v²_preStep + 2 g (y_after - y_preStep)
+            // Eliminates symplectic-Euler sink-and-pushback energy drain on horizontal shelves
+            // AND eliminates cos(dTheta) chord-transition energy loss on ramps & curved U-bowls!
+            const preY = preStepYMap.get(b.strokeId) ?? b.cy;
+            const preSpeedSq = preStepSpeedSqMap.get(b.strokeId) ?? (b.vx * b.vx + b.vy * b.vy);
             const vt = b.vx * tx + b.vy * ty;
-            const targetSpeedSq = speedBeforeSq + 2 * gPx * (b.cy - yBefore);
+            const targetSpeedSq = preSpeedSq + 2 * gPx * (b.cy - preY);
             if (targetSpeedSq > 1e-3 && Math.abs(vt) > 1e-3) {
               const targetSpeed = Math.sqrt(targetSpeedSq);
               const sign = vt >= 0 ? 1 : -1;
