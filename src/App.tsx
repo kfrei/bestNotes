@@ -4529,12 +4529,18 @@ export default function App() {
     FALLBACK_EMPTY_NOTEBOOK;
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
+  const isActivelyErasingRef = useRef<boolean>(false);
+  const eraserDidModifyRef = useRef<boolean>(false);
   const activeNotebookLiveRef = useRef<Notebook>(activeNotebook);
-  activeNotebookLiveRef.current = activeNotebook;
+  if (!(isActivelyErasingRef.current && eraserDidModifyRef.current)) {
+    activeNotebookLiveRef.current = activeNotebook;
+  }
   const activePageIndexLiveRef = useRef<number>(activePageIndex);
   activePageIndexLiveRef.current = activePageIndex;
   const activePageLiveRef = useRef<NotePage>(activePage);
-  activePageLiveRef.current = activePage;
+  if (!(isActivelyErasingRef.current && eraserDidModifyRef.current)) {
+    activePageLiveRef.current = activePage;
+  }
   const pageWidth = getPageLogicalWidth(activePage);
   const pageHeight = getPageLogicalHeight(activePage);
 
@@ -4965,7 +4971,9 @@ export default function App() {
   const failedSyncRetryTimersRef = useRef<Map<string, number>>(new Map());
   const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
   const notebooksRef = useRef<Notebook[]>(notebooks);
-  notebooksRef.current = notebooks;
+  if (!(isActivelyErasingRef.current && eraserDidModifyRef.current)) {
+    notebooksRef.current = notebooks;
+  }
   const customFoldersRef = useRef<CustomFolderMeta[]>(customFolders);
   customFoldersRef.current = customFolders;
 
@@ -6261,8 +6269,13 @@ export default function App() {
 
             if (!rem.nb || !rem.dataJson) continue;
 
-            // If this device is actively uploading a newer version of this notebook right now, never overwrite with an intermediate snapshot!
-            if ((inFlightSavesMapRef.current.get(id) || 0) > 0) {
+            // If this device is actively uploading a newer version OR actively erasing strokes on this notebook right now, never overwrite with an intermediate snapshot!
+            if (
+              (inFlightSavesMapRef.current.get(id) || 0) > 0 ||
+              (isActivelyErasingRef.current &&
+                eraserDidModifyRef.current &&
+                id === activeNotebookLiveRef.current.id)
+            ) {
               continue;
             }
 
@@ -12786,8 +12799,6 @@ export default function App() {
   const renderStaticSceneRef = useRef<(forceActive?: boolean) => void>(() => {});
   const pendingStaticRenderRafRef = useRef<number | null>(null);
   const overCanvasDirtyMapRef = useRef<Map<string, boolean>>(new Map());
-  const isActivelyErasingRef = useRef<boolean>(false);
-  const eraserDidModifyRef = useRef<boolean>(false);
   const eraserRenderRafRef = useRef<number | null>(null);
   const staticPageRenderCacheRef = useRef<
     Map<
@@ -43536,7 +43547,10 @@ export default function App() {
         const nextPages = liveNb.pages.map((p, idx) => (idx === targetIdx ? nextPage : p));
         const nextNb: Notebook = {
           ...liveNb,
-          updatedAt: new Date().toISOString(),
+          updatedAt: getMonotonicIsoTimestamp(
+            liveNb.updatedAt,
+            remoteUpdatedAtMapRef.current.get(liveNb.id)
+          ),
           pages: nextPages,
         };
         activeNotebookLiveRef.current = nextNb;
