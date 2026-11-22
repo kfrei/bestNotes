@@ -480,10 +480,17 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
 
       {id === 'tool-ruler' && (
         <g transform="rotate(-14 48 31)">
-          <rect x="12" y="22" width="72" height="18" rx="2.5" fill="#fef3c7" stroke="#b45309" strokeWidth="1.6" />
-          {[22, 32, 42, 52, 62, 72].map((x) => (
-            <line key={x} x1={x} y1="22" x2={x} y2="29" stroke="#b45309" strokeWidth="1.3" />
-          ))}
+          <rect x="12" y="21" width="72" height="20" rx="3.5" fill="#e8eef5" stroke="#94a3b8" strokeWidth="1.5" />
+          <line x1="16" y1="31" x2="80" y2="31" stroke="#cbd5e1" strokeWidth="1" />
+          {[22, 32, 42, 52, 62, 72].map((x, idx) => {
+            const major = idx % 2 === 0;
+            return (
+              <g key={x}>
+                <line x1={x} y1="21" x2={x} y2={major ? 27 : 25} stroke={major ? '#475569' : '#94a3b8'} strokeWidth={major ? '1.3' : '1'} />
+                <line x1={x} y1="41" x2={x} y2={major ? 35 : 37} stroke={major ? '#475569' : '#94a3b8'} strokeWidth={major ? '1.3' : '1'} />
+              </g>
+            );
+          })}
         </g>
       )}
 
