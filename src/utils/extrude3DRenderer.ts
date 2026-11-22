@@ -470,11 +470,11 @@ export function drawPolyExtruded3D(
     ctx.fill();
     ctx.restore();
 
-    // 2a. HIDDEN edges (dashed): occluded edges of the far cap + occluded connecting ribs
+    // 2a. HIDDEN edges (faint dashed): occluded edges of the far cap + occluded connecting ribs
     ctx.save();
     ctx.strokeStyle = inkColor;
-    ctx.globalAlpha = baseAlphaW * 0.52;
-    ctx.lineWidth = Math.max(1.0, contourW * 0.88);
+    ctx.globalAlpha = baseAlphaW * 0.28;
+    ctx.lineWidth = Math.max(0.85, contourW * 0.72);
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
     for (let i = 0; i < nW; i++) {
