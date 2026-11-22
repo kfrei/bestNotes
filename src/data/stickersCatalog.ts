@@ -1602,10 +1602,10 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   {
     id: 'sk-scientist-robert-hooke',
     iconifyId: 'sketch-png:/mind_maps/premium_pdf/scientist_robert_hooke_blue_sketch.webp:#5a3015',
-    title: "Ρόμπερτ Χουκ (1635–1703) — Φυσικός & Βιολόγος (Νόμος Ελαστικότητας & Κύτταρο)",
+    title: "Ρόμπερτ Χουκ (1635–1703) — Φυσικός & Βιολόγος (Νόμος Ελαστικής Παραμόρφωσης & Κύτταρο)",
     category: 'Μονόχρωμα Σκίτσα',
     colorStyle: 'monochrome',
-    tags: ["φυσικοί", "επιστήμονες", "premium", "χουκ", "ρόμπερτ χουκ", "hooke", "φυσικός", "ελατήριο", "κύτταρο", "επιστήμονας", "μονόχρωμο σκίτσο", "φυσική", "βιολογία"],
+    tags: ["φυσικοί", "επιστήμονες", "premium", "χουκ", "ρόμπερτ χουκ", "hooke", "robert hooke", "νόμος του hooke", "νόμος ελαστικής παραμόρφωσης", "ελαστικότητα", "ελαστική παραμόρφωση", "φυσικός", "ελατήριο", "κύτταρο", "επιστήμονας", "μονόχρωμο σκίτσο", "φυσική", "βιολογία"],
   },
   {
     id: 'sk-scientist-alessandro-volta',
