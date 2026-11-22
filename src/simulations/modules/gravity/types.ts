@@ -4,6 +4,7 @@ export interface GravitySegment {
   bx: number;
   by: number;
   strokeId: string;
+  halfWidth?: number;
 }
 
 export interface GravityTether {

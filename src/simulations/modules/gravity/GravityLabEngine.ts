@@ -81,11 +81,13 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
   const depthMidX = has3DDepth ? exDx * 0.42 : 0;
   const depthMidY = has3DDepth ? exDy * 0.42 : 0;
 
+  const segHalfW = Math.min(8, Math.max(1.5, (s.width || 3) * 0.5));
+
   // 4. Flat extruded ellipse disc used as a floor
   if ((s.shapeType === 'circle' || s.shapeType === 'ellipse') && pts.length === 4) {
     const b = getStrokeBounds(s);
     const yTop = b.cy + depthMidY;
-    segs.push({ ax: b.minX, ay: yTop, bx: b.maxX, by: yTop, strokeId: s.id });
+    segs.push({ ax: b.minX, ay: yTop, bx: b.maxX, by: yTop, strokeId: s.id, halfWidth: segHalfW });
     return segs;
   }
 
@@ -103,7 +105,7 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
         x: u * u * p0.x + 2 * u * t * cx + t * t * p2.x + depthMidX,
         y: u * u * p0.y + 2 * u * t * cy + t * t * p2.y + depthMidY,
       };
-      segs.push({ ax: prev.x, ay: prev.y, bx: cur.x, by: cur.y, strokeId: s.id });
+      segs.push({ ax: prev.x, ay: prev.y, bx: cur.x, by: cur.y, strokeId: s.id, halfWidth: segHalfW });
       prev = cur;
     }
     return segs;
@@ -176,6 +178,7 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
         bx: b.x + depthMidX,
         by: b.y + depthMidY,
         strokeId: s.id,
+        halfWidth: segHalfW,
       });
     }
   }
@@ -198,6 +201,7 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
         bx: first.x + depthMidX,
         by: first.y + depthMidY,
         strokeId: s.id,
+        halfWidth: segHalfW,
       });
     }
   }
@@ -470,6 +474,42 @@ export function buildGravitySceneFromStrokes(
     }
   }
 
+  // Visual-contact seating at t = 0: if a resting body (no v0, no tether) is placed visually
+  // touching a curve/ramp (within <= 8.5px of its stroke edge), seat it cleanly onto the surface
+  // so it glides smoothly instead of doing a tiny micro-drop pinball bounce!
+  // (Clearly floating bodies > 8.5px away still drop and bounce naturally.)
+  for (const bd of dynamicBodies) {
+    if (bd.tether || Math.hypot(bd.initVx, bd.initVy) > 5) continue;
+    const r = bd.shapeKind === 'ball' ? bd.radius : Math.min(bd.halfW, bd.halfH);
+    let bestGap = Infinity;
+    let bestSeatX = bd.cx;
+    let bestSeatY = bd.cy;
+    for (const seg of segments) {
+      const abx = seg.bx - seg.ax;
+      const aby = seg.by - seg.ay;
+      const lenSq = abx * abx + aby * aby;
+      if (lenSq < 1e-4) continue;
+      const t = Math.max(0, Math.min(1, ((bd.cx - seg.ax) * abx + (bd.cy - seg.ay) * aby) / lenSq));
+      const closestX = seg.ax + t * abx;
+      const closestY = seg.ay + t * aby;
+      const dx = bd.cx - closestX;
+      const dy = bd.cy - closestY;
+      const dist = Math.hypot(dx, dy);
+      const rContact = r + (seg.halfWidth ?? 1.5);
+      const gap = dist - rContact;
+      if (gap > 0 && gap <= 8.5 && gap < bestGap && dist > 1e-4) {
+        bestGap = gap;
+        bestSeatX = closestX + (dx / dist) * rContact;
+        bestSeatY = closestY + (dy / dist) * rContact;
+      }
+    }
+    if (bestGap <= 8.5) {
+      bd.cx = bestSeatX;
+      bd.cy = bestSeatY;
+      bd.trail = [{ x: bd.cx, y: bd.cy }];
+    }
+  }
+
   return { bodies, segments, consumedStrokeIds };
 }
 
@@ -565,11 +605,12 @@ export function stepGravityScene(
         const dx = b.cx - closestX;
         const dy = b.cy - closestY;
         const dist = Math.hypot(dx, dy);
+        const rContact = r + (seg.halfWidth ?? 1.5);
 
-        if (dist < r && dist > 1e-5) {
+        if (dist < rContact && dist > 1e-5) {
           const nx = dx / dist;
           const ny = dy / dist;
-          const overlap = r - dist;
+          const overlap = rContact - dist;
           const yBefore = b.cy;
           const speedBeforeSq = b.vx * b.vx + b.vy * b.vy;
 
@@ -582,8 +623,9 @@ export function stepGravityScene(
             const ty = nx;
             const vtBefore = b.vx * tx + b.vy * ty;
             // Smooth grazing/rolling contact on curved U-bowls & ramps vs genuine drop/wall bounce
+            // (42 px/s ≈ 1.5px micro-drop; real air drops hit at 120+ px/s and bounce cleanly!)
             const isGrazingSlide =
-              Math.abs(vn) < 26 || Math.abs(vn) < Math.abs(vtBefore) * 0.38;
+              Math.abs(vn) < 42 || Math.abs(vn) < Math.abs(vtBefore) * 0.42;
             const eEff = isGrazingSlide ? 0 : config.restitution;
             const jn = -(1 + eEff) * vn;
             b.vx += jn * nx;
