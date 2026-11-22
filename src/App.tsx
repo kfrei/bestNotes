@@ -3149,6 +3149,145 @@ export default function App() {
     sampledCurvePoints?: BezierPoint[];
     sampledBaseKeyIndices?: number[];
   } | null>(null);
+  const endpointSnapHoverRef = useRef<{
+    key: string;
+    x: number;
+    y: number;
+    rafId: number | null;
+  } | null>(null);
+  const cancelEndpointSnapPulse = useCallback(() => {
+    const cur = endpointSnapHoverRef.current;
+    if (cur && cur.rafId !== null) {
+      window.cancelAnimationFrame(cur.rafId);
+      const c = activeCanvasRef.current;
+      const ctx = activeCtxRef.current;
+      if (c && ctx && !isDrawingRef.current) {
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+      }
+    }
+    endpointSnapHoverRef.current = null;
+  }, []);
+  const findNearestStrokeEndpoint = useCallback(
+    (pt: { x: number; y: number }, strokes: StrokeObject[], maxDist = 13) => {
+      const CLOSED_SHAPES = new Set([
+        'ellipse',
+        'circle',
+        'rectangle',
+        'square',
+        'parallelogram',
+        'trapezoid',
+        'triangle',
+        'rhombus',
+        'pentagon',
+        'hexagon',
+        'star',
+        'diamond',
+        'cube-3d',
+        'cylinder-3d',
+        'cone-3d',
+        'sphere-3d',
+        'prism-3d',
+        'pyramid-3d',
+        'stickman',
+        'stickman-3d',
+      ]);
+      let best: { x: number; y: number; strokeId: string; endIdx: 0 | 1; dist: number } | null = null;
+      for (let i = strokes.length - 1; i >= 0; i--) {
+        const s = strokes[i];
+        if (
+          !s ||
+          !s.points ||
+          s.points.length < 2 ||
+          s.tool === 'highlighter'
+        ) {
+          continue;
+        }
+        if (s.isShape && s.shapeType && CLOSED_SHAPES.has(s.shapeType)) continue;
+        const p0 = s.points[0];
+        const p1 = s.points[s.points.length - 1];
+        // Skip closed freehand loops
+        if (Math.hypot(p1.x - p0.x, p1.y - p0.y) <= 6) continue;
+        const d0 = Math.hypot(pt.x - p0.x, pt.y - p0.y);
+        if (d0 <= maxDist && (!best || d0 < best.dist)) {
+          best = { x: p0.x, y: p0.y, strokeId: s.id, endIdx: 0, dist: d0 };
+        }
+        const d1 = Math.hypot(pt.x - p1.x, pt.y - p1.y);
+        if (d1 <= maxDist && (!best || d1 < best.dist)) {
+          best = { x: p1.x, y: p1.y, strokeId: s.id, endIdx: 1, dist: d1 };
+        }
+      }
+      return best;
+    },
+    []
+  );
+  const triggerEndpointSnapPulse = useCallback(
+    (x: number, y: number, key: string, ringColor: string) => {
+      const prev = endpointSnapHoverRef.current;
+      if (prev && prev.rafId !== null) {
+        window.cancelAnimationFrame(prev.rafId);
+      }
+      const startTime = performance.now();
+      const DURATION_MS = 340;
+      const state = { key, x, y, rafId: null as number | null };
+      endpointSnapHoverRef.current = state;
+
+      const drawFrame = (now: number) => {
+        if (isDrawingRef.current || endpointSnapHoverRef.current !== state) {
+          state.rafId = null;
+          return;
+        }
+        const c = activeCanvasRef.current;
+        const ctx = activeCtxRef.current;
+        if (!c || !ctx) {
+          state.rafId = null;
+          return;
+        }
+        const t = Math.min(1, (now - startTime) / DURATION_MS);
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+
+        if (t >= 1) {
+          state.rafId = null;
+          return;
+        }
+
+        const ease = 1 - Math.pow(1 - t, 3); // fast smooth convergence into the point
+        const ringR = 15.5 * (1 - ease) + 2.2;
+        const alpha = (1 - t) * 0.9;
+        const dotR = 2.8 * (1 - t * 0.65);
+
+        ctx.save();
+        // Subtle white outer contrast halo
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3.4;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Crisp converging magnetic snap ring
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 1.9;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Tiny center anchor dot fading into the exact endpoint
+        ctx.fillStyle = ringColor;
+        ctx.beginPath();
+        ctx.arc(x, y, dotR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        state.rafId = window.requestAnimationFrame(drawFrame);
+      };
+
+      state.rafId = window.requestAnimationFrame(drawFrame);
+    },
+    []
+  );
   const activeDeleteNodeRef = useRef<{
     strokeId: string;
     nodeIdx: number;
@@ -42609,13 +42748,21 @@ export default function App() {
 
     // 6. Pen / Pencil / Highlighter / Shape / Laser -> Deselect any previous shape/image & Start 0ms Direct Ink!
     e.preventDefault();
+    cancelEndpointSnapPulse();
     if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
     if (activeNodeStrokeId) setActiveNodeStrokeId(null);
     if (selectedImageId) setSelectedImageId(null);
+    let startPt = pt;
+    if (effectiveTool === 'pen' || effectiveTool === 'pencil' || effectiveTool === 'shape') {
+      const snapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 13);
+      if (snapHit) {
+        startPt = { ...pt, x: snapHit.x, y: snapHit.y };
+      }
+    }
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
-    currentStrokePtsRef.current = [pt];
-    holdAnchorPtRef.current = { x: pt.x, y: pt.y };
+    currentStrokePtsRef.current = [startPt];
+    holdAnchorPtRef.current = { x: startPt.x, y: startPt.y };
     lastHoldMoveTimeRef.current = performance.now();
     if (effectiveTool === 'laser') {
       if (laserPageIdRef.current !== targetPage.id) {
@@ -42625,7 +42772,7 @@ export default function App() {
       cancelLaserTimers();
       renderLaserOverlay(1);
     } else if (['pen', 'pencil'].includes(effectiveTool)) {
-      drawInitialDot(pt);
+      drawInitialDot(startPt);
     }
   };
 
@@ -43794,6 +43941,30 @@ export default function App() {
         hoverAddNodePreviewRef.current = null;
         e.currentTarget.style.cursor = '';
         clearActiveOverlay();
+      }
+
+      // Magnetic endpoint hover indicator: brief ~340ms converging ring when approaching an open line/stroke endpoint
+      if (
+        (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'shape') &&
+        e.pointerType !== 'touch' &&
+        activePage.strokes.length > 0
+      ) {
+        const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+        const hit = findNearestStrokeEndpoint(hoverPt, activePage.strokes, 13);
+        if (hit) {
+          const key = `${hit.strokeId}:${hit.endIdx}`;
+          if (!endpointSnapHoverRef.current || endpointSnapHoverRef.current.key !== key) {
+            const col = strokeColor && strokeColor.toLowerCase() !== '#ffffff' ? strokeColor : '#2563eb';
+            triggerEndpointSnapPulse(hit.x, hit.y, key, col);
+          }
+        } else if (endpointSnapHoverRef.current) {
+          const prev = endpointSnapHoverRef.current;
+          if (Math.hypot(hoverPt.x - prev.x, hoverPt.y - prev.y) > 17) {
+            cancelEndpointSnapPulse();
+          }
+        }
+      } else if (endpointSnapHoverRef.current) {
+        cancelEndpointSnapPulse();
       }
       return;
     }
