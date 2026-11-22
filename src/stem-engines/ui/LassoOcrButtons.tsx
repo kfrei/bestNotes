@@ -78,7 +78,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb]'
           }`}
-          title="Μαθηματικά, Γεωμετρία & Κώδικας OCR (Εξίσωση, Διάγραμμα, Πολύγωνο, Κώδικας)"
+          aria-label="Μαθηματικά, Γεωμετρία & Κώδικας OCR"
         >
           <span className="font-serif font-bold text-[12px] leading-none">Σ</span>
           <span>Math</span>
@@ -201,7 +201,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb]'
           }`}
-          title="Χημεία & Άτομο (Αντιδράσεις ChemOCR, 3D Μόριο, 2D Άτομο)"
+          aria-label="Χημεία & Άτομο"
         >
           <FlaskConical className="w-3.5 h-3.5" />
           <span>Chem</span>

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 export type RichTipId =
-  // Mirror & Library
+  // Mirror & Library & 3D
   | 'mirror-h'
   | 'mirror-v'
   | 'add-library'
+  | 'extrude-3d'
   // Z-Order
   | 'z-back'
   | 'z-down'
@@ -47,6 +48,7 @@ const TIP_DEFS: Record<RichTipId, TipDef> = {
   'mirror-h': { title: 'Οριζόντιο Mirror', subtitle: 'Κατοπτρισμός Αριστερά ↔ Δεξιά' },
   'mirror-v': { title: 'Κατακόρυφο Mirror', subtitle: 'Κατοπτρισμός Πάνω ↕ Κάτω' },
   'add-library': { title: '+Βιβλιοθήκη', subtitle: 'Αποθήκευση στα «Δικά μου» σχήματα' },
+  'extrude-3d': { title: '2D → 3D Μετατροπή', subtitle: 'Εξώθηση επιπέδου σχήματος σε 3D (π.χ. Κύλινδρος, Κύβος)' },
   'z-back': { title: 'Τέρμα Πίσω', subtitle: 'Μεταφορά πίσω από όλα τα αντικείμενα' },
   'z-down': { title: 'Πίσω (-1)', subtitle: 'Κατέβασμα κατά ένα επίπεδο' },
   'z-up': { title: 'Μπροστά (+1)', subtitle: 'Ανέβασμα κατά ένα επίπεδο' },
@@ -122,6 +124,51 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
           <path d="M 52 24 L 64 24 L 67 20 L 84 20" fill="none" stroke="#d97706" strokeWidth="1.5" />
           <g style={{ animation: 'rtFlyToLib 2.1s ease-in-out infinite' }}>
             <polygon points="14,38 28,16 42,38" fill="#2563eb" fillOpacity="0.72" stroke="#1d4ed8" strokeWidth="1.6" />
+          </g>
+        </g>
+      )}
+
+      {id === 'extrude-3d' && (
+        <g>
+          <defs>
+            <linearGradient id="rtCylBody" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#1e3a8a" stopOpacity="0.75" />
+              <stop offset="42%" stopColor="#60a5fa" stopOpacity="0.65" />
+              <stop offset="100%" stopColor="#1e40af" stopOpacity="0.82" />
+            </linearGradient>
+          </defs>
+          {/* Base ellipse (always anchored at bottom) */}
+          <ellipse cx="48" cy="48" rx="22" ry="8" fill="#2563eb" fillOpacity="0.35" stroke="#1d4ed8" strokeWidth="1.6" />
+          {/* Extruded cylinder walls growing upward */}
+          <rect
+            x="26"
+            y="18"
+            width="44"
+            height="30"
+            fill="url(#rtCylBody)"
+            style={{ transformOrigin: '48px 48px', animation: 'rtCylGrow 2.2s ease-in-out infinite' }}
+          />
+          <line
+            x1="26"
+            y1="18"
+            x2="26"
+            y2="48"
+            stroke="#1d4ed8"
+            strokeWidth="1.7"
+            style={{ transformOrigin: '26px 48px', animation: 'rtCylGrow 2.2s ease-in-out infinite' }}
+          />
+          <line
+            x1="70"
+            y1="18"
+            x2="70"
+            y2="48"
+            stroke="#1d4ed8"
+            strokeWidth="1.7"
+            style={{ transformOrigin: '70px 48px', animation: 'rtCylGrow 2.2s ease-in-out infinite' }}
+          />
+          {/* Top ellipse rising smoothly from base to top */}
+          <g style={{ animation: 'rtCylTopRise 2.2s ease-in-out infinite' }}>
+            <ellipse cx="48" cy="48" rx="22" ry="8" fill="#bfdbfe" fillOpacity="0.92" stroke="#1d4ed8" strokeWidth="1.8" />
           </g>
         </g>
       )}
@@ -508,6 +555,8 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtTapePeek { 0%, 25% { opacity: 0.96; } 55%, 82% { opacity: 0.16; } 100% { opacity: 0.96; } }
         @keyframes rtSpinSlow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes rtSimRoll { 0%, 100% { transform: translate(-10px, -16px); } 50% { transform: translate(38px, 6px); } }
+        @keyframes rtCylGrow { 0%, 20% { transform: scaleY(0); opacity: 0; } 55%, 85% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(0); opacity: 0; } }
+        @keyframes rtCylTopRise { 0%, 20% { transform: translateY(0px); } 55%, 85% { transform: translateY(-30px); } 100% { transform: translateY(0px); } }
       `}</style>
       <div className="w-[248px] rounded-xl bg-[#fdfbf7]/96 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_14px_34px_-8px_rgba(15,23,42,0.22)] p-2 flex items-center gap-2.5">
         <TipAnimationSvg id={activeTip.id} />

@@ -64565,7 +64565,8 @@ export default function App() {
                                   ? 'bg-[#d6cbb8] text-[#234978] shadow-inner border border-[#bfb097]/70'
                                   : 'hover:bg-[#fdfbf7] text-[#234978]'
                               }`}
-                              title={
+                              data-rich-tip="extrude-3d"
+                              aria-label={
                                 active3D
                                   ? 'Ενεργό 3D (κλικ για επιστροφή σε 2D)'
                                   : 'Μετατροπή 2D σχήματος σε 3D'

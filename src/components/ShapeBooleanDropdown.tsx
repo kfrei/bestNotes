@@ -360,7 +360,7 @@ export const ShapeBooleanDropdown: React.FC<ShapeBooleanDropdownProps> = ({
             ? 'bg-[#234978] text-white border-[#1b3a60]'
             : 'bg-[#ece7dc] hover:bg-[#e3ddd0] text-[#1b2a4a] border-[#dfd8cb]'
         }`}
-        title={`Συνδυασμός ${shapeCount} επιλεγμένων σχημάτων (Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός)`}
+        aria-label={`Συνδυασμός ${shapeCount} επιλεγμένων σχημάτων`}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" className="shrink-0">
           <rect

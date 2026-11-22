@@ -212,7 +212,7 @@ export const ShapeSliceDropdown: React.FC<ShapeSliceDropdownProps> = ({
             ? 'bg-[#234978] text-white border-[#1b3a60]'
             : 'bg-[#ece7dc] hover:bg-[#e3ddd0] text-[#1b2a4a] border-[#dfd8cb]'
         }`}
-        title="Κόψιμο σχήματος (Μαχαίρι με γραμμή/γωνία ή 1-κλικ Ίσα Κομμάτια / Κλάσματα)"
+        aria-label="Κόψιμο σχήματος"
       >
         <Scissors className="w-3.5 h-3.5" />
         <span>Κόψιμο</span>
