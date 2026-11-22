@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Ο Κύκλος του Νερού (Υδρολογικός Κύκλος)</text>
+  <rect x="20" y="34" width="400" height="248" rx="10" fill="url(#sky-grad)" stroke="#cbd5e1"/>
+  <!-- Sun -->
+  <circle cx="70" cy="74" r="22" fill="url(#sun-grad)"/>
+  <!-- Clouds -->
+  <path d="M168,84 Q158,66 178,64 Q192,52 212,64 Q230,62 232,78 Q224,90 202,88 Z" fill="#ffffff" stroke="#94a3b8"/>
+  <path d="M294,88 Q284,70 304,66 Q320,54 342,66 Q362,64 364,82 Q354,94 328,92 Z" fill="#cbd5e1" stroke="#64748b"/>
+  <!-- Mountain & land -->
+  <polygon points="210,230 330,118 420,170 420,282 20,282 20,230" fill="#86efac" stroke="#15803d" stroke-width="1.3"/>
+  <polygon points="296,150 330,118 364,138 342,148 326,138" fill="#ffffff"/>
+  <!-- Sea -->
+  <rect x="20" y="224" width="210" height="58" fill="url(#sea-grad)"/>
+  <!-- Underground aquifer -->
+  <path d="M210,264 Q300,256 410,266" fill="none" stroke="#0284c7" stroke-width="3" stroke-dasharray="6,4" marker-end="url(#arr-blue)"/>
+  <!-- Rain -->
+  <g stroke="#2563eb" stroke-width="1.8">
+    <line x1="308" y1="98" x2="302" y2="118"/>
+    <line x1="326" y1="98" x2="320" y2="118"/>
+    <line x1="344" y1="98" x2="338" y2="118"/>
+  </g>
+  <!-- Evaporation arrows -->
+  <path d="M78,218 Q70,180 82,142" fill="none" stroke="#0284c7" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <path d="M118,218 Q110,180 122,142" fill="none" stroke="#0284c7" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <!-- Wind arrow -->
+  <line x1="238" y1="74" x2="284" y2="74" stroke="#475569" stroke-width="1.8" marker-end="url(#arr-dark)"/>
+  <!-- Surface runoff -->
+  <path d="M312,162 Q278,196 234,224" fill="none" stroke="#0369a1" stroke-width="2.5" marker-end="url(#arr-blue)"/>
+  <!-- Labels -->
+  <text x="98" y="134" text-anchor="middle" class="t-lbl">Εξάτμιση</text>
+  <text x="198" y="54" text-anchor="middle" class="t-lbl">Συμπύκνωση</text>
+  <text x="330" y="54" text-anchor="middle" class="t-lbl">Βροχόπτωση</text>
+  <text x="278" y="218" class="t-lbl">Απορροή</text>
+  <text x="318" y="254" class="t-sm">Διήθηση &amp; Υπόγεια νερά</text>
+  <text x="115" y="256" text-anchor="middle" class="t-white">Θάλασσα / Ωκεανός</text>
+
+</svg>

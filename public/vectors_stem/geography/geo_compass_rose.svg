@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Ανεμολόγιο &amp; Σημεία του Ορίζοντα</text>
+  <g transform="translate(220,162)">
+    <circle r="102" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+    <circle r="86" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+    <!-- Intercardinal points -->
+    <polygon points="0,0 12,-12 58,-58 0,-18" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <polygon points="0,0 12,12 58,58 18,0" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <polygon points="0,0 -12,12 -58,58 0,18" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <polygon points="0,0 -12,-12 -58,-58 -18,0" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <!-- Cardinal points -->
+    <polygon points="0,-86 14,0 0,0" fill="#dc2626" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="0,-86 -14,0 0,0" fill="#f87171" stroke="#1e293b" stroke-width="1"/>
+    <polygon points="0,86 14,0 0,0" fill="#1e293b"/>
+    <polygon points="0,86 -14,0 0,0" fill="#64748b"/>
+    <polygon points="86,0 0,-14 0,0" fill="#2563eb"/>
+    <polygon points="86,0 0,14 0,0" fill="#93c5fd"/>
+    <polygon points="-86,0 0,-14 0,0" fill="#2563eb"/>
+    <polygon points="-86,0 0,14 0,0" fill="#93c5fd"/>
+    <circle r="6" fill="#ffffff" stroke="#1e293b" stroke-width="2"/>
+    <!-- Cardinal labels -->
+    <text x="0" y="-108" text-anchor="middle" class="t-title" fill="#dc2626">Β (Βορράς • 0°)</text>
+    <text x="0" y="122" text-anchor="middle" class="t-title">Ν (Νότος • 180°)</text>
+    <text x="114" y="4" class="t-title" fill="#2563eb">Α (90°)</text>
+    <text x="-114" y="4" text-anchor="end" class="t-title" fill="#2563eb">Δ (270°)</text>
+    <!-- Intercardinal labels -->
+    <text x="68" y="-64" class="t-lbl">ΒΑ</text>
+    <text x="68" y="72" class="t-lbl">ΝΑ</text>
+    <text x="-82" y="72" class="t-lbl">ΝΔ</text>
+    <text x="-82" y="-64" class="t-lbl">ΒΔ</text>
+  </g>
+
+</svg>

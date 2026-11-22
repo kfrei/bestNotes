@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Εσωτερική Δομή της Γης</text>
+  <g transform="translate(165,160)">
+    <circle r="110" fill="#2563eb" stroke="#1e293b" stroke-width="2"/>
+    <path d="M-85,-45 Q-50,-75 -20,-40 Q-5,-15 -35,20 Q-65,45 -90,10 Z" fill="#22c55e" opacity="0.85"/>
+    <path d="M-40,55 Q-10,45 10,80 Q-20,102 -55,82 Z" fill="#22c55e" opacity="0.85"/>
+    <!-- Cutaway quadrant -->
+    <path d="M0,0 L0,-110 A110,110 0 0,1 110,0 Z" fill="#92400e" stroke="#1e293b" stroke-width="1.5"/>
+    <path d="M0,0 L0,-102 A102,102 0 0,1 102,0 Z" fill="#ea580c" stroke="#9a3412" stroke-width="1.2"/>
+    <path d="M0,0 L0,-62 A62,62 0 0,1 62,0 Z" fill="#f59e0b" stroke="#b45309" stroke-width="1.2"/>
+    <path d="M0,0 L0,-30 A30,30 0 0,1 30,0 Z" fill="#fef08a" stroke="#ca8a04" stroke-width="1.2"/>
+  </g>
+  <!-- Labels -->
+  <line x1="235" y1="78" x2="295" y2="62" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="300" y="65" class="t-lbl">Φλοιός (5–70 km)</text>
+  <line x1="235" y1="105" x2="295" y2="100" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="300" y="103" class="t-lbl">Μανδύας (2.900 km)</text>
+  <line x1="210" y1="130" x2="295" y2="140" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="300" y="143" class="t-lbl">Εξωτερικός Πυρήνας</text>
+  <text x="300" y="156" class="t-sm">(υγρός Fe–Ni)</text>
+  <line x1="185" y1="148" x2="295" y2="188" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="300" y="191" class="t-lbl">Εσωτερικός Πυρήνας</text>
+  <text x="300" y="204" class="t-sm">(στερεός, ~5.500 °C)</text>
+  <text x="300" y="242" class="t-sm">Ακτίνα Γης ≈ 6.371 km</text>
+
+</svg>

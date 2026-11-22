@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Σεισμός: Υπόκεντρο, Επίκεντρο &amp; Κύματα</text>
+  <!-- Earth block 3D-like -->
+  <polygon points="40,100 340,100 400,66 100,66" fill="#bbf7d0" stroke="#15803d" stroke-width="1.4"/>
+  <rect x="40" y="100" width="300" height="170" fill="#e7e5e4" stroke="#57534e" stroke-width="1.4"/>
+  <polygon points="340,100 400,66 400,236 340,270" fill="#d6d3d1" stroke="#57534e" stroke-width="1.4"/>
+  <!-- Fault plane -->
+  <line x1="140" y1="100" x2="220" y2="270" stroke="#b91c1c" stroke-width="2.2" stroke-dasharray="6,3"/>
+  <line x1="140" y1="100" x2="200" y2="66" stroke="#b91c1c" stroke-width="2" stroke-dasharray="5,3"/>
+  <!-- Seismic waves around focus -->
+  <circle cx="182" cy="190" r="24" fill="none" stroke="#ef4444" stroke-width="1.6" stroke-dasharray="4,2"/>
+  <circle cx="182" cy="190" r="46" fill="none" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <circle cx="182" cy="190" r="70" fill="none" stroke="#eab308" stroke-width="1.4" stroke-dasharray="6,3"/>
+  <!-- Focus -->
+  <circle cx="182" cy="190" r="7" fill="#dc2626" stroke="#fff" stroke-width="1.5"/>
+  <!-- Vertical line to Epicenter -->
+  <line x1="182" y1="183" x2="182" y2="88" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <!-- Epicenter -->
+  <ellipse cx="182" cy="84" rx="22" ry="8" fill="none" stroke="#dc2626" stroke-width="1.5"/>
+  <ellipse cx="182" cy="84" rx="40" ry="13" fill="none" stroke="#ef4444" stroke-width="1.2" opacity="0.7"/>
+  <circle cx="182" cy="84" r="5" fill="#dc2626"/>
+  <!-- Labels -->
+  <line x1="188" y1="82" x2="255" y2="50" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="260" y="53" class="t-lbl">Επίκεντρο (επιφάνεια)</text>
+  <line x1="188" y1="192" x2="262" y2="204" stroke="#1e293b" stroke-width="1.2"/>
+  <text x="266" y="206" class="t-lbl">Υπόκεντρο</text>
+  <text x="266" y="219" class="t-sm">(Εστία σεισμού)</text>
+  <text x="54" y="138" class="t-lbl" fill="#b91c1c">Επίπεδο</text>
+  <text x="54" y="151" class="t-lbl" fill="#b91c1c">ρήγματος</text>
+  <text x="54" y="254" class="t-sm">Σεισμικά κύματα (P &amp; S)</text>
+  <text x="190" y="142" class="t-sm">Εστιακό βάθος (h)</text>
+
+</svg>

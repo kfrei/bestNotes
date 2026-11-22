@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Κλιματικές Ζώνες της Γης</text>
+  <g transform="translate(155,160)">
+    <clipPath id="globe-clip"><circle r="106"/></clipPath>
+    <g clip-path="url(#globe-clip)">
+      <rect x="-110" y="-110" width="220" height="34" fill="#bae6fd"/>
+      <rect x="-110" y="-76" width="220" height="44" fill="#86efac"/>
+      <rect x="-110" y="-32" width="220" height="64" fill="#fde047"/>
+      <rect x="-110" y="32" width="220" height="44" fill="#86efac"/>
+      <rect x="-110" y="76" width="220" height="34" fill="#bae6fd"/>
+      <line x1="-110" y1="0" x2="110" y2="0" stroke="#dc2626" stroke-width="2" stroke-dasharray="5,3"/>
+      <line x1="-110" y1="-32" x2="110" y2="-32" stroke="#d97706" stroke-width="1.2"/>
+      <line x1="-110" y1="32" x2="110" y2="32" stroke="#d97706" stroke-width="1.2"/>
+      <line x1="-110" y1="-76" x2="110" y2="-76" stroke="#0284c7" stroke-width="1.2"/>
+      <line x1="-110" y1="76" x2="110" y2="76" stroke="#0284c7" stroke-width="1.2"/>
+    </g>
+    <circle r="106" fill="none" stroke="#1e293b" stroke-width="2"/>
+    <text x="0" y="-86" text-anchor="middle" class="t-sm">Πολική</text>
+    <text x="0" y="-50" text-anchor="middle" class="t-lbl">Β. Εύκρατη</text>
+    <text x="0" y="-6" text-anchor="middle" class="t-lbl">Τροπική Ζώνη</text>
+    <text x="0" y="14" text-anchor="middle" class="t-sm" fill="#b91c1c">Ισημερινός 0°</text>
+    <text x="0" y="58" text-anchor="middle" class="t-lbl">Ν. Εύκρατη</text>
+    <text x="0" y="94" text-anchor="middle" class="t-sm">Πολική</text>
+  </g>
+  <!-- Legend right -->
+  <text x="278" y="86" class="t-lbl">66,5° Β — Αρκτικός Κύκλος</text>
+  <text x="278" y="128" class="t-lbl">23,5° Β — Τροπικός Καρκίνου</text>
+  <text x="278" y="164" class="t-lbl" fill="#b91c1c">0° — Ισημερινός</text>
+  <text x="278" y="198" class="t-lbl">23,5° Ν — Τροπικός Αιγόκερω</text>
+  <text x="278" y="238" class="t-lbl">66,5° Ν — Ανταρκτικός Κύκλος</text>
+
+</svg>

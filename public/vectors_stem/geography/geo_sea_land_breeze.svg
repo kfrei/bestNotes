@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Θαλάσσια &amp; Απόγειος Αύρα</text>
+  <!-- Left: Day (Sea breeze) -->
+  <g transform="translate(16,38)">
+    <rect width="198" height="244" rx="10" fill="url(#sky-grad)" stroke="#cbd5e1"/>
+    <text x="99" y="18" text-anchor="middle" class="t-sub">Ημέρα: Θαλάσσια Αύρα</text>
+    <circle cx="164" cy="48" r="14" fill="url(#sun-grad)"/>
+    <rect x="2" y="196" width="98" height="46" fill="url(#sea-grad)"/>
+    <polygon points="100,196 196,174 196,242 100,242" fill="#d97706" opacity="0.65"/>
+    <!-- Circulation arrows -->
+    <line x1="48" y1="176" x2="146" y2="162" stroke="#2563eb" stroke-width="2.4" marker-end="url(#arr-blue)"/>
+    <line x1="158" y1="152" x2="158" y2="96" stroke="#dc2626" stroke-width="2.4" marker-end="url(#arr-red)"/>
+    <line x1="146" y1="88" x2="48" y2="88" stroke="#64748b" stroke-width="2" marker-end="url(#arr-dark)"/>
+    <line x1="40" y1="98" x2="40" y2="164" stroke="#2563eb" stroke-width="2" marker-end="url(#arr-blue)"/>
+    <text x="50" y="224" text-anchor="middle" class="t-white">Ψυχρή θάλασσα</text>
+    <text x="150" y="224" text-anchor="middle" class="t-lbl">Θερμή ξηρά</text>
+  </g>
+  <!-- Right: Night (Land breeze) -->
+  <g transform="translate(226,38)">
+    <rect width="198" height="244" rx="10" fill="#1e293b" stroke="#475569"/>
+    <text x="99" y="18" text-anchor="middle" class="t-white">Νύχτα: Απόγειος Αύρα</text>
+    <circle cx="164" cy="48" r="11" fill="#fef08a"/>
+    <rect x="2" y="196" width="98" height="46" fill="#0369a1"/>
+    <polygon points="100,196 196,174 196,242 100,242" fill="#78716c"/>
+    <line x1="146" y1="162" x2="48" y2="176" stroke="#60a5fa" stroke-width="2.4" marker-end="url(#arr-blue)"/>
+    <line x1="40" y1="164" x2="40" y2="98" stroke="#f87171" stroke-width="2.4" marker-end="url(#arr-red)"/>
+    <line x1="50" y1="88" x2="146" y2="88" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arr-dark)"/>
+    <line x1="158" y1="98" x2="158" y2="154" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+    <text x="50" y="224" text-anchor="middle" class="t-white">Θερμότερη θάλασσα</text>
+    <text x="150" y="224" text-anchor="middle" class="t-white">Ψυχρή ξηρά</text>
+  </g>
+
+</svg>

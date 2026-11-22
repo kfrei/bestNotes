@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Ισοϋψείς Καμπύλες &amp; Τοπογραφικό Προφίλ</text>
+  <!-- Top: contour map -->
+  <rect x="28" y="34" width="384" height="114" rx="8" fill="#fefce8" stroke="#cbd5e1"/>
+  <ellipse cx="185" cy="92" rx="135" ry="46" fill="none" stroke="#92400e" stroke-width="1.4"/>
+  <ellipse cx="175" cy="92" rx="95" ry="34" fill="none" stroke="#92400e" stroke-width="1.4"/>
+  <ellipse cx="164" cy="92" rx="56" ry="22" fill="none" stroke="#92400e" stroke-width="1.4"/>
+  <ellipse cx="154" cy="92" rx="24" ry="10" fill="none" stroke="#92400e" stroke-width="1.4"/>
+  <text x="154" y="95" text-anchor="middle" class="t-sm">400m</text>
+  <text x="210" y="95" class="t-sm">300</text>
+  <text x="258" y="95" class="t-sm">200</text>
+  <text x="306" y="95" class="t-sm">100m</text>
+  <!-- Section line A-B -->
+  <line x1="42" y1="92" x2="338" y2="92" stroke="#2563eb" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <text x="34" y="95" class="t-lbl" fill="#2563eb">Α</text>
+  <text x="344" y="95" class="t-lbl" fill="#2563eb">Β</text>
+  <text x="366" y="54" class="t-sm">Κάτοψη</text>
+  <text x="366" y="66" class="t-sm">(Χάρτης)</text>
+  <!-- Bottom: profile -->
+  <rect x="28" y="162" width="384" height="120" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <line x1="48" y1="262" x2="390" y2="262" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="48" y1="262" x2="48" y2="174" stroke="#64748b" stroke-width="1.4"/>
+  <path d="M50,262 Q95,245 128,192 Q154,174 182,196 Q240,224 320,262 Z" fill="#d97706" opacity="0.35" stroke="#92400e" stroke-width="2"/>
+  <text x="38" y="184" text-anchor="end" class="t-sm">400</text>
+  <text x="38" y="206" text-anchor="end" class="t-sm">300</text>
+  <text x="38" y="228" text-anchor="end" class="t-sm">200</text>
+  <text x="38" y="250" text-anchor="end" class="t-sm">100</text>
+  <text x="90" y="246" class="t-sm">Απότομη κλίση</text>
+  <text x="234" y="246" class="t-sm">Ήπια κλίση</text>
+  <text x="366" y="182" class="t-sm">Τομή Α–Β</text>
+
+</svg>

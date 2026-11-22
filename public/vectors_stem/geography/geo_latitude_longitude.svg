@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Γεωγραφικές Συντεταγμένες (Πλάτος &amp; Μήκος)</text>
+  <!-- Left: Latitude -->
+  <g transform="translate(115,160)">
+    <circle r="84" fill="#eff6ff" stroke="#1e3a8a" stroke-width="1.8"/>
+    <ellipse cx="0" cy="0" rx="84" ry="20" fill="none" stroke="#dc2626" stroke-width="2.2"/>
+    <ellipse cx="0" cy="-34" rx="76" ry="16" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <ellipse cx="0" cy="-62" rx="56" ry="11" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <ellipse cx="0" cy="34" rx="76" ry="16" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <ellipse cx="0" cy="62" rx="56" ry="11" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <line x1="0" y1="-92" x2="0" y2="92" stroke="#475569" stroke-width="1.2" stroke-dasharray="4,3"/>
+    <text x="0" y="-96" text-anchor="middle" class="t-lbl">Β. Πόλος (90° Β)</text>
+    <text x="0" y="106" text-anchor="middle" class="t-lbl">Ν. Πόλος (90° Ν)</text>
+    <text x="0" y="122" text-anchor="middle" class="t-sub">Παράλληλοι (Πλάτος φ)</text>
+    <text x="0" y="4" text-anchor="middle" class="t-sm" fill="#b91c1c">Ισημερινός 0°</text>
+  </g>
+  <!-- Right: Longitude -->
+  <g transform="translate(325,160)">
+    <circle r="84" fill="#eff6ff" stroke="#1e3a8a" stroke-width="1.8"/>
+    <line x1="0" y1="-84" x2="0" y2="84" stroke="#dc2626" stroke-width="2.2"/>
+    <ellipse cx="0" cy="0" rx="28" ry="84" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <ellipse cx="0" cy="0" rx="58" ry="84" fill="none" stroke="#2563eb" stroke-width="1.3"/>
+    <line x1="-84" y1="0" x2="84" y2="0" stroke="#94a3b8" stroke-width="1.1" stroke-dasharray="4,3"/>
+    <text x="0" y="-96" text-anchor="middle" class="t-lbl">Μεσημβρινός Greenwich (0°)</text>
+    <text x="-58" y="104" text-anchor="middle" class="t-sm">Δυτικό (Δ)</text>
+    <text x="58" y="104" text-anchor="middle" class="t-sm">Ανατολικό (Α)</text>
+    <text x="0" y="122" text-anchor="middle" class="t-sub">Μεσημβρινοί (Μήκος λ)</text>
+  </g>
+
+</svg>

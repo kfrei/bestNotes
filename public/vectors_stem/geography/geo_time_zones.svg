@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Ωριαίες Άτρακτοι (Ζώνες Ώρας • 360° ÷ 24 = 15°)</text>
+  <rect x="20" y="42" width="400" height="206" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <!-- 9 representative bands -->
+  <g>
+    <rect x="28" y="58" width="42" height="140" fill="#dbeafe" stroke="#93c5fd"/>
+    <rect x="70" y="58" width="42" height="140" fill="#eff6ff" stroke="#93c5fd"/>
+    <rect x="112" y="58" width="42" height="140" fill="#dbeafe" stroke="#93c5fd"/>
+    <rect x="154" y="58" width="42" height="140" fill="#eff6ff" stroke="#93c5fd"/>
+    <rect x="196" y="58" width="48" height="140" fill="#fef08a" stroke="#eab308" stroke-width="1.8"/>
+    <rect x="244" y="58" width="42" height="140" fill="#dcfce7" stroke="#86efac"/>
+    <rect x="286" y="58" width="42" height="140" fill="#bbf7d0" stroke="#22c55e" stroke-width="1.8"/>
+    <rect x="328" y="58" width="42" height="140" fill="#dcfce7" stroke="#86efac"/>
+    <rect x="370" y="58" width="42" height="140" fill="#bbf7d0" stroke="#86efac"/>
+  </g>
+  <!-- Labels -->
+  <text x="49" y="76" text-anchor="middle" class="t-sm">UTC-4</text>
+  <text x="91" y="76" text-anchor="middle" class="t-sm">UTC-3</text>
+  <text x="133" y="76" text-anchor="middle" class="t-sm">UTC-2</text>
+  <text x="175" y="76" text-anchor="middle" class="t-sm">UTC-1</text>
+  <text x="220" y="76" text-anchor="middle" class="t-lbl">UTC 0</text>
+  <text x="220" y="92" text-anchor="middle" class="t-sm">Λονδίνο</text>
+  <text x="220" y="132" text-anchor="middle" class="t-lbl">12:00</text>
+  <text x="265" y="76" text-anchor="middle" class="t-sm">UTC+1</text>
+  <text x="265" y="132" text-anchor="middle" class="t-sm">13:00</text>
+  <text x="307" y="76" text-anchor="middle" class="t-lbl" fill="#15803d">UTC+2</text>
+  <text x="307" y="92" text-anchor="middle" class="t-sm" fill="#15803d">Ελλάδα</text>
+  <text x="307" y="132" text-anchor="middle" class="t-lbl" fill="#15803d">14:00</text>
+  <text x="349" y="76" text-anchor="middle" class="t-sm">UTC+3</text>
+  <text x="349" y="132" text-anchor="middle" class="t-sm">15:00</text>
+  <text x="391" y="76" text-anchor="middle" class="t-sm">UTC+4</text>
+  <text x="391" y="132" text-anchor="middle" class="t-sm">16:00</text>
+  <!-- Arrows West/East -->
+  <line x1="184" y1="220" x2="62" y2="220" stroke="#2563eb" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <text x="122" y="236" text-anchor="middle" class="t-sm" fill="#1d4ed8">Προς Δύση: −1 ώρα / 15°</text>
+  <line x1="256" y1="220" x2="378" y2="220" stroke="#16a34a" stroke-width="2" marker-end="url(#arr-green)"/>
+  <text x="318" y="236" text-anchor="middle" class="t-sm" fill="#15803d">Προς Ανατολή: +1 ώρα / 15°</text>
+  <text x="220" y="274" text-anchor="middle" class="t-sm">Μεσημβρινός Greenwich (0°) — Διεθνής Γραμμή Ημερομηνίας (180°)</text>
+
+</svg>

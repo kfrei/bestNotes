@@ -63820,20 +63820,20 @@ export default function App() {
                   ).length;
                   const iconsTotal = CURATED_STICKERS_CATALOG.length - sketchesTotal;
                   return (
-                    <div className="flex items-center justify-between gap-0.5 p-1 bg-[#efebe3] rounded-xl mb-2.5 shrink-0 border border-[#dfd8cb]">
+                    <div className="flex items-center gap-0.5 p-1 bg-[#efebe3] rounded-xl mb-2.5 shrink-0 border border-[#dfd8cb] overflow-x-auto no-scrollbar">
                       <button
                         onClick={() => setLibraryTab('all')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'all'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
                         }`}
                       >
-                        Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + shapeLibrary.length})
+                        Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + STEM_VECTORS_CATALOG.length + shapeLibrary.length})
                       </button>
                       <button
                         onClick={() => setLibraryTab('educational')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'educational'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
@@ -63843,7 +63843,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setLibraryTab('sketches')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'sketches'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
@@ -63853,7 +63853,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setLibraryTab('stickers')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'stickers'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
@@ -63863,7 +63863,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setLibraryTab('vectors')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'vectors'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
@@ -63874,7 +63874,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setLibraryTab('custom')}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'custom'
                             ? 'bg-[#234978] text-white shadow-xs'
                             : 'text-[#475569] hover:text-[#234978]'
@@ -63918,6 +63918,14 @@ export default function App() {
                       if (!qNorm) return true;
                       const haystack = normalizeGreekText(
                         `${item.title} ${(item.tags || []).join(' ')}`
+                      );
+                      return matchesGreekSearchTokens(haystack, qNorm);
+                    });
+
+                    const matchedVectors = STEM_VECTORS_CATALOG.filter((item) => {
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${item.chapterTitle} ${item.subject} ${item.grade} ${item.tags.join(' ')}`
                       );
                       return matchesGreekSearchTokens(haystack, qNorm);
                     });
@@ -64019,13 +64027,20 @@ export default function App() {
                       }
                     };
 
+                    const displayedVectors = qNorm
+                      ? matchedVectors.slice(0, libVisibleCount)
+                      : matchedVectors.slice(0, 6);
                     const displayedLessons = qNorm
                       ? matchedLessons.slice(0, libVisibleCount)
                       : matchedLessons.slice(0, 8);
                     const displayedStickers = qNorm
                       ? matchedStickers.slice(0, libVisibleCount)
                       : matchedStickers.slice(0, 12);
-                    const totalFound = matchedLessons.length + matchedStickers.length + matchedCustom.length;
+                    const totalFound =
+                      matchedVectors.length +
+                      matchedLessons.length +
+                      matchedStickers.length +
+                      matchedCustom.length;
 
                     return (
                       <div key="tab-all" className="flex flex-col min-h-0 flex-1">
@@ -64059,6 +64074,13 @@ export default function App() {
                         {/* Live Category Breakdown Bar */}
                         <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-[#dfd8cb] shrink-0 flex-wrap text-[10px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setLibraryTab('vectors')}
+                              className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold hover:bg-indigo-100 cursor-pointer"
+                            >
+                              {matchedVectors.length} vectors
+                            </button>
                             <button
                               type="button"
                               onClick={() => setLibraryTab('educational')}
@@ -64161,6 +64183,71 @@ export default function App() {
                                           ))}
                                         </div>
                                       )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 1b. Matching Native STEM Vectors */}
+                            {matchedVectors.length > 0 && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10.5px] font-bold text-indigo-800">
+                                    Native Vectors — STEM ({matchedVectors.length})
+                                  </span>
+                                  {!qNorm && matchedVectors.length > displayedVectors.length && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setLibraryTab('vectors')}
+                                      className="text-[10px] font-bold text-indigo-700 hover:underline cursor-pointer"
+                                    >
+                                      Δες όλα ({matchedVectors.length}) →
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {displayedVectors.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => {
+                                        insertImageDataUrlOnPage(
+                                          item.url,
+                                          `📐 Προστέθηκε Vector: «${item.title}» (${item.subject} ${item.grade})`
+                                        );
+                                      }}
+                                      className="group flex flex-col justify-between p-2 rounded-xl border border-indigo-200/80 bg-indigo-50/30 hover:bg-indigo-50/80 hover:border-indigo-400 transition cursor-pointer shadow-2xs"
+                                      title={`${item.title} — ${item.chapterTitle}\nNative SVG (άπειρο zoom)`}
+                                    >
+                                      <div>
+                                        <div className="flex items-center justify-between gap-1 mb-1">
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${subjectColors[item.subject]}`}
+                                          >
+                                            {item.subject}
+                                          </span>
+                                          <span className="text-[9px] font-semibold text-indigo-500 truncate">
+                                            SVG • {item.grade.replace(' Γυμνασίου', ' Γυμν.').replace(' Λυκείου', ' Λυκ.')}
+                                          </span>
+                                        </div>
+                                        <div
+                                          className="w-full h-24 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                          style={{
+                                            backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                                            backgroundSize: '10px 10px',
+                                          }}
+                                        >
+                                          <img
+                                            src={item.url}
+                                            alt={item.title}
+                                            loading="lazy"
+                                            className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-150"
+                                          />
+                                        </div>
+                                        <p className="mt-1.5 text-[10.5px] font-bold text-[#1e293b] leading-snug line-clamp-2">
+                                          {item.title}
+                                        </p>
+                                      </div>
                                     </div>
                                   ))}
                                 </div>

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 300" width="440" height="300">
+  <defs>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <linearGradient id="sea-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="lava-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="sun-grad" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+    <radialGradient id="earth-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="65%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-white { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="220" y="22" text-anchor="middle" class="t-title">Ο Ρους ενός Ποταμού (Πηγές → Μαίανδροι → Δέλτα)</text>
+  <rect x="20" y="34" width="400" height="248" rx="10" fill="#ecfdf5" stroke="#cbd5e1"/>
+  <!-- Mountains -->
+  <polygon points="20,140 68,58 124,140" fill="#94a3b8" stroke="#475569"/>
+  <polygon points="88,140 132,76 180,140" fill="#cbd5e1" stroke="#475569"/>
+  <!-- Sea on right -->
+  <path d="M342,34 Q326,155 344,282 L420,282 L420,34 Z" fill="url(#sea-grad)"/>
+  <!-- River winding -->
+  <path d="M88,116 Q116,150 144,162 Q178,176 168,208 Q156,238 206,226 Q254,214 246,168 Q238,136 286,154 Q316,166 336,168" fill="none" stroke="#0284c7" stroke-width="7" stroke-linecap="round"/>
+  <!-- Delta branches -->
+  <path d="M322,166 Q344,146 364,136" fill="none" stroke="#0284c7" stroke-width="3.5"/>
+  <path d="M326,168 L368,168" fill="none" stroke="#0284c7" stroke-width="3.5"/>
+  <path d="M322,170 Q344,192 362,204" fill="none" stroke="#0284c7" stroke-width="3.5"/>
+  <!-- Tributary -->
+  <path d="M138,118 Q152,148 164,168" fill="none" stroke="#38bdf8" stroke-width="3.5"/>
+  <!-- Labels -->
+  <text x="40" y="54" class="t-lbl">Πηγές</text>
+  <text x="150" y="114" class="t-sm">Παραπόταμος</text>
+  <text x="218" y="254" text-anchor="middle" class="t-lbl">Μαίανδροι (Μέσος ρους)</text>
+  <text x="380" y="116" text-anchor="middle" class="t-white">Θάλασσα</text>
+  <text x="308" y="226" text-anchor="middle" class="t-lbl">Δέλτα &amp;</text>
+  <text x="308" y="239" text-anchor="middle" class="t-lbl">Εκβολή</text>
+
+</svg>
