@@ -33,6 +33,66 @@ export function getStrokeBounds(s: StrokeObject) {
   };
 }
 
+/**
+ * Computes the true oriented half-extents (halfThickness <= halfLength) of a rotated box/polygon stroke
+ * by projecting all vertices onto every edge normal, so a tilted block resting on an inclined ramp uses
+ * its exact perpendicular half-thickness instead of the inflated axis-aligned bounding box!
+ */
+export function getOrientedHalfExtents(s: StrokeObject): {
+  halfThickness: number;
+  halfLength: number;
+} {
+  const pts = s.points;
+  const aabb = getStrokeBounds(s);
+  if (!pts || pts.length < 3) {
+    return {
+      halfThickness: Math.min(aabb.w, aabb.h) * 0.5,
+      halfLength: Math.max(aabb.w, aabb.h) * 0.5,
+    };
+  }
+  let bestThickness = Math.min(aabb.w, aabb.h);
+  let bestLength = Math.max(aabb.w, aabb.h);
+
+  const count = pts.length;
+  for (let i = 0; i < count; i++) {
+    const p0 = pts[i];
+    const p1 = pts[(i + 1) % count];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 3) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let minN = Infinity;
+    let maxN = -Infinity;
+    for (let k = 0; k < count; k++) {
+      const pk = pts[k];
+      const pu = pk.x * ux + pk.y * uy;
+      const pn = pk.x * nx + pk.y * ny;
+      if (pu < minU) minU = pu;
+      if (pu > maxU) maxU = pu;
+      if (pn < minN) minN = pn;
+      if (pn > maxN) maxN = pn;
+    }
+    const spanN = maxN - minN;
+    const spanU = maxU - minU;
+    if (spanN > 1 && spanN < bestThickness) {
+      bestThickness = spanN;
+      bestLength = Math.max(spanU, spanN);
+    }
+  }
+
+  return {
+    halfThickness: Math.max(4, bestThickness * 0.5),
+    halfLength: Math.max(4, bestLength * 0.5),
+  };
+}
+
 /** Sample any stroke (line, curve, parabola, U-bowl, polygon, 3D floor/wedge) into crisp collision segments */
 export function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
   const pts = s.points;

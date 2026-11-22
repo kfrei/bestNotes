@@ -1,6 +1,11 @@
 import type { StrokeObject } from '../../../types/note';
 import type { GravityBodyState, GravityLabConfig, GravitySegment } from './types';
-import { GRAVITY_PX_PER_M, getStrokeBounds, sampleStrokeToSegments } from './gravityGeometry';
+import {
+  GRAVITY_PX_PER_M,
+  getStrokeBounds,
+  getOrientedHalfExtents,
+  sampleStrokeToSegments,
+} from './gravityGeometry';
 
 export function buildGravitySceneFromStrokes(
   strokes: StrokeObject[],
@@ -115,9 +120,14 @@ export function buildGravitySceneFromStrokes(
     const isPinned =
       pinnedOverrides[s.id] !== undefined ? pinnedOverrides[s.id] : defaultPinned;
 
+    const oriented = isBall ? null : getOrientedHalfExtents(s);
+    const strokeHalfPad = Math.min(3, (s.width || 2) * 0.5);
+    const boxHalfH = oriented ? oriented.halfThickness + strokeHalfPad : b.h * 0.5;
+    const boxHalfW = oriented ? oriented.halfLength + strokeHalfPad : b.w * 0.5;
+
     const radius = isBall
       ? Math.max(8, (b.w + b.h) * 0.25)
-      : Math.max(8, Math.min(b.w, b.h) * 0.5);
+      : Math.max(6, Math.min(boxHalfW, boxHalfH));
 
     const rawMass = Math.max(0.5, Math.round(((radius * radius) / 400) * 10) / 10);
     const mass = isBall ? rawMass : Math.max(1.5, Math.min(5.0, rawMass));
@@ -137,8 +147,8 @@ export function buildGravitySceneFromStrokes(
       vx: 0,
       vy: 0,
       radius,
-      halfW: b.w * 0.5,
-      halfH: b.h * 0.5,
+      halfW: isBall ? b.w * 0.5 : boxHalfW,
+      halfH: isBall ? b.h * 0.5 : boxHalfH,
       mass,
       normalX: 0,
       normalY: 0,
