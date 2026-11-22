@@ -61499,6 +61499,9 @@ export default function App() {
                     ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
                     : lineStyle === 'dashed';
                 const activeFillColor = targetStrokes[0]?.color || strokeColor || '#234978';
+                const effectiveInkPreviewColor = /^#f{3,6}$/i.test(activeFillColor.trim())
+                  ? '#475569'
+                  : activeFillColor;
                 const fillAlpha = Math.max(0.08, Math.min(0.95, (100 - effectiveTrans) / 100));
 
                 return (
@@ -61507,6 +61510,7 @@ export default function App() {
                     <div className="flex items-center gap-1">
                       {widthSlots.map((w, idx) => {
                         const isSlotActive = Math.abs(strokeWidth - w) < 0.25 && activeWidthSlotIdx === idx;
+                        const isMatched = isSlotActive || Math.abs(strokeWidth - w) < 0.25;
                         return (
                           <button
                             key={idx}
@@ -61522,15 +61526,22 @@ export default function App() {
                               }
                             }}
                             className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
-                              isSlotActive || Math.abs(strokeWidth - w) < 0.25
-                                ? 'bg-[#efebe3] ring-2 ring-[#234978]'
-                                : 'hover:bg-[#ece7dc]'
+                              isMatched ? 'bg-[#efebe3]' : 'hover:bg-[#ece7dc]'
                             }`}
+                            style={
+                              isMatched
+                                ? { boxShadow: `0 0 0 2px ${effectiveInkPreviewColor}` }
+                                : undefined
+                            }
                             title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
                           >
                             <span
-                              className="rounded-lg bg-slate-800"
-                              style={{ width: Math.min(18, Math.max(4, w * 1.9)), height: Math.min(18, Math.max(4, w * 1.9)) }}
+                              className="rounded-full"
+                              style={{
+                                width: Math.min(18, Math.max(4, w * 1.9)),
+                                height: Math.min(18, Math.max(4, w * 1.9)),
+                                backgroundColor: effectiveInkPreviewColor,
+                              }}
                             />
                           </button>
                         );
@@ -61542,7 +61553,8 @@ export default function App() {
                           setShowColorPopover(false);
                           setShowShapeLibraryPanel(false);
                         }}
-                        className="px-1.5 py-0.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[10px] font-bold text-[#234978] cursor-pointer"
+                        className="px-1.5 py-0.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[10px] font-bold cursor-pointer"
+                        style={{ color: effectiveInkPreviewColor }}
                         title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
                       >
                         {strokeWidth.toFixed(1)}px
@@ -61554,9 +61566,10 @@ export default function App() {
                         }}
                         className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-lg border transition cursor-pointer ${
                           effectiveDashed
-                            ? 'bg-[#234978] border-[#234978] text-white shadow-xs'
-                            : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
+                            ? 'bg-[#d6cbb8] border-[#c2b59f] shadow-xs'
+                            : 'bg-[#efebe3] border-[#dfd8cb] hover:bg-[#e4ded2]'
                         }`}
+                        style={{ color: effectiveInkPreviewColor }}
                         title={
                           effectiveDashed
                             ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
