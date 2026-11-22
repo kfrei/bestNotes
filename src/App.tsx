@@ -33279,25 +33279,35 @@ export default function App() {
             const angle = Math.atan2(pStart.y - pPeak.y, pPeak.x - pStart.x);
             const deg = Math.round((angle * 180) / Math.PI);
 
-            // Green Angle Arc θ at pStart + Green Draggable Peak Handle at pPeak
-            ctx.save();
-            ctx.fillStyle = 'rgba(76, 175, 80, 0.14)';
-            ctx.strokeStyle = '#4caf50';
-            ctx.lineWidth = 2.0;
-            ctx.beginPath();
-            ctx.moveTo(pStart.x, pStart.y);
-            ctx.arc(pStart.x, pStart.y, 48, 0, -angle, true);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-            drawHaloLabel(
-              showNums ? `θ = ${deg}°` : 'θ',
-              pStart.x + (showNums ? 74 : 62) * Math.cos(-angle / 2),
-              pStart.y + (showNums ? 74 : 62) * Math.sin(-angle / 2),
-              '#2e7d32',
-              showNums ? 'bold 13px system-ui, sans-serif' : 'italic bold 15px Georgia, serif'
-            );
+            // Green Angle Arc θ at pStart (skip when θ = 0° so Canvas arc doesn't draw a full 360° circle!)
+            if (angle > 0.01) {
+              ctx.save();
+              ctx.fillStyle = 'rgba(76, 175, 80, 0.14)';
+              ctx.strokeStyle = '#4caf50';
+              ctx.lineWidth = 2.0;
+              ctx.beginPath();
+              ctx.moveTo(pStart.x, pStart.y);
+              ctx.arc(pStart.x, pStart.y, 48, 0, -angle, true);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+              ctx.restore();
+              drawHaloLabel(
+                showNums ? `θ = ${deg}°` : 'θ',
+                pStart.x + (showNums ? 74 : 62) * Math.cos(-angle / 2),
+                pStart.y + (showNums ? 74 : 62) * Math.sin(-angle / 2),
+                '#2e7d32',
+                showNums ? 'bold 13px system-ui, sans-serif' : 'italic bold 15px Georgia, serif'
+              );
+            } else if (showNums) {
+              drawHaloLabel(
+                'θ = 0°',
+                pStart.x + 32,
+                pStart.y - 16,
+                '#2e7d32',
+                'bold 13px system-ui, sans-serif'
+              );
+            }
 
             // Green Peak Drag Handle
             ctx.save();
@@ -33390,7 +33400,7 @@ export default function App() {
                 getStepProg(3)
               );
             }
-            if (fSim.anMode === 'B' && curStep >= 4) {
+            if (fSim.anMode === 'B' && curStep >= 4 && bx >= 2) {
               drawSimVector(
                 cx,
                 cy,
@@ -33402,7 +33412,7 @@ export default function App() {
                 showNums ? `Bx = ${Bx_N.toFixed(1)} N` : 'Bx'
               );
             }
-            if (fSim.anMode === 'B' && curStep >= 5) {
+            if (fSim.anMode === 'B' && curStep >= 5 && by >= 2) {
               drawSimLineOrAxis(
                 cx,
                 cy + B_mag,
@@ -33415,7 +33425,7 @@ export default function App() {
                 getStepProg(5)
               );
             }
-            if (fSim.anMode === 'B' && curStep >= 6) {
+            if (fSim.anMode === 'B' && curStep >= 6 && by >= 2) {
               drawSimVector(
                 cx,
                 cy,
@@ -33439,16 +33449,18 @@ export default function App() {
                 1,
                 showNums ? `B = ${B_N} N` : 'B'
               );
-              drawSimVector(
-                cx,
-                cy,
-                cx + N_mag * Math.cos(aY_norm),
-                cy + N_mag * Math.sin(aY_norm),
-                '#0d6efd',
-                3.6,
-                1,
-                showNums ? `N = ${By_N.toFixed(1)} N` : 'N'
-              );
+              if (N_mag >= 2) {
+                drawSimVector(
+                  cx,
+                  cy,
+                  cx + N_mag * Math.cos(aY_norm),
+                  cy + N_mag * Math.sin(aY_norm),
+                  '#0d6efd',
+                  3.6,
+                  1,
+                  showNums ? `N = ${By_N.toFixed(1)} N` : 'N'
+                );
+              }
             }
 
             if (fSim.showCalc) {
@@ -44738,11 +44750,14 @@ export default function App() {
           const lenPx =
             fSim.inclineLenPx ||
             Math.max(140, Math.hypot(wedge.points[2].x - pStart.x, wedge.points[2].y - pStart.y));
+          const dx = latestPt.x - pStart.x;
           const dy = pStart.y - latestPt.y;
-          let na = Math.asin(Math.max(0, Math.min(1, dy / lenPx)));
-          const minAng = (15 * Math.PI) / 180;
-          const maxAng = (60 * Math.PI) / 180;
-          na = Math.max(minAng, Math.min(maxAng, na));
+          let na = Math.atan2(dy, dx);
+          if (na < 0) na = 0;
+          if (na > Math.PI / 2) na = Math.PI / 2;
+          // Gentle magnetic snap to exact 0° and 90° limiting cases
+          if (na < (1.5 * Math.PI) / 180) na = 0;
+          else if (na > (88.5 * Math.PI) / 180) na = Math.PI / 2;
           const topX = pStart.x + lenPx * Math.cos(na);
           const topY = pStart.y - lenPx * Math.sin(na);
           const pSlopeStart = { x: pStart.x, y: pStart.y };
@@ -68024,7 +68039,7 @@ export default function App() {
                         {activeForce && activeForce.mode === 'incline' && (
                           <div className="ipados-liquid-card bg-white/45 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                             <p className="text-[10px] text-[#64748b] leading-snug">
-                              Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου (15°–60°) για αλλαγή γωνίας θ.
+                              Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου (0°–90°) για αλλαγή γωνίας θ.
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               <button
