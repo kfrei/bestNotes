@@ -369,7 +369,29 @@ export function drawPolyExtruded3D(
   const lx = Math.cos(lightRad);
   const ly = -Math.sin(lightRad);
 
-  const backPts = frontPts.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  // Smooth 1-point perspective convergence when a rectangle is extruded straight up/down (dx near 0):
+  // the back edge tapers symmetrically inward (/‾‾‾‾\) so the top face reads as true 3D receding depth!
+  let frontMinX = Infinity,
+    frontMaxX = -Infinity;
+  for (const p of frontPts) {
+    if (p.x < frontMinX) frontMinX = p.x;
+    if (p.x > frontMaxX) frontMaxX = p.x;
+  }
+  const frontW = Math.max(10, frontMaxX - frontMinX);
+  const frontCx = (frontMinX + frontMaxX) * 0.5;
+  const centerBlend =
+    s.shapeType === 'rectangle' && Math.abs(dy) >= 4
+      ? Math.max(0, 1 - Math.abs(dx) / 22)
+      : 0;
+  const perspTaper =
+    centerBlend > 0
+      ? centerBlend * Math.min(0.24, (Math.abs(dy) / Math.max(60, frontW)) * 0.42 + 0.08)
+      : 0;
+
+  const backPts = frontPts.map((p) => ({
+    x: frontCx + (p.x - frontCx) * (1 - perspTaper) + dx,
+    y: p.y + dy,
+  }));
 
   // Base color: prefer fillColor if set and not transparent, otherwise stroke color
   const rawHex =
