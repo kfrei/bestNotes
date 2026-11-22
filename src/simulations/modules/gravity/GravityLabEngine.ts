@@ -562,8 +562,12 @@ export function stepGravityScene(
   const subDt = clampedDt / SUB_STEPS;
   const gPx = config.gravity * GRAVITY_PX_PER_M;
 
-  // Reset per-frame contact telemetry
+  // Snapshot previous-frame contact state so balls already rolling down a steep ramp smoothly
+  // transition onto a connected horizontal floor (instead of bouncing off the sharp corner!),
+  // while genuine air drops (wasOnGround === false) still bounce naturally!
+  const wasOnGroundMap = new Map<string, boolean>();
   for (const b of bodies) {
+    wasOnGroundMap.set(b.strokeId, b.onGround);
     b.normalX = 0;
     b.normalY = 0;
     b.normalForceN = 0;
@@ -679,10 +683,12 @@ export function stepGravityScene(
           const tx = -ny;
           const ty = nx;
           const vtBefore = b.vx * tx + b.vy * ty;
-          // Smooth grazing/rolling contact on curved U-bowls & ramps vs genuine drop/wall bounce
-          // (42 px/s ≈ 1.5px micro-drop; real air drops hit at 120+ px/s and bounce cleanly!)
+          const wasRollingOnTrack = (wasOnGroundMap.get(b.strokeId) || b.onGround) && ny < -0.35;
+          // Smooth grazing/rolling contact on curved U-bowls & steep ramp->floor transitions vs genuine air drop/wall bounce!
           const isGrazingSlide =
-            Math.abs(vn) < 42 || Math.abs(vn) < Math.abs(vtBefore) * 0.42;
+            wasRollingOnTrack ||
+            Math.abs(vn) < 42 ||
+            Math.abs(vn) < Math.abs(vtBefore) * 0.42;
           const eEff = isGrazingSlide ? 0 : config.restitution;
           const jn = -(1 + eEff) * vn;
           b.vx += jn * nx;
