@@ -72056,7 +72056,6 @@ export default function App() {
                                   {(
                                     [
                                       { id: 'studio', label: 'Studio' },
-                                      { id: 'sketch', label: 'Sketch' },
                                       { id: 'flat', label: 'Flat' },
                                       { id: 'wireframe', label: 'Wire' },
                                     ] as { id: ShadingStyle3D; label: string }[]

@@ -407,54 +407,100 @@ export function drawPolyExtruded3D(
     ctx.restore();
   }
 
-  // 2. Wireframe mode: draw subtle translucent back + dashed back edges first
+  // 2. Wireframe mode: textbook 3D stereometry hidden-line rendering!
+  //    ONLY the truly occluded back/bottom edges are dashed; all visible outer & front edges are crisp solid!
   if (style === 'wireframe') {
+    const nW = frontPts.length;
+    const uxW = dx / depthLen;
+    const uyW = dy / depthLen;
+    const isSmoothW = nW > 16;
+
+    // Determine which side-wall edges face outward along extrusion (visible) vs hidden behind front face
+    const edgeVis: boolean[] = new Array(nW);
+    for (let i = 0; i < nW; i++) {
+      const j = (i + 1) % nW;
+      const ex = frontPts[j].x - frontPts[i].x;
+      const ey = frontPts[j].y - frontPts[i].y;
+      const eLen = Math.hypot(ex, ey) || 1;
+      const nx = ey / eLen;
+      const ny = -ex / eLen;
+      edgeVis[i] = nx * uxW + ny * uyW > -0.02;
+    }
+
+    const baseAlphaW = s.opacity ?? 1;
+    const fillRatioW =
+      s.fillTransparency !== undefined
+        ? Math.max(0.03, Math.min(0.45, ((100 - s.fillTransparency) / 100) * 0.22))
+        : 0.1;
+
+    // Subtle translucent fill inside front face
     ctx.save();
     ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.72);
-    ctx.globalAlpha = (s.opacity ?? 1) * 0.14;
+    ctx.globalAlpha = baseAlphaW * fillRatioW;
     ctx.beginPath();
-    ctx.moveTo(backPts[0].x, backPts[0].y);
-    for (let i = 1; i < backPts.length; i++) ctx.lineTo(backPts[i].x, backPts[i].y);
+    ctx.moveTo(frontPts[0].x, frontPts[0].y);
+    for (let i = 1; i < nW; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
 
+    // 2a. HIDDEN edges (dashed): occluded back edges + occluded connecting ribs
     ctx.save();
     ctx.strokeStyle = inkColor;
-    ctx.globalAlpha = (s.opacity ?? 1) * 0.48;
-    ctx.lineWidth = Math.max(1, contourW * 0.85);
+    ctx.globalAlpha = baseAlphaW * 0.52;
+    ctx.lineWidth = Math.max(1.0, contourW * 0.88);
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    ctx.moveTo(backPts[0].x, backPts[0].y);
-    for (let i = 1; i < backPts.length; i++) ctx.lineTo(backPts[i].x, backPts[i].y);
-    ctx.closePath();
-    // Connecting ribs (skip dense curves by stepping cleanly)
-    const ribStep = frontPts.length > 16 ? Math.floor(frontPts.length / 4) : 1;
-    for (let i = 0; i < frontPts.length; i += ribStep) {
-      ctx.moveTo(frontPts[i].x, frontPts[i].y);
-      ctx.lineTo(backPts[i].x, backPts[i].y);
+    for (let i = 0; i < nW; i++) {
+      const j = (i + 1) % nW;
+      if (!edgeVis[i]) {
+        ctx.moveTo(backPts[i].x, backPts[i].y);
+        ctx.lineTo(backPts[j].x, backPts[j].y);
+      }
+      if (!isSmoothW) {
+        const prevVis = edgeVis[(i - 1 + nW) % nW];
+        const currVis = edgeVis[i];
+        if (!prevVis && !currVis) {
+          ctx.moveTo(frontPts[i].x, frontPts[i].y);
+          ctx.lineTo(backPts[i].x, backPts[i].y);
+        }
+      }
     }
     ctx.stroke();
     ctx.restore();
 
-    // Crisp solid front face
-    ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.82);
+    // 2b. VISIBLE edges (crisp solid): visible back edges + visible ribs + entire front face
     ctx.save();
-    ctx.globalAlpha = (s.opacity ?? 1) * 0.12;
-    ctx.beginPath();
-    ctx.moveTo(frontPts[0].x, frontPts[0].y);
-    for (let i = 1; i < frontPts.length; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
     ctx.strokeStyle = inkColor;
+    ctx.globalAlpha = baseAlphaW;
     ctx.lineWidth = Math.max(1.4, contourW * 1.1);
+    ctx.setLineDash([]);
     ctx.beginPath();
+    // Front face (always visible)
     ctx.moveTo(frontPts[0].x, frontPts[0].y);
-    for (let i = 1; i < frontPts.length; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
+    for (let i = 1; i < nW; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
     ctx.closePath();
+    for (let i = 0; i < nW; i++) {
+      const j = (i + 1) % nW;
+      if (edgeVis[i]) {
+        ctx.moveTo(backPts[i].x, backPts[i].y);
+        ctx.lineTo(backPts[j].x, backPts[j].y);
+      }
+      const prevVis = edgeVis[(i - 1 + nW) % nW];
+      const currVis = edgeVis[i];
+      if (isSmoothW) {
+        // For cylinders/circles, draw the 2 silhouette tangent ribs where visibility flips!
+        if (prevVis !== currVis) {
+          ctx.moveTo(frontPts[i].x, frontPts[i].y);
+          ctx.lineTo(backPts[i].x, backPts[i].y);
+        }
+      } else if (prevVis || currVis) {
+        ctx.moveTo(frontPts[i].x, frontPts[i].y);
+        ctx.lineTo(backPts[i].x, backPts[i].y);
+      }
+    }
     ctx.stroke();
+    ctx.restore();
 
     ctx.restore();
     return true;
