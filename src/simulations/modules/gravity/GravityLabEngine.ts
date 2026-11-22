@@ -89,6 +89,26 @@ function sampleStrokeToSegments(s: StrokeObject): GravitySegment[] {
     return segs;
   }
 
+  // 4b. BestNotes 3-point Parabola / Arc ('parabola' | 'arc'): exact quadratic Bézier passing through [p0, pMid, p2]!
+  if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && pts.length === 3) {
+    const [p0, pMid, p2] = pts;
+    const cx = 2 * pMid.x - (p0.x + p2.x) * 0.5;
+    const cy = 2 * pMid.y - (p0.y + p2.y) * 0.5;
+    const STEPS = 48;
+    let prev = { x: p0.x + depthMidX, y: p0.y + depthMidY };
+    for (let i = 1; i <= STEPS; i++) {
+      const t = i / STEPS;
+      const u = 1 - t;
+      const cur = {
+        x: u * u * p0.x + 2 * u * t * cx + t * t * p2.x + depthMidX,
+        y: u * u * p0.y + 2 * u * t * cy + t * t * p2.y + depthMidY,
+      };
+      segs.push({ ax: prev.x, ay: prev.y, bx: cur.x, by: cur.y, strokeId: s.id });
+      prev = cur;
+    }
+    return segs;
+  }
+
   // 5. Sample Bezier curves or polylines cleanly
   const sampled: { x: number; y: number }[] = [];
   const isCurved = pts.some(

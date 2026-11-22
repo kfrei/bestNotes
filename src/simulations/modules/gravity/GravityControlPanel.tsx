@@ -113,44 +113,6 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </span>
       </div>
 
-      {/* Gravity g Presets + Slider */}
-      <div className="space-y-1.5 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">Βαρύτητα g</span>
-          <span className="font-bold text-[#234978]">{config.gravity.toFixed(1)} m/s²</span>
-        </div>
-        <div className="grid grid-cols-4 gap-1">
-          {[
-            { g: 0, label: '0 (Κενό)' },
-            { g: 1.6, label: 'Σελήνη' },
-            { g: 9.8, label: 'Γη 9.8' },
-            { g: 24.8, label: 'Δίας' },
-          ].map((opt) => (
-            <button
-              key={opt.label}
-              type="button"
-              onClick={() => setConfig((c) => ({ ...c, gravity: opt.g }))}
-              className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer ${
-                Math.abs(config.gravity - opt.g) < 0.2
-                  ? 'bg-[#d6cbb8] text-[#2c251d] border border-[#bfb097]'
-                  : 'bg-[#efebe3] hover:bg-[#e5ded1] text-[#5c5346]'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={25}
-          step={0.2}
-          value={config.gravity}
-          onChange={(e) => setConfig((c) => ({ ...c, gravity: parseFloat(e.target.value) }))}
-          className="w-full accent-[#234978]"
-        />
-      </div>
-
       {/* Restitution e (Bounce Elasticity) */}
       <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
         <div className="flex items-center justify-between">
