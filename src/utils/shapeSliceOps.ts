@@ -4,6 +4,7 @@ import type { BezierPoint, StrokeObject } from '../types/note';
 import { isClosedBooleanShape, strokeToPolygonRing } from './shapeBooleanOps';
 
 export type EqualSlicePreset = 'quarter-split' | 2 | 3 | 4 | 6 | 8;
+export type SliceStyleMode = 'closed' | 'outline';
 
 function getRingBounds(ring: Ring) {
   let minX = Infinity,
@@ -86,14 +87,176 @@ function multiPolygonToSliceStrokes(
   return out;
 }
 
+/** Segment-segment intersection returning param u on [a,b] in [0,1] and point (x,y), or null. */
+function segmentIntersectParam(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number
+): { u: number; x: number; y: number } | null {
+  const rx = bx - ax;
+  const ry = by - ay;
+  const sx = dx - cx;
+  const sy = dy - cy;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 1e-9) return null;
+  const qpx = cx - ax;
+  const qpy = cy - ay;
+  const u = (qpx * sy - qpy * sx) / denom;
+  const v = (qpx * ry - qpy * rx) / denom;
+  if (u >= -1e-6 && u <= 1 + 1e-6 && v >= -1e-6 && v <= 1 + 1e-6) {
+    const cu = Math.max(0, Math.min(1, u));
+    return { u: cu, x: ax + cu * rx, y: ay + cu * ry };
+  }
+  return null;
+}
+
+/**
+ * Split a closed polygon ring into open perimeter arcs at every intersection with `cutSegments`.
+ * Returns open StrokeObjects (no interior chords/radii — pure outline arcs!).
+ */
+function splitRingOutlineBySegments(
+  ring: Ring,
+  cutSegments: { ax: number; ay: number; bx: number; by: number }[],
+  template: StrokeObject,
+  tag: string,
+  baseZOrder: number,
+  explodeDist = 3.5,
+  specialTopLeftQuarterShift = false
+): StrokeObject[] {
+  const n = ring.length - 1;
+  if (n < 3) return [];
+  const bounds = getRingBounds(ring);
+
+  // Collect all cuts along the ring parameterized by (segIdx + u)
+  const cuts: { pos: number; x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = ring[i];
+    const [bx, by] = ring[i + 1];
+    for (const cs of cutSegments) {
+      const hit = segmentIntersectParam(ax, ay, bx, by, cs.ax, cs.ay, cs.bx, cs.by);
+      if (hit) {
+        cuts.push({ pos: i + hit.u, x: hit.x, y: hit.y });
+      }
+    }
+  }
+  if (cuts.length < 2) return [];
+
+  cuts.sort((a, b) => a.pos - b.pos);
+  // Deduplicate cuts that are virtually identical (e.g. right on a vertex)
+  const dedupCuts: { pos: number; x: number; y: number }[] = [];
+  for (const c of cuts) {
+    const prev = dedupCuts[dedupCuts.length - 1];
+    if (!prev || Math.hypot(c.x - prev.x, c.y - prev.y) > 0.8) {
+      dedupCuts.push(c);
+    }
+  }
+  if (
+    dedupCuts.length >= 2 &&
+    Math.hypot(
+      dedupCuts[0].x - dedupCuts[dedupCuts.length - 1].x,
+      dedupCuts[0].y - dedupCuts[dedupCuts.length - 1].y
+    ) <= 0.8
+  ) {
+    dedupCuts.pop();
+  }
+  if (dedupCuts.length < 2) return [];
+
+  const out: StrokeObject[] = [];
+  for (let ci = 0; ci < dedupCuts.length; ci++) {
+    const startCut = dedupCuts[ci];
+    const endCut = dedupCuts[(ci + 1) % dedupCuts.length];
+    const pts: { x: number; y: number }[] = [{ x: startCut.x, y: startCut.y }];
+
+    const startNextVert = Math.floor(startCut.pos) + 1;
+    const endPrevVert = Math.floor(endCut.pos);
+    const wraps = ci === dedupCuts.length - 1;
+
+    if (!wraps) {
+      for (let v = startNextVert; v <= endPrevVert; v++) {
+        const idx = v % n;
+        const p = { x: ring[idx][0], y: ring[idx][1] };
+        const last = pts[pts.length - 1];
+        if (Math.hypot(p.x - last.x, p.y - last.y) > 0.4) pts.push(p);
+      }
+    } else {
+      for (let v = startNextVert; v < n; v++) {
+        const p = { x: ring[v][0], y: ring[v][1] };
+        const last = pts[pts.length - 1];
+        if (Math.hypot(p.x - last.x, p.y - last.y) > 0.4) pts.push(p);
+      }
+      for (let v = 0; v <= endPrevVert; v++) {
+        const p = { x: ring[v][0], y: ring[v][1] };
+        const last = pts[pts.length - 1];
+        if (Math.hypot(p.x - last.x, p.y - last.y) > 0.4) pts.push(p);
+      }
+    }
+    const lastBeforeEnd = pts[pts.length - 1];
+    if (Math.hypot(endCut.x - lastBeforeEnd.x, endCut.y - lastBeforeEnd.y) > 0.4) {
+      pts.push({ x: endCut.x, y: endCut.y });
+    }
+    if (pts.length < 2) continue;
+
+    // Arc length check to skip tiny slivers
+    let arcLen = 0;
+    for (let k = 1; k < pts.length; k++) {
+      arcLen += Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y);
+    }
+    if (arcLen < 6) continue;
+
+    // Gentle outward shift from shape center
+    const midPt = pts[Math.floor(pts.length / 2)];
+    let ox = 0;
+    let oy = 0;
+    if (specialTopLeftQuarterShift && midPt.x < bounds.cx && midPt.y < bounds.cy) {
+      ox = -10;
+      oy = -10;
+    } else if (explodeDist > 0) {
+      const dx = midPt.x - bounds.cx;
+      const dy = midPt.y - bounds.cy;
+      const dLen = Math.hypot(dx, dy) || 1;
+      ox = (dx / dLen) * explodeDist;
+      oy = (dy / dLen) * explodeDist;
+    }
+
+    const bezPts: BezierPoint[] = pts.map((p) => ({
+      x: Math.round((p.x + ox) * 100) / 100,
+      y: Math.round((p.y + oy) * 100) / 100,
+      pressure: 0.5,
+      smooth: false,
+    }));
+
+    out.push({
+      id: `slice-${Date.now()}-${tag}-arc-${ci}-${Math.random().toString(36).slice(2, 6)}`,
+      tool: template.tool === 'pencil' ? 'pencil' : 'pen',
+      color: template.color,
+      width: template.width,
+      opacity: template.opacity ?? 1,
+      layerId: template.layerId,
+      isShape: true,
+      shapeType: 'line',
+      lineStyle: template.lineStyle,
+      fillStyle: 'none',
+      zOrder: baseZOrder + out.length,
+      points: bezPts,
+    });
+  }
+  return out;
+}
+
 /**
  * Slice any closed shape along an arbitrary user-drawn polyline/angle/curve using an exact
- * half-plane clipping polygon (zero material loss, works for straight lines, L-angles & curves!).
+ * half-plane clipping polygon (closed mode) OR splitting only the perimeter into open arcs (outline mode).
  */
 export function sliceShapeWithPath(
   stroke: StrokeObject,
   rawCutPoints: { x: number; y: number }[],
-  baseZOrder: number
+  baseZOrder: number,
+  style: SliceStyleMode = 'closed'
 ): StrokeObject[] {
   if (!isClosedBooleanShape(stroke) || rawCutPoints.length < 2) return [];
 
@@ -129,6 +292,24 @@ export function sliceShapeWithPath(
     pEnd.x + ((pEnd.x - pEndPrev.x) / deLen) * pad,
     pEnd.y + ((pEnd.y - pEndPrev.y) / deLen) * pad,
   ];
+
+  if (style === 'outline') {
+    const extPoly = [
+      { x: startExt[0], y: startExt[1] },
+      ...cut,
+      { x: endExt[0], y: endExt[1] },
+    ];
+    const cutSegs: { ax: number; ay: number; bx: number; by: number }[] = [];
+    for (let i = 0; i < extPoly.length - 1; i++) {
+      cutSegs.push({
+        ax: extPoly[i].x,
+        ay: extPoly[i].y,
+        bx: extPoly[i + 1].x,
+        by: extPoly[i + 1].y,
+      });
+    }
+    return splitRingOutlineBySegments(shapeRing, cutSegs, stroke, 'knife', baseZOrder, 3.5, false);
+  }
 
   // Build huge half-plane polygon on one side of the extended cut polyline
   const vx = endExt[0] - startExt[0];
@@ -196,7 +377,8 @@ function buildPieWedgePoly(
 export function sliceShapeEqualParts(
   stroke: StrokeObject,
   preset: EqualSlicePreset,
-  baseZOrder: number
+  baseZOrder: number,
+  style: SliceStyleMode = 'closed'
 ): StrokeObject[] {
   if (!isClosedBooleanShape(stroke)) return [];
   const shapeRing = strokeToPolygonRing(stroke);
@@ -205,6 +387,37 @@ export function sliceShapeEqualParts(
   const bounds = getRingBounds(shapeRing);
   const shapePoly: Polygon = [shapeRing];
   const R = Math.hypot(bounds.w, bounds.h) + 60;
+
+  if (style === 'outline') {
+    const cutSegs: { ax: number; ay: number; bx: number; by: number }[] = [];
+    if (preset === 'quarter-split') {
+      // 2 rays at 180° (left) and 270° (top) -> splits outline into open ¼ arc + open ¾ arc!
+      cutSegs.push({ ax: bounds.cx, ay: bounds.cy, bx: bounds.cx - R, by: bounds.cy });
+      cutSegs.push({ ax: bounds.cx, ay: bounds.cy, bx: bounds.cx, by: bounds.cy - R });
+      return splitRingOutlineBySegments(shapeRing, cutSegs, stroke, 'q', baseZOrder, 2.5, true);
+    }
+    const count = preset;
+    const isBoxLike = stroke.shapeType === 'rectangle' || stroke.shapeType === 'square';
+    if (isBoxLike) {
+      const stepW = bounds.w / count;
+      for (let i = 1; i < count; i++) {
+        const xCut = bounds.minX + i * stepW;
+        cutSegs.push({ ax: xCut, ay: bounds.minY - 30, bx: xCut, by: bounds.maxY + 30 });
+      }
+      return splitRingOutlineBySegments(shapeRing, cutSegs, stroke, `eq${count}`, baseZOrder, 3, false);
+    }
+    const stepAngle = (Math.PI * 2) / count;
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI / 2 + i * stepAngle;
+      cutSegs.push({
+        ax: bounds.cx,
+        ay: bounds.cy,
+        bx: bounds.cx + Math.cos(a) * R,
+        by: bounds.cy + Math.sin(a) * R,
+      });
+    }
+    return splitRingOutlineBySegments(shapeRing, cutSegs, stroke, `eq${count}`, baseZOrder, 3.5, false);
+  }
 
   if (preset === 'quarter-split') {
     // Iconic top-left ¼ (180° -> 270°) + remaining ¾, nudging the ¼ slice slightly up-left!

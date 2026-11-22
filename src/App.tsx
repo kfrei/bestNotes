@@ -173,6 +173,7 @@ import {
   sliceShapeWithPath,
   sliceShapeEqualParts,
   type EqualSlicePreset,
+  type SliceStyleMode,
 } from './utils/shapeSliceOps';
 import { ShapeBooleanDropdown } from './components/ShapeBooleanDropdown';
 import { ShapeSliceDropdown } from './components/ShapeSliceDropdown';
@@ -16922,6 +16923,7 @@ export default function App() {
   );
 
   const [knifeCutTargetId, setKnifeCutTargetId] = useState<string | null>(null);
+  const [shapeSliceStyle, setShapeSliceStyle] = useState<SliceStyleMode>('closed');
   const knifeCutPtsRef = useRef<{ x: number; y: number }[]>([]);
 
   // Cancel knife cut mode if selection changes or user presses Escape
@@ -16942,7 +16944,7 @@ export default function App() {
         return;
       }
       const baseZ = Math.max(target.zOrder ?? 0, getNextPageZOrder(activePage));
-      const pieces = sliceShapeEqualParts(target, preset, baseZ);
+      const pieces = sliceShapeEqualParts(target, preset, baseZ, shapeSliceStyle);
       if (pieces.length < 2) {
         showToast('ℹ️ Δεν ήταν δυνατό το κόψιμο αυτού του σχήματος.');
         return;
@@ -16963,7 +16965,7 @@ export default function App() {
           : `🍕 Το σχήμα κόπηκε σε ${pieces.length} ίσα ανεξάρτητα κομμάτια!`
       );
     },
-    [activePage, selectedStrokeIds, updateActivePage, showToast]
+    [activePage, selectedStrokeIds, shapeSliceStyle, updateActivePage, showToast]
   );
 
   // Photoshop / Illustrator Pathfinder Boolean Shape Operations (Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός)
@@ -50107,7 +50109,7 @@ export default function App() {
       const target = activePage.strokes.find((s) => s.id === targetId);
       if (target && cutPts.length >= 2) {
         const baseZ = Math.max(target.zOrder ?? 0, getNextPageZOrder(activePage));
-        const pieces = sliceShapeWithPath(target, cutPts, baseZ);
+        const pieces = sliceShapeWithPath(target, cutPts, baseZ, shapeSliceStyle);
         if (pieces.length >= 2) {
           suppressNextUndoRecordRef.current = false;
           updateActivePage(
@@ -64413,6 +64415,8 @@ export default function App() {
                           return (
                             <ShapeSliceDropdown
                               isKnifeActive={knifeCutTargetId === singleSt.id}
+                              sliceStyle={shapeSliceStyle}
+                              onChangeSliceStyle={setShapeSliceStyle}
                               onStartKnifeCut={() => {
                                 setKnifeCutTargetId(singleSt.id);
                                 showToast('🔪 Σύρε 1 γραμμή ή γωνία πάνω στο σχήμα για να το κόψεις!');

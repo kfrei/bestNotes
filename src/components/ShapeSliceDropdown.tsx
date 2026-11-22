@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Scissors, X } from 'lucide-react';
-import type { EqualSlicePreset } from '../utils/shapeSliceOps';
+import type { EqualSlicePreset, SliceStyleMode } from '../utils/shapeSliceOps';
 
 export type SliceHoverPreview = 'knife' | EqualSlicePreset;
 
 interface ShapeSliceDropdownProps {
   isKnifeActive: boolean;
+  sliceStyle: SliceStyleMode;
+  onChangeSliceStyle: (style: SliceStyleMode) => void;
   onStartKnifeCut: () => void;
   onCancelKnifeCut: () => void;
   onSelectEqualSlice: (preset: EqualSlicePreset) => void;
@@ -19,10 +21,11 @@ const EQUAL_PART_BUTTONS: { preset: 2 | 3 | 4 | 6 | 8; fraction: string; label: 
   { preset: 8, fraction: '⅛', label: '8' },
 ];
 
-function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
+function SlicePreviewStage({ mode, sliceStyle }: { mode: SliceHoverPreview; sliceStyle: SliceStyleMode }) {
   const cx = 52;
   const cy = 33;
   const r = 21;
+  const isOutlineOnly = sliceStyle === 'outline';
 
   const describeWedge = (startDeg: number, endDeg: number, rad = r) => {
     const a0 = (startDeg * Math.PI) / 180;
@@ -32,6 +35,9 @@ function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
     const x1 = cx + Math.cos(a1) * rad;
     const y1 = cy + Math.sin(a1) * rad;
     const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+    if (isOutlineOnly) {
+      return `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${rad} ${rad} 0 ${largeArc} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+    }
     return `M ${cx} ${cy} L ${x0.toFixed(1)} ${y0.toFixed(1)} A ${rad} ${rad} 0 ${largeArc} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z`;
   };
 
@@ -98,10 +104,24 @@ function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
           {mode === 'knife' && (
             <g>
               <g style={{ animation: 'slHalfLeft 2.2s ease-in-out infinite' }}>
-                <path d={describeWedge(130, 310)} fill="#3b82f6" fillOpacity="0.45" stroke="#1d4ed8" strokeWidth="1.7" />
+                <path
+                  d={describeWedge(130, 310)}
+                  fill={isOutlineOnly ? 'none' : '#3b82f6'}
+                  fillOpacity={isOutlineOnly ? 0 : 0.45}
+                  stroke="#1d4ed8"
+                  strokeWidth={isOutlineOnly ? '2.4' : '1.7'}
+                  strokeLinecap="round"
+                />
               </g>
               <g style={{ animation: 'slHalfRight 2.2s ease-in-out infinite' }}>
-                <path d={describeWedge(-50, 130)} fill="#3b82f6" fillOpacity="0.45" stroke="#1d4ed8" strokeWidth="1.7" />
+                <path
+                  d={describeWedge(-50, 130)}
+                  fill={isOutlineOnly ? 'none' : '#3b82f6'}
+                  fillOpacity={isOutlineOnly ? 0 : 0.45}
+                  stroke="#1d4ed8"
+                  strokeWidth={isOutlineOnly ? '2.4' : '1.7'}
+                  strokeLinecap="round"
+                />
               </g>
               <line
                 x1="28"
@@ -119,9 +139,23 @@ function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
 
           {mode === 'quarter-split' && (
             <g>
-              <path d={describeWedge(-90, 180)} fill="#3b82f6" fillOpacity="0.48" stroke="#1d4ed8" strokeWidth="1.8" />
+              <path
+                d={describeWedge(-90, 180)}
+                fill={isOutlineOnly ? 'none' : '#3b82f6'}
+                fillOpacity={isOutlineOnly ? 0 : 0.48}
+                stroke="#1d4ed8"
+                strokeWidth={isOutlineOnly ? '2.4' : '1.8'}
+                strokeLinecap="round"
+              />
               <g style={{ animation: 'slQuarterOut 2.2s ease-in-out infinite' }}>
-                <path d={describeWedge(180, 270)} fill="#2563eb" fillOpacity="0.65" stroke="#1d4ed8" strokeWidth="1.8" />
+                <path
+                  d={describeWedge(180, 270)}
+                  fill={isOutlineOnly ? 'none' : '#2563eb'}
+                  fillOpacity={isOutlineOnly ? 0 : 0.65}
+                  stroke="#1d4ed8"
+                  strokeWidth={isOutlineOnly ? '2.4' : '1.8'}
+                  strokeLinecap="round"
+                />
               </g>
             </g>
           )}
@@ -141,10 +175,11 @@ function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
                     key={idx}
                     d={describeWedge(a0, a1, r - 1)}
                     transform={`translate(${tx}, ${ty})`}
-                    fill={idx === 0 ? '#2563eb' : '#60a5fa'}
-                    fillOpacity={idx === 0 ? '0.68' : '0.38'}
+                    fill={isOutlineOnly ? 'none' : idx === 0 ? '#2563eb' : '#60a5fa'}
+                    fillOpacity={isOutlineOnly ? 0 : idx === 0 ? '0.68' : '0.38'}
                     stroke="#1d4ed8"
-                    strokeWidth="1.5"
+                    strokeWidth={isOutlineOnly ? '2.4' : '1.5'}
+                    strokeLinecap="round"
                   />
                 );
               })}
@@ -168,6 +203,8 @@ function SlicePreviewStage({ mode }: { mode: SliceHoverPreview }) {
 
 export const ShapeSliceDropdown: React.FC<ShapeSliceDropdownProps> = ({
   isKnifeActive,
+  sliceStyle,
+  onChangeSliceStyle,
   onStartKnifeCut,
   onCancelKnifeCut,
   onSelectEqualSlice,
@@ -224,10 +261,37 @@ export const ShapeSliceDropdown: React.FC<ShapeSliceDropdownProps> = ({
           className="absolute left-0 top-full mt-1.5 w-[272px] rounded-xl bg-[#f7f4ee] border border-[#dfd8cb] shadow-xl py-1.5 z-[120]"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="px-3 pb-1 mb-1 border-b border-[#e5dfd3]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Κόψιμο Σχήματος
-            </span>
+          <div className="px-2 pb-1.5 mb-1 border-b border-[#e5dfd3]">
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Κόψιμο Σχήματος
+              </span>
+            </div>
+            {/* 2-way toggle: Closed Pie Pieces vs Open Outline Arcs only */}
+            <div className="grid grid-cols-2 gap-1 bg-[#ece7dc] p-0.5 rounded-lg border border-[#dfd8cb]">
+              <button
+                type="button"
+                onClick={() => onChangeSliceStyle('closed')}
+                className={`py-1 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer ${
+                  sliceStyle === 'closed'
+                    ? 'bg-[#234978] text-white shadow-2xs'
+                    : 'text-[#2c3e50] hover:bg-[#fdfbf7]'
+                }`}
+              >
+                🍕 Κλειστά κομμάτια
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeSliceStyle('outline')}
+                className={`py-1 px-2 rounded-md text-[10.5px] font-bold transition cursor-pointer ${
+                  sliceStyle === 'outline'
+                    ? 'bg-[#234978] text-white shadow-2xs'
+                    : 'text-[#2c3e50] hover:bg-[#fdfbf7]'
+                }`}
+              >
+                〰️ Μόνο περίγραμμα
+              </button>
+            </div>
           </div>
 
           <div className="px-1.5 flex flex-col gap-1">
@@ -308,7 +372,7 @@ export const ShapeSliceDropdown: React.FC<ShapeSliceDropdownProps> = ({
             </div>
           </div>
 
-          <SlicePreviewStage mode={hovered} />
+          <SlicePreviewStage mode={hovered} sliceStyle={sliceStyle} />
         </div>
       )}
     </div>
