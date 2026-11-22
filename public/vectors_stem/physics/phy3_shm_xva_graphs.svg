@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="20" text-anchor="middle" class="t-title">Γραφικές Παραστάσεις ΑΑΤ: x(t), u(t), α(t)</text>
+  <!-- Vertical guides at T/4, T/2, 3T/4, T -->
+  <g stroke="#e2e8f0" stroke-width="1.2" stroke-dasharray="4,3">
+    <line x1="134" y1="40" x2="134" y2="274"/>
+    <line x1="190" y1="40" x2="190" y2="274"/>
+    <line x1="246" y1="40" x2="246" y2="274"/>
+    <line x1="302" y1="40" x2="302" y2="274"/>
+    <line x1="358" y1="40" x2="358" y2="274"/>
+  </g>
+  <!-- x(t) -->
+  <line x1="78" y1="76" x2="430" y2="76" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <line x1="78" y1="108" x2="78" y2="42" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <path d="M78.0,76.0 L80.8,74.0 L83.6,71.9 L86.4,69.9 L89.2,68.0 L92.0,66.1 L94.8,64.2 L97.6,62.4 L100.4,60.7 L103.2,59.1 L106.0,57.6 L108.8,56.2 L111.6,55.0 L114.4,53.8 L117.2,52.8 L120.0,52.0 L122.8,51.3 L125.6,50.7 L128.4,50.3 L131.2,50.1 L134.0,50.0 L136.8,50.1 L139.6,50.3 L142.4,50.7 L145.2,51.3 L148.0,52.0 L150.8,52.8 L153.6,53.8 L156.4,55.0 L159.2,56.2 L162.0,57.6 L164.8,59.1 L167.6,60.7 L170.4,62.4 L173.2,64.2 L176.0,66.1 L178.8,68.0 L181.6,69.9 L184.4,71.9 L187.2,74.0 L190.0,76.0 L192.8,78.0 L195.6,80.1 L198.4,82.1 L201.2,84.0 L204.0,85.9 L206.8,87.8 L209.6,89.6 L212.4,91.3 L215.2,92.9 L218.0,94.4 L220.8,95.8 L223.6,97.0 L226.4,98.2 L229.2,99.2 L232.0,100.0 L234.8,100.7 L237.6,101.3 L240.4,101.7 L243.2,101.9 L246.0,102.0 L248.8,101.9 L251.6,101.7 L254.4,101.3 L257.2,100.7 L260.0,100.0 L262.8,99.2 L265.6,98.2 L268.4,97.0 L271.2,95.8 L274.0,94.4 L276.8,92.9 L279.6,91.3 L282.4,89.6 L285.2,87.8 L288.0,85.9 L290.8,84.0 L293.6,82.1 L296.4,80.1 L299.2,78.0 L302.0,76.0 L304.8,74.0 L307.6,71.9 L310.4,69.9 L313.2,68.0 L316.0,66.1 L318.8,64.2 L321.6,62.4 L324.4,60.7 L327.2,59.1 L330.0,57.6 L332.8,56.2 L335.6,55.0 L338.4,53.8 L341.2,52.8 L344.0,52.0 L346.8,51.3 L349.6,50.7 L352.4,50.3 L355.2,50.1 L358.0,50.0 L360.8,50.1 L363.6,50.3 L366.4,50.7 L369.2,51.3 L372.0,52.0 L374.8,52.8 L377.6,53.8 L380.4,55.0 L383.2,56.2 L386.0,57.6 L388.8,59.1 L391.6,60.7 L394.4,62.4 L397.2,64.2 L400.0,66.1 L402.8,68.0 L405.6,69.9 L408.4,71.9 L411.2,74.0 L414.0,76.0" fill="none" stroke="#2563eb" stroke-width="2.4"/>
+  <text x="68" y="54" text-anchor="end" class="t-eq" fill="#1d4ed8">x(t)</text>
+  <text x="68" y="68" text-anchor="end" class="t-sm">+A</text>
+  <!-- u(t) -->
+  <line x1="78" y1="158" x2="430" y2="158" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <line x1="78" y1="190" x2="78" y2="124" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <path d="M78.0,132.0 L80.8,132.1 L83.6,132.3 L86.4,132.7 L89.2,133.3 L92.0,134.0 L94.8,134.8 L97.6,135.8 L100.4,137.0 L103.2,138.2 L106.0,139.6 L108.8,141.1 L111.6,142.7 L114.4,144.4 L117.2,146.2 L120.0,148.1 L122.8,150.0 L125.6,151.9 L128.4,153.9 L131.2,156.0 L134.0,158.0 L136.8,160.0 L139.6,162.1 L142.4,164.1 L145.2,166.0 L148.0,167.9 L150.8,169.8 L153.6,171.6 L156.4,173.3 L159.2,174.9 L162.0,176.4 L164.8,177.8 L167.6,179.0 L170.4,180.2 L173.2,181.2 L176.0,182.0 L178.8,182.7 L181.6,183.3 L184.4,183.7 L187.2,183.9 L190.0,184.0 L192.8,183.9 L195.6,183.7 L198.4,183.3 L201.2,182.7 L204.0,182.0 L206.8,181.2 L209.6,180.2 L212.4,179.0 L215.2,177.8 L218.0,176.4 L220.8,174.9 L223.6,173.3 L226.4,171.6 L229.2,169.8 L232.0,167.9 L234.8,166.0 L237.6,164.1 L240.4,162.1 L243.2,160.0 L246.0,158.0 L248.8,156.0 L251.6,153.9 L254.4,151.9 L257.2,150.0 L260.0,148.1 L262.8,146.2 L265.6,144.4 L268.4,142.7 L271.2,141.1 L274.0,139.6 L276.8,138.2 L279.6,137.0 L282.4,135.8 L285.2,134.8 L288.0,134.0 L290.8,133.3 L293.6,132.7 L296.4,132.3 L299.2,132.1 L302.0,132.0 L304.8,132.1 L307.6,132.3 L310.4,132.7 L313.2,133.3 L316.0,134.0 L318.8,134.8 L321.6,135.8 L324.4,137.0 L327.2,138.2 L330.0,139.6 L332.8,141.1 L335.6,142.7 L338.4,144.4 L341.2,146.2 L344.0,148.1 L346.8,150.0 L349.6,151.9 L352.4,153.9 L355.2,156.0 L358.0,158.0 L360.8,160.0 L363.6,162.1 L366.4,164.1 L369.2,166.0 L372.0,167.9 L374.8,169.8 L377.6,171.6 L380.4,173.3 L383.2,174.9 L386.0,176.4 L388.8,177.8 L391.6,179.0 L394.4,180.2 L397.2,181.2 L400.0,182.0 L402.8,182.7 L405.6,183.3 L408.4,183.7 L411.2,183.9 L414.0,184.0" fill="none" stroke="#16a34a" stroke-width="2.4"/>
+  <text x="68" y="136" text-anchor="end" class="t-eq" fill="#15803d">u(t)</text>
+  <text x="68" y="150" text-anchor="end" class="t-sm">+u_max</text>
+  <!-- a(t) -->
+  <line x1="78" y1="240" x2="430" y2="240" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <line x1="78" y1="272" x2="78" y2="206" stroke="#334155" stroke-width="1.4" marker-end="url(#arr-dark)"/>
+  <path d="M78.0,240.0 L80.8,242.0 L83.6,244.1 L86.4,246.1 L89.2,248.0 L92.0,249.9 L94.8,251.8 L97.6,253.6 L100.4,255.3 L103.2,256.9 L106.0,258.4 L108.8,259.8 L111.6,261.0 L114.4,262.2 L117.2,263.2 L120.0,264.0 L122.8,264.7 L125.6,265.3 L128.4,265.7 L131.2,265.9 L134.0,266.0 L136.8,265.9 L139.6,265.7 L142.4,265.3 L145.2,264.7 L148.0,264.0 L150.8,263.2 L153.6,262.2 L156.4,261.0 L159.2,259.8 L162.0,258.4 L164.8,256.9 L167.6,255.3 L170.4,253.6 L173.2,251.8 L176.0,249.9 L178.8,248.0 L181.6,246.1 L184.4,244.1 L187.2,242.0 L190.0,240.0 L192.8,238.0 L195.6,235.9 L198.4,233.9 L201.2,232.0 L204.0,230.1 L206.8,228.2 L209.6,226.4 L212.4,224.7 L215.2,223.1 L218.0,221.6 L220.8,220.2 L223.6,219.0 L226.4,217.8 L229.2,216.8 L232.0,216.0 L234.8,215.3 L237.6,214.7 L240.4,214.3 L243.2,214.1 L246.0,214.0 L248.8,214.1 L251.6,214.3 L254.4,214.7 L257.2,215.3 L260.0,216.0 L262.8,216.8 L265.6,217.8 L268.4,219.0 L271.2,220.2 L274.0,221.6 L276.8,223.1 L279.6,224.7 L282.4,226.4 L285.2,228.2 L288.0,230.1 L290.8,232.0 L293.6,233.9 L296.4,235.9 L299.2,238.0 L302.0,240.0 L304.8,242.0 L307.6,244.1 L310.4,246.1 L313.2,248.0 L316.0,249.9 L318.8,251.8 L321.6,253.6 L324.4,255.3 L327.2,256.9 L330.0,258.4 L332.8,259.8 L335.6,261.0 L338.4,262.2 L341.2,263.2 L344.0,264.0 L346.8,264.7 L349.6,265.3 L352.4,265.7 L355.2,265.9 L358.0,266.0 L360.8,265.9 L363.6,265.7 L366.4,265.3 L369.2,264.7 L372.0,264.0 L374.8,263.2 L377.6,262.2 L380.4,261.0 L383.2,259.8 L386.0,258.4 L388.8,256.9 L391.6,255.3 L394.4,253.6 L397.2,251.8 L400.0,249.9 L402.8,248.0 L405.6,246.1 L408.4,244.1 L411.2,242.0 L414.0,240.0" fill="none" stroke="#dc2626" stroke-width="2.4"/>
+  <text x="68" y="218" text-anchor="end" class="t-eq" fill="#b91c1c">α(t)</text>
+  <text x="68" y="232" text-anchor="end" class="t-sm">+α_max</text>
+  <!-- Time ticks -->
+  <text x="134" y="290" text-anchor="middle" class="t-sm">T/4</text>
+  <text x="190" y="290" text-anchor="middle" class="t-sm">T/2</text>
+  <text x="246" y="290" text-anchor="middle" class="t-sm">3T/4</text>
+  <text x="302" y="290" text-anchor="middle" class="t-sm">T</text>
+  <text x="434" y="244" class="t-lbl">t</text>
+
+</svg>

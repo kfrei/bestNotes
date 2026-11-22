@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ενέργειες στην ΑΑΤ: E = K + U = ½DA²</text>
+  <!-- Axes -->
+  <line x1="56" y1="236" x2="414" y2="236" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <line x1="230" y1="252" x2="230" y2="46" stroke="#1e293b" stroke-width="2" marker-end="url(#arr-dark)"/>
+  <text x="422" y="240" class="t-lbl">x</text>
+  <text x="242" y="54" class="t-lbl">Ενέργεια</text>
+  <!-- Total energy line -->
+  <line x1="90" y1="86" x2="370" y2="86" stroke="#0f172a" stroke-width="2.4" stroke-dasharray="7,4"/>
+  <text x="378" y="90" class="t-eq">E = ½DA²</text>
+  <!-- Curves -->
+  <path d="M90.0,86.0 L94.7,95.8 L99.3,105.3 L104.0,114.5 L108.7,123.3 L113.3,131.8 L118.0,140.0 L122.7,147.8 L127.3,155.3 L132.0,162.5 L136.7,169.3 L141.3,175.8 L146.0,182.0 L150.7,187.8 L155.3,193.3 L160.0,198.5 L164.7,203.3 L169.3,207.8 L174.0,212.0 L178.7,215.8 L183.3,219.3 L188.0,222.5 L192.7,225.3 L197.3,227.8 L202.0,230.0 L206.7,231.8 L211.3,233.3 L216.0,234.5 L220.7,235.3 L225.3,235.8 L230.0,236.0 L234.7,235.8 L239.3,235.3 L244.0,234.5 L248.7,233.3 L253.3,231.8 L258.0,230.0 L262.7,227.8 L267.3,225.3 L272.0,222.5 L276.7,219.3 L281.3,215.8 L286.0,212.0 L290.7,207.8 L295.3,203.3 L300.0,198.5 L304.7,193.3 L309.3,187.8 L314.0,182.0 L318.7,175.8 L323.3,169.3 L328.0,162.5 L332.7,155.3 L337.3,147.8 L342.0,140.0 L346.7,131.8 L351.3,123.3 L356.0,114.5 L360.7,105.3 L365.3,95.8 L370.0,86.0" fill="none" stroke="#2563eb" stroke-width="2.8"/>
+  <path d="M90.0,236.0 L94.7,226.2 L99.3,216.7 L104.0,207.5 L108.7,198.7 L113.3,190.2 L118.0,182.0 L122.7,174.2 L127.3,166.7 L132.0,159.5 L136.7,152.7 L141.3,146.2 L146.0,140.0 L150.7,134.2 L155.3,128.7 L160.0,123.5 L164.7,118.7 L169.3,114.2 L174.0,110.0 L178.7,106.2 L183.3,102.7 L188.0,99.5 L192.7,96.7 L197.3,94.2 L202.0,92.0 L206.7,90.2 L211.3,88.7 L216.0,87.5 L220.7,86.7 L225.3,86.2 L230.0,86.0 L234.7,86.2 L239.3,86.7 L244.0,87.5 L248.7,88.7 L253.3,90.2 L258.0,92.0 L262.7,94.2 L267.3,96.7 L272.0,99.5 L276.7,102.7 L281.3,106.2 L286.0,110.0 L290.7,114.2 L295.3,118.7 L300.0,123.5 L304.7,128.7 L309.3,134.2 L314.0,140.0 L318.7,146.2 L323.3,152.7 L328.0,159.5 L332.7,166.7 L337.3,174.2 L342.0,182.0 L346.7,190.2 L351.3,198.7 L356.0,207.5 L360.7,216.7 L365.3,226.2 L370.0,236.0" fill="none" stroke="#dc2626" stroke-width="2.8"/>
+  <!-- Intersection points x = ±A/√2 -->
+  <circle cx="131" cy="161" r="4.5" fill="#7c3aed" stroke="#fff" stroke-width="1.2"/>
+  <circle cx="329" cy="161" r="4.5" fill="#7c3aed" stroke="#fff" stroke-width="1.2"/>
+  <line x1="131" y1="161" x2="131" y2="236" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="3,3"/>
+  <line x1="329" y1="161" x2="329" y2="236" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="3,3"/>
+  <text x="90" y="252" text-anchor="middle" class="t-lbl">−A</text>
+  <text x="370" y="252" text-anchor="middle" class="t-lbl">+A</text>
+  <text x="329" y="252" text-anchor="middle" class="t-sm" fill="#6d28d9">+A/√2</text>
+  <text x="131" y="252" text-anchor="middle" class="t-sm" fill="#6d28d9">−A/√2</text>
+  <text x="336" y="122" class="t-eq" fill="#1d4ed8">U = ½Dx²</text>
+  <text x="252" y="114" class="t-eq" fill="#b91c1c">K = ½mu²</text>
+  <text x="230" y="290" text-anchor="middle" class="t-sm">Στα x = ±A/√2 ισχύει K = U = E/2</text>
+
+</svg>

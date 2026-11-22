@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Ηλεκτρομαγνητική Ταλάντωση σε Κύκλωμα LC (U_E ↔ U_B)</text>
+  <!-- Left: Circuit diagram -->
+  <rect x="18" y="40" width="186" height="212" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="111" y="60" text-anchor="middle" class="t-sub">Κύκλωμα LC</text>
+  <line x1="60" y1="88" x2="162" y2="88" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="60" y1="208" x2="162" y2="208" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="60" y1="88" x2="60" y2="138" stroke="#1e293b" stroke-width="2.4"/>
+  <line x1="60" y1="158" x2="60" y2="208" stroke="#1e293b" stroke-width="2.4"/>
+  <!-- Capacitor C -->
+  <line x1="42" y1="138" x2="78" y2="138" stroke="#2563eb" stroke-width="3.6"/>
+  <line x1="42" y1="158" x2="78" y2="158" stroke="#2563eb" stroke-width="3.6"/>
+  <text x="30" y="134" class="t-eq" fill="#1d4ed8">+q</text>
+  <text x="30" y="170" class="t-eq" fill="#1d4ed8">−q</text>
+  <text x="86" y="152" class="t-eq" fill="#1d4ed8">C</text>
+  <!-- Inductor L -->
+  <line x1="162" y1="88" x2="162" y2="108" stroke="#1e293b" stroke-width="2.4"/>
+  <path d="M162,108 C178,108 178,126 162,126 C178,126 178,144 162,144 C178,144 178,162 162,162 C178,162 178,180 162,180" fill="none" stroke="#ea580c" stroke-width="3"/>
+  <line x1="162" y1="180" x2="162" y2="208" stroke="#1e293b" stroke-width="2.4"/>
+  <text x="142" y="150" class="t-eq" fill="#c2410c">L</text>
+  <line x1="92" y1="88" x2="130" y2="88" stroke="#dc2626" stroke-width="2.4" marker-end="url(#arr-red)"/>
+  <text x="111" y="80" text-anchor="middle" class="t-eq" fill="#b91c1c">i(t)</text>
+  <text x="111" y="236" text-anchor="middle" class="t-sm">Τύπος Thomson: T = 2π√(LC)</text>
+
+  <!-- Right: Energy exchange bars/curves -->
+  <rect x="214" y="40" width="228" height="212" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="328" y="60" text-anchor="middle" class="t-sub">Εναλλαγή Ενέργειας U_E &amp; U_B</text>
+  <line x1="234" y1="214" x2="428" y2="214" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <line x1="234" y1="214" x2="234" y2="78" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <!-- U_E = cos^2, U_B = sin^2 -->
+  <path d="M234,94 Q256,94 278,214 Q300,94 322,94 Q344,94 366,214 Q388,94 410,94" fill="none" stroke="#2563eb" stroke-width="2.4"/>
+  <path d="M234,214 Q256,94 278,94 Q300,214 322,214 Q344,94 366,94 Q388,214 410,214" fill="none" stroke="#dc2626" stroke-width="2.4"/>
+  <text x="254" y="88" class="t-eq" fill="#1d4ed8">U_E = q²/2C</text>
+  <text x="352" y="88" class="t-eq" fill="#b91c1c">U_B = ½Li²</text>
+  <text x="278" y="230" text-anchor="middle" class="t-sm">T/4</text>
+  <text x="322" y="230" text-anchor="middle" class="t-sm">T/2</text>
+  <text x="366" y="230" text-anchor="middle" class="t-sm">3T/4</text>
+  <text x="410" y="230" text-anchor="middle" class="t-sm">T</text>
+
+  <rect x="18" y="264" width="424" height="34" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="285" text-anchor="middle" class="t-eq">ω = 1 / √(LC)   |   U_ολ = ½ Q²/C = ½ L·I² = σταθ.</text>
+
+</svg>

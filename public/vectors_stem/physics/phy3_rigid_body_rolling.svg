@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Κύλιση Χωρίς Ολίσθηση — Κατανομή Ταχυτήτων (u_cm = ωR)</text>
+  <!-- Ground -->
+  <line x1="28" y1="226" x2="432" y2="226" stroke="#1e293b" stroke-width="2.2"/>
+  <rect x="28" y="226" width="404" height="14" fill="url(#hatch)"/>
+  <!-- Wheel / cylinder -->
+  <circle cx="215" cy="146" r="78" fill="url(#metal-grad)" opacity="0.55" stroke="#1e293b" stroke-width="2.2" filter="url(#soft-shadow)"/>
+  <circle cx="215" cy="146" r="5" fill="#1e293b"/>
+  <!-- Spokes -->
+  <line x1="215" y1="68" x2="215" y2="224" stroke="#64748b" stroke-width="1.3" stroke-dasharray="4,3"/>
+  <line x1="137" y1="146" x2="293" y2="146" stroke="#64748b" stroke-width="1.3" stroke-dasharray="4,3"/>
+  <!-- Rotation arc omega -->
+  <path d="M180,104 A52,52 0 0,1 252,104" fill="none" stroke="#7c3aed" stroke-width="2.2" marker-end="url(#arr-violet)"/>
+  <text x="215" y="96" text-anchor="middle" class="t-eq" fill="#6d28d9">ω</text>
+  <!-- Velocity vectors: Top = 2 u_cm, Center = u_cm, Bottom = 0 -->
+  <line x1="215" y1="68" x2="365" y2="68" stroke="#dc2626" stroke-width="2.8" marker-end="url(#arr-red)"/>
+  <text x="372" y="72" class="t-eq" fill="#b91c1c">u_Α = 2u_cm</text>
+  <line x1="215" y1="146" x2="292" y2="146" stroke="#2563eb" stroke-width="2.8" marker-end="url(#arr-blue)"/>
+  <text x="300" y="150" class="t-eq" fill="#1d4ed8">u_cm = ωR</text>
+  <circle cx="215" cy="224" r="5" fill="#16a34a" stroke="#fff" stroke-width="1.2"/>
+  <text x="228" y="218" class="t-eq" fill="#15803d">u_Κ = 0 (στιγμιαίος άξονας)</text>
+  <!-- Linear velocity profile line -->
+  <line x1="215" y1="224" x2="365" y2="68" stroke="#dc2626" stroke-width="1.3" stroke-dasharray="4,3" opacity="0.7"/>
+  <!-- Radius -->
+  <text x="196" y="188" class="t-eq">R</text>
+  <rect x="24" y="262" width="412" height="34" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="283" text-anchor="middle" class="t-eq">u_cm = ωR   |   α_cm = α_γων·R   |   K_ολ = ½mu_cm² + ½I_cmω²</text>
+
+</svg>

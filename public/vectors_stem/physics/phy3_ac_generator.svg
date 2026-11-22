@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Γεννήτρια Εναλλασσόμενου Ρεύματος (AC)</text>
+  <!-- Left: Rotating coil in B field -->
+  <rect x="18" y="40" width="218" height="214" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="28" y="96" width="34" height="92" rx="4" fill="#dc2626" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="45" y="147" text-anchor="middle" class="t-w" font-size="14">N</text>
+  <rect x="192" y="96" width="34" height="92" rx="4" fill="#2563eb" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="209" y="147" text-anchor="middle" class="t-w" font-size="14">S</text>
+  <!-- Magnetic field lines -->
+  <line x1="66" y1="120" x2="188" y2="120" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-dark)"/>
+  <line x1="66" y1="164" x2="188" y2="164" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-dark)"/>
+  <!-- Rotating rectangular loop -->
+  <polygon points="94,104 162,92 162,178 94,190" fill="none" stroke="#ea580c" stroke-width="3.2"/>
+  <line x1="128" y1="74" x2="128" y2="214" stroke="#475569" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <path d="M110,80 A20,8 0 1,1 146,80" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr-violet)"/>
+  <text x="128" y="68" text-anchor="middle" class="t-eq" fill="#6d28d9">ω</text>
+  <!-- Slip rings -->
+  <ellipse cx="128" cy="212" rx="16" ry="5" fill="none" stroke="#d97706" stroke-width="2.4"/>
+  <ellipse cx="128" cy="224" rx="16" ry="5" fill="none" stroke="#d97706" stroke-width="2.4"/>
+  <text x="128" y="246" text-anchor="middle" class="t-sm">Δακτύλιοι &amp; Ψήκτρες</text>
+
+  <!-- Right: Sinusoidal EMF graph -->
+  <rect x="246" y="40" width="196" height="214" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="344" y="60" text-anchor="middle" class="t-sub">Εναλλασσόμενη Τάση e(t)</text>
+  <line x1="264" y1="152" x2="432" y2="152" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <line x1="266" y1="222" x2="266" y2="82" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <path d="M266.0,152.0 L267.4,147.8 L268.7,143.6 L270.1,139.4 L271.4,135.3 L272.8,131.3 L274.1,127.5 L275.4,123.8 L276.8,120.3 L278.1,116.9 L279.5,113.8 L280.9,110.9 L282.2,108.3 L283.6,106.0 L284.9,103.9 L286.2,102.1 L287.6,100.6 L288.9,99.5 L290.3,98.7 L291.6,98.2 L293.0,98.0 L294.4,98.2 L295.7,98.7 L297.1,99.5 L298.4,100.6 L299.8,102.1 L301.1,103.9 L302.4,106.0 L303.8,108.3 L305.1,110.9 L306.5,113.8 L307.9,116.9 L309.2,120.3 L310.6,123.8 L311.9,127.5 L313.2,131.3 L314.6,135.3 L315.9,139.4 L317.3,143.6 L318.6,147.8 L320.0,152.0 L321.4,156.2 L322.7,160.4 L324.1,164.6 L325.4,168.7 L326.8,172.7 L328.1,176.5 L329.4,180.2 L330.8,183.7 L332.1,187.1 L333.5,190.2 L334.9,193.1 L336.2,195.7 L337.6,198.0 L338.9,200.1 L340.2,201.9 L341.6,203.4 L342.9,204.5 L344.3,205.3 L345.6,205.8 L347.0,206.0 L348.4,205.8 L349.7,205.3 L351.1,204.5 L352.4,203.4 L353.8,201.9 L355.1,200.1 L356.4,198.0 L357.8,195.7 L359.1,193.1 L360.5,190.2 L361.9,187.1 L363.2,183.7 L364.6,180.2 L365.9,176.5 L367.2,172.7 L368.6,168.7 L369.9,164.6 L371.3,160.4 L372.6,156.2 L374.0,152.0 L375.4,147.8 L376.7,143.6 L378.1,139.4 L379.4,135.3 L380.8,131.3 L382.1,127.5 L383.4,123.8 L384.8,120.3 L386.1,116.9 L387.5,113.8 L388.9,110.9 L390.2,108.3 L391.6,106.0 L392.9,103.9 L394.2,102.1 L395.6,100.6 L396.9,99.5 L398.3,98.7 L399.6,98.2 L401.0,98.0 L402.4,98.2 L403.7,98.7 L405.0,99.5 L406.4,100.6 L407.8,102.1 L409.1,103.9 L410.5,106.0 L411.8,108.3 L413.1,110.9 L414.5,113.8 L415.9,116.9 L417.2,120.3 L418.6,123.8 L419.9,127.5 L421.2,131.3 L422.6,135.3 L423.9,139.4 L425.3,143.6 L426.6,147.8 L428.0,152.0" fill="none" stroke="#dc2626" stroke-width="2.6"/>
+  <text x="260" y="96" text-anchor="end" class="t-sm">+E₀</text>
+  <text x="260" y="212" text-anchor="end" class="t-sm">−E₀</text>
+  <text x="434" y="156" class="t-lbl">t</text>
+  <text x="344" y="240" text-anchor="middle" class="t-sm">V_εν = V₀ / √2</text>
+
+  <rect x="18" y="264" width="424" height="34" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="285" text-anchor="middle" class="t-eq">Φ(t) = N·B·A·cos(ωt)   ⇒   e(t) = E₀·sin(ωt)  όπου  E₀ = N·B·A·ω</text>
+
+</svg>

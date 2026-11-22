@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Στιγμιότυπο Κύματος y(x) vs Ταλάντωση Σημείου y(t)</text>
+  <!-- Left: y(x) -->
+  <rect x="16" y="38" width="208" height="222" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="120" y="58" text-anchor="middle" class="t-sub">Στιγμιότυπο (t = σταθ.)</text>
+  <line x1="42" y1="152" x2="214" y2="152" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <line x1="46" y1="214" x2="46" y2="80" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <path d="M46.0,152.0 L47.4,148.2 L48.8,144.5 L50.1,140.8 L51.5,137.2 L52.9,133.6 L54.3,130.2 L55.7,126.9 L57.1,123.8 L58.5,120.8 L59.8,118.1 L61.2,115.5 L62.6,113.2 L64.0,111.1 L65.4,109.2 L66.8,107.7 L68.1,106.3 L69.5,105.3 L70.9,104.6 L72.3,104.1 L73.7,104.0 L75.0,104.1 L76.4,104.6 L77.8,105.3 L79.2,106.3 L80.6,107.7 L82.0,109.2 L83.3,111.1 L84.7,113.2 L86.1,115.5 L87.5,118.1 L88.9,120.8 L90.3,123.8 L91.7,126.9 L93.0,130.2 L94.4,133.6 L95.8,137.2 L97.2,140.8 L98.6,144.5 L100.0,148.2 L101.3,152.0 L102.7,155.8 L104.1,159.5 L105.5,163.2 L106.9,166.8 L108.2,170.4 L109.6,173.8 L111.0,177.1 L112.4,180.2 L113.8,183.2 L115.2,185.9 L116.5,188.5 L117.9,190.8 L119.3,192.9 L120.7,194.8 L122.1,196.3 L123.5,197.7 L124.8,198.7 L126.2,199.4 L127.6,199.9 L129.0,200.0 L130.4,199.9 L131.8,199.4 L133.2,198.7 L134.5,197.7 L135.9,196.3 L137.3,194.8 L138.7,192.9 L140.1,190.8 L141.4,188.5 L142.8,185.9 L144.2,183.2 L145.6,180.2 L147.0,177.1 L148.4,173.8 L149.8,170.4 L151.1,166.8 L152.5,163.2 L153.9,159.5 L155.3,155.8 L156.7,152.0 L158.1,148.2 L159.4,144.5 L160.8,140.8 L162.2,137.2 L163.6,133.6 L165.0,130.2 L166.3,126.9 L167.7,123.8 L169.1,120.8 L170.5,118.1 L171.9,115.5 L173.3,113.2 L174.7,111.1 L176.0,109.2 L177.4,107.7 L178.8,106.3 L180.2,105.3 L181.6,104.6 L182.9,104.1 L184.3,104.0 L185.7,104.1 L187.1,104.6 L188.5,105.3 L189.9,106.3 L191.2,107.7 L192.6,109.2 L194.0,111.1 L195.4,113.2 L196.8,115.5 L198.2,118.1 L199.6,120.8 L200.9,123.8 L202.3,126.9 L203.7,130.2 L205.1,133.6 L206.5,137.2 L207.8,140.8 L209.2,144.5 L210.6,148.2 L212.0,152.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <line x1="46" y1="96" x2="156" y2="96" stroke="#dc2626" stroke-width="1.5" marker-start="url(#arr-red)" marker-end="url(#arr-red)"/>
+  <text x="101" y="90" text-anchor="middle" class="t-eq" fill="#b91c1c">λ (μήκος κύματος)</text>
+  <text x="212" y="168" text-anchor="end" class="t-lbl">x (m)</text>
+  <text x="38" y="88" text-anchor="end" class="t-lbl">y</text>
+  <text x="120" y="242" text-anchor="middle" class="t-sm">Δείχνει ΟΛΑ τα σημεία μια στιγμή</text>
+
+  <!-- Right: y(t) -->
+  <rect x="236" y="38" width="208" height="222" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="340" y="58" text-anchor="middle" class="t-sub">Διάγραμμα Χρόνου (x = σταθ.)</text>
+  <line x1="254" y1="152" x2="428" y2="152" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <line x1="258" y1="214" x2="258" y2="80" stroke="#1e293b" stroke-width="1.6" marker-end="url(#arr-dark)"/>
+  <path d="M258.0,152.0 L259.4,148.2 L260.8,144.5 L262.1,140.8 L263.5,137.2 L264.9,133.6 L266.3,130.2 L267.7,126.9 L269.1,123.8 L270.4,120.8 L271.8,118.1 L273.2,115.5 L274.6,113.2 L276.0,111.1 L277.4,109.2 L278.8,107.7 L280.1,106.3 L281.5,105.3 L282.9,104.6 L284.3,104.1 L285.7,104.0 L287.1,104.1 L288.4,104.6 L289.8,105.3 L291.2,106.3 L292.6,107.7 L294.0,109.2 L295.4,111.1 L296.7,113.2 L298.1,115.5 L299.5,118.1 L300.9,120.8 L302.3,123.8 L303.6,126.9 L305.0,130.2 L306.4,133.6 L307.8,137.2 L309.2,140.8 L310.6,144.5 L311.9,148.2 L313.3,152.0 L314.7,155.8 L316.1,159.5 L317.5,163.2 L318.9,166.8 L320.2,170.4 L321.6,173.8 L323.0,177.1 L324.4,180.2 L325.8,183.2 L327.2,185.9 L328.6,188.5 L329.9,190.8 L331.3,192.9 L332.7,194.8 L334.1,196.3 L335.5,197.7 L336.9,198.7 L338.2,199.4 L339.6,199.9 L341.0,200.0 L342.4,199.9 L343.8,199.4 L345.1,198.7 L346.5,197.7 L347.9,196.3 L349.3,194.8 L350.7,192.9 L352.1,190.8 L353.4,188.5 L354.8,185.9 L356.2,183.2 L357.6,180.2 L359.0,177.1 L360.4,173.8 L361.8,170.4 L363.1,166.8 L364.5,163.2 L365.9,159.5 L367.3,155.8 L368.7,152.0 L370.1,148.2 L371.4,144.5 L372.8,140.8 L374.2,137.2 L375.6,133.6 L377.0,130.2 L378.4,126.9 L379.7,123.8 L381.1,120.8 L382.5,118.1 L383.9,115.5 L385.3,113.2 L386.6,111.1 L388.0,109.2 L389.4,107.7 L390.8,106.3 L392.2,105.3 L393.6,104.6 L394.9,104.1 L396.3,104.0 L397.7,104.1 L399.1,104.6 L400.5,105.3 L401.9,106.3 L403.2,107.7 L404.6,109.2 L406.0,111.1 L407.4,113.2 L408.8,115.5 L410.2,118.1 L411.6,120.8 L412.9,123.8 L414.3,126.9 L415.7,130.2 L417.1,133.6 L418.5,137.2 L419.9,140.8 L421.2,144.5 L422.6,148.2 L424.0,152.0" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+  <line x1="258" y1="96" x2="368" y2="96" stroke="#d97706" stroke-width="1.5" marker-start="url(#arr-amber)" marker-end="url(#arr-amber)"/>
+  <text x="313" y="90" text-anchor="middle" class="t-eq" fill="#b45309">T (περίοδος)</text>
+  <text x="426" y="168" text-anchor="end" class="t-lbl">t (s)</text>
+  <text x="250" y="88" text-anchor="end" class="t-lbl">y</text>
+  <text x="340" y="242" text-anchor="middle" class="t-sm">Δείχνει ΕΝΑ σημείο στον χρόνο</text>
+
+  <rect x="16" y="268" width="428" height="30" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="287" text-anchor="middle" class="t-eq">Εξίσωση αρμονικού κύματος: y(x,t) = A·sin[ 2π ( t/T − x/λ ) ]</text>
+
+</svg>

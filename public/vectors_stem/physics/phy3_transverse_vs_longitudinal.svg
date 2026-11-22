@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="20" text-anchor="middle" class="t-title">Εγκάρσιο vs Διάμηκες Κύμα</text>
+  <!-- Top: Transverse -->
+  <rect x="20" y="32" width="420" height="114" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="50" class="t-sub">1. Εγκάρσιο Κύμα (ταλάντωση ⊥ διάδοση)</text>
+  <line x1="34" y1="96" x2="426" y2="96" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <path d="M38.0,96.0 L41.2,91.3 L44.4,86.7 L47.6,82.4 L50.8,78.4 L54.0,74.8 L57.2,71.7 L60.4,69.3 L63.6,67.5 L66.8,66.4 L70.0,66.0 L73.2,66.4 L76.4,67.5 L79.6,69.3 L82.8,71.7 L86.0,74.8 L89.2,78.4 L92.4,82.4 L95.6,86.7 L98.8,91.3 L102.0,96.0 L105.2,100.7 L108.4,105.3 L111.6,109.6 L114.8,113.6 L118.0,117.2 L121.2,120.3 L124.4,122.7 L127.6,124.5 L130.8,125.6 L134.0,126.0 L137.2,125.6 L140.4,124.5 L143.6,122.7 L146.8,120.3 L150.0,117.2 L153.2,113.6 L156.4,109.6 L159.6,105.3 L162.8,100.7 L166.0,96.0 L169.2,91.3 L172.4,86.7 L175.6,82.4 L178.8,78.4 L182.0,74.8 L185.2,71.7 L188.4,69.3 L191.6,67.5 L194.8,66.4 L198.0,66.0 L201.2,66.4 L204.4,67.5 L207.6,69.3 L210.8,71.7 L214.0,74.8 L217.2,78.4 L220.4,82.4 L223.6,86.7 L226.8,91.3 L230.0,96.0 L233.2,100.7 L236.4,105.3 L239.6,109.6 L242.8,113.6 L246.0,117.2 L249.2,120.3 L252.4,122.7 L255.6,124.5 L258.8,125.6 L262.0,126.0 L265.2,125.6 L268.4,124.5 L271.6,122.7 L274.8,120.3 L278.0,117.2 L281.2,113.6 L284.4,109.6 L287.6,105.3 L290.8,100.7 L294.0,96.0 L297.2,91.3 L300.4,86.7 L303.6,82.4 L306.8,78.4 L310.0,74.8 L313.2,71.7 L316.4,69.3 L319.6,67.5 L322.8,66.4 L326.0,66.0 L329.2,66.4 L332.4,67.5 L335.6,69.3 L338.8,71.7 L342.0,74.8 L345.2,78.4 L348.4,82.4 L351.6,86.7 L354.8,91.3 L358.0,96.0 L361.2,100.7 L364.4,105.3 L367.6,109.6 L370.8,113.6 L374.0,117.2 L377.2,120.3 L380.4,122.7 L383.6,124.5 L386.8,125.6 L390.0,126.0 L393.2,125.6 L396.4,124.5 L399.6,122.7 L402.8,120.3 L406.0,117.2 L409.2,113.6 L412.4,109.6 L415.6,105.3 L418.8,100.7 L422.0,96.0" fill="none" stroke="#dc2626" stroke-width="2.6"/>
+  <line x1="70" y1="66" x2="198" y2="66" stroke="#1e293b" stroke-width="1.4" marker-start="url(#arr-dark)" marker-end="url(#arr-dark)"/>
+  <text x="134" y="60" text-anchor="middle" class="t-eq">λ</text>
+  <line x1="364" y1="74" x2="412" y2="74" stroke="#16a34a" stroke-width="2" marker-end="url(#arr-green)"/>
+  <text x="388" y="68" text-anchor="middle" class="t-sm" fill="#15803d">u_διάδ</text>
+  <text x="70" y="136" text-anchor="middle" class="t-sm">Όρος</text>
+  <text x="134" y="136" text-anchor="middle" class="t-sm">Κοιλάδα</text>
+
+  <!-- Bottom: Longitudinal -->
+  <rect x="20" y="156" width="420" height="122" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="174" class="t-sub">2. Διάμηκες Κύμα (ταλάντωση ∥ διάδοση — π.χ. Ήχος)</text>
+  <line x1="38.0" y1="190" x2="38.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="49.3" y1="190" x2="49.3" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="60.2" y1="190" x2="60.2" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="70.6" y1="190" x2="70.6" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="80.2" y1="190" x2="80.2" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="88.9" y1="190" x2="88.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="96.9" y1="190" x2="96.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="104.1" y1="190" x2="104.1" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="110.9" y1="190" x2="110.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="117.4" y1="190" x2="117.4" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="124.1" y1="190" x2="124.1" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="131.2" y1="190" x2="131.2" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="139.0" y1="190" x2="139.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="147.6" y1="190" x2="147.6" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="157.0" y1="190" x2="157.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="167.3" y1="190" x2="167.3" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="178.1" y1="190" x2="178.1" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="189.3" y1="190" x2="189.3" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="200.6" y1="190" x2="200.6" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="211.6" y1="190" x2="211.6" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="222.2" y1="190" x2="222.2" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="231.9" y1="190" x2="231.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="240.9" y1="190" x2="240.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="248.9" y1="190" x2="248.9" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="256.3" y1="190" x2="256.3" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="263.1" y1="190" x2="263.1" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="269.7" y1="190" x2="269.7" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="276.4" y1="190" x2="276.4" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="283.4" y1="190" x2="283.4" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="291.0" y1="190" x2="291.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="299.4" y1="190" x2="299.4" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="308.7" y1="190" x2="308.7" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="318.8" y1="190" x2="318.8" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="329.5" y1="190" x2="329.5" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="340.7" y1="190" x2="340.7" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="352.0" y1="190" x2="352.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="363.1" y1="190" x2="363.1" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="373.7" y1="190" x2="373.7" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="383.6" y1="190" x2="383.6" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="392.7" y1="190" x2="392.7" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="401.0" y1="190" x2="401.0" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="408.5" y1="190" x2="408.5" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="415.4" y1="190" x2="415.4" y2="246" stroke="#2563eb" stroke-width="1.6"/><line x1="422.0" y1="190" x2="422.0" y2="246" stroke="#2563eb" stroke-width="1.6"/>
+  <text x="114" y="264" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Πύκνωμα</text>
+  <text x="192" y="264" text-anchor="middle" class="t-sm">Αραίωμα</text>
+  <text x="268" y="264" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Πύκνωμα</text>
+  <line x1="114" y1="184" x2="268" y2="184" stroke="#1e293b" stroke-width="1.4" marker-start="url(#arr-dark)" marker-end="url(#arr-dark)"/>
+  <text x="191" y="179" text-anchor="middle" class="t-eq">λ</text>
+  <text x="230" y="298" text-anchor="middle" class="t-eq">Θεμελιώδης νόμος κυματικής: u = λ · f = λ / T</text>
+
+</svg>

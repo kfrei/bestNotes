@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Κύματα de Broglie &amp; Στάσιμες Τροχιές (2πr = n·λ)</text>
+  <!-- Left: Allowed orbit n=5 -->
+  <circle cx="152" cy="152" r="74" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5,4"/>
+  <path d="M226.0,152.0 L227.9,154.6 L229.6,157.4 L231.1,160.3 L232.3,163.3 L233.2,166.3 L233.7,169.4 L233.8,172.4 L233.5,175.4 L232.8,178.3 L231.7,181.0 L230.2,183.6 L228.3,186.0 L226.1,188.1 L223.6,190.1 L220.8,191.8 L217.9,193.2 L214.9,194.4 L211.9,195.5 L208.8,196.4 L205.8,197.1 L202.9,197.8 L200.1,198.5 L197.6,199.2 L195.1,199.9 L192.9,200.8 L190.9,201.8 L189.0,203.0 L187.3,204.4 L185.7,206.0 L184.2,207.8 L182.8,209.9 L181.3,212.2 L179.9,214.6 L178.3,217.1 L176.7,219.7 L174.9,222.4 L172.9,225.0 L170.8,227.5 L168.5,229.8 L166.1,231.8 L163.5,233.6 L160.7,235.1 L157.9,236.1 L155.0,236.8 L152.0,237.0 L149.0,236.8 L146.1,236.1 L143.3,235.1 L140.5,233.6 L137.9,231.8 L135.5,229.8 L133.2,227.5 L131.1,225.0 L129.1,222.4 L127.3,219.7 L125.7,217.1 L124.1,214.6 L122.7,212.2 L121.2,209.9 L119.8,207.8 L118.3,206.0 L116.7,204.4 L115.0,203.0 L113.1,201.8 L111.1,200.8 L108.9,199.9 L106.4,199.2 L103.9,198.5 L101.1,197.8 L98.2,197.1 L95.2,196.4 L92.1,195.5 L89.1,194.4 L86.1,193.2 L83.2,191.8 L80.4,190.1 L77.9,188.1 L75.7,186.0 L73.8,183.6 L72.3,181.0 L71.2,178.3 L70.5,175.4 L70.2,172.4 L70.3,169.4 L70.8,166.3 L71.7,163.3 L72.9,160.3 L74.4,157.4 L76.1,154.6 L78.0,152.0 L80.0,149.5 L81.9,147.1 L83.9,144.8 L85.7,142.7 L87.4,140.6 L88.9,138.6 L90.2,136.6 L91.3,134.6 L92.1,132.5 L92.6,130.4 L93.0,128.2 L93.1,125.8 L93.1,123.3 L92.9,120.6 L92.7,117.8 L92.4,114.8 L92.2,111.7 L92.1,108.5 L92.2,105.3 L92.4,102.0 L92.9,98.8 L93.7,95.7 L94.7,92.7 L96.1,89.9 L97.8,87.4 L99.8,85.2 L102.0,83.2 L104.6,81.7 L107.3,80.5 L110.2,79.7 L113.3,79.2 L116.5,79.1 L119.7,79.4 L122.9,79.9 L126.0,80.7 L129.1,81.6 L132.1,82.7 L135.0,83.8 L137.8,85.0 L140.4,86.1 L142.9,87.1 L145.3,87.9 L147.6,88.5 L149.8,88.9 L152.0,89.0 L154.2,88.9 L156.4,88.5 L158.7,87.9 L161.1,87.1 L163.6,86.1 L166.2,85.0 L169.0,83.8 L171.9,82.7 L174.9,81.6 L178.0,80.7 L181.1,79.9 L184.3,79.4 L187.5,79.1 L190.7,79.2 L193.8,79.7 L196.7,80.5 L199.4,81.7 L202.0,83.2 L204.2,85.2 L206.2,87.4 L207.9,89.9 L209.3,92.7 L210.3,95.7 L211.1,98.8 L211.6,102.0 L211.8,105.3 L211.9,108.5 L211.8,111.7 L211.6,114.8 L211.3,117.7 L211.1,120.6 L210.9,123.3 L210.9,125.8 L211.0,128.2 L211.4,130.4 L211.9,132.5 L212.7,134.6 L213.8,136.6 L215.1,138.6 L216.6,140.6 L218.3,142.7 L220.1,144.8 L222.1,147.1 L224.0,149.5 L226.0,152.0" fill="none" stroke="#2563eb" stroke-width="2.6"/>
+  <circle cx="152" cy="152" r="14" fill="url(#ball-red)" stroke="#1e293b" filter="url(#soft-shadow)"/>
+  <text x="152" y="156" text-anchor="middle" class="t-w">+Ze</text>
+  <text x="152" y="250" text-anchor="middle" class="t-lbl" fill="#1d4ed8">Επιτρεπτή τροχιά (n = 5)</text>
+  <!-- Right: Info card -->
+  <rect x="260" y="64" width="178" height="176" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="349" y="88" text-anchor="middle" class="t-sub">Κυματοσωματιδιακός</text>
+  <text x="349" y="102" text-anchor="middle" class="t-sub">Δυϊσμός Ύλης</text>
+  <text x="349" y="134" text-anchor="middle" class="t-eq" font-size="13">λ = h / p = h / (m·u)</text>
+  <line x1="280" y1="152" x2="418" y2="152" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text x="349" y="176" text-anchor="middle" class="t-sm">Συνθήκη στάσιμου κύματος:</text>
+  <text x="349" y="198" text-anchor="middle" class="t-eq">2πr_n = n · λ</text>
+  <text x="349" y="222" text-anchor="middle" class="t-eq" fill="#15803d">⇒ L = m·u·r = n·(h/2π)</text>
+  <text x="230" y="290" text-anchor="middle" class="t-sm">Κβάντωση στροφορμής Bohr ως στάσιμο κύμα de Broglie</text>
+
+</svg>

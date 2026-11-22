@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 310" width="460" height="310">
+  <defs>
+    <filter id="soft-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.2" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#64748b" stroke-width="1.15" opacity="0.65"/>
+    </pattern>
+    <pattern id="hatch-warm" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#92400e" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <radialGradient id="ball-blue" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="45%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="ball-red" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="45%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="ball-amber" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <radialGradient id="ball-slate" cx="32%" cy="28%" r="68%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </radialGradient>
+    <linearGradient id="metal-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="35%" stop-color="#cbd5e1"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="wood-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="copper-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="45%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="area-blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="area-red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+    </linearGradient>
+    <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#1e293b"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#dc2626"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#16a34a"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1,1.5 L8.5,5 L1,8.5 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .t-title { font: 700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #0f172a; }
+    .t-sub { font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #334155; }
+    .t-lbl { font: 600 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #1e293b; }
+    .t-eq { font: 700 11px Georgia, "Times New Roman", serif; fill: #1e3a8a; }
+    .t-sm { font: 500 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #475569; }
+    .t-w { font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: #ffffff; }
+  </style>
+
+  <text x="230" y="22" text-anchor="middle" class="t-title">Φθίνουσα Ταλάντωση — A(t) = A₀·e^(−Λt)</text>
+  <line x1="62" y1="152" x2="432" y2="152" stroke="#1e293b" stroke-width="1.8" marker-end="url(#arr-dark)"/>
+  <line x1="62" y1="256" x2="62" y2="44" stroke="#1e293b" stroke-width="1.8" marker-end="url(#arr-dark)"/>
+  <text x="438" y="156" class="t-lbl">t</text>
+  <text x="50" y="52" class="t-lbl">x(t)</text>
+  <path d="M62.0,64.0 L67.9,66.9 L73.8,69.7 L79.7,72.4 L85.6,75.0 L91.5,77.5 L97.4,80.0 L103.3,82.3 L109.2,84.6 L115.1,86.8 L121.0,88.9 L126.9,91.0 L132.8,93.0 L138.7,94.9 L144.6,96.8 L150.5,98.6 L156.4,100.4 L162.3,102.1 L168.2,103.7 L174.1,105.3 L180.0,106.8 L185.9,108.3 L191.8,109.7 L197.7,111.1 L203.6,112.5 L209.5,113.8 L215.4,115.0 L221.3,116.2 L227.2,117.4 L233.1,118.5 L239.0,119.6 L244.9,120.7 L250.8,121.7 L256.7,122.7 L262.6,123.7 L268.5,124.6 L274.4,125.5 L280.3,126.4 L286.2,127.2 L292.1,128.0 L298.0,128.8 L303.9,129.6 L309.8,130.3 L315.7,131.0 L321.6,131.7 L327.5,132.4 L333.4,133.0 L339.3,133.6 L345.2,134.2 L351.1,134.8 L357.0,135.4 L362.9,135.9 L368.8,136.5 L374.7,137.0 L380.6,137.5 L386.5,137.9 L392.4,138.4 L398.3,138.8 L404.2,139.3 L410.1,139.7 L416.0,140.1" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-dasharray="6,4"/>
+  <path d="M62.0,240.0 L67.9,237.1 L73.8,234.3 L79.7,231.6 L85.6,229.0 L91.5,226.5 L97.4,224.0 L103.3,221.7 L109.2,219.4 L115.1,217.2 L121.0,215.1 L126.9,213.0 L132.8,211.0 L138.7,209.1 L144.6,207.2 L150.5,205.4 L156.4,203.6 L162.3,201.9 L168.2,200.3 L174.1,198.7 L180.0,197.2 L185.9,195.7 L191.8,194.3 L197.7,192.9 L203.6,191.5 L209.5,190.2 L215.4,189.0 L221.3,187.8 L227.2,186.6 L233.1,185.5 L239.0,184.4 L244.9,183.3 L250.8,182.3 L256.7,181.3 L262.6,180.3 L268.5,179.4 L274.4,178.5 L280.3,177.6 L286.2,176.8 L292.1,176.0 L298.0,175.2 L303.9,174.4 L309.8,173.7 L315.7,173.0 L321.6,172.3 L327.5,171.6 L333.4,171.0 L339.3,170.4 L345.2,169.8 L351.1,169.2 L357.0,168.6 L362.9,168.1 L368.8,167.5 L374.7,167.0 L380.6,166.5 L386.5,166.1 L392.4,165.6 L398.3,165.2 L404.2,164.7 L410.1,164.3 L416.0,163.9" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-dasharray="6,4"/>
+  <path d="M62.0,64.0 L64.0,65.7 L65.9,68.9 L67.9,73.5 L69.9,79.4 L71.8,86.4 L73.8,94.4 L75.8,103.2 L77.7,112.7 L79.7,122.7 L81.7,132.9 L83.6,143.3 L85.6,153.6 L87.6,163.7 L89.5,173.3 L91.5,182.3 L93.5,190.6 L95.4,198.0 L97.4,204.5 L99.4,209.9 L101.3,214.2 L103.3,217.3 L105.3,219.2 L107.2,219.9 L109.2,219.3 L111.2,217.6 L113.1,214.8 L115.1,211.0 L117.1,206.2 L119.0,200.6 L121.0,194.2 L123.0,187.2 L124.9,179.8 L126.9,172.1 L128.9,164.1 L130.8,156.2 L132.8,148.3 L134.8,140.7 L136.7,133.4 L138.7,126.6 L140.7,120.4 L142.6,115.0 L144.6,110.2 L146.6,106.3 L148.5,103.3 L150.5,101.2 L152.5,100.1 L154.4,99.9 L156.4,100.6 L158.4,102.1 L160.3,104.6 L162.3,107.7 L164.3,111.6 L166.2,116.2 L168.2,121.2 L170.2,126.7 L172.1,132.5 L174.1,138.5 L176.1,144.6 L178.0,150.7 L180.0,156.7 L182.0,162.5 L183.9,168.0 L185.9,173.1 L187.9,177.6 L189.8,181.7 L191.8,185.1 L193.8,187.9 L195.7,190.0 L197.7,191.4 L199.7,192.0 L201.6,192.0 L203.6,191.2 L205.6,189.8 L207.5,187.8 L209.5,185.1 L211.5,182.0 L213.4,178.4 L215.4,174.4 L217.4,170.1 L219.3,165.6 L221.3,160.9 L223.3,156.2 L225.2,151.5 L227.2,146.9 L229.2,142.6 L231.1,138.5 L233.1,134.7 L235.1,131.3 L237.0,128.3 L239.0,125.8 L241.0,123.8 L242.9,122.4 L244.9,121.5 L246.9,121.2 L248.8,121.4 L250.8,122.1 L252.8,123.4 L254.7,125.1 L256.7,127.3 L258.7,129.8 L260.6,132.7 L262.6,135.8 L264.6,139.2 L266.5,142.7 L268.5,146.3 L270.5,149.9 L272.4,153.5 L274.4,157.0 L276.4,160.3 L278.3,163.4 L280.3,166.2 L282.3,168.7 L284.2,170.9 L286.2,172.7 L288.2,174.0 L290.1,175.0 L292.1,175.6 L294.1,175.7 L296.0,175.4 L298.0,174.7 L300.0,173.6 L301.9,172.2 L303.9,170.4 L305.9,168.4 L307.8,166.1 L309.8,163.6 L311.8,161.0 L313.7,158.3 L315.7,155.5 L317.7,152.7 L319.6,150.0 L321.6,147.4 L323.6,144.9 L325.5,142.6 L327.5,140.5 L329.5,138.6 L331.4,137.0 L333.4,135.8 L335.4,134.8 L337.3,134.1 L339.3,133.8 L341.3,133.8 L343.2,134.2 L345.2,134.8 L347.2,135.7 L349.1,136.9 L351.1,138.3 L353.1,139.9 L355.0,141.7 L357.0,143.7 L359.0,145.7 L360.9,147.8 L362.9,150.0 L364.9,152.1 L366.8,154.2 L368.8,156.2 L370.8,158.1 L372.7,159.8 L374.7,161.3 L376.7,162.7 L378.6,163.8 L380.6,164.7 L382.6,165.4 L384.5,165.8 L386.5,166.0 L388.5,165.9 L390.4,165.6 L392.4,165.0 L394.4,164.3 L396.3,163.3 L398.3,162.1 L400.3,160.8 L402.2,159.4 L404.2,157.9 L406.2,156.3 L408.1,154.7 L410.1,153.0 L412.1,151.4 L414.0,149.8 L416.0,148.3" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="52" y="68" text-anchor="end" class="t-sm">+A₀</text>
+  <text x="52" y="242" text-anchor="end" class="t-sm">−A₀</text>
+  <text x="276" y="88" class="t-eq" fill="#b91c1c">+A₀·e^(−Λt)</text>
+  <rect x="28" y="268" width="404" height="30" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="230" y="287" text-anchor="middle" class="t-eq">F_αντ = −b·u   |   Λ = b / (2m)   |   E(t) = E₀·e^(−2Λt)</text>
+
+</svg>
