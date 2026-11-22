@@ -524,22 +524,16 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
             </clipPath>
           </defs>
           <g clipPath="url(#rtStickersClip)">
-            {/* Simple green outline Cell — rests at center, slides out right */}
+            {/* Exclamation mark (matching the stickers catalog) — rests at center, slides out right */}
             <g style={{ animation: 'rtStickerCellSlide 3.2s ease-in-out infinite' }}>
               <path
-                d="M 28 31 C 28 18, 39 11, 50 12 C 62 13, 70 21, 69 32 C 68 44, 58 51, 46 50 C 34 49, 28 42, 28 31 Z"
-                fill="#10b981"
-                fillOpacity="0.07"
-                stroke="#059669"
-                strokeWidth="1.9"
+                d="M 38 13 L 58 13 L 48 39 Z"
+                fill="#141d2e"
+                stroke="#141d2e"
+                strokeWidth="3"
+                strokeLinejoin="round"
               />
-              {/* Nucleus + nucleolus */}
-              <circle cx="48" cy="30" r="8" fill="#10b981" fillOpacity="0.12" stroke="#059669" strokeWidth="1.5" />
-              <circle cx="49" cy="29.5" r="2.6" fill="none" stroke="#059669" strokeWidth="1.3" />
-              {/* Small organelles */}
-              <ellipse cx="36" cy="24" rx="3.2" ry="1.8" transform="rotate(-25 36 24)" fill="none" stroke="#059669" strokeWidth="1.2" />
-              <ellipse cx="60" cy="38" rx="3.5" ry="1.9" transform="rotate(20 60 38)" fill="none" stroke="#059669" strokeWidth="1.2" />
-              <circle cx="38" cy="40" r="2" fill="none" stroke="#059669" strokeWidth="1.2" />
+              <circle cx="48" cy="48.5" r="4.2" fill="#141d2e" />
             </g>
 
             {/* Simple green outline Leaf — slides in from left, rests at center, slides out right */}
