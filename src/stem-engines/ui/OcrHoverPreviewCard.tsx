@@ -44,7 +44,7 @@ const PREVIEW_META: Record<OcrHoverPreviewMode, PreviewMeta> = {
   },
   reaction: {
     title: 'Αντιδράσεις',
-    subtitle: 'Αναγνώριση & ισοστάθμιση αντίδρασης',
+    subtitle: 'Αναγνώριση χημικής αντίδρασης & ατόμων',
     badge: '→',
   },
   molecule3d: {

@@ -240,7 +240,7 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>Αντιδράσεις</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">ChemOCR / Ισοστάθμιση</span>
+              <span className="text-[10px] text-[#64748b] font-medium">ChemOCR</span>
             </button>
             <button
               type="button"
