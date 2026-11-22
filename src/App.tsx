@@ -16267,20 +16267,24 @@ export default function App() {
         x: im.x + 28,
         y: im.y + 28,
       }));
-      const duplicatedStrokes: StrokeObject[] = selStrokes.map((s) => ({
-        ...structuredClone(s),
-        id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        groupId: s.groupId ? newGroupId : undefined,
-        attachedToWeightId: undefined,
-        springSupport: undefined,
-        points: s.points.map((p) => ({
-          ...p,
-          x: p.x + 28,
-          y: p.y + 28,
-          cx: p.cx !== undefined ? p.cx + 28 : undefined,
-          cy: p.cy !== undefined ? p.cy + 28 : undefined,
-        })),
-      }));
+      const duplicatedStrokes: StrokeObject[] = selStrokes.map((s) => {
+        const circuitSuffixMatch = s.id.match(/(-(bulb|fan|switch|battery|resistor|ammeter|voltmeter)-[a-z0-9-]+)$/i);
+        const preservedSuffix = circuitSuffixMatch ? circuitSuffixMatch[1] : '';
+        return {
+          ...structuredClone(s),
+          id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}${preservedSuffix}`,
+          groupId: s.groupId ? newGroupId : undefined,
+          attachedToWeightId: undefined,
+          springSupport: undefined,
+          points: s.points.map((p) => ({
+            ...p,
+            x: p.x + 28,
+            y: p.y + 28,
+            cx: p.cx !== undefined ? p.cx + 28 : undefined,
+            cy: p.cy !== undefined ? p.cy + 28 : undefined,
+          })),
+        };
+      });
       const duplicatedTexts: TextObject[] = selTexts.map((t) => ({
         ...structuredClone(t),
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

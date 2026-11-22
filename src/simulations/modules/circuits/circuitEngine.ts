@@ -196,6 +196,11 @@ export function getCircuitComponentsWithTerminals(
         // Never merge strokes of different component kinds (e.g. bulb vs fan vs battery), even when grouped as one "sim group"!
         if (cand.kind !== seed.kind) continue;
 
+        // Never merge two distinct components that belong to DIFFERENT groupIds (e.g. a duplicated bulb/fan overlapping the original!)
+        const candGrp = cand.stroke.groupId;
+        if (seedGrp && candGrp && seedGrp !== candGrp) continue;
+        if (isDedicatedCompGroup && candGrp !== seedGrp) continue;
+
         const gapX = Math.max(0, cMinX - cand.maxX, cand.minX - cMaxX);
         const gapY = Math.max(0, cMinY - cand.maxY, cand.minY - cMaxY);
         const spatiallyClose = gapX <= 16 && gapY <= 16;
