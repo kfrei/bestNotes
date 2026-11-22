@@ -631,27 +631,29 @@ export function stepGravityScene(
         }
       }
 
-      // Keep inside A4 page bounds gently
-      const halfWBound = b.shapeKind === 'ball' ? r : b.halfW;
-      const wallRestitution = b.pusher ? 0 : config.restitution;
-      if (b.cx - halfWBound < 8) {
-        b.cx = 8 + halfWBound;
-        if (b.vx < 0) b.vx = -b.vx * wallRestitution;
-      } else if (b.cx + halfWBound > pageW - 8) {
-        b.cx = pageW - 8 - halfWBound;
-        if (b.vx > 0) b.vx = -b.vx * wallRestitution;
-      }
-      if (b.cy - r < 8) {
-        b.cy = 8 + r;
-        if (b.vy < 0) b.vy = -b.vy * config.restitution;
-      } else if (b.cy + r > pageH - 8) {
-        b.cy = pageH - 8 - r;
-        if (b.vy > 0) {
-          const eEff = Math.abs(b.vy) < 26 ? 0 : config.restitution;
-          b.vy = -b.vy * eEff;
-          b.onGround = true;
-          if (config.frictionEnabled) {
-            b.vx *= Math.max(0, 1 - config.frictionMu * 1.8 * subDt);
+      // Keep inside A4 page bounds gently ONLY when pageBoundsEnabled is checked!
+      if (config.pageBoundsEnabled) {
+        const halfWBound = b.shapeKind === 'ball' ? r : b.halfW;
+        const wallRestitution = b.pusher ? 0 : config.restitution;
+        if (b.cx - halfWBound < 8) {
+          b.cx = 8 + halfWBound;
+          if (b.vx < 0) b.vx = -b.vx * wallRestitution;
+        } else if (b.cx + halfWBound > pageW - 8) {
+          b.cx = pageW - 8 - halfWBound;
+          if (b.vx > 0) b.vx = -b.vx * wallRestitution;
+        }
+        if (b.cy - r < 8) {
+          b.cy = 8 + r;
+          if (b.vy < 0) b.vy = -b.vy * config.restitution;
+        } else if (b.cy + r > pageH - 8) {
+          b.cy = pageH - 8 - r;
+          if (b.vy > 0) {
+            const eEff = Math.abs(b.vy) < 26 ? 0 : config.restitution;
+            b.vy = -b.vy * eEff;
+            b.onGround = true;
+            if (config.frictionEnabled) {
+              b.vx *= Math.max(0, 1 - config.frictionMu * 1.8 * subDt);
+            }
           }
         }
       }

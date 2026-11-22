@@ -55,6 +55,7 @@ export interface GravityLabConfig {
   frictionMu: number; // 0.02 .. 0.80
   airDragEnabled: boolean;
   airDragCoeff: number; // 0.02 .. 0.30
+  pageBoundsEnabled: boolean; // true = bounce off page edges; false = fly/fall freely off-page
   pushForceN: number; // Stickman horizontal pushing force in Newtons (0 .. 40 N)
   showVectors: boolean;
   showTrail: boolean;
@@ -68,6 +69,7 @@ export const DEFAULT_GRAVITY_CONFIG: GravityLabConfig = {
   frictionMu: 0.18,
   airDragEnabled: false,
   airDragCoeff: 0.08,
+  pageBoundsEnabled: true,
   pushForceN: 14,
   showVectors: true,
   showTrail: true,
