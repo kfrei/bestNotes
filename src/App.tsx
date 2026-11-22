@@ -8772,6 +8772,10 @@ export default function App() {
           sa.shapeType !== sb.shapeType ||
           Boolean(sa.arrowStart) !== Boolean(sb.arrowStart) ||
           Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
+          (sa.extrudeDx ?? null) !== (sb.extrudeDx ?? null) ||
+          (sa.extrudeDy ?? null) !== (sb.extrudeDy ?? null) ||
+          (sa.shadingStyle3D || '') !== (sb.shadingStyle3D || '') ||
+          (sa.lightAngle3D ?? null) !== (sb.lightAngle3D ?? null) ||
           sa.groupId !== sb.groupId ||
           sa.layerId !== sb.layerId ||
           sa.zOrder !== sb.zOrder ||
@@ -71987,24 +71991,31 @@ export default function App() {
                                     const origDx = handleInfo.dx;
                                     const origDy = handleInfo.dy;
                                     const scale = Math.max(0.2, zoom || 1);
-                                    // Record one undo snapshot before dragging
-                                    patch3D({ extrudeDx: origDx, extrudeDy: origDy }, true);
+                                    let recordedDragUndo = false;
                                     const onMove = (me: PointerEvent) => {
-                                      const nextDx = Math.max(
-                                        -180,
-                                        Math.min(180, origDx + (me.clientX - startClientX) / scale)
+                                      const nextDx = Math.round(
+                                        Math.max(
+                                          -180,
+                                          Math.min(180, origDx + (me.clientX - startClientX) / scale)
+                                        )
                                       );
-                                      const nextDy = Math.max(
-                                        -180,
-                                        Math.min(180, origDy + (me.clientY - startClientY) / scale)
+                                      const nextDy = Math.round(
+                                        Math.max(
+                                          -180,
+                                          Math.min(180, origDy + (me.clientY - startClientY) / scale)
+                                        )
                                       );
+                                      if (!recordedDragUndo && nextDx === origDx && nextDy === origDy) {
+                                        return;
+                                      }
                                       patch3D(
                                         {
-                                          extrudeDx: Math.round(nextDx),
-                                          extrudeDy: Math.round(nextDy),
+                                          extrudeDx: nextDx,
+                                          extrudeDy: nextDy,
                                         },
-                                        false
+                                        !recordedDragUndo
                                       );
+                                      recordedDragUndo = true;
                                     };
                                     const onUp = () => {
                                       window.removeEventListener('pointermove', onMove);
