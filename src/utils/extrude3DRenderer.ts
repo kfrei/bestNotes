@@ -25,10 +25,11 @@ export const EXTRUDABLE_2D_SHAPE_TYPES = new Set([
 ]);
 
 export function hasExtrude3D(s: StrokeObject): boolean {
+  if (SHADED_3D_SHAPE_TYPES.has(s.shapeType || '')) return false;
+  if (s.extrudeShape3D === 'sphere') return true;
   return (
     (typeof s.extrudeDx === 'number' || typeof s.extrudeDy === 'number') &&
-    Math.hypot(s.extrudeDx || 0, s.extrudeDy || 0) >= 2 &&
-    !SHADED_3D_SHAPE_TYPES.has(s.shapeType || '')
+    Math.hypot(s.extrudeDx || 0, s.extrudeDy || 0) >= 2
   );
 }
 
@@ -217,6 +218,7 @@ export function get3DExtrudeHandleAnchorAndPos(
   s: StrokeObject
 ): { anchor: { x: number; y: number }; handle: { x: number; y: number }; dx: number; dy: number } | null {
   if (!s.points || s.points.length < 3) return null;
+  if (s.extrudeShape3D === 'sphere') return null;
 
   if (hasExtrude3D(s)) {
     const ring = sampleRingFromStroke(s);
@@ -817,5 +819,160 @@ export function drawExtruded3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
   if (!hasExtrude3D(s)) return false;
   const frontPts = sampleRingFromStroke(s);
   if (frontPts.length < 3) return false;
+
+  // 3D Sphere / Ellipsoid mode (toggled via "Σφαίρα" on any Circle or Ellipse!)
+  if (s.extrudeShape3D === 'sphere') {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const p of frontPts) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const rx = Math.max(8, (maxX - minX) * 0.5);
+    const ry = Math.max(8, (maxY - minY) * 0.5);
+
+    const style: ShadingStyle3D = s.shadingStyle3D || 'studio';
+    const lightDeg = s.lightAngle3D ?? 45;
+    const lightRad = (lightDeg * Math.PI) / 180;
+    const lx = Math.cos(lightRad);
+    const ly = -Math.sin(lightRad);
+
+    const rawHex =
+      s.fillColor && s.fillStyle && s.fillStyle !== 'none' ? s.fillColor : s.color || '#64748b';
+    let baseRgb = parseHexRgb(rawHex);
+    const lum = 0.299 * baseRgb[0] + 0.587 * baseRgb[1] + 0.114 * baseRgb[2];
+    if (style === 'studio' && lum < 45) {
+      baseRgb = [100, 116, 139];
+    }
+    const inkColor = lum < 80 ? rawHex : mixRgb(baseRgb, [15, 23, 42], 0.55);
+    const baseAlpha = s.opacity ?? 1;
+    const fillRatio =
+      s.fillTransparency !== undefined
+        ? Math.max(0.05, Math.min(1, (100 - s.fillTransparency) / 100))
+        : 1;
+    const faceAlpha = baseAlpha * fillRatio;
+    const contourW = Math.max(1.1, Math.min(2.6, (s.width || 2.5) * 0.72));
+
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // 1. Subtle elliptical contact shadow underneath sphere
+    if (style === 'studio' || style === 'flat') {
+      const shRx = rx * 0.76;
+      const shRy = Math.max(3.5, Math.min(8.5, ry * 0.16));
+      const shAlpha = (style === 'studio' ? 0.16 : 0.09) * Math.max(0.15, fillRatio);
+      ctx.save();
+      ctx.translate(cx - lx * 4, maxY + 1.5);
+      ctx.scale(1, shRy / shRx);
+      const shG = ctx.createRadialGradient(0, 0, 0, 0, 0, shRx);
+      shG.addColorStop(0, `rgba(15, 23, 42, ${shAlpha.toFixed(3)})`);
+      shG.addColorStop(0.55, `rgba(15, 23, 42, ${(shAlpha * 0.4).toFixed(3)})`);
+      shG.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = shG;
+      ctx.beginPath();
+      ctx.arc(0, 0, shRx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (style === 'wireframe') {
+      // Subtle translucent sphere tint
+      ctx.save();
+      ctx.globalAlpha = baseAlpha * Math.min(0.2, fillRatio * 0.14);
+      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.72);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Faint dashed back equator arc (upper half of tilted equator)
+      ctx.save();
+      ctx.strokeStyle = inkColor;
+      ctx.globalAlpha = baseAlpha * 0.28;
+      ctx.lineWidth = Math.max(0.85, contourW * 0.72);
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry * 0.3, 0, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Solid outer sphere contour + solid front equator arc
+      ctx.save();
+      ctx.strokeStyle = inkColor;
+      ctx.globalAlpha = baseAlpha;
+      ctx.lineWidth = Math.max(1.4, contourW * 1.1);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry * 0.3, 0, 0, Math.PI);
+      ctx.stroke();
+      ctx.restore();
+    } else if (style === 'flat') {
+      // Clean cel-shaded 2-tone sphere
+      ctx.save();
+      ctx.globalAlpha = faceAlpha;
+      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.32);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft crescent shadow on opposite side of light
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = mixRgb(baseRgb, [15, 23, 42], 0.28);
+      ctx.beginPath();
+      ctx.ellipse(cx - lx * rx * 0.32, cy - ly * ry * 0.32, rx * 1.05, ry * 1.05, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.32);
+      ctx.beginPath();
+      ctx.ellipse(cx + lx * rx * 0.22, cy + ly * ry * 0.22, rx * 0.88, ry * 0.88, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.globalAlpha = baseAlpha;
+      ctx.strokeStyle = inkColor;
+      ctx.lineWidth = Math.max(1.5, contourW * 1.1);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      // Studio Blender-Clay 3D Sphere (5-stop radial studio lighting driven by lightAngle3D!)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(1, ry / rx);
+      const hiX = lx * rx * 0.36;
+      const hiY = ly * rx * 0.36;
+      const sg = ctx.createRadialGradient(hiX, hiY, rx * 0.05, 0, 0, rx * 1.02);
+      sg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.92));
+      sg.addColorStop(0.28, mixRgb(baseRgb, [255, 255, 255], 0.42));
+      sg.addColorStop(0.62, mixRgb(baseRgb, [15, 23, 42], 0.12));
+      sg.addColorStop(0.88, mixRgb(baseRgb, [15, 23, 42], 0.44));
+      sg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.28)); // Subtle rim bounce light
+      ctx.globalAlpha = faceAlpha;
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(0, 0, rx, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = baseAlpha * 0.55;
+      ctx.strokeStyle = mixRgb(baseRgb, [15, 23, 42], 0.36);
+      ctx.lineWidth = Math.max(0.85, contourW * 0.65);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+    return true;
+  }
+
   return drawPolyExtruded3D(ctx, frontPts, s.extrudeDx ?? 28, s.extrudeDy ?? -22, s);
 }

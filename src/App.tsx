@@ -8774,6 +8774,7 @@ export default function App() {
           Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
           (sa.extrudeDx ?? null) !== (sb.extrudeDx ?? null) ||
           (sa.extrudeDy ?? null) !== (sb.extrudeDy ?? null) ||
+          (sa.extrudeShape3D || '') !== (sb.extrudeShape3D || '') ||
           (sa.shadingStyle3D || '') !== (sb.shadingStyle3D || '') ||
           (sa.lightAngle3D ?? null) !== (sb.lightAngle3D ?? null) ||
           sa.groupId !== sb.groupId ||
@@ -63216,6 +63217,7 @@ export default function App() {
                                               ...st,
                                               extrudeDx: undefined,
                                               extrudeDy: undefined,
+                                              extrudeShape3D: undefined,
                                               shadingStyle3D: undefined,
                                               lightAngle3D: undefined,
                                             }
@@ -72159,6 +72161,35 @@ export default function App() {
                                   {stOpt.label}
                                 </button>
                               ))}
+                              {(selStroke.shapeType === 'circle' ||
+                                selStroke.shapeType === 'ellipse') && (
+                                <>
+                                  <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextSphere = selStroke.extrudeShape3D !== 'sphere';
+                                      patch3D({
+                                        extrudeShape3D: nextSphere ? 'sphere' : 'extrude',
+                                        ...(nextSphere
+                                          ? {}
+                                          : {
+                                              extrudeDx: selStroke.extrudeDx ?? 0,
+                                              extrudeDy: selStroke.extrudeDy ?? -68,
+                                            }),
+                                      });
+                                    }}
+                                    className={`px-2 py-0.5 rounded-[5px] cursor-pointer transition ${
+                                      selStroke.extrudeShape3D === 'sphere'
+                                        ? 'bg-[#d6cbb8] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-inner'
+                                        : 'text-[#5c5346] hover:text-[#2c251d] hover:bg-[#ebe4d7]/75'
+                                    }`}
+                                    title="Εναλλαγή Κύλινδρος ↔ 3D Σφαίρα"
+                                  >
+                                    Σφαίρα
+                                  </button>
+                                </>
+                              )}
                               <span className="w-px h-3.5 bg-[#d6cbb8]/80 mx-0.5" />
                               <button
                                 type="button"
@@ -72187,6 +72218,7 @@ export default function App() {
                                       patch3D({
                                         extrudeDx: undefined,
                                         extrudeDy: undefined,
+                                        extrudeShape3D: undefined,
                                         shadingStyle3D: undefined,
                                         lightAngle3D: undefined,
                                       })

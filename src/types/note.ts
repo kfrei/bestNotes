@@ -132,6 +132,7 @@ export interface StrokeObject {
   // Mini-Blender 2.5D Extrude & Studio 3D properties
   extrudeDx?: number;
   extrudeDy?: number;
+  extrudeShape3D?: 'extrude' | 'sphere';
   shadingStyle3D?: 'studio' | 'sketch' | 'flat' | 'wireframe';
   lightAngle3D?: number; // Light direction in degrees (45 = top-right, 135 = top-left, 225 = bottom-left, 315 = bottom-right)
 }
