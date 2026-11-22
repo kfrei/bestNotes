@@ -57519,13 +57519,12 @@ export default function App() {
                       ? `${nb.title}\n📁 ${folderBreadcrumb}\n(Πάτα πάνω στο όνομα για μετονομασία)`
                       : `${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`
                   }
-                  className={`w-fit shrink-0 ${tabMaxWidthClass} flex items-center gap-2 px-3 py-1 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+                  className={`w-fit shrink-0 ${tabMaxWidthClass} flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                     isActive
                       ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
                       : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
                   }`}
                 >
-                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
                   {renamingNotebookId === nb.id && renamingNotebookContext === 'tab' ? (
                     <input
                       type="text"
