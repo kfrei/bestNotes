@@ -71993,18 +71993,21 @@ export default function App() {
                                     const scale = Math.max(0.2, zoom || 1);
                                     let recordedDragUndo = false;
                                     const onMove = (me: PointerEvent) => {
-                                      const nextDx = Math.round(
+                                      let nextDx = Math.round(
                                         Math.max(
                                           -180,
                                           Math.min(180, origDx + (me.clientX - startClientX) / scale)
                                         )
                                       );
-                                      const nextDy = Math.round(
+                                      let nextDy = Math.round(
                                         Math.max(
                                           -180,
                                           Math.min(180, origDy + (me.clientY - startClientY) / scale)
                                         )
                                       );
+                                      // Magnetic vertical/horizontal snap (0°/90°) for effortless upright cylinders & prisms!
+                                      if (Math.abs(nextDx) <= 10 && Math.abs(nextDy) >= 12) nextDx = 0;
+                                      if (Math.abs(nextDy) <= 10 && Math.abs(nextDx) >= 12) nextDy = 0;
                                       if (!recordedDragUndo && nextDx === origDx && nextDy === origDy) {
                                         return;
                                       }
@@ -72048,14 +72051,20 @@ export default function App() {
                               {canExtrude ? (
                                 <button
                                   type="button"
-                                  onClick={() =>
+                                  onClick={() => {
+                                    const boxW = selBox.maxX - selBox.minX;
+                                    const boxH = selBox.maxY - selBox.minY;
+                                    const isFlatEllipse =
+                                      (selStroke.shapeType === 'ellipse' ||
+                                        selStroke.shapeType === 'circle') &&
+                                      boxW > boxH * 1.35;
                                     patch3D({
-                                      extrudeDx: 28,
-                                      extrudeDy: -22,
+                                      extrudeDx: isFlatEllipse ? 0 : 28,
+                                      extrudeDy: isFlatEllipse ? -68 : -22,
                                       shadingStyle3D: 'studio',
                                       lightAngle3D: 45,
-                                    })
-                                  }
+                                    });
+                                  }}
                                   className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#d6cbb8] hover:bg-[#c8baa3] text-[#2c251d] font-bold border border-[#bfb097]/70 shadow-2xs cursor-pointer transition"
                                   title="Μετατροπή 2D σχήματος σε 3D (Extrude)"
                                 >

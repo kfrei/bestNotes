@@ -407,6 +407,8 @@ export function drawPolyExtruded3D(
     ctx.restore();
   }
 
+  const isUpright = dy < -4 && Math.abs(dx) <= Math.max(12, Math.abs(dy) * 0.28);
+
   // 2. Wireframe mode: textbook 3D stereometry hidden-line rendering!
   //    ONLY the truly occluded back/bottom edges are dashed; all visible outer & front edges are crisp solid!
   if (style === 'wireframe') {
@@ -415,7 +417,8 @@ export function drawPolyExtruded3D(
     const uyW = dy / depthLen;
     const isSmoothW = nW > 16;
 
-    // Determine which side-wall edges face outward along extrusion (visible) vs hidden behind front face
+    // Determine which side-wall edges face the viewer (visible) vs hidden behind the solid.
+    // In upright mode (rising UP from a base), front-facing walls have outward normal pointing opposite to (uxW, uyW) (i.e. downward/forward).
     const edgeVis: boolean[] = new Array(nW);
     for (let i = 0; i < nW; i++) {
       const j = (i + 1) % nW;
@@ -424,7 +427,8 @@ export function drawPolyExtruded3D(
       const eLen = Math.hypot(ex, ey) || 1;
       const nx = ey / eLen;
       const ny = -ex / eLen;
-      edgeVis[i] = nx * uxW + ny * uyW > -0.02;
+      const dot = nx * uxW + ny * uyW;
+      edgeVis[i] = isUpright ? dot < 0.02 : dot > -0.02;
     }
 
     const baseAlphaW = s.opacity ?? 1;
@@ -433,18 +437,21 @@ export function drawPolyExtruded3D(
         ? Math.max(0.03, Math.min(0.45, ((100 - s.fillTransparency) / 100) * 0.22))
         : 0.1;
 
-    // Subtle translucent fill inside front face
+    const visibleCap = isUpright ? backPts : frontPts;
+    const farCap = isUpright ? frontPts : backPts;
+
+    // Subtle translucent fill inside visible cap
     ctx.save();
     ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.72);
     ctx.globalAlpha = baseAlphaW * fillRatioW;
     ctx.beginPath();
-    ctx.moveTo(frontPts[0].x, frontPts[0].y);
-    for (let i = 1; i < nW; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
+    ctx.moveTo(visibleCap[0].x, visibleCap[0].y);
+    for (let i = 1; i < nW; i++) ctx.lineTo(visibleCap[i].x, visibleCap[i].y);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
 
-    // 2a. HIDDEN edges (dashed): occluded back edges + occluded connecting ribs
+    // 2a. HIDDEN edges (dashed): occluded edges of the far cap + occluded connecting ribs
     ctx.save();
     ctx.strokeStyle = inkColor;
     ctx.globalAlpha = baseAlphaW * 0.52;
@@ -454,8 +461,8 @@ export function drawPolyExtruded3D(
     for (let i = 0; i < nW; i++) {
       const j = (i + 1) % nW;
       if (!edgeVis[i]) {
-        ctx.moveTo(backPts[i].x, backPts[i].y);
-        ctx.lineTo(backPts[j].x, backPts[j].y);
+        ctx.moveTo(farCap[i].x, farCap[i].y);
+        ctx.lineTo(farCap[j].x, farCap[j].y);
       }
       if (!isSmoothW) {
         const prevVis = edgeVis[(i - 1 + nW) % nW];
@@ -469,22 +476,21 @@ export function drawPolyExtruded3D(
     ctx.stroke();
     ctx.restore();
 
-    // 2b. VISIBLE edges (crisp solid): visible back edges + visible ribs + entire front face
+    // 2b. VISIBLE edges (crisp solid): visible cap + visible edges of far cap + visible ribs
     ctx.save();
     ctx.strokeStyle = inkColor;
     ctx.globalAlpha = baseAlphaW;
     ctx.lineWidth = Math.max(1.4, contourW * 1.1);
     ctx.setLineDash([]);
     ctx.beginPath();
-    // Front face (always visible)
-    ctx.moveTo(frontPts[0].x, frontPts[0].y);
-    for (let i = 1; i < nW; i++) ctx.lineTo(frontPts[i].x, frontPts[i].y);
+    ctx.moveTo(visibleCap[0].x, visibleCap[0].y);
+    for (let i = 1; i < nW; i++) ctx.lineTo(visibleCap[i].x, visibleCap[i].y);
     ctx.closePath();
     for (let i = 0; i < nW; i++) {
       const j = (i + 1) % nW;
       if (edgeVis[i]) {
-        ctx.moveTo(backPts[i].x, backPts[i].y);
-        ctx.lineTo(backPts[j].x, backPts[j].y);
+        ctx.moveTo(farCap[i].x, farCap[i].y);
+        ctx.lineTo(farCap[j].x, farCap[j].y);
       }
       const prevVis = edgeVis[(i - 1 + nW) % nW];
       const currVis = edgeVis[i];
@@ -506,7 +512,7 @@ export function drawPolyExtruded3D(
     return true;
   }
 
-  // 3. Build side-wall quads and sort back-to-front along extrusion vector (dx, dy)
+  // 3. Build side-wall quads and sort back-to-front
   const n = frontPts.length;
   const ux = dx / depthLen;
   const uy = dy / depthLen;
@@ -535,19 +541,17 @@ export function drawPolyExtruded3D(
     const nx = ey / eLen;
     const ny = -ex / eLen;
 
-    // A side face is visible on the outside when its outward normal points toward the extrusion direction
     const visDot = nx * ux + ny * uy;
     const ndotl = nx * lx + ny * ly;
     const midX = (f0.x + f1.x + b0.x + b1.x) * 0.25;
     const midY = (f0.y + f1.y + b0.y + b1.y) * 0.25;
-    // Higher projection along (ux, uy) = farther back -> draw first
-    const depthScore = midX * ux + midY * uy;
+    const depthScore = isUpright ? -(midX * ux + midY * uy) : midX * ux + midY * uy;
 
     quads.push({
       idx: i,
       quad: [f0, f1, b1, b0],
       ndotl,
-      visible: visDot > -0.02,
+      visible: isUpright ? visDot < 0.02 : visDot > -0.02,
       depthScore,
     });
   }
@@ -570,59 +574,127 @@ export function drawPolyExtruded3D(
   const faceAlpha = baseAlpha * fillRatio;
 
   // 4. Draw visible extruded side walls
-  for (const q of quads) {
-    if (!q.visible) continue;
-    const brightness = (q.ndotl + 1) * 0.5; // 0 (dark) .. 1 (brightest)
+  if (isSmoothCurve && (style === 'studio' || style === 'flat')) {
+    // Silky-smooth cylindrical side wrap (ZERO vertical facet stripes!)
+    const visIndices: number[] = [];
+    const visByIdx: boolean[] = new Array(n).fill(false);
+    for (const q of quads) {
+      if (q.visible) visByIdx[q.idx] = true;
+    }
+    // Find contiguous visible arc start (where prev is false and curr is true)
+    let arcStart = -1;
+    for (let i = 0; i < n; i++) {
+      if (visByIdx[i] && !visByIdx[(i - 1 + n) % n]) {
+        arcStart = i;
+        break;
+      }
+    }
+    if (arcStart >= 0) {
+      let cur = arcStart;
+      while (visByIdx[cur] && visIndices.length < n) {
+        visIndices.push(cur);
+        cur = (cur + 1) % n;
+      }
+      visIndices.push(cur); // Closing endpoint of visible arc
+    }
+    if (visIndices.length >= 2) {
+      const farRing = isUpright ? frontPts : backPts;
+      const nearRing = isUpright ? backPts : frontPts;
+      const firstIdx = visIndices[0];
+      const lastIdx = visIndices[visIndices.length - 1];
 
-    if (style === 'studio') {
-      const [f0, , b1] = q.quad;
-      const g = ctx.createLinearGradient(b1.x, b1.y, f0.x, f0.y);
-      if (brightness > 0.55) {
-        g.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.88));
-        g.addColorStop(0.6, mixRgb(baseRgb, [255, 255, 255], 0.52));
-        g.addColorStop(1, mixRgb(baseRgb, [255, 255, 255], 0.22));
-      } else if (brightness > 0.3) {
-        g.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.42));
-        g.addColorStop(0.55, mixRgb(baseRgb, [255, 255, 255], 0.08));
-        g.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.24));
+      // Build one smooth closed wrap silhouette polygon (near arc -> far arc reversed)
+      const wrapPoly: { x: number; y: number }[] = [];
+      for (const idx of visIndices) wrapPoly.push(nearRing[idx]);
+      for (let k = visIndices.length - 1; k >= 0; k--) wrapPoly.push(farRing[visIndices[k]]);
+
+      // Cylindrical lighting gradient perpendicular to extrusion axis (ux, uy)
+      const px = -uy;
+      const py = ux;
+      const a0 = nearRing[firstIdx];
+      const a1 = nearRing[lastIdx];
+      const gradDir = (a1.x - a0.x) * lx + (a1.y - a0.y) * ly >= 0 ? 1 : -1;
+      const gStart = gradDir > 0 ? a1 : a0;
+      const gEnd = gradDir > 0 ? a0 : a1;
+      const cg = ctx.createLinearGradient(gStart.x, gStart.y, gEnd.x, gEnd.y);
+      if (style === 'studio') {
+        cg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.72));
+        cg.addColorStop(0.28, mixRgb(baseRgb, [255, 255, 255], 0.28));
+        cg.addColorStop(0.65, mixRgb(baseRgb, [15, 23, 42], 0.22));
+        cg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.48));
       } else {
-        g.addColorStop(0, mixRgb(baseRgb, [15, 23, 42], 0.14));
-        g.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.48));
+        cg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.48));
+        cg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.24));
       }
       ctx.globalAlpha = faceAlpha;
-      ctx.fillStyle = g;
-      tracePoly(q.quad);
+      ctx.fillStyle = cg;
+      tracePoly(wrapPoly);
       ctx.fill();
-      if (!isSmoothCurve) {
+
+      // Clean outer silhouette contour (far arc + 2 tangent side ribs)
+      ctx.globalAlpha = baseAlpha;
+      ctx.strokeStyle = style === 'studio' ? mixRgb(baseRgb, [15, 23, 42], 0.34) : inkColor;
+      ctx.lineWidth = style === 'studio' ? Math.max(0.9, contourW * 0.65) : Math.max(1.4, contourW);
+      ctx.beginPath();
+      ctx.moveTo(nearRing[firstIdx].x, nearRing[firstIdx].y);
+      ctx.lineTo(farRing[firstIdx].x, farRing[firstIdx].y);
+      for (let k = 1; k < visIndices.length; k++) {
+        ctx.lineTo(farRing[visIndices[k]].x, farRing[visIndices[k]].y);
+      }
+      ctx.lineTo(nearRing[lastIdx].x, nearRing[lastIdx].y);
+      ctx.stroke();
+      void px;
+      void py;
+    }
+  } else {
+    for (const q of quads) {
+      if (!q.visible) continue;
+      const brightness = (q.ndotl + 1) * 0.5; // 0 (dark) .. 1 (brightest)
+
+      if (style === 'studio') {
+        const [f0, , b1] = q.quad;
+        const g = ctx.createLinearGradient(b1.x, b1.y, f0.x, f0.y);
+        if (brightness > 0.55) {
+          g.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.88));
+          g.addColorStop(0.6, mixRgb(baseRgb, [255, 255, 255], 0.52));
+          g.addColorStop(1, mixRgb(baseRgb, [255, 255, 255], 0.22));
+        } else if (brightness > 0.3) {
+          g.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.42));
+          g.addColorStop(0.55, mixRgb(baseRgb, [255, 255, 255], 0.08));
+          g.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.24));
+        } else {
+          g.addColorStop(0, mixRgb(baseRgb, [15, 23, 42], 0.14));
+          g.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.48));
+        }
+        ctx.globalAlpha = faceAlpha;
+        ctx.fillStyle = g;
+        tracePoly(q.quad);
+        ctx.fill();
         ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = mixRgb(baseRgb, [15, 23, 42], 0.28);
         ctx.lineWidth = Math.max(0.75, contourW * 0.55);
         ctx.stroke();
-      }
-    } else if (style === 'flat') {
-      ctx.globalAlpha = faceAlpha;
-      ctx.fillStyle =
-        brightness > 0.55
-          ? mixRgb(baseRgb, [255, 255, 255], 0.62)
-          : brightness > 0.3
-            ? mixRgb(baseRgb, [255, 255, 255], 0.25)
-            : mixRgb(baseRgb, [15, 23, 42], 0.26);
-      tracePoly(q.quad);
-      ctx.fill();
-      if (!isSmoothCurve) {
+      } else if (style === 'flat') {
+        ctx.globalAlpha = faceAlpha;
+        ctx.fillStyle =
+          brightness > 0.55
+            ? mixRgb(baseRgb, [255, 255, 255], 0.62)
+            : brightness > 0.3
+              ? mixRgb(baseRgb, [255, 255, 255], 0.25)
+              : mixRgb(baseRgb, [15, 23, 42], 0.26);
+        tracePoly(q.quad);
+        ctx.fill();
         ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = inkColor;
         ctx.lineWidth = Math.max(1.3, contourW);
         ctx.stroke();
-      }
-    } else if (style === 'sketch') {
-      ctx.globalAlpha = faceAlpha;
-      ctx.fillStyle =
-        brightness > 0.55 ? '#ffffff' : brightness > 0.3 ? '#f8fafc' : '#eef2f6';
-      tracePoly(q.quad);
-      ctx.fill();
-      drawSketchHatching(ctx, q.quad, inkColor, 1 - brightness, faceAlpha);
-      if (!isSmoothCurve) {
+      } else if (style === 'sketch') {
+        ctx.globalAlpha = faceAlpha;
+        ctx.fillStyle =
+          brightness > 0.55 ? '#ffffff' : brightness > 0.3 ? '#f8fafc' : '#eef2f6';
+        tracePoly(q.quad);
+        ctx.fill();
+        drawSketchHatching(ctx, q.quad, inkColor, 1 - brightness, faceAlpha);
         ctx.globalAlpha = baseAlpha;
         ctx.strokeStyle = inkColor;
         ctx.lineWidth = Math.max(1.4, contourW * 1.05);
@@ -632,25 +704,13 @@ export function drawPolyExtruded3D(
   }
   ctx.globalAlpha = baseAlpha;
 
-  // For smooth curved extruded solids (cylinders/ellipses), draw clean silhouette outer contour on back arc
-  if (isSmoothCurve && (style === 'flat' || style === 'sketch' || style === 'studio')) {
-    ctx.strokeStyle = style === 'studio' ? mixRgb(baseRgb, [15, 23, 42], 0.32) : inkColor;
-    ctx.lineWidth = style === 'studio' ? Math.max(0.85, contourW * 0.6) : Math.max(1.3, contourW);
-    for (const q of quads) {
-      if (!q.visible) continue;
-      ctx.beginPath();
-      ctx.moveTo(q.quad[3].x, q.quad[3].y);
-      ctx.lineTo(q.quad[2].x, q.quad[2].y);
-      ctx.stroke();
-    }
-  }
-
-  // 5. Draw Front Face (nearest to viewer)
+  // 5. Draw Visible Cap Face (Top lid when rising upright, or Front face when extruding backward)
+  const capPts = isUpright ? backPts : frontPts;
   let fMinX = Infinity,
     fMinY = Infinity,
     fMaxX = -Infinity,
     fMaxY = -Infinity;
-  for (const p of frontPts) {
+  for (const p of capPts) {
     if (p.x < fMinX) fMinX = p.x;
     if (p.y < fMinY) fMinY = p.y;
     if (p.x > fMaxX) fMaxX = p.x;
@@ -667,32 +727,41 @@ export function drawPolyExtruded3D(
       fCx - lx * fSpan,
       fCy - ly * fSpan
     );
-    fg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.24));
-    fg.addColorStop(0.5, mixRgb(baseRgb, [15, 23, 42], 0.14));
-    fg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.42));
+    if (isUpright) {
+      // Top lid catches overhead studio light brightly!
+      fg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.90));
+      fg.addColorStop(0.55, mixRgb(baseRgb, [255, 255, 255], 0.56));
+      fg.addColorStop(1, mixRgb(baseRgb, [255, 255, 255], 0.22));
+    } else {
+      fg.addColorStop(0, mixRgb(baseRgb, [255, 255, 255], 0.24));
+      fg.addColorStop(0.5, mixRgb(baseRgb, [15, 23, 42], 0.14));
+      fg.addColorStop(1, mixRgb(baseRgb, [15, 23, 42], 0.42));
+    }
     ctx.globalAlpha = faceAlpha;
     ctx.fillStyle = fg;
-    tracePoly(frontPts);
+    tracePoly(capPts);
     ctx.fill();
 
-    // Subtle bright specular bevel along front edge
+    // Subtle bright specular bevel along cap edge
     ctx.save();
     ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.lineWidth = Math.max(0.85, contourW * 0.65);
-    tracePoly(frontPts);
+    tracePoly(capPts);
     ctx.stroke();
     ctx.restore();
 
     ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = mixRgb(baseRgb, [15, 23, 42], 0.34);
     ctx.lineWidth = Math.max(0.85, contourW * 0.6);
-    tracePoly(frontPts);
+    tracePoly(capPts);
     ctx.stroke();
   } else if (style === 'flat') {
     ctx.globalAlpha = faceAlpha;
-    ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.12);
-    tracePoly(frontPts);
+    ctx.fillStyle = isUpright
+      ? mixRgb(baseRgb, [255, 255, 255], 0.65)
+      : mixRgb(baseRgb, [255, 255, 255], 0.12);
+    tracePoly(capPts);
     ctx.fill();
     ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = inkColor;
@@ -701,9 +770,9 @@ export function drawPolyExtruded3D(
   } else if (style === 'sketch') {
     ctx.globalAlpha = faceAlpha;
     ctx.fillStyle = '#ffffff';
-    tracePoly(frontPts);
+    tracePoly(capPts);
     ctx.fill();
-    drawSketchHatching(ctx, frontPts, inkColor, 0.20, faceAlpha);
+    drawSketchHatching(ctx, capPts, inkColor, 0.20, faceAlpha);
     ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = inkColor;
     ctx.lineWidth = Math.max(1.6, contourW * 1.15);
