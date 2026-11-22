@@ -8,7 +8,10 @@ interface GravityControlPanelProps {
   isRunning: boolean;
   onToggleRun: () => void;
   onReset: () => void;
-  onRescan: () => void;
+  onLoadFromLasso: () => void;
+  onClearScene: () => void;
+  lassoSelectedCount: number;
+  hasBoundScene: boolean;
   bodies: GravityBodyState[];
   segmentCount: number;
   energy: GravityEnergyStats;
@@ -21,7 +24,10 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
   isRunning,
   onToggleRun,
   onReset,
-  onRescan,
+  onLoadFromLasso,
+  onClearScene,
+  lassoSelectedCount,
+  hasBoundScene,
   bodies,
   segmentCount,
   energy,
@@ -33,6 +39,45 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
 
   return (
     <div className="space-y-3 text-xs text-[#2c3e50]">
+      {/* Lasso Selection Binding Button (Explicit user-controlled study scope!) */}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onLoadFromLasso}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg font-bold transition cursor-pointer border text-[11px] ${
+            lassoSelectedCount > 0
+              ? 'bg-[#d6cbb8] hover:bg-[#c8baa3] text-[#2c251d] border-[#bfb097] shadow-2xs'
+              : 'bg-[#efebe3] hover:bg-[#e5ded1] text-[#5c5346] border-[#dfd8cb]'
+          }`}
+          title="Φόρτωση μόνο των σχημάτων που έχεις επιλέξει με το Λάσο"
+        >
+          <ScanSearch className="w-3.5 h-3.5" />
+          <span>
+            {lassoSelectedCount > 0
+              ? `Φόρτωση από Λάσο (${lassoSelectedCount})`
+              : 'Επίλεξε με Λάσο & Πάτα εδώ'}
+          </span>
+        </button>
+        {hasBoundScene && (
+          <button
+            type="button"
+            onClick={onClearScene}
+            className="px-2 py-1.5 rounded-lg bg-[#efebe3] hover:bg-rose-100 text-[#64748b] hover:text-rose-700 border border-[#dfd8cb] text-[11px] font-semibold transition cursor-pointer"
+            title="Καθαρισμός ενεργής σκηνής Βαρύτητας"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {!hasBoundScene && (
+        <div className="px-2.5 py-2 rounded-lg bg-[#f5f1e8] border border-[#e3ddd2] text-[11px] text-[#5c5346] leading-snug">
+          Επίλεξε με το <strong>Λάσο</strong> μόνο το σώμα και το δάπεδο/καμπύλη που θέλεις να
+          μελετήσεις και πάτα <strong>«Φόρτωση από Λάσο»</strong> (ή απευθείας{' '}
+          <strong>Έναρξη</strong>).
+        </div>
+      )}
+
       {/* Primary Transport Row */}
       <div className="flex items-center gap-1.5">
         <button
@@ -54,14 +99,6 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
           title="Επαναφορά στην αρχική θέση"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onRescan}
-          className="p-2 rounded-lg bg-[#efebe3] hover:bg-[#d6cbb8] text-[#2c3e50] border border-[#dfd8cb] transition cursor-pointer"
-          title="Επανασάρωση σχημάτων από τη σελίδα"
-        >
-          <ScanSearch className="w-3.5 h-3.5" />
         </button>
       </div>
 

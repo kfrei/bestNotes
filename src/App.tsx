@@ -2153,6 +2153,8 @@ export default function App() {
   const [gravityPinnedOverrides, setGravityPinnedOverrides] = useState<Record<string, boolean>>({});
   const gravityBodiesRef = useRef<GravityBodyState[]>([]);
   const gravitySegmentsRef = useRef<GravitySegment[]>([]);
+  const gravityBoundStrokeIdsRef = useRef<string[]>([]);
+  const [gravityBoundCount, setGravityBoundCount] = useState<number>(0);
   const gravityOffsetsRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
   const gravityHiddenStrokeIdsRef = useRef<Set<string>>(new Set());
   const [gravityBodiesUi, setGravityBodiesUi] = useState<GravityBodyState[]>([]);
@@ -14828,23 +14830,19 @@ export default function App() {
   }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
 
-  // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (0 RAF when paused/closed) ──
-  const rescanGravityScene = useCallback(
-    (overridesArg?: Record<string, boolean>) => {
+  // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (Lasso-Scoped, 0 RAF when paused/closed) ──
+  const buildGravityFromIds = useCallback(
+    (strokeIds: string[], overridesArg?: Record<string, boolean>) => {
       const ov = overridesArg ?? gravityPinnedOverrides;
       const curPage =
         activeNotebookLiveRef.current.pages[activePageIndexLiveRef.current] ||
         activeNotebookLiveRef.current.pages[0];
-      if (!curPage) return;
-      const visibleLayerIds = new Set(
-        (curPage.layers || [{ id: 'layer-1', visible: true }])
-          .filter((l) => l.visible !== false)
-          .map((l) => l.id)
-      );
-      const visibleStrokes = curPage.strokes.filter(
-        (s) => visibleLayerIds.has(s.layerId || 'layer-1')
-      );
-      const { bodies, segments } = buildGravitySceneFromStrokes(visibleStrokes, ov);
+      if (!curPage) return false;
+      const idSet = new Set(strokeIds);
+      const targetStrokes = curPage.strokes.filter((s) => idSet.has(s.id));
+      const { bodies, segments } = buildGravitySceneFromStrokes(targetStrokes, ov);
+      gravityBoundStrokeIdsRef.current = targetStrokes.map((s) => s.id);
+      setGravityBoundCount(targetStrokes.length);
       gravityBodiesRef.current = bodies;
       gravitySegmentsRef.current = segments;
       gravityOffsetsRef.current.clear();
@@ -14861,9 +14859,48 @@ export default function App() {
         computeGravityEnergyStats(bodies, segments, gravityConfigRef.current, pH)
       );
       renderStaticSceneRef.current();
+      return bodies.length > 0;
     },
     [gravityPinnedOverrides]
   );
+
+  const loadGravityFromLasso = useCallback(() => {
+    setIsGravityRunning(false);
+    if (selectedStrokeIds.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το σώμα και το δάπεδο/καμπύλη που θέλεις!');
+      return false;
+    }
+    const ok = buildGravityFromIds(selectedStrokeIds);
+    // Deselect lasso box so the scene looks clean & ready to play!
+    setSelectedStrokeIds([]);
+    if (ok) {
+      showToast(`✅ Φορτώθηκαν ${selectedStrokeIds.length} σχήματα στο Πεδίο Βαρύτητας!`);
+    } else {
+      showToast('ℹ️ Δεν βρέθηκε κινούμενο σώμα (σφαίρα ή κύβος) στην επιλογή Λάσου.');
+    }
+    return ok;
+  }, [selectedStrokeIds, buildGravityFromIds, showToast]);
+
+  const clearGravityScene = useCallback(() => {
+    setIsGravityRunning(false);
+    gravityBoundStrokeIdsRef.current = [];
+    setGravityBoundCount(0);
+    gravityBodiesRef.current = [];
+    gravitySegmentsRef.current = [];
+    gravityOffsetsRef.current.clear();
+    gravityHiddenStrokeIdsRef.current.clear();
+    setGravityBodiesUi([]);
+    setGravitySegmentCount(0);
+    setGravityEnergyStats({
+      kineticJ: 0,
+      potentialJ: 0,
+      totalJ: 0,
+      speedMs: 0,
+      heightM: 0,
+      refFloorY: 800,
+    });
+    renderStaticSceneRef.current();
+  }, []);
 
   const resetGravityScene = useCallback(() => {
     setIsGravityRunning(false);
@@ -14901,20 +14938,16 @@ export default function App() {
       setIsGravityRunning(false);
       setGravityPinnedOverrides((prev) => {
         const next = { ...prev, [strokeId]: nextPinned };
-        rescanGravityScene(next);
+        buildGravityFromIds(gravityBoundStrokeIdsRef.current, next);
         return next;
       });
     },
-    [rescanGravityScene]
+    [buildGravityFromIds]
   );
 
-  // Auto-scan page whenever Gravity tab is opened or strokes change while paused
+  // Clean up Gravity offsets when switching away from Gravity tab, closing panel, or changing page
   useEffect(() => {
-    if (showSimulationPanel && simActiveCategory === 'gravity') {
-      if (!isGravityRunningRef.current) {
-        rescanGravityScene();
-      }
-    } else {
+    if (!showSimulationPanel || simActiveCategory !== 'gravity') {
       if (isGravityRunningRef.current) setIsGravityRunning(false);
       if (gravityOffsetsRef.current.size > 0 || gravityHiddenStrokeIdsRef.current.size > 0) {
         gravityOffsetsRef.current.clear();
@@ -14922,7 +14955,7 @@ export default function App() {
         renderStaticSceneRef.current();
       }
     }
-  }, [showSimulationPanel, simActiveCategory, activePage.id, activePage.strokes.length, rescanGravityScene]);
+  }, [showSimulationPanel, simActiveCategory, activePage.id]);
 
   // Strictly-gated 60/120fps Gravity Physics RAF Loop (0 RAF when paused or panel closed!)
   useEffect(() => {
@@ -66019,13 +66052,23 @@ export default function App() {
                     setConfig={setGravityConfig}
                     isRunning={isGravityRunning}
                     onToggleRun={() => {
-                      if (!isGravityRunning && gravityBodiesRef.current.length === 0) {
-                        rescanGravityScene();
+                      if (!isGravityRunning) {
+                        // If user currently has a Lasso selection, load it automatically on Play!
+                        if (selectedStrokeIds.length > 0) {
+                          const ok = loadGravityFromLasso();
+                          if (!ok) return;
+                        } else if (gravityBodiesRef.current.length === 0) {
+                          showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το σώμα και το δάπεδο/καμπύλη!');
+                          return;
+                        }
                       }
                       setIsGravityRunning((r) => !r);
                     }}
                     onReset={resetGravityScene}
-                    onRescan={rescanGravityScene}
+                    onLoadFromLasso={loadGravityFromLasso}
+                    onClearScene={clearGravityScene}
+                    lassoSelectedCount={selectedStrokeIds.length}
+                    hasBoundScene={gravityBoundCount > 0}
                     bodies={gravityBodiesUi}
                     segmentCount={gravitySegmentCount}
                     energy={gravityEnergyStats}
