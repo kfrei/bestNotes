@@ -916,25 +916,36 @@ export function drawExtruded3DStroke(ctx: CanvasRenderingContext2D, s: StrokeObj
       ctx.stroke();
       ctx.restore();
     } else if (style === 'flat') {
-      // Clean cel-shaded 2-tone sphere
+      // Clean modern cel-shaded 3D sphere: single crisp crescent shadow + subtle glossy specular dot
       ctx.save();
       ctx.globalAlpha = faceAlpha;
-      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.32);
+      // 1. Shaded shadow-side base fill
+      ctx.fillStyle = mixRgb(baseRgb, [15, 23, 42], 0.24);
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Soft crescent shadow on opposite side of light
+      // 2. Single larger offset lit circle clipped to sphere -> pure clean crescent shadow on opposite side!
       ctx.beginPath();
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
       ctx.clip();
-      ctx.fillStyle = mixRgb(baseRgb, [15, 23, 42], 0.28);
+      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.34);
       ctx.beginPath();
-      ctx.ellipse(cx - lx * rx * 0.32, cy - ly * ry * 0.32, rx * 1.05, ry * 1.05, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + lx * rx * 0.26, cy + ly * ry * 0.26, rx * 1.02, ry * 1.02, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = mixRgb(baseRgb, [255, 255, 255], 0.32);
+
+      // 3. Crisp small specular highlight pill on the lit side
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.58)';
       ctx.beginPath();
-      ctx.ellipse(cx + lx * rx * 0.22, cy + ly * ry * 0.22, rx * 0.88, ry * 0.88, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx + lx * rx * 0.44,
+        cy + ly * ry * 0.44,
+        Math.max(3, rx * 0.16),
+        Math.max(2, ry * 0.09),
+        Math.atan2(ly, lx) + Math.PI * 0.5,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
       ctx.restore();
 
