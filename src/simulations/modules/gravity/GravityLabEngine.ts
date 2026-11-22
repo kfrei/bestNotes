@@ -414,23 +414,27 @@ export function buildGravitySceneFromStrokes(
   }
 
   // Bind initial velocity arrows (v0) to the nearest dynamic body
+  const dynamicBodies = bodies.filter((bd) => !bd.pinned);
   for (const arr of arrows) {
     const tail = arr.arrowStart && !arr.arrowEnd ? arr.points[arr.points.length - 1] : arr.points[0];
     const tip = arr.arrowStart && !arr.arrowEnd ? arr.points[0] : arr.points[arr.points.length - 1];
     let bestBody: GravityBodyState | null = null;
     let bestDist = Infinity;
-    for (const bd of bodies) {
-      if (bd.pinned) continue;
+    for (const bd of dynamicBodies) {
       const d = Math.hypot(tail.x - bd.initCx, tail.y - bd.initCy);
-      if (d <= bd.radius + 42 && d < bestDist) {
+      if (d <= bd.radius + 85 && d < bestDist) {
         bestDist = d;
         bestBody = bd;
       }
     }
+    // If the user Lasso-selected exactly 1 dynamic body + an arrow, always bind it!
+    if (!bestBody && dynamicBodies.length === 1) {
+      bestBody = dynamicBodies[0];
+    }
     if (bestBody) {
-      // Arrow length in px * 3.2 -> initial velocity in px/s (e.g. 100px arrow = 320 px/s ≈ 5.3 m/s)
-      bestBody.initVx = (tip.x - tail.x) * 3.2;
-      bestBody.initVy = (tip.y - tail.y) * 3.2;
+      // Arrow length in px * 5.2 -> initial velocity in px/s (e.g. 100px arrow at 45° -> ~450px parabolic range!)
+      bestBody.initVx = (tip.x - tail.x) * 5.2;
+      bestBody.initVy = (tip.y - tail.y) * 5.2;
       bestBody.vx = bestBody.initVx;
       bestBody.vy = bestBody.initVy;
       bestBody.v0ArrowStrokeId = arr.id;
@@ -763,6 +767,42 @@ export function renderGravityOverlay(
       continue;
     }
 
+    // 0. Pre-launch parabolic trajectory preview & v0 badge when paused at t = 0
+    if (!isRunning && b.trail.length <= 1) {
+      const v0Mag = Math.hypot(b.initVx, b.initVy);
+      if (v0Mag > 12) {
+        const gPx = config.gravity * GRAVITY_PX_PER_M;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(b.cx, b.cy);
+        const dtPreview = 0.04;
+        const maxSteps = 42;
+        for (let s = 1; s <= maxSteps; s++) {
+          const t = s * dtPreview;
+          const px = b.cx + b.initVx * t;
+          const py = b.cy + b.initVy * t + 0.5 * gPx * t * t;
+          ctx.lineTo(px, py);
+          if (py > b.cy + b.radius + 90) break;
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        const v0Ms = (v0Mag / GRAVITY_PX_PER_M).toFixed(1);
+        drawVectorArrow(
+          ctx,
+          b.cx,
+          b.cy,
+          b.initVx * 0.22,
+          b.initVy * 0.22,
+          '#2563eb',
+          `v₀ = ${v0Ms} m/s`
+        );
+      }
+    }
+
     // 1. Live Trajectory Trail
     if (config.showTrail && b.trail.length >= 2) {
       ctx.save();
@@ -797,8 +837,11 @@ export function renderGravityOverlay(
 
     // 3. Live Velocity & Force Vectors (v, W, N)
     if (config.showVectors) {
+      const drewV0Preview = !isRunning && b.trail.length <= 1 && Math.hypot(b.initVx, b.initVy) > 12;
       // Velocity vector v (blue)
-      drawVectorArrow(ctx, b.cx, b.cy, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'v');
+      if (!drewV0Preview) {
+        drawVectorArrow(ctx, b.cx, b.cy, b.vx * 0.22, b.vy * 0.22, '#2563eb', 'v');
+      }
       // Weight W = mg (crimson/slate)
       if (config.gravity > 0.1) {
         drawVectorArrow(ctx, b.cx, b.cy, 0, Math.min(58, config.gravity * 3.6), '#dc2626', 'W');
