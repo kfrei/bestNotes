@@ -113,27 +113,41 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
         </span>
       </div>
 
-      {/* Contextual Stickman Pushing Force F (shown automatically when a Stickman is in the scene!) */}
+      {/* Contextual Stickman Signed Force F (-40..+40 N: negative = left ←, positive = right →) */}
       {bodies.some((b) => !b.pinned && b.pusher) && (
         <div className="space-y-1 p-2.5 rounded-lg bg-white/55 border border-[#e3ddd2]">
           <div className="flex items-center justify-between">
             <span className="font-semibold">
               Δύναμη{' '}
               <span className="text-[#64748b] font-normal">
-                ({bodies.find((b) => !b.pinned && b.pusher)?.pusher?.dir === 1 ? '→' : '←'})
+                ({config.pushForceN > 0 ? '→' : config.pushForceN < 0 ? '←' : '0'})
               </span>
             </span>
-            <span className="font-bold text-[#234978]">{config.pushForceN.toFixed(0)} N</span>
+            <span className="font-bold text-[#234978]">
+              {config.pushForceN > 0 ? `+${config.pushForceN.toFixed(0)}` : config.pushForceN.toFixed(0)} N
+            </span>
           </div>
           <input
             type="range"
-            min={0}
+            min={-40}
             max={40}
             step={1}
             value={config.pushForceN}
             onChange={(e) => setConfig((c) => ({ ...c, pushForceN: parseFloat(e.target.value) }))}
             className="w-full accent-[#234978]"
           />
+          <div className="flex items-center justify-between text-[10px] text-[#64748b] font-medium">
+            <span>← -40 N</span>
+            <button
+              type="button"
+              onClick={() => setConfig((c) => ({ ...c, pushForceN: 0 }))}
+              className="px-1.5 py-0.5 rounded hover:bg-[#e5dfd3] text-[#2c3e50] cursor-pointer"
+              title="Μηδενισμός δύναμης"
+            >
+              0
+            </button>
+            <span>+40 N →</span>
+          </div>
         </div>
       )}
 

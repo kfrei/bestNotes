@@ -14883,6 +14883,14 @@ export default function App() {
       return false;
     }
     const ok = buildGravityFromIds(selectedStrokeIds);
+    // Align initial signed force F direction with detected Stickman torso lean (user can freely slide -40..+40 N anytime!)
+    const detectedPusher = gravityBodiesRef.current.find((b) => !b.pinned && b.pusher)?.pusher;
+    if (detectedPusher) {
+      setGravityConfig((c) => {
+        const mag = Math.abs(c.pushForceN) || 14;
+        return { ...c, pushForceN: detectedPusher.dir * mag };
+      });
+    }
     // Deselect lasso box so the scene looks clean & ready to play!
     setSelectedStrokeIds([]);
     if (ok) {

@@ -469,7 +469,14 @@ export function buildGravitySceneFromStrokes(
       bestBody = dynamicBodies[0];
     }
     if (bestBody) {
-      const dir: 1 | -1 = sb.cx <= bestBody.initCx ? 1 : -1;
+      // Detect push vs pull direction from Stickman's torso lean (head p[0] vs hip p[2]):
+      // Leaning RIGHT (head.x > hip.x) -> force RIGHT (+1, either pushing from left or pulling from right!)
+      // Leaning LEFT (head.x < hip.x) -> force LEFT (-1, either pushing from right or pulling from left!)
+      const head = st.points[0];
+      const hip = st.points[2];
+      const leanX = head && hip ? head.x - hip.x : 0;
+      const dir: 1 | -1 =
+        Math.abs(leanX) > 4 ? (leanX > 0 ? 1 : -1) : sb.cx <= bestBody.initCx ? 1 : -1;
       bestBody.pusher = { strokeId: st.id, dir };
     }
   }
@@ -546,9 +553,9 @@ export function stepGravityScene(
       if (b.pinned) continue;
       b.vy += gPx * subDt;
 
-      // Stickman horizontal pushing force F (a = F / m)
-      if (b.pusher && config.pushForceN > 0) {
-        const axPx = ((b.pusher.dir * config.pushForceN) / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
+      // Stickman signed horizontal force F (-40..+40 N: negative = left ←, positive = right →)
+      if (b.pusher && Math.abs(config.pushForceN) > 0.1) {
+        const axPx = (config.pushForceN / Math.max(0.5, b.mass)) * GRAVITY_PX_PER_M;
         b.vx += axPx * subDt;
       }
 
@@ -968,23 +975,32 @@ export function renderGravityOverlay(
         const nLen = Math.min(58, b.normalForceN * 3.4);
         drawVectorArrow(ctx, b.cx, b.cy, b.normalX * nLen, b.normalY * nLen, '#059669', 'N');
       }
-      // Stickman horizontal pushing force F (royal blue)
-      if (b.pusher && config.pushForceN > 0.2) {
-        const fLen = Math.min(72, 22 + config.pushForceN * 1.4);
+      // Stickman signed horizontal force F (royal blue: - = left ←, + = right →)
+      if (b.pusher && Math.abs(config.pushForceN) > 0.2) {
+        const fDir = config.pushForceN >= 0 ? 1 : -1;
+        const fLen = Math.min(72, 22 + Math.abs(config.pushForceN) * 1.4);
         drawVectorArrow(
           ctx,
           b.cx,
           b.cy,
-          b.pusher.dir * fLen,
+          fDir * fLen,
           0,
           '#1d4ed8',
-          `F = ${config.pushForceN.toFixed(0)} N`
+          `F = ${Math.abs(config.pushForceN).toFixed(0)} N`
         );
       }
-      // Friction force T (amber) opposing horizontal motion / push
+      // Friction force T (amber) opposing horizontal motion / applied force
       if (config.frictionEnabled && b.onGround && b.frictionForceN > 0.2) {
         const motionDir =
-          Math.abs(b.vx) > 2 ? (b.vx > 0 ? 1 : -1) : b.pusher ? b.pusher.dir : 0;
+          Math.abs(b.vx) > 2
+            ? b.vx > 0
+              ? 1
+              : -1
+            : b.pusher && Math.abs(config.pushForceN) > 0.2
+            ? config.pushForceN > 0
+              ? 1
+              : -1
+            : 0;
         if (motionDir !== 0) {
           const tLen = Math.min(64, 18 + b.frictionForceN * 1.4);
           drawVectorArrow(ctx, b.cx, b.cy + 6, -motionDir * tLen, 0, '#d97706', 'T');
