@@ -518,8 +518,49 @@ function TipAnimationSvg({ id }: { id: RichTipId }) {
 
       {id === 'tool-stickers' && (
         <g>
-          <circle cx="34" cy="31" r="13" fill="#dbeafe" stroke="#2563eb" strokeWidth="1.8" />
-          <polygon points="62,16 66,27 78,27 68,34 72,46 62,39 52,46 56,34 46,27 58,27" fill="#fbbf24" stroke="#d97706" strokeWidth="1.4" style={{ transformOrigin: '62px 31px', animation: 'rtSpinSlow 5s linear infinite' }} />
+          <defs>
+            <clipPath id="rtStickersClip">
+              <rect x="2" y="2" width="92" height="58" rx="6" />
+            </clipPath>
+          </defs>
+          <g clipPath="url(#rtStickersClip)">
+            {/* Simple green outline Cell — rests at center, slides out right */}
+            <g style={{ animation: 'rtStickerCellSlide 3.2s ease-in-out infinite' }}>
+              <path
+                d="M 28 31 C 28 18, 39 11, 50 12 C 62 13, 70 21, 69 32 C 68 44, 58 51, 46 50 C 34 49, 28 42, 28 31 Z"
+                fill="#10b981"
+                fillOpacity="0.07"
+                stroke="#059669"
+                strokeWidth="1.9"
+              />
+              {/* Nucleus + nucleolus */}
+              <circle cx="48" cy="30" r="8" fill="#10b981" fillOpacity="0.12" stroke="#059669" strokeWidth="1.5" />
+              <circle cx="49" cy="29.5" r="2.6" fill="none" stroke="#059669" strokeWidth="1.3" />
+              {/* Small organelles */}
+              <ellipse cx="36" cy="24" rx="3.2" ry="1.8" transform="rotate(-25 36 24)" fill="none" stroke="#059669" strokeWidth="1.2" />
+              <ellipse cx="60" cy="38" rx="3.5" ry="1.9" transform="rotate(20 60 38)" fill="none" stroke="#059669" strokeWidth="1.2" />
+              <circle cx="38" cy="40" r="2" fill="none" stroke="#059669" strokeWidth="1.2" />
+            </g>
+
+            {/* Simple green outline Leaf — slides in from left, rests at center, slides out right */}
+            <g style={{ animation: 'rtStickerLeafSlide 3.2s ease-in-out infinite' }}>
+              <path
+                d="M 28 45 C 28 24, 46 13, 68 14 C 67 35, 55 48, 33 46 Z"
+                fill="#10b981"
+                fillOpacity="0.07"
+                stroke="#059669"
+                strokeWidth="1.9"
+                strokeLinejoin="round"
+              />
+              {/* Stem + central midrib */}
+              <path d="M 23 50 Q 43 34, 62 19" fill="none" stroke="#059669" strokeWidth="1.5" strokeLinecap="round" />
+              {/* Side veins */}
+              <path d="M 38 38 L 37 29" fill="none" stroke="#059669" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M 48 30 L 47 22" fill="none" stroke="#059669" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M 43 35 L 52 36" fill="none" stroke="#059669" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M 52 27 L 59 28" fill="none" stroke="#059669" strokeWidth="1.2" strokeLinecap="round" />
+            </g>
+          </g>
         </g>
       )}
 
@@ -775,6 +816,8 @@ export const RichHoverTooltipHost: React.FC = () => {
         @keyframes rtCornerTapRing { 0%, 38% { opacity: 0; transform: scale(0.4); } 44% { opacity: 0.95; transform: scale(1); } 58%, 100% { opacity: 0; transform: scale(1.65); } }
         @keyframes rtPixelBrushMove { 0%, 12% { transform: translate(-2px, -9px); opacity: 0.85; } 24% { transform: translate(0px, 0px); opacity: 1; } 58% { transform: translate(14px, 0px); opacity: 1; } 72%, 88% { transform: translate(16px, -8px); opacity: 0.6; } 100% { transform: translate(-2px, -9px); opacity: 0.85; } }
         @keyframes rtPixelBiteGrow { 0%, 22% { transform: scaleX(0); } 58%, 86% { transform: scaleX(1); } 94%, 100% { transform: scaleX(0); } }
+        @keyframes rtStickerCellSlide { 0%, 34% { transform: translateX(0px); opacity: 1; } 50% { transform: translateX(84px); opacity: 0; } 51%, 84% { transform: translateX(-84px); opacity: 0; } 100% { transform: translateX(0px); opacity: 1; } }
+        @keyframes rtStickerLeafSlide { 0%, 34% { transform: translateX(-84px); opacity: 0; } 50%, 84% { transform: translateX(0px); opacity: 1; } 100% { transform: translateX(84px); opacity: 0; } }
       `}</style>
       <div className="w-[248px] rounded-xl bg-[#fdfbf7]/96 backdrop-blur-xl border border-[#dfd8cb] shadow-[0_14px_34px_-8px_rgba(15,23,42,0.22)] p-2 flex items-center gap-2.5">
         <TipAnimationSvg id={activeTip.id} />
