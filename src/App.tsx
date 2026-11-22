@@ -56715,7 +56715,7 @@ export default function App() {
             : {}),
         }}
         className={`${
-          isCleanProjectorMode && viewMode === 'editor' ? 'hidden' : 'sticky top-0 z-40 flex'
+          isCleanProjectorMode && viewMode === 'editor' ? 'hidden' : 'sticky top-0 z-[80] flex'
         } items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none bn-safe-top-header`}
       >
         {/* Left Navigation Icons (BestNotes Logo -> Landing Page, Home -> Documents/Notes Library, Page Thumbnails Grid) */}
