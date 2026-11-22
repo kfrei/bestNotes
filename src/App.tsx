@@ -60373,7 +60373,7 @@ export default function App() {
                           }
                         }}
                         title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
-                        className={`xl:col-span-2 flex items-center justify-between px-4 py-2.5 rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
+                        className={`flex items-center justify-between px-4 py-4 min-h-[82px] rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
                           isLibraryDropZoneActive
                             ? 'bg-sky-100/90 border-[#234978] ring-2 ring-inset ring-[#234978]'
                             : 'bg-white/75 border-slate-300/90 hover:bg-white hover:border-slate-400'
