@@ -3155,6 +3155,19 @@ export default function App() {
     y: number;
     rafId: number | null;
   } | null>(null);
+  const endpointTapDownRef = useRef<{
+    startTime: number;
+    startX: number;
+    startY: number;
+    maxDist: number;
+    hit: { strokeId: string; endIdx: 0 | 1; x: number; y: number } | null;
+  } | null>(null);
+  const lastEndpointTapRef = useRef<{
+    time: number;
+    strokeId: string;
+    endIdx: 0 | 1;
+    dotStrokeId: string;
+  } | null>(null);
   const cancelEndpointSnapPulse = useCallback(() => {
     const cur = endpointSnapHoverRef.current;
     if (cur && cur.rafId !== null) {
@@ -42771,11 +42784,28 @@ export default function App() {
     if (activeNodeStrokeId) setActiveNodeStrokeId(null);
     if (selectedImageId) setSelectedImageId(null);
     let startPt = pt;
+    let downSnapHit: { strokeId: string; endIdx: 0 | 1; x: number; y: number; dist: number } | null = null;
     if (effectiveTool === 'pen' || effectiveTool === 'pencil' || effectiveTool === 'shape') {
-      const snapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 13);
-      if (snapHit) {
-        startPt = { ...pt, x: snapHit.x, y: snapHit.y };
+      downSnapHit = findNearestStrokeEndpoint(pt, targetPage.strokes, 14);
+      if (downSnapHit) {
+        startPt = { ...pt, x: downSnapHit.x, y: downSnapHit.y };
       }
+      endpointTapDownRef.current = {
+        startTime: performance.now(),
+        startX: pt.x,
+        startY: pt.y,
+        maxDist: 0,
+        hit: downSnapHit
+          ? {
+              strokeId: downSnapHit.strokeId,
+              endIdx: downSnapHit.endIdx,
+              x: downSnapHit.x,
+              y: downSnapHit.y,
+            }
+          : null,
+      };
+    } else {
+      endpointTapDownRef.current = null;
     }
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
@@ -44014,6 +44044,15 @@ export default function App() {
         Math.max(6.0, distance(activeStrokePts[activeStrokePts.length - 1], activeStrokePts[0]) * 0.68);
     if (!isLatestStaleOriginJump) {
       lastRawCanvasPtRef.current = latestPt;
+    }
+    if (endpointTapDownRef.current) {
+      const epDist = Math.hypot(
+        latestPt.x - endpointTapDownRef.current.startX,
+        latestPt.y - endpointTapDownRef.current.startY
+      );
+      if (epDist > endpointTapDownRef.current.maxDist) {
+        endpointTapDownRef.current.maxDist = epDist;
+      }
     }
     if (e.pointerType === 'pen' && penTapTrackRef.current) {
       const distFromStart = Math.hypot(
@@ -50152,10 +50191,100 @@ export default function App() {
       return;
     }
 
+    const nowUp = performance.now();
+
+    // Double-Tap on any open line/stroke endpoint (Pen / Pencil / Shape, works with Apple Pencil, Mouse & Touch):
+    // Toggles an arrowhead right on that exact tapped end (and tapping the other end creates a double-arrow ↔)!
+    const epTap = endpointTapDownRef.current;
+    endpointTapDownRef.current = null;
+    const isEndpointMicroTap =
+      epTap !== null &&
+      epTap.hit !== null &&
+      nowUp - epTap.startTime <= 260 &&
+      epTap.maxDist <= 8 &&
+      (activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'shape');
+
+    if (isEndpointMicroTap && epTap && epTap.hit) {
+      const prevEp = lastEndpointTapRef.current;
+      if (
+        prevEp &&
+        prevEp.strokeId === epTap.hit.strokeId &&
+        prevEp.endIdx === epTap.hit.endIdx &&
+        nowUp - prevEp.time >= 35 &&
+        nowUp - prevEp.time <= 420
+      ) {
+        const targetId = epTap.hit.strokeId;
+        const tappedEnd = epTap.hit.endIdx;
+        const strayDotId = prevEp.dotStrokeId;
+        lastEndpointTapRef.current = null;
+        lastStationaryPenTapRef.current = null;
+        penTapTrackRef.current = null;
+        currentStrokePtsRef.current = [];
+        snappedCurrentStrokeRef.current = null;
+        clearActiveOverlay();
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes
+              .filter((s) => !strayDotId || s.id !== strayDotId)
+              .map((s) => {
+                if (s.id !== targetId) return s;
+                const hasStart = Boolean(s.arrowStart || s.shapeType === 'double-arrow');
+                const hasEnd = Boolean(
+                  s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow'
+                );
+                const nextStart = tappedEnd === 0 ? !hasStart : hasStart;
+                const nextEnd = tappedEnd === 1 ? !hasEnd : hasEnd;
+                const isLineLikeShape =
+                  Boolean(s.isShape) &&
+                  (!s.shapeType ||
+                    s.shapeType === 'line' ||
+                    s.shapeType === 'arrow' ||
+                    s.shapeType === 'double-arrow');
+                // Canonical 1-way arrow when tapping start of a 2-point straight line (so Forces & Mechanics recognize it too!)
+                if (isLineLikeShape && s.points.length === 2 && nextStart && !nextEnd) {
+                  return {
+                    ...s,
+                    points: [s.points[1], s.points[0]],
+                    shapeType: 'arrow' as const,
+                    arrowStart: false,
+                    arrowEnd: true,
+                  };
+                }
+                return {
+                  ...s,
+                  arrowStart: nextStart,
+                  arrowEnd: nextEnd,
+                  ...(isLineLikeShape
+                    ? {
+                        shapeType: (nextStart && nextEnd
+                          ? 'double-arrow'
+                          : nextEnd
+                          ? 'arrow'
+                          : 'line') as StrokeObject['shapeType'],
+                      }
+                    : {}),
+                };
+              }),
+          }),
+          true
+        );
+        return;
+      }
+      // Record 1st tap on this endpoint (dotStrokeId gets filled below if a dot stroke is committed)
+      lastEndpointTapRef.current = {
+        time: nowUp,
+        strokeId: epTap.hit.strokeId,
+        endIdx: epTap.hit.endIdx,
+        dotStrokeId: '',
+      };
+    } else if (epTap && epTap.maxDist > 8) {
+      lastEndpointTapRef.current = null;
+    }
+
     // Apple Pencil Stationary Double-Tap with the Tip (in Chrome & Safari without native wrapper):
     // Two quick vertical micro-taps (duration <= 215ms, movement <= 7.5px) at the same spot (<= 18px)
     // when not immediately preceded by normal handwriting (> 350ms after last real stroke) toggles Pen <-> Eraser!
-    const nowUp = performance.now();
     const tapTrack = e.pointerType === 'pen' ? penTapTrackRef.current : null;
     penTapTrackRef.current = null;
     const isStationaryPenMicroTap =
@@ -51202,6 +51331,10 @@ export default function App() {
           attachPointerToSpring(sid, newStroke.id);
         }, 10);
       }
+    }
+
+    if (isEndpointMicroTap && lastEndpointTapRef.current) {
+      lastEndpointTapRef.current.dotStrokeId = newStroke.id;
     }
 
     if (isStationaryPenMicroTap && tapTrack) {
