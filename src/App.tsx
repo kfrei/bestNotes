@@ -61233,13 +61233,22 @@ export default function App() {
                             featureLabel: activePlan?.name || 'Επισκέπτης',
                           })
                         }
-                        className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/90 hover:bg-[#eef3f8] border border-[#dfd8cb] text-xs font-extrabold text-[#1b2a4a] shadow-2xs transition cursor-pointer"
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-purple-50/70 border border-purple-500/80 text-purple-700 text-[14px] font-semibold shadow-2xs transition cursor-pointer"
                         title="Προβολή πλάνου & ορίων"
                       >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: activePlan?.badgeColor || '#64748b' }}
-                        />
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="w-[17px] h-[17px] text-purple-700 shrink-0"
+                          aria-hidden="true"
+                        >
+                          <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+                          <path d="M5 21h14" />
+                        </svg>
                         <span>{activePlan ? `Πλάνο ${activePlan.name}` : 'Επισκέπτης'}</span>
                       </button>
 
