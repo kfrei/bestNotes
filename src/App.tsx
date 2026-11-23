@@ -4580,6 +4580,7 @@ export default function App() {
     icon: string;
     favorite: boolean;
     showMoveTree?: boolean;
+    showCopyTree?: boolean;
   } | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderNameInput, setNewFolderNameInput] = useState<string>('');
@@ -8808,6 +8809,7 @@ export default function App() {
     openUpward: boolean;
     mode?: 'download' | 'library-gear';
     showMoveTree?: boolean;
+    showCopyTree?: boolean;
   } | null>(null);
 
   const toggleDownloadMenuForButton = useCallback(
@@ -8849,6 +8851,7 @@ export default function App() {
           openUpward,
           mode: 'library-gear',
           showMoveTree: false,
+          showCopyTree: false,
         };
       });
     },
@@ -60448,16 +60451,31 @@ export default function App() {
                 );
               };
 
-              const duplicateNotebookInLibrary = (nb: Notebook) => {
+              const duplicateNotebookInLibrary = (nb: Notebook, targetFolderOverride?: string) => {
                 const sourceIsShowcase = isShowcaseNotebook(nb);
-                // Non-admin duplicating a showcase demo notebook -> creates a personal user-owned copy in Root Library!
+                const curFolder = normalizeFolderPath(nb.folder || '');
+                const hasExplicitTarget = targetFolderOverride !== undefined;
+                const requestedFolder = hasExplicitTarget
+                  ? normalizeFolderPath(targetFolderOverride)
+                  : curFolder;
+                const isSameFolderCopy = !hasExplicitTarget || requestedFolder === curFolder;
+
+                // Non-admin duplicating a showcase demo notebook -> creates a personal user-owned copy in chosen personal folder (or Root)!
                 if (sourceIsShowcase && !isAdminUser) {
+                  const safeDestFolder = isShowcaseFolderPath(requestedFolder, showcaseFolderName)
+                    ? ''
+                    : hasExplicitTarget
+                    ? requestedFolder
+                    : '';
                   const masterNb = showcaseMasterNotebooksRef.current.get(nb.id) || nb;
                   if (!checkFileAndStorageOrOpenModal(1, computeNotebookSizeBytes(masterNb))) {
                     return;
                   }
                   const nowIso = new Date().toISOString();
-                  const personalCopy = buildPersonalCopyFromShowcase(masterNb, nowIso);
+                  const personalCopy: Notebook = {
+                    ...buildPersonalCopyFromShowcase(masterNb, nowIso),
+                    folder: safeDestFolder,
+                  };
                   userEditedInSessionRef.current.add(personalCopy.id);
                   saveUserEditedSessionIds(userEditedInSessionRef.current);
                   trackFileCreation(currentUser);
@@ -60467,17 +60485,15 @@ export default function App() {
                   }
                   setIsDirty(true);
                   setSyncStatus('dirty');
+                  const destLabel = safeDestFolder ? `στον φάκελο «${safeDestFolder}»` : 'στη Βιβλιοθήκη σου';
                   showToast(
-                    `📋 Δημιουργήθηκε προσωπικό αντίγραφο «${personalCopy.title}» στη Βιβλιοθήκη σου! Μπορείς να το μετακινήσεις και να το επεξεργαστείς ελεύθερα.`
+                    `📋 Δημιουργήθηκε προσωπικό αντίγραφο «${personalCopy.title}» ${destLabel}!`
                   );
                   return;
                 }
 
-                // Admin duplicating inside the showcase folder -> creates a new public showcase notebook!
-                if (
-                  isAdminUser &&
-                  (sourceIsShowcase || isShowcaseFolderPath(nb.folder, showcaseFolderName))
-                ) {
+                // Admin copying ANY notebook into the showcase folder -> publishes a new public showcase demo notebook!
+                if (isAdminUser && isShowcaseFolderPath(requestedFolder, showcaseFolderName)) {
                   const nowIso = new Date().toISOString();
                   const newShowcaseId = `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random()
                     .toString(36)
@@ -60490,10 +60506,10 @@ export default function App() {
                     ...buildShowcaseCloneFromNotebook(
                       nb,
                       newShowcaseId,
-                      nb.folder || showcaseFolderName,
+                      requestedFolder || showcaseFolderName,
                       nowIso
                     ),
-                    title: `${nb.title}-Copy`,
+                    title: isSameFolderCopy ? `${nb.title}-Copy` : nb.title,
                     pages: clonedPages,
                   };
                   userEditedInSessionRef.current.add(newShowcaseNb.id);
@@ -60514,18 +60530,27 @@ export default function App() {
                   }
                   setIsDirty(true);
                   setSyncStatus('dirty');
-                  showToast(`🌐 Δημιουργήθηκε νέο demo αντίγραφο «${newShowcaseNb.title}»!`);
+                  showToast(
+                    `🌐 Αντιγράφηκε στον δημόσιο φάκελο «${requestedFolder || showcaseFolderName}»: «${newShowcaseNb.title}»!`
+                  );
                   return;
                 }
+
+                const destFolder =
+                  !isAdminUser && isShowcaseFolderPath(requestedFolder, showcaseFolderName)
+                    ? ''
+                    : requestedFolder;
 
                 if (!checkFileAndStorageOrOpenModal(1, computeNotebookSizeBytes(nb))) {
                   return;
                 }
                 const newId = `nb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
                 const origTime = nb.updatedAt ? new Date(nb.updatedAt).getTime() : Date.now();
-                const adjacentIso = new Date(
-                  Number.isFinite(origTime) && origTime > 1000 ? origTime - 1 : Date.now()
-                ).toISOString();
+                const adjacentIso = isSameFolderCopy
+                  ? new Date(
+                      Number.isFinite(origTime) && origTime > 1000 ? origTime - 1 : Date.now()
+                    ).toISOString()
+                  : new Date().toISOString();
                 const clonedPages = structuredClone(nb.pages).map((p, idx) => ({
                   ...p,
                   id: `page-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
@@ -60533,7 +60558,9 @@ export default function App() {
                 const newNb: Notebook = {
                   ...structuredClone(nb),
                   id: newId,
-                  title: `${nb.title}-Copy`,
+                  isShowcase: undefined,
+                  folder: destFolder,
+                  title: isSameFolderCopy ? `${nb.title}-Copy` : nb.title,
                   updatedAt: adjacentIso,
                   pages: clonedPages,
                 };
@@ -60558,7 +60585,8 @@ export default function App() {
                 }
                 setIsDirty(true);
                 setSyncStatus('dirty');
-                showToast(`📋 Δημιουργήθηκε αντίγραφο «${newNb.title}»!`);
+                const destLabel = destFolder ? ` στον φάκελο «${destFolder}»` : '';
+                showToast(`📋 Δημιουργήθηκε αντίγραφο «${newNb.title}»${destLabel}!`);
               };
 
               const openFolderEditorModal = (folder: {
@@ -63497,14 +63525,25 @@ export default function App() {
                             </button>
                           )}
 
-                          {/* 4. Αντίγραφο */}
+                          {/* 4. Αντίγραφο (opens Folder Tree to copy into same or any folder) */}
                           <button
                             type="button"
-                            onClick={() => {
-                              setShareMenuTarget(null);
-                              duplicateNotebookInLibrary(targetNb);
-                            }}
-                            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                            onClick={() =>
+                              setShareMenuTarget((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      showCopyTree: !prev.showCopyTree,
+                                      showMoveTree: false,
+                                    }
+                                  : null
+                              )
+                            }
+                            className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer text-left ${
+                              shareMenuTarget.showCopyTree
+                                ? 'bg-[#efebe3] text-[#234978]'
+                                : 'hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978]'
+                            }`}
                           >
                             <span className="flex items-center gap-2.5">
                               <Copy className="w-4 h-4 text-[#2c3e50] shrink-0" />
@@ -63512,8 +63551,80 @@ export default function App() {
                                 {targetIsLockedShowcase ? 'Αντίγραφο (Δικό μου)' : 'Αντίγραφο'}
                               </span>
                             </span>
-                            <span className="text-[10px] font-medium text-[#64748b]">-Copy</span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-[#64748b] transition-transform ${
+                                shareMenuTarget.showCopyTree ? 'rotate-180' : ''
+                              }`}
+                            />
                           </button>
+
+                          {shareMenuTarget.showCopyTree && (
+                            <div className="mt-1 max-h-48 overflow-y-auto p-1.5 bg-[#efebe3]/45 rounded-xl border border-[#dfd8cb] space-y-1">
+                              {!targetIsLockedShowcase && curNbFolder !== '' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    duplicateNotebookInLibrary(targetNb, curNbFolder);
+                                    setShareMenuTarget(null);
+                                  }}
+                                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer text-left bg-[#234978]/10 hover:bg-[#234978]/20 text-[#234978] border border-[#234978]/25"
+                                >
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <Copy className="w-3.5 h-3.5 shrink-0 text-[#234978]" />
+                                    <span className="truncate">Ίδιος φάκελος (-Copy)</span>
+                                  </span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  duplicateNotebookInLibrary(targetNb, '');
+                                  setShareMenuTarget(null);
+                                }}
+                                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer text-left ${
+                                  !targetIsLockedShowcase && curNbFolder === ''
+                                    ? 'bg-[#234978]/10 hover:bg-[#234978]/20 text-[#234978] border border-[#234978]/25'
+                                    : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <Home className="w-3.5 h-3.5 shrink-0 text-[#2c3e50]" />
+                                  <span className="truncate">
+                                    {!targetIsLockedShowcase && curNbFolder === ''
+                                      ? 'Βιβλιοθήκη (-Copy)'
+                                      : 'Βιβλιοθήκη (Αρχικός)'}
+                                  </span>
+                                </span>
+                              </button>
+
+                              {moveTreeRows.map((node) => {
+                                const isCurrentFolder = curNbFolder === node.path;
+                                return (
+                                  <button
+                                    key={`copy-${node.path}`}
+                                    type="button"
+                                    onClick={() => {
+                                      duplicateNotebookInLibrary(targetNb, node.path);
+                                      setShareMenuTarget(null);
+                                    }}
+                                    style={{ paddingLeft: `${(node.depth + 1) * 14 + 6}px` }}
+                                    className="w-full flex items-center justify-between pr-2 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer text-left bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70"
+                                  >
+                                    <span className="flex items-center gap-1.5 min-w-0 truncate">
+                                      <span className="font-mono text-[10px] select-none text-[#a8a29e]">
+                                        {node.isLastSibling ? '└─' : '├─'}
+                                      </span>
+                                      <Folder className="w-3.5 h-3.5 shrink-0 text-[#2c3e50]" />
+                                      <span className="truncate">
+                                        {node.name}
+                                        {isCurrentFolder ? ' (-Copy)' : ''}
+                                      </span>
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
 
                           {!targetIsLockedShowcase && (
                             <>
@@ -63524,7 +63635,13 @@ export default function App() {
                                 type="button"
                                 onClick={() =>
                                   setShareMenuTarget((prev) =>
-                                    prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          showMoveTree: !prev.showMoveTree,
+                                          showCopyTree: false,
+                                        }
+                                      : null
                                   )
                                 }
                                 className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer text-left ${
