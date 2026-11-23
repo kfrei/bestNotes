@@ -1,9 +1,25 @@
-# 📝 BestNotes / ExplainBoards — `v1.1 (simPDFFixes)`
+# 📝 BestNotes / ExplainBoards — `buttonHoverAnimations v1.1.2`
 
 > **Live Web App (Primary):** [**https://explainboards.web.app**](https://explainboards.web.app) & [**https://mybestnotes.web.app**](https://mybestnotes.web.app)  
 > **Mirror Hosting:** [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app)  
 > **Πολιτική Απορρήτου & Όροι Χρήσης:** [`/privacy`](https://explainboards.web.app/privacy) • [`/terms`](https://explainboards.web.app/terms)  
-> **Τρέχουσα Έκδοση:** **`v1.1 — simPDFFixes`** (20 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`buttonHoverAnimations v1.1.2`** (23 Νοεμβρίου 2026)
+
+### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `buttonHoverAnimations v1.1.2`
+* **Photoshop-Style Live SVG Hover Animations (`RichHoverTooltip.tsx`, `OcrHoverPreviewCard.tsx`):**
+  * Μηδενικής επιβάρυνσης (`0% CPU` σε idle, pure CSS `@keyframes`) κινούμενες προεπισκοπήσεις σε όλη την κύρια μπάρα εργαλείων, στα μενού OCR (`textOCR`, `Σ Math ▾`, `⚗ Chem ▾`), στη Σβήστρα (`Stroke` corner-tap & `Pixel` partial-side erase), στο Κείμενο (`α, β, γ` typing), στην Ορθογώνια Επιλογή, στο Ελεύθερο Λάσο (κλειστό περίγραμμα από το μηδέν), στον γκρι Χάρακα, στα Σκίτσα (θαυμαστικό → φύλλο), στο 3D Extrude (κύκλος → κύλινδρος), Mirror, +Βιβλιοθήκη, Z-Order, Align & Group — με αφαίρεση περιττών dark native tooltips.
+* **Boolean Pathfinder, Κοπή Σχημάτων & Μόνιμες Πράσινες Γωνίες (`shapeBooleanOps.ts`, `shapeSliceOps.ts`, `interactiveAngleTool.ts`):**
+  * **Συνδυασμός (`Συνδυασμός ▾`)**: Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός με 72-pt ellipse sampling, καθαρές εσωτερικές οπές `twist: 888` χωρίς bridge lines & εγγυημένο Undo.
+  * **Κόψιμο (`✂️ Κόψιμο ▾`)**: Μαχαίρι (γραμμή/γωνία), `¼ + ¾`, Ίσα Κομμάτια (`2, 3, 4, 6, 8`) και επιλογή **`🍕 Κλειστά κομμάτια` | `〰️ Μόνο περίγραμμα`**.
+  * **Διαδραστικές Γωνίες με Διπλό Κλικ στην Κορυφή**: Μόνιμη απαλή πράσινη γωνία (`page.angleMarks`) με ακέραιη τιμή (`1°..180°`, τετραγωνάκι στις `90°`), σύρσιμο πλευρών ως 100% ευθείες & ήπιο κλείδωμα `±0.85°` στις **`30°, 45°, 60°, 90°, 120°`**.
+  * **Ακρίβεια Εργαλείων**: Χάρακας με ισχυρό `±10°` H/V κλείδωμα + κουμπί `0°/90°`, Κόμβοι ευθειών με `±3.1° / 8px` H/V κλείδωμα, Διαφάνεια Γεμίσματος έως **`0%`** (100% συμπαγές).
+* **Μηχανική & Βαρύτητα (`GravityLabEngine` Modular Architecture):**
+  * Ακριβές Oriented Bounding Box (`getOrientedHalfExtents`) για κεκλιμένα ορθογώνια σώματα χωρίς αρχική απομάκρυνση από τη ράμπα, **ομαλή περιστροφή προσανατολισμού (`45° ↔ 0°`)** ανάλογα με την κλίση της επιφάνειας, inline επεξεργασία αρχικής ταχύτητας `u = ... m/s` χωρίς αλλαγή μήκους βέλους (με double-pulse flash highlight), και απόκρυψη του μπλε διανύσματος `u₀` όταν η Ταχύτητα είναι OFF.
+* **Εφαρμογές Ελατηρίων (`public/sketches/springs/`) & Cross-Device Sync Hardening:**
+  * Νέα υποκατηγορία **«Εφαρμογές Ελατηρίων»** με **10 μονόχρωμα χαρακτικά SVG** (δυναμόμετρο, ποδήλατο, ζυγαριά, αμορτισέρ, όργανο γυμναστικής, στυλό, πλήκτρα, παιχνίδι, αποσβεστήρας ανελκυστήρα, στρώμα) + εμπλουτισμένα tags για τον Robert Hooke.
+  * **Bulletproof Cross-Device Sync & iPad Safari Fixes**: Monotonic timestamps (`getMonotonicIsoTimestamp`), άμεσο push σε rename/μετακίνηση φακέλου/tags/αγαπημένα, οριστική διαγραφή Κάδου με `deleteDoc` fallback, per-folder persistent sorting, και διόρθωση iPad Safari alpha-WebP & bit-8 PNG overflow.
+
+---
 
 ### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `v1.1 — simPDFFixes`
 * **4-Axis Audit Packages A + B + C (`b6f78d2`):**
