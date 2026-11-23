@@ -1,167 +1,69 @@
-# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`v1.1 — simPDFFixes`)
+# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`adminPanelRefresh v1.1.2`)
 
-> **Σκοπός:** Αυτό το έγγραφο αποτελεί τον κεντρικό χάρτη πλοήγησης (Code Index) του BestNotes / ExplainBoards (συγχρονισμένο με το [../CODEBASE_INDEX.md](../CODEBASE_INDEX.md)). Καταγράφει αναλυτικά πού βρίσκεται κάθε λειτουργία, πώς οργανώνονται τα domains (`src/simulations/`, `src/stem-engines/`, `src/canvas-tools/`, `src/features/library/`, `src/services/storage/`, `src/features/admin/`), πώς αποσυντίθεται το `src/App.tsx` και το `src/utils/geometryAndAlgorithms.ts`, και πώς γίνεται το code-splitting ώστε οποιοσδήποτε προγραμματιστής ή AI agent να εντοπίζει ακαριαία τον κώδικα.
-> **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [./SIMULATION_GUIDELINES.md](./SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling).
+> **Σημείωση:** Το πλήρες ευρετήριο αρχείων και αρχιτεκτονικής βρίσκεται συγχρονισμένο και στο [docs/CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md).
+> **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [docs/SIMULATION_GUIDELINES.md](./docs/SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling, αυτόματο πάγωμα προσομοιώσεων όταν κλείνει το Sim ή αλλάζει σελίδα/σημείωση).
+> **Υποχρεωτικός Κανόνας Αναίρεσης (`Undo-First Guarantee`):** ΚΑΘΕ νέο feature που προσθέτει, τροποποιεί, συνδυάζει, ενώνει ή διαγράφει strokes, σχήματα, εικόνες, γωνίες ή κείμενα **ΠΡΕΠΕΙ** να υποστηρίζει 100% Αναίρεση (`Undo`) — πάντα `suppressNextUndoRecordRef.current = false` πριν το `updateActivePage(..., true)` (ή ρητό `pushUndoSnapshot`), και πάντα έλεγχος ότι το `Undo` επαναφέρει ακριβώς την προηγούμενη κατάσταση!
 
----
+## 🏛️ Δομή Domains (`adminPanelRefresh v1.1.2`)
 
-## 🏛️ Οι 6 Βασικοί Πυλώνες (Domain-Driven Architecture)
+- **`src/features/plans/` (Subscription Plans, Quotas, Guest Mode & Liquid Upgrade Modal — `adminPanelRefresh v1.1.2`)**:
+  - `types.ts`: `SubscriptionPlan` (`ULTRA`, `PLUS`, `FREE` + custom plans), `GUEST_LIMITS`, `UserAiUsage`, `LimitHitKind` (`files`, `pages`, `storage`, `ai_daily`, `ai_weekly`, `ai_guest`, `auto_tags`, `drive_sync`, `live_broadcast`, `live_sim_links`, `guest_save`, `view_plans`), `AI_TOKEN_FEATURES_CATALOG`.
+  - `quotaLogic.ts`: Καθαροί έλεγχοι ορίων (`resolveEffectivePlan`, `checkFileAndStorageAllowed`, `checkPagesAllowed`, `checkAiCallAllowed`, `checkAutoTagsAllowed`) με PDF exception (ανοίγουν ανεξαρτήτως σελίδων εντός MB).
+  - `plansService.ts`: Firestore sync για `app_plans/{planId}` (με 12ωρη `localStorage` cache), `user_profiles/{uid}` (`planId`, `aiDayKey/Count`, `aiWeekKey/Count`, `aiTotalCount`) και Admin CRUD.
+  - `components/LiquidUpgradeModal.tsx`: Liquid-glass modal σύγκρισης πλάνων, ζωντανής χρήσης AI και επικοινωνίας (`FreiderikosKostas@gmail.com`).
+- **`src/services/storage/` (Optimized Sync & Public Demo Showcase — `adminPanelRefresh v1.1.2`)**:
+  - `publicShowcaseLogic.ts` & `publicShowcaseSync.ts`: Δημόσιος read-only φάκελος **`Σημειώσεις`** (`public_showcase_meta/config`, `public_showcase_notebooks`), 8-note Admin auto-seed, sandbox reset για non-admins, IndexedDB cache keyed by `meta.updatedAt`, και live Admin publishing (με Duplicate folder picker).
+  - `firestoreSync.ts`: Chunk-level diffing, skip διπλού `chunk_0` όταν περιέχεται στο manifest, κατάργηση per-save `getDocFromServer`, και `clearAllNotebookSyncCaches` / `clearNotebookWrittenChunksCache`.
+  - `storageCleaners.ts` (`compactStrokeForStorage`), `indexedDb.ts` (singleton IDB connection cache + showcase cache), `localAndIdbSync.ts`.
+- **`src/firebase.ts` & `functions/src/index.ts` (`adminPanelRefresh v1.1.2`)**:
+  - `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` με fallback σε `getFirestore`.
+  - `getAdminFirebaseUsageStats` (`europe-west1`): Google Cloud Monitoring v3 για Firestore Reads/Writes/Deletes, Hosting Downloads, **Hosting Storage GB** (`firebasehosting.googleapis.com/storage/total_bytes`), Cloud Functions, και **cross-project Gemini API Monitoring** (`FreiderikosK` μέσω `Monitoring Viewer`).
+- **`src/features/admin/` (`feature-admin` chunk — `adminPanelRefresh v1.1.2`)**:
+  - `AdminPortal.tsx`, `AdminDashboard.tsx`, `components/AdminSidebar.tsx` (σύντομες ετικέτες `Απόδοση`, `Κίνηση`, νέο tab `Πλάνα & Όρια`), `components/AdminPlansView.tsx` (CRUD πλάνων & κατάλογος AI tokens), `components/AdminUsersTable.tsx` (dropdown αλλαγής πλάνου ανά χρήστη).
+  - `components/AdminFirebaseBillingView.tsx` & `components/AdminUsageCharts.tsx`: Οριζόντιες μπάρες προόδου στα καρτελάκια σύνοψης, Hosting Storage 10 GB alert, διαγράμματα 7 ημερών τύπου Firebase Build (Αυτή vs Προηγούμενη εβδομάδα), και διαγράμματα Google AI Studio (Requests, Success Rate %, Errors + cross-project Project ID setup).
+  - `components/AdminOcrAnalyticsView.tsx`: Ημερήσιο όριο `1.100` (80 Flash κύρια μπάρα + δυναμική διπλανή μπάρα 1.020 Lite από `24/11/2026`, παλιό όριο 100 για `< 24/11`), στοιβαγμένα χρώματα ανά μοντέλο Gemini & 4 διακριτά χρώματα ανά τύπο AI.
+  - `components/AdminPerformanceView.tsx`, `services/userStatsService.ts`, `services/trafficService.ts`.
 
-```mermaid
-graph TD
-    App["src/App.tsx<br/>(Master Orchestrator & State)"]
-    
-    subgraph D1["1. src/simulations/ (Προσομοιώσεις & Physics)"]
-        SimIndex["index.ts (Facade & Registry Init)"]
-        SimRegistry["registry/SimulationRegistry.ts"]
-        SimCore["core/ (PhysicsMath, UniversalStopwatchBridge, VirtualPencilAnimator)"]
-        SimCircuits["modules/circuits/ (circuitEngine, circuitHelpers, CircuitControlPanel, CircuitSimulationModule)"]
-        SimHeat["modules/heat/ (heatPhysicsEngine, HeatRenderer, useHeatSimulation, HeatControlPanel, Modals, SketchRecognizer)"]
-        SimPendulum["modules/mechanics/pendulum/ (pendulumPhysics, PendulumModule)"]
-        SimUI["ui/ (StopwatchWidget 1x/2x/5x, FullscreenLaserCanvas, SimulationObjectRibbon)"]
-    end
-    
-    subgraph D2["2. src/stem-engines/ (STEM & OCR)"]
-        StemIndex["index.ts (Facade)"]
-        StemOCR["ocr/OcrPrompts.ts"]
-        StemChem["chemistry/periodicTableData.ts"]
-        StemMath["math/physicsEquationsLibrary.ts"]
-        StemUI["ui/LassoOcrButtons.tsx"]
-    end
-
-    subgraph D3["3. src/canvas-tools/ (Εργαλεία Σχεδίασης & Χρώματα)"]
-        CanvasIndex["index.ts (Facade)"]
-        CanvasTypes["types.ts (ToolType, PenSubType, EraserSubType)"]
-        CanvasPalette["palette/colorPresets.ts (PRESET_COLORS, DEFAULT_COLOR_SLOTS, APP_NAVY)"]
-        CanvasCatalog["tools/toolCatalog.ts (TOOL_DESCRIPTORS, shortcuts)"]
-        CanvasGeom["geometry/ (Bezier Splines, Smoothing, Graph Strokes)"]
-    end
-
-    subgraph D4["4. src/features/library/ (Βιβλιοθήκη & Φάκελοι)"]
-        LibIndex["index.ts (Facade)"]
-        LibTypes["types.ts (CustomFolderMeta, EditingFolderModalState)"]
-        LibPresets["constants/folderPresets.tsx (Colors, 30 Icons, renderFolderCustomIcon)"]
-        LibRecent["components/RecentlyOpenedStrip.tsx"]
-        LibDelModal["components/LibraryDeleteModal.tsx"]
-        LibFolderModal["components/FolderEditModal.tsx"]
-    end
-
-    subgraph D5["5. src/services/storage/ (Αποθήκευση, Συμπίεση, IndexedDB & Firestore)"]
-        StorIndex["index.ts (Facade)"]
-        StorIDB["indexedDb.ts (openBestNotesIdb, saveNotebooksToIndexedDB)"]
-        StorClean["storageCleaners.ts (compactStrokeForStorage, cleanNotebookForStorage, serializeNotebookForFirestore)"]
-        StorSync["firestoreSync.ts (saveNotebookToFirestoreChunked)"]
-        StorKeys["storageKeys.ts (STORAGE_KEY, UI_SESSION_STORAGE_KEY)"]
-    end
-
-    subgraph D6["6. src/features/admin/ (Πίνακας Ελέγχου Admin, Τηλεμετρία & Traffic)"]
-        AdminIndex["index.ts (Facade)"]
-        AdminPortal["AdminPortal.tsx (Lazy Code-Split Gate & Suspense)"]
-        AdminDash["AdminDashboard.tsx (Master View)"]
-        AdminRouteHook["hooks/useAdminRoute.ts"]
-        AdminTelemHook["hooks/useAppTelemetry.ts"]
-        AdminStats["services/userStatsService.ts"]
-        AdminTraffic["services/trafficService.ts"]
-        AdminViews["components/ (AdminSidebar, AdminKpiCards, AdminUsersTable, AdminTrafficView, AdminOcrAnalyticsView, AdminFirebaseBillingView, AdminPerformanceView)"]
-    end
-
-    App --> SimIndex
-    App --> StemIndex
-    App --> CanvasIndex
-    App --> LibIndex
-    App --> StorIndex
-    App --> AdminIndex
-```
-
----
-
-## 📦 Αναλυτικός Πίνακας Ευρετηρίου Αρχείων (File & Symbol Index)
-
-### 1. Domain: Προσομοιώσεις Φυσικής & Εργαστηρίου (`src/simulations/`)
-
-| Υποενότητα | Αρχείο | Ρόλος & Βασικές Εξαγωγές | Τι Απομόνωσε / Βελτιστοποίησε |
-| :--- | :--- | :--- | :--- |
-| **Facade & Core** | `src/simulations/index.ts` | Master Facade export & αυτόματη εγγραφή των `PendulumModule`, `HeatSimulationModule`, `CircuitSimulationModule` | Ενοποιημένο import στο `App.tsx` |
-| | `src/simulations/types.ts` | `ISimulationModule`, `SimulationCategory`, `SimulationObjectItem`, `Vector2D`, `StopwatchAction` | Τύποι προσομοιώσεων |
-| | `src/simulations/core/PhysicsMath.ts` | 2D διανυσματικά μαθηματικά (`add`, `sub`, `scale`, `dot`, `cross`, `norm`, `lerp`, `clamp`) | Επαναχρησιμοποιήσιμη μηχανή διανυσμάτων |
-| | `src/simulations/core/UniversalStopwatchBridge.ts` | Pub/Sub bridge για συγχρονισμό χρονομέτρου με προσομοιώσεις (`dispatchAction`, `subscribe`) | Αποσύζευξη UI χρονομέτρου |
-| | `src/simulations/core/VirtualPencilAnimator.ts` | Βηματική σχεδίαση με κινούμενο μολυβάκι (Pencil PNG) στον καμβά | Μηχανή αυτόματης σχεδίασης |
-| | `src/simulations/registry/SimulationRegistry.ts` | Plug-and-play Registry (`register`, `get`, `listByCategory`) | Κεντρική καταγραφή προσομοιώσεων |
-| **Ηλεκτρικά Κυκλώματα (`modules/circuits/`)** | `src/simulations/modules/circuits/index.ts` | Barrel export για όλη τη Μηχανή Κυκλωμάτων | Πλήρης αυτονομία κυκλωμάτων |
-| | `src/simulations/modules/circuits/types.ts` | `CircuitComponentKind`, `CircuitComponentInfo`, `HandDrawnCircuitRecognitionResult`, `SimulatedWireSegment`, `SimulatedComponentState`, `AutoVerticalSwitchInfo`, `CircuitSimulationData`, `CircuitSimConfig` | Όλοι οι τύποι κυκλωμάτων |
-| | `src/simulations/modules/circuits/circuitEngine.ts` | `classifyCircuitStrokeKind`, `getCircuitComponentsWithTerminals`, `repairCircuitMeterStrokes`, `splitWiresUnderCircuitComponent`, `getCircuitWireRailSnapDelta`, `adaptCircuitWiresOnScaleTransform`, `adaptCircuitWiresOnComponentMove`, `toggleSwitchStrokeGroup`, `recognizeHandDrawnCircuitSymbols`, `autoAlignAndConnectCircuit`, `convertCircuitComponents`, `analyzeCircuitForSimulation` (με **LRU Memoization Cache** `O(1)`, αυτόματη γεφύρωση `bulb-bridge` για ασύμμετρους εικονιστικούς ακροδέκτες λαμπτήρα `14587c8`, και `m.active` Kirchhoff για ζωντανό βολτόμετρο πηγής `V_πηγής` με ανοιχτό διακόπτη `c09a552`) | Αφαίρεση **7.138 γραμμών** από το `geometryAndAlgorithms.ts` + `O(1)` cache στον επιλυτή Kirchhoff |
-| | `src/simulations/modules/circuits/circuitHelpers.ts` | `getValidCircuitSims`, `getAllNotebookCircuitSims`, `getActiveCircuitSim`, `getNextDefaultCircuitSimName`, `isCircuitEligibleStroke`, `areStrokesWithinCircuitTol`, `getSimExpandedStrokeSet`, `expandWholeCircuitStrokeIds`, `runScopedCircuitOperationOnPage`, `splitWiresAndSyncPageSims` | Αφαίρεση **335 γραμμών** από το `App.tsx` |
-| | `src/simulations/modules/circuits/CircuitControlPanel.tsx` | Πλήρες Dashboard UI για τα Ηλεκτρικά Κυκλώματα (επιλογέας `sim01`/`sim02` με πράσινο ενεργό / μαύρο ανενεργό pill σε όλα τα 5 Sim tabs `fcf607f`, Play/Pause, `Ένωση`, `Ολοκλήρωση`, Αποδοχή/Ακύρωση πρότασης, διακόπτης, μετατροπή `Σχήματα ↔ Σύμβολα`, φορά ηλεκτρονίων/συμβατική, ταχύτητα) | Αφαίρεση **775 γραμμών** inline JSX από το `App.tsx` |
-| | `src/simulations/modules/circuits/CircuitSimulationModule.ts` | `CircuitSimulationModule` & `CIRCUIT_OBJECT_CATALOG` (8 εξαρτήματα κυκλώματος) | Εγγραφή στο `SimulationRegistry` |
-| **Θερμότητα & Θερμοδυναμική (`modules/heat/`)** | `src/simulations/modules/heat/index.ts` | Barrel export για όλη την ενότητα Θερμότητας | Πλήρης αυτονομία Θερμότητας |
-| | `src/simulations/modules/heat/types.ts` | `HeatSimConfig`, `HeatObject`, `HeatObjectType`, `LiquidType`, `LIQUID_REGISTRY` (Νερό, Γάλα, Ελαιόλαδο), `HeatContainerState`, `HeatBurnerState`, `HeatTripodState`, `HeatThermometerState`, `HeatGraphConfig` | Μοντέλα δεδομένων Θερμότητας |
-| | `src/simulations/modules/heat/heatPhysicsEngine.ts` | Θερμιδική ισορροπία με ενεργειακά συνεπή μονοτονική σύγκλιση ($\theta_i(t+\Delta t) = \theta_{\text{eq}} + (\theta_i(t) - \theta_{\text{eq}})e^{-\lambda\Delta t}$), Νόμος Ψύξης Νεύτωνα προς $\theta_{\text{περιβάλλοντος}}$, βρασμός, εξάτμιση & decimation ιστορικού γραφήματος | Φυσική μηχανή Θερμότητας |
-| | `src/simulations/modules/heat/HeatRenderer.ts` | 2.5D rendering (Καμινέτο, Τρίποδας, Ποτήρι, Λεκάνη, Κωνική Φιάλη, Θερμόμετρο, Γράφημα $\theta - t$), χρωματική κωδικοποίηση ένθετων δοχείων (`Α` μαύρο, `Β` μωβ `#7c3aed`, `Γ` πράσινο `#16a34a`, `Δ` κόκκινο `#dc2626`), offscreen blur caching (`renderWithOffscreenBlurCache`), viewport culling (`getHeatSimulationWorldBounds`), idle deduplication (`isHeatSimulationVisuallyActive`), απόκρυψη δεξιών κουμπιών κατά την επιλογή, και hover badges υγρού (`500ml Νερό`) στη σταγόνα (`💧`) και στη μύτη του δοχείου | Υψηλής απόδοσης 120fps Canvas 2D renderer |
-| | `src/simulations/modules/heat/useHeatSimulation.ts` | Κεντρικό React hook διαχείρισης αντικειμένων, μαγνητικού κουμπώματος, resize/stretch handles, multi-select, copy/paste, z-order και physics frame stepping | State & pointer interactions Θερμότητας |
-| | `src/simulations/modules/heat/HeatControlPanel.tsx` | Dashboard Θερμότητας (Play/Pause, Reset, Χρονόμετρο, Διάγραμμα $\theta - t$, Θερμοκρασία Περιβάλλοντος $0\text{–}50^\circ\text{C}$, Εργαστηριακός εξοπλισμός & Οδηγός) | UI ελέγχου Θερμότητας |
-| | `src/simulations/modules/heat/HeatLiquidConfigModal.tsx` | Modal ρύθμισης υγρού (Νερό/Γάλα/Ελαιόλαδο), όγκου ($\text{ml}$) και αρχικής θερμοκρασίας ($\theta_0$) | Modal ιδιοτήτων δοχείου |
-| | `src/simulations/modules/heat/HeatGraphChoiceModal.tsx` | Modal επιλογής προσθήκης καμπύλης σε υπάρχον διάγραμμα ή δημιουργίας νέου διαγράμματος | Modal διαγραμμάτων $\theta - t$ |
-| | `src/simulations/modules/heat/HeatSketchRecognizer.ts` | Αναγνώριση χειρόγραφου σκίτσου (καμινέτο, τρίποδας, ποτήρι, λεκάνη, κωνική φιάλη, θερμόμετρο) | Sketch-to-Sim Θερμότητας |
-| | `src/components/PageHeatSimsThumbCanvas.tsx` | Component απόδοσης προσομοιώσεων Θερμότητας στις μικρογραφίες της Βιβλιοθήκης και του Πλέγματος Σελίδων | Live thumbnails Θερμότητας |
-| **Μηχανική (`modules/mechanics/`)** | `src/simulations/modules/mechanics/pendulum/` | `PendulumModule.ts` & `pendulumPhysics.ts` ($T = 2\pi\sqrt{L/g}$, τάση νήματος $T = mg(3\cos\theta - 2\cos\theta_{\max})$, συντεταγμένες, 1-click εκκίνηση/παύση από ακραία θέση) | Φυσική & παραμετροποίηση εκκρεμούς |
-| **UI Widgets (`ui/`)** | `src/simulations/ui/StopwatchWidget.tsx` | Ψηφιακό Χρονόμετρο με dual-corner resize, κουμπί επιτάχυνσης χρόνου **`1x` → `2x` → `5x`** στην επικεφαλίδα, και persistence στο `localStorage` | Αυτόνομο widget χρονομέτρου |
-| | `src/simulations/ui/FullscreenLaserCanvas.tsx` | Ανεξάρτητος καμβάς κόκκινου laser (`z-[100000]`) με presentation lock | Καμβάς παρουσίασης |
-| | `src/simulations/ui/SimulationObjectRibbon.tsx` | Swipeable οριζόντια μπάρα αντικειμένων προσομοίωσης | Κοινή μπάρα αντικειμένων |
-
----
-
-### 2. Υπόλοιπα Domains (`src/stem-engines/`, `src/canvas-tools/`, `src/features/`, `src/services/`)
-
-| Domain | Αρχείο | Ρόλος & Βασικές Εξαγωγές |
-| :--- | :--- | :--- |
-| **STEM & OCR** | `src/stem-engines/index.ts` | Master Facade export για STEM, Χημεία, Φυσική & OCR |
-| | `src/stem-engines/ocr/OcrPrompts.ts` | System prompts για Ελληνικό χειρόγραφο, LaTeX, Χημικές Εξισώσεις, 3D Μόρια |
-| | `src/stem-engines/chemistry/periodicTableData.ts` | Περιοδικός πίνακας, Bohr models, χημικές εξισώσεις |
-| | `src/stem-engines/math/physicsEquationsLibrary.ts` | Κατάλογος εξισώσεων φυσικής ελληνικού αναλυτικού προγράμματος |
-| | `src/stem-engines/ui/LassoOcrButtons.tsx` | Κορδέλα 3 κουμπιών OCR (`textOCR`, `Σ Math ▾` με `Εξίσωση`, `Διάγραμμα`, `Πολύγωνο`, και ξεχωριστό **`Κώδικας`** για ΑΕΠΠ/εσοχές `c453bca`, `⚗ Chem ▾`) |
-| **Canvas Tools & Fonts** | `src/canvas-tools/index.ts` | Master Facade export για εργαλεία σχεδίασης και παλέτες |
-| | `src/canvas-tools/palette/colorPresets.ts` | `PRESET_COLORS`, `DEFAULT_COLOR_SLOTS`, `THICKNESS_PRESETS`, `APP_NAVY` |
-| | `src/canvas-tools/tools/toolCatalog.ts` | `TOOL_DESCRIPTORS` & helper queries |
-| | `public/fonts/ExplainBoards*.otf` | Ενσωματωμένες ελληνικές γραμματοσειρές: `Καλλιγραφική` (`ExplainBoards Calligraphic`), `Πένα` (`ExplainBoards Pena`), **`Fun`** (`ExplainBoards Fun` & `FunBold`), **`Diary`** (`ExplainBoards Diary` & `DiaryBold`) με οριζόντιο swipe 4 γραμματοσειρών στην πάνω μπάρα |
-| **Library** | `src/features/library/index.ts` | Master Facade export για τη βιβλιοθήκη και τους φακέλους (`RecentlyOpenedStrip`, `LibraryDeleteModal`, `FolderEditModal`, `folderPresets`) |
-| | `src/components/LibraryNoteMiniThumb.tsx` | Κάρτα προεπισκόπησης σημειωματάριου στη Βιβλιοθήκη (περιλαμβάνει `PageStrokesThumbCanvas` + `PageHeatSimsThumbCanvas`) |
-| **Storage, Compression & Sync** | `src/services/storage/storageCleaners.ts` | `compactStrokeForStorage` (**Lossless συμπίεση σημείων 240Hz Apple Pencil / GoodNotes κατά 55%–70%** + στρογγυλοποίηση `0.1px`), `cleanNotebookForStorage`, `serializeNotebookForFirestore`, `cleanNotebookForLibraryCache`, `getNotebookContentScore` |
-| | `src/services/storage/indexedDb.ts` | `openBestNotesIdb` (**singleton IDB connection cache** `b6f78d2`), `saveNotebooksToIndexedDB`, `loadNotebooksFromIndexedDB` |
-| | `src/services/storage/localAndIdbSync.ts` | `saveCustomFoldersToLocalAndIdb`, `saveNotebooksToLocalAndIdb`, `saveLibraryShelfCache` |
-| | `src/services/storage/firestoreSync.ts` | `saveNotebookToFirestoreChunked`, `getMonotonicIsoTimestamp` |
-| **OCR, PDF Export & Telemetry** | `src/utils/geometryAndAlgorithms.ts` | Multi-key Gemini OCR failover (`Admin key → VITE_GV_PRIMARY → VITE_GV_A/B`) με HTTP `402` handling & κατάργηση σιωπηλής αλλοίωσης `beautifyHandwritingStrokes` σε αποτυχία OCR (`fcf607f`), επαναφορά `textOCR` & διαχωρισμός `Math → Κώδικας` (`c453bca`), Unicode PUA SI unit sentinels (`d0d00be`) & Unicode-safe ελληνικό LaTeX (`b6f78d2`) |
-| | `src/utils/googleDrivePdfSync.ts` | Εξαγωγή PDF & `Live PDF` (`v1.1` overhaul `c453bca`): Circuits Option A (καμία αυτόματη ανίχνευση σε μη καταχωρημένα σκίτσα, σεβασμός per-circuit `switchClosed`/`showElectrons` & συνεχείς αλυσίδες σωματιδίων), PDF font stack/weight parity + `document.fonts.load` preloading, Pendulum `forceSims` validation, απόκρυψη στατικών strokes, πλήρης διανυσματική ισοδυναμία & διόρθωση φόντου `Live PDF` |
-| | `src/utils/perfTelemetry.ts` & `src/components/AdminPerfPill.tsx` | Zero-cost Live Telemetry Απόδοσης (Sim Frame ms, Active Live Loops, Long Tasks `>50ms`, RAM & Canvas VRAM, 1-click Παύση Όλων) |
-| **Hover Animations, Pathfinder & Angles (`v1.1.2`)** | `src/components/RichHoverTooltip.tsx` | Global zero-overhead SVG hover animations (`data-rich-tip`, pure CSS `@keyframes`, 0% CPU idle) για όλη τη μπάρα εργαλείων, Stroke/Pixel σβήστρες, Κείμενο `α,β,γ`, Ορθογώνιο/Λάσο, Χάρακα, Σκίτσα, 3D Extrude, Mirror, Z-Order, Align & Group |
-| | `src/stem-engines/ui/OcrHoverPreviewCard.tsx` | Photoshop-style live SVG hover mini-animations για `textOCR`, `Σ Math ▾` και `⚗ Chem ▾` |
-| | `src/components/ShapeBooleanDropdown.tsx` & `src/utils/shapeBooleanOps.ts` | Boolean Pathfinder (`Συνδυασμός ▾`: Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός) με 72-pt ellipse sampling, clean `twist: 888` evenodd holes & πλήρες Undo |
-| | `src/components/ShapeSliceDropdown.tsx` & `src/utils/shapeSliceOps.ts` | `✂️ Κόψιμο ▾` (Μαχαίρι, ¼+¾, Ίσα Κομμάτια 2/3/4/6/8 + toggle Κλειστά κομμάτια vs Μόνο περίγραμμα) με hover animations & πλήρες Undo |
-| | `src/utils/interactiveAngleTool.ts` | Διαδραστικές μόνιμες πράσινες γωνίες (`page.angleMarks`) με διπλό κλικ σε κορυφή, ακέραιες μοίρες `1°..180°`, ευθείες πλευρές & `±0.85°` κλείδωμα στις `30°, 45°, 60°, 90°, 120°` |
-| **Gravity & Mechanics (`v1.1.2`)** | `src/simulations/modules/gravity/GravityLabEngine.ts` | Thin facade/barrel export για τη Μηχανή Μηχανικής & Βαρύτητας |
-| | `src/simulations/modules/gravity/gravityGeometry.ts` | `GRAVITY_PX_PER_M`, `getStrokeBounds`, `getOrientedHalfExtents` (OBB για κεκλιμένα σώματα), `sampleStrokeToSegments` (3D Studio Floor/Wedge, 64-segment loop-the-loop & 90° Τεταρτοκύκλιο Bézier) |
-| | `src/simulations/modules/gravity/gravitySceneBuilder.ts` | `buildGravitySceneFromStrokes` — ταξινόμηση σωμάτων με OBB & `initAngle`, auto-pin εγκλειόντων κύκλων, αυστηρό εκκρεμές (κέντρο στο άκρο ευθείας), `u₀` & πολλαπλοί Stickmen |
-| | `src/simulations/modules/gravity/gravityPhysicsStep.ts` | `stepGravityScene`, `computeGravityEnergyStats` — ακριβής διατήρηση $E_0$, Τροχιά-Οδηγός, καθαρή εκτόξευση & επανείσοδος, ομαλή στροφή προσανατολισμού (`45° ↔ 0°`) |
-| | `src/simulations/modules/gravity/gravityRenderer.ts` | `renderGravityOverlay` — fade-out ίχνος τροχιάς, διανύσματα `u`, Δυνάμεις, `ΣF`, απόκρυψη μπλε βέλους `u₀` όταν Ταχύτητα OFF + double-pulse flash highlight, κεκλιμένη πινέζα |
-| | `src/simulations/modules/gravity/GravityControlPanel.tsx` | Dashboard Μηχανικής (Play/Pause, Reset ↺, inline edit `u = ... m/s` χωρίς αλλαγή μήκους βέλους, `📌 Ορισμός ως Ακίνητο Δάπεδο`, `Τροχιά-Οδηγός`, 3 checkboxes διανυσμάτων) |
-| **2D→3D, STEM Portraits & Springs (`v1.1.2`)** | `src/data/vectors/*`, `public/sketches/springs/` | 53 Da-Vinci sepia πορτρέτα επιστημόνων (incl. Robert Hooke & 1689 Kneller Newton), **10 μονόχρωμα SVG σκίτσα «Εφαρμογές Ελατηρίων»**, 90° Τεταρτοκύκλιο, 3D Studio Shapes |
-| **Seeds & Importers** | `src/data/seedIds.ts` & `src/data/seeds/index.ts` | Lightweight `seedIds.ts` που αποτρέπει το eager download του `data-seeds` chunk (**`-888.7 KB` gzip** στο αρχικό boot `b6f78d2`) + 11 έτοιμα εκπαιδευτικά τετράδια |
-| | `src/utils/goodnotesParser.ts` | Native `.goodnotes` (ZIP + Protobuf + `bv41` LZ4) & `.bestnotes` parser με αυτόματη συμπίεση `compactStrokeForStorage` |
-| | `src/utils/pdfAndImageImporter.ts` | PDF & Image importer με adaptive DPI και local IndexedDB caching |
-| **Admin, Security & Routing** | `src/features/admin/index.ts` | Απομονωμένο Admin Portal (`AdminPortal.tsx`, `AdminDashboard.tsx`, `AdminFirebaseBillingView.tsx`, `AdminPerformanceView.tsx`, `useAdminRoute`, `useAppTelemetry`, `userStatsService`, `trafficService`) |
-| | `firestore.rules` & `index.html` | Θωρακισμένοι Firestore Security Rules και διόρθωση `_vcheck` redirect (`b6f78d2`) |
-| **Bundling & Code Splitting** | `vite.config.ts` | Έξυπνος διαχωρισμός σε 9 ανεξάρτητα chunks: `vendor-react`, `vendor-firebase`, `vendor-pdf-zip`, `vendor-math`, `vendor-icons`, `feature-simulations`, `feature-admin`, lazy `data-seeds` (`-888.7 KB` gzip από το initial boot `b6f78d2`), και κύριο `index` |
-
----
-
-## 🔍 Χάρτης Πλοήγησης του `src/App.tsx` (Master Coordinator)
-
-1. **Γραμμές 1 – 360:** Εισαγωγές βιβλιοθηκών και των 6 domains (`./simulations`, `./stem-engines`, `./canvas-tools`, `./features/library`, `./services/storage`, `./features/admin`).
-2. **Γραμμές 361 – 1,800:** Βοηθητικές συναρτήσεις συγχρονισμού, ανάκτησης συνεδρίας και φακέλων.
-3. **Γραμμές 1,801 – 22,000:** State hooks, Scroll-Spy προσομοιώσεων, συγχρονισμός χρονομέτρων (`heatStopwatchElapsedMs`, `heatSimSpeed` `1x/2x/5x`, `pendulumStopwatchElapsedMs`).
-4. **Γραμμές 22,001 – 51,000:** Handlers & Render Loops:
-   - `renderSimFrame` (Γραμμές ~27,420–33,835): Περιλαμβάνει viewport visibility culling, offscreen bitmap caching, idle frame deduplication και κλιμάκωση ταχύτητας `heatSimSpeed`.
-   - Pointer events (`handlePointerDown`, `handlePointerMove`, `handlePointerUp`): Υποστηρίζει 1-click εκκίνηση/παύση εκκρεμούς, hover στη σταγόνα/μύτη δοχείων Θερμότητας, και μαγνητική συναρμολόγηση.
-5. **Γραμμές 51,001 – 70,500+:** JSX Tree:
-   - **Top Bar:** Κουμπιά εικονιδίων (χωρίς κείμενο) για `Βιβλιοθήκη`, `Ανανέωση`, `Σελίδες`, καρτέλες ανοιχτών αρχείων, και μενού γραμματοσειρών με οριζόντιο swipe 4 ορατών γραμματοσειρών (`Καλλιγραφική`, `Πένα`, `Fun`, `Diary`).
-   - **Simulation Dashboard:** Ενσωματώνει τα modular components `<CircuitControlPanel />` και `<HeatControlPanel />`, ενώ κλείνοντας το dashboard οι προσομοιώσεις παραμένουν ορατές πάνω στο χαρτί.
-   - **Floating Widgets:** `<StopwatchWidget />` (με κουμπί `1x` / `2x` / `5x`), `<FullscreenLaserCanvas />`, `<HeatLiquidConfigModal />`, `<HeatGraphChoiceModal />`.
+- **`src/components/` (Interactive Hover Animations, Pathfinder & Slice UI — `v1.1.2`)**:
+  - `RichHoverTooltip.tsx`: Global zero-overhead `RichHoverTooltipHost` (`data-rich-tip="..."`, pure CSS `@keyframes`, 0% CPU σε idle) για όλη την κύρια μπάρα εργαλείων, Σβήστρα (`Stroke` corner-tap / `Pixel` partial-side erase), Κείμενο (`α, β, γ` typing), Ορθογώνια Επιλογή (growing corner marquee), Ελεύθερο Λάσο (draw closed loop from 0 & catch), Χάρακα (γκρι-ασημί), Σκίτσα (θαυμαστικό → φύλλο), 3D Extrude (κύκλος → κύλινδρος), Mirror, +Βιβλιοθήκη, Z-Order, Align & Group.
+  - `ShapeBooleanDropdown.tsx` & `src/utils/shapeBooleanOps.ts`: Photoshop/Illustrator Pathfinder (`Συνδυασμός ▾` για `2+` κλειστά σχήματα — Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός) με 72-pt ellipse sampling, καθαρά `twist: 888` evenodd holes χωρίς bridge lines, live hover animations & εγγυημένο Undo.
+  - `ShapeSliceDropdown.tsx` & `src/utils/shapeSliceOps.ts`: `✂️ Κόψιμο ▾` για `1` κλειστό σχήμα — **🔪 Μαχαίρι** (γραμμή/γωνία), **¼ + ¾**, **Ίσα Κομμάτια (`2, 3, 4, 6, 8`)**, και 2-way toggle **`🍕 Κλειστά κομμάτια` | `〰️ Μόνο περίγραμμα`** (ανοιχτά τόξα) με hover animations & εγγυημένο Undo.
+  - `src/stem-engines/ui/OcrHoverPreviewCard.tsx`: Photoshop-style live SVG hover mini-animations για `textOCR`, `Σ Math ▾` και `⚗ Chem ▾`.
+- **`src/simulations/`** (`feature-simulations` chunk):
+  - **`modules/gravity/` (Μηχανική & Βαρύτητα — Modular Engine `v1.1.2`)**:
+    - `GravityLabEngine.ts`: Thin facade/barrel export για όλα τα υπο-άρθρα της Μηχανικής.
+    - `gravityGeometry.ts`: `GRAVITY_PX_PER_M`, `getStrokeBounds`, **`getOrientedHalfExtents`** (OBB ακριβές μισό-πάχος & γωνία άξονα για περιστραμμένα σώματα σε ράμπες), `sampleStrokeToSegments` (3D Studio Floor/Wedge, 64-segment loop-the-loop & 90° Τεταρτοκύκλιο Bézier).
+    - `gravitySceneBuilder.ts`: `buildGravitySceneFromStrokes` — αυτόματη ταξινόμηση δυναμικών σωμάτων με OBB πάχος & αρχική γωνία `initAngle`, auto-pin εγκλειόντων κύκλων, αυστηρό εκκρεμές μόνο σε ευθύγραμμα τμήματα με κέντρο σφαίρας στο άκρο, αρχικές ταχύτητες `u₀` & πολλαπλοί Stickmen (`F₁`, `F₂`, `ΣF`).
+    - `gravityPhysicsStep.ts`: `stepGravityScene` & `computeGravityEnergyStats` — symplectic sub-stepping (8 substeps/frame), διατήρηση ενέργειας $E_0$, **Τροχιά-Οδηγός** (`guideRailEnabled`), καθαρή εκτόξευση & εφαπτομενική επανείσοδος, και **ομαλή περιστροφή προσανατολισμού (`b.angle`)** για ορθογώνια σώματα που κινούνται μεταξύ κεκλιμένων & οριζόντιων επιπέδων (`45° ↔ 0°`).
+    - `gravityRenderer.ts`: `renderGravityOverlay` — fade-out ίχνος τροχιάς, διανύσματα **`u`**, **Δυνάμεις**, **`ΣF` / `ΣF = 0`**, απόκρυψη μπλε διανύσματος `u₀` όταν η Ταχύτητα είναι OFF (εμφάνιση μόνο της ζωντανής τιμής `u₀`), double-pulse flash highlight κατά το edit της `u₀`, και αχνή κόκκινη πινέζα εκτός περιγράμματος για καρφιτσωμένα δάπεδα.
+    - `GravityControlPanel.tsx`: Αυτόνομο Dashboard UI Μηχανικής (Play/Pause, Reset ↺, **inline επεξεργασία `u = ... m/s`** με κλικ χωρίς αλλαγή μήκους του ζωγραφιστού βέλους, `📌 Ορισμός ως Ακίνητο Δάπεδο`, `Τροχιά-Οδηγός`, 3 checkboxes διανυσμάτων σε 1 σειρά, live μπάρες ενέργειας $K, U, E$).
+    - `types.ts`: `GravityBodyState` (incl. `initAngle`, `angle`), `GravityLabConfig`, `GravitySegment`, `GravityEnergyStats`, `DEFAULT_GRAVITY_CONFIG`.
+  - **`modules/circuits/`**:
+    - `types.ts`: `CircuitComponentKind`, `CircuitComponentInfo`, `CircuitSimulationData`, `CircuitSimConfig`, κ.ά.
+    - `circuitEngine.ts`: Πλήρης μηχανή αναγνώρισης, αυτόματης ευθυγράμμισης/ένωσης αγωγών, αυτόματης γεφύρωσης `bulb-bridge` για ασύμμετρους εικονιστικούς ακροδέκτες λαμπτήρα (`14587c8`), μετατροπής `Σχήματα ↔ Σύμβολα` και επίλυσης κόμβων Kirchhoff (`analyzeCircuitForSimulation` με `O(1)` LRU Memoization Cache & `m.active` για ζωντανό βολτόμετρο πηγής `V_πηγής` ακόμα και με ανοιχτό διακόπτη `c09a552`).
+    - `circuitHelpers.ts`: `getValidCircuitSims`, `getAllNotebookCircuitSims`, `getActiveCircuitSim`, `getNextDefaultCircuitSimName`, `getSimExpandedStrokeSet`, `expandWholeCircuitStrokeIds`, `runScopedCircuitOperationOnPage`, `splitWiresAndSyncPageSims`.
+    - `CircuitControlPanel.tsx`: Αυτόνομο Dashboard UI για τα Ηλεκτρικά Κυκλώματα (πράσινα ενεργά / μαύρα ανενεργά pills σε όλα τα 5 Sim tabs `fcf607f`).
+    - `CircuitSimulationModule.ts`: Module εγγραφής στο `SimulationRegistry`.
+  - **`modules/heat/`**:
+    - `types.ts`, `heatPhysicsEngine.ts`, `HeatRenderer.ts`, `useHeatSimulation.ts`, `HeatControlPanel.tsx`, `HeatLiquidConfigModal.tsx`, `HeatGraphChoiceModal.tsx`, `HeatSketchRecognizer.ts`, `HeatSimulationModule.ts`.
+  - **`modules/mechanics/pendulum/`**:
+    - `pendulumPhysics.ts`, `PendulumModule.ts`.
+  - **`ui/`**:
+    - `StopwatchWidget.tsx` (με επιλογέα ταχύτητας `1x` → `2x` → `5x`), `FullscreenLaserCanvas.tsx`, `SimulationObjectRibbon.tsx`.
+- **`src/stem-engines/`**: `ocr/OcrPrompts.ts`, `chemistry/periodicTableData.ts`, `math/physicsEquationsLibrary.ts`, `ui/LassoOcrButtons.tsx` (`textOCR`, `Σ Math ▾` με ξεχωριστό `Κώδικας` για ΑΕΠΠ/εσοχές `c453bca`, `⚗ Chem ▾`).
+- **`src/canvas-tools/`**: `palette/colorPresets.ts`, `tools/toolCatalog.ts`, `geometry/index.ts`.
+- **`src/features/library/`**: `RecentlyOpenedStrip.tsx`, `LibraryDeleteModal.tsx`, `FolderEditModal.tsx`, `constants/folderPresets.tsx`.
+- **`src/services/storage/`**: `storageCleaners.ts` (`compactStrokeForStorage` lossless συμπίεση σημείων 240Hz κατά 55%–70%), `indexedDb.ts` (singleton IDB connection cache `b6f78d2`), `localAndIdbSync.ts`, `firestoreSync.ts`.
+- **`src/data/` & `public/sketches/springs/`**: `seedIds.ts` (lightweight seed IDs για lazy φόρτωση του chunk `data-seeds`, `-888.7 KB` gzip στο αρχικό boot `b6f78d2`), `seeds/index.ts`, `stickersCatalog.ts` (iPadOS WebKit alpha-WebP bypass & 10 νέα μονόχρωμα χαρακτικά SVG στην κατηγορία **«Εφαρμογές Ελατηρίων»**: δυναμόμετρο, ποδήλατο, ζυγαριά, αμορτισέρ, όργανο γυμναστικής, στυλό, πλήκτρα, παιχνίδι, αποσβεστήρας ανελκυστήρα, στρώμα), & `vectors/` (**53 μουσειακές γκραβούρες Da-Vinci επιστημόνων** incl. Robert Hooke με εμπλουτισμένα tags).
+- **`2D→3D, Σχήματα, Γωνίες & Χάρακας (v1.1.2)`**:
+  - `src/utils/interactiveAngleTool.ts` + `NotePage.angleMarks` (`src/types/note.ts`): Διπλό κλικ/tap σε οποιαδήποτε κορυφή γωνίας (2 ευθείες ή πολύγωνο) → **μόνιμη απαλή πράσινη γωνία** με ακέραιη τιμή (`1°..180°`, χωρίς πλαίσιο/κουκκίδες, τετραγωνάκι στις `90°`), σύρσιμο πλευρών ως 100% ευθείες, ήπιο μαγνητικό κλείδωμα `±0.85°` στις **`30°, 45°, 60°, 90°, 120°`**, toggle off με 2ο διπλό κλικ & πλήρες Undo.
+  - **Χάρακας**: ισχυρό `±10°` οριζόντιο/κατακόρυφο κλείδωμα + 1-click `0° / 90°` κουμπί. **Κόμβοι (`direct-node`)**: ήπιο `±3.1° / 8px` οριζόντιο/κατακόρυφο κλείδωμα για ευθείες/πολυγραμμές. **Διαφάνεια Γεμίσματος**: slider έως **`0%`** (100% συμπαγές).
+  - **Cross-Device Sync & Βιβλιοθήκη (`v1.1.2`)**: Per-folder & per-subfolder persistent sorting (`bestnotes_folder_sort_map_v1`), compact notebook tabs, bulletproof clock-skew monotonic timestamps (`getMonotonicIsoTimestamp`), άμεσο push σε rename/μετακίνηση φακέλου/tags/αγαπημένα, και οριστική διαγραφή Κάδου με `deleteDoc` fallback ώστε διαγραμμένα αρχεία να μην κολλάνε ποτέ μεταξύ iPad/Mac.
+  - **2D→3D & Μελάνι**: 3D σχήματα (`shaded-floor`, `shaded-wedge`, `shaded-arrow`, `shaded-sphere`, `shaded-cuboid`), 90° Τεταρτοκύκλιο, συντόμευση `A / Α` → Βελάκι, μαγνητικός δακτύλιος σε άκρα & εκκρεμές, διόρθωση iPad Safari PNG `(253..255 + 3) & 0xf8` overflow (`eaa967b`).
+- **`src/utils/`**:
+  - `geometryAndAlgorithms.ts`: Καθαρή αλυσίδα 7 δωρεάν Gemini μοντέλων (`1.100 RPD/ημ.` — `gemini-4-hydrogen` → `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3-flash-preview` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-2.5-flash`, χωρίς Groq/Mistral), multi-key failover, επαναφορά `textOCR` & διαχωρισμός `Math → Κώδικας`, Unicode PUA sentinels για μονάδες SI & ελληνικό LaTeX.
+  - `liveTvSync.ts`: WebRTC-first Live TV 16:9 (**0 Firestore writes** όσο είναι ανοιχτό το P2P, catch-up snapshot μόνο σε αποσύνδεση, πάντα OFF στην εκκίνηση).
+  - `notebookStorageSize.ts`: Ενιαίος υπολογισμός μεγέθους (bytes/MB) σημειώσεων για έλεγχο ορίων πλάνων & Admin Panel.
+  - `googleDrivePdfSync.ts`: Εξαγωγή PDF & `Live PDF` (PLUS & ULTRA) με Circuits Option A, font parity & vector parity.
+  - `perfTelemetry.ts` & `src/components/AdminPerfPill.tsx`: Admin-only Live Telemetry Απόδοσης (Sim Frame ms, Active Live Loops, Long Tasks `>50ms`, RAM & Canvas VRAM, 1-click Παύση Όλων).
+- **`firestore.rules` & `index.html`**: Θωρακισμένοι κανόνες ασφαλείας Firestore (`app_plans`, `user_profiles.planId` anti-privilege-escalation, `app_config/gemini` authenticated-only, `public_showcase_meta` & `public_showcase_notebooks` public read / Admin write) και διόρθωση `_vcheck` redirect.

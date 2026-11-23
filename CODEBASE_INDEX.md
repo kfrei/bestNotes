@@ -1,10 +1,28 @@
-# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`buttonHoverAnimations v1.1.2`)
+# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`adminPanelRefresh v1.1.2`)
 
 > **Σημείωση:** Το πλήρες ευρετήριο αρχείων και αρχιτεκτονικής βρίσκεται συγχρονισμένο και στο [docs/CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md).
-> **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [docs/SIMULATION_GUIDELINES.md](./docs/SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling).
+> **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [docs/SIMULATION_GUIDELINES.md](./docs/SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling, αυτόματο πάγωμα προσομοιώσεων όταν κλείνει το Sim ή αλλάζει σελίδα/σημείωση).
 > **Υποχρεωτικός Κανόνας Αναίρεσης (`Undo-First Guarantee`):** ΚΑΘΕ νέο feature που προσθέτει, τροποποιεί, συνδυάζει, ενώνει ή διαγράφει strokes, σχήματα, εικόνες, γωνίες ή κείμενα **ΠΡΕΠΕΙ** να υποστηρίζει 100% Αναίρεση (`Undo`) — πάντα `suppressNextUndoRecordRef.current = false` πριν το `updateActivePage(..., true)` (ή ρητό `pushUndoSnapshot`), και πάντα έλεγχος ότι το `Undo` επαναφέρει ακριβώς την προηγούμενη κατάσταση!
 
-## 🏛️ Δομή Domains (`buttonHoverAnimations v1.1.2`)
+## 🏛️ Δομή Domains (`adminPanelRefresh v1.1.2`)
+
+- **`src/features/plans/` (Subscription Plans, Quotas, Guest Mode & Liquid Upgrade Modal — `adminPanelRefresh v1.1.2`)**:
+  - `types.ts`: `SubscriptionPlan` (`ULTRA`, `PLUS`, `FREE` + custom plans), `GUEST_LIMITS`, `UserAiUsage`, `LimitHitKind` (`files`, `pages`, `storage`, `ai_daily`, `ai_weekly`, `ai_guest`, `auto_tags`, `drive_sync`, `live_broadcast`, `live_sim_links`, `guest_save`, `view_plans`), `AI_TOKEN_FEATURES_CATALOG`.
+  - `quotaLogic.ts`: Καθαροί έλεγχοι ορίων (`resolveEffectivePlan`, `checkFileAndStorageAllowed`, `checkPagesAllowed`, `checkAiCallAllowed`, `checkAutoTagsAllowed`) με PDF exception (ανοίγουν ανεξαρτήτως σελίδων εντός MB).
+  - `plansService.ts`: Firestore sync για `app_plans/{planId}` (με 12ωρη `localStorage` cache), `user_profiles/{uid}` (`planId`, `aiDayKey/Count`, `aiWeekKey/Count`, `aiTotalCount`) και Admin CRUD.
+  - `components/LiquidUpgradeModal.tsx`: Liquid-glass modal σύγκρισης πλάνων, ζωντανής χρήσης AI και επικοινωνίας (`FreiderikosKostas@gmail.com`).
+- **`src/services/storage/` (Optimized Sync & Public Demo Showcase — `adminPanelRefresh v1.1.2`)**:
+  - `publicShowcaseLogic.ts` & `publicShowcaseSync.ts`: Δημόσιος read-only φάκελος **`Σημειώσεις`** (`public_showcase_meta/config`, `public_showcase_notebooks`), 8-note Admin auto-seed, sandbox reset για non-admins, IndexedDB cache keyed by `meta.updatedAt`, και live Admin publishing (με Duplicate folder picker).
+  - `firestoreSync.ts`: Chunk-level diffing, skip διπλού `chunk_0` όταν περιέχεται στο manifest, κατάργηση per-save `getDocFromServer`, και `clearAllNotebookSyncCaches` / `clearNotebookWrittenChunksCache`.
+  - `storageCleaners.ts` (`compactStrokeForStorage`), `indexedDb.ts` (singleton IDB connection cache + showcase cache), `localAndIdbSync.ts`.
+- **`src/firebase.ts` & `functions/src/index.ts` (`adminPanelRefresh v1.1.2`)**:
+  - `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` με fallback σε `getFirestore`.
+  - `getAdminFirebaseUsageStats` (`europe-west1`): Google Cloud Monitoring v3 για Firestore Reads/Writes/Deletes, Hosting Downloads, **Hosting Storage GB** (`firebasehosting.googleapis.com/storage/total_bytes`), Cloud Functions, και **cross-project Gemini API Monitoring** (`FreiderikosK` μέσω `Monitoring Viewer`).
+- **`src/features/admin/` (`feature-admin` chunk — `adminPanelRefresh v1.1.2`)**:
+  - `AdminPortal.tsx`, `AdminDashboard.tsx`, `components/AdminSidebar.tsx` (σύντομες ετικέτες `Απόδοση`, `Κίνηση`, νέο tab `Πλάνα & Όρια`), `components/AdminPlansView.tsx` (CRUD πλάνων & κατάλογος AI tokens), `components/AdminUsersTable.tsx` (dropdown αλλαγής πλάνου ανά χρήστη).
+  - `components/AdminFirebaseBillingView.tsx` & `components/AdminUsageCharts.tsx`: Οριζόντιες μπάρες προόδου στα καρτελάκια σύνοψης, Hosting Storage 10 GB alert, διαγράμματα 7 ημερών τύπου Firebase Build (Αυτή vs Προηγούμενη εβδομάδα), και διαγράμματα Google AI Studio (Requests, Success Rate %, Errors + cross-project Project ID setup).
+  - `components/AdminOcrAnalyticsView.tsx`: Ημερήσιο όριο `1.100` (80 Flash κύρια μπάρα + δυναμική διπλανή μπάρα 1.020 Lite από `24/11/2026`, παλιό όριο 100 για `< 24/11`), στοιβαγμένα χρώματα ανά μοντέλο Gemini & 4 διακριτά χρώματα ανά τύπο AI.
+  - `components/AdminPerformanceView.tsx`, `services/userStatsService.ts`, `services/trafficService.ts`.
 
 - **`src/components/` (Interactive Hover Animations, Pathfinder & Slice UI — `v1.1.2`)**:
   - `RichHoverTooltip.tsx`: Global zero-overhead `RichHoverTooltipHost` (`data-rich-tip="..."`, pure CSS `@keyframes`, 0% CPU σε idle) για όλη την κύρια μπάρα εργαλείων, Σβήστρα (`Stroke` corner-tap / `Pixel` partial-side erase), Κείμενο (`α, β, γ` typing), Ορθογώνια Επιλογή (growing corner marquee), Ελεύθερο Λάσο (draw closed loop from 0 & catch), Χάρακα (γκρι-ασημί), Σκίτσα (θαυμαστικό → φύλλο), 3D Extrude (κύκλος → κύλινδρος), Mirror, +Βιβλιοθήκη, Z-Order, Align & Group.
@@ -43,8 +61,9 @@
   - **Cross-Device Sync & Βιβλιοθήκη (`v1.1.2`)**: Per-folder & per-subfolder persistent sorting (`bestnotes_folder_sort_map_v1`), compact notebook tabs, bulletproof clock-skew monotonic timestamps (`getMonotonicIsoTimestamp`), άμεσο push σε rename/μετακίνηση φακέλου/tags/αγαπημένα, και οριστική διαγραφή Κάδου με `deleteDoc` fallback ώστε διαγραμμένα αρχεία να μην κολλάνε ποτέ μεταξύ iPad/Mac.
   - **2D→3D & Μελάνι**: 3D σχήματα (`shaded-floor`, `shaded-wedge`, `shaded-arrow`, `shaded-sphere`, `shaded-cuboid`), 90° Τεταρτοκύκλιο, συντόμευση `A / Α` → Βελάκι, μαγνητικός δακτύλιος σε άκρα & εκκρεμές, διόρθωση iPad Safari PNG `(253..255 + 3) & 0xf8` overflow (`eaa967b`).
 - **`src/utils/`**:
-  - `geometryAndAlgorithms.ts`: Multi-key Gemini OCR failover (`Admin key → VITE_GV_PRIMARY → VITE_GV_A/B`) με χειρισμό HTTP `402` και κατάργηση σιωπηλής αλλοίωσης `beautifyHandwritingStrokes` σε αποτυχία OCR (`fcf607f`), επαναφορά `textOCR` & διαχωρισμός `Math → Κώδικας` (`c453bca`), Unicode PUA sentinels για μονάδες SI (`d0d00be`) & Unicode-safe ελληνικό LaTeX (`b6f78d2`).
-  - `googleDrivePdfSync.ts`: Εξαγωγή PDF & `Live PDF` με Circuits Option A (καμία αυθαίρετη ανίχνευση σε μη καταχωρημένα σκίτσα, σεβασμός αποθηκευμένων per-circuit `switchClosed`/`showElectrons` & συνεχείς αλυσίδες σωματιδίων), font stack/weight parity + `document.fonts.load` preloading, Pendulum `forceSims` validation, απόκρυψη στατικών strokes, πλήρη διανυσματική ισοδυναμία & διόρθωση φόντου `Live PDF` (`c453bca`).
-  - `perfTelemetry.ts` & `src/components/AdminPerfPill.tsx`: Μηδενικού κόστους Live Telemetry Απόδοσης (Sim Frame ms, Active Live Loops, Long Tasks `>50ms`, RAM & Canvas VRAM, 1-click Παύση Όλων).
-- **`src/features/admin/`** (`feature-admin` chunk): `AdminPortal.tsx`, `AdminDashboard.tsx`, `components/AdminFirebaseBillingView.tsx`, `components/AdminPerformanceView.tsx`, `services/userStatsService.ts`, `services/trafficService.ts`.
-- **`firestore.rules` & `index.html`**: Θωρακισμένοι κανόνες ασφαλείας Firestore και διόρθωση `_vcheck` redirect (`b6f78d2`).
+  - `geometryAndAlgorithms.ts`: Καθαρή αλυσίδα 7 δωρεάν Gemini μοντέλων (`1.100 RPD/ημ.` — `gemini-4-hydrogen` → `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3-flash-preview` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-2.5-flash`, χωρίς Groq/Mistral), multi-key failover, επαναφορά `textOCR` & διαχωρισμός `Math → Κώδικας`, Unicode PUA sentinels για μονάδες SI & ελληνικό LaTeX.
+  - `liveTvSync.ts`: WebRTC-first Live TV 16:9 (**0 Firestore writes** όσο είναι ανοιχτό το P2P, catch-up snapshot μόνο σε αποσύνδεση, πάντα OFF στην εκκίνηση).
+  - `notebookStorageSize.ts`: Ενιαίος υπολογισμός μεγέθους (bytes/MB) σημειώσεων για έλεγχο ορίων πλάνων & Admin Panel.
+  - `googleDrivePdfSync.ts`: Εξαγωγή PDF & `Live PDF` (PLUS & ULTRA) με Circuits Option A, font parity & vector parity.
+  - `perfTelemetry.ts` & `src/components/AdminPerfPill.tsx`: Admin-only Live Telemetry Απόδοσης (Sim Frame ms, Active Live Loops, Long Tasks `>50ms`, RAM & Canvas VRAM, 1-click Παύση Όλων).
+- **`firestore.rules` & `index.html`**: Θωρακισμένοι κανόνες ασφαλείας Firestore (`app_plans`, `user_profiles.planId` anti-privilege-escalation, `app_config/gemini` authenticated-only, `public_showcase_meta` & `public_showcase_notebooks` public read / Admin write) και διόρθωση `_vcheck` redirect.

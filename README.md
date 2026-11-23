@@ -1,9 +1,31 @@
-# 📝 BestNotes / ExplainBoards — `buttonHoverAnimations v1.1.2`
+# 📝 BestNotes / ExplainBoards — `adminPanelRefresh v1.1.2`
 
-> **Live Web App (Primary):** [**https://explainboards.web.app**](https://explainboards.web.app) & [**https://mybestnotes.web.app**](https://mybestnotes.web.app)  
-> **Mirror Hosting:** [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app)  
+> **Live Web App:** [**https://explainboards.web.app**](https://explainboards.web.app)  
 > **Πολιτική Απορρήτου & Όροι Χρήσης:** [`/privacy`](https://explainboards.web.app/privacy) • [`/terms`](https://explainboards.web.app/terms)  
-> **Τρέχουσα Έκδοση:** **`buttonHoverAnimations v1.1.2`** (23 Νοεμβρίου 2026)
+> **Τρέχουσα Έκδοση:** **`adminPanelRefresh v1.1.2`** (23 Νοεμβρίου 2026)
+
+### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `adminPanelRefresh v1.1.2`
+* **Σύστημα Πλάνων (`ULTRA` / `PLUS` / `FREE`), Λειτουργία Επισκέπτη & Liquid Upgrade Modal (`src/features/plans/`):**
+  * **3 δυναμικά πλάνα στο Firestore (`app_plans/{planId}`)** με πλήρη διαχείριση & δημιουργία νέων πλάνων από το Admin Panel (**Πλάνα & Όρια**) και άμεση αλλαγή πλάνου ανά χρήστη στον πίνακα **Χρήστες & Αρχεία**:
+    * **ULTRA (Admin):** Απεριόριστα αρχεία, σελίδες, χώρος & AI κλήσεις, Αυτόματα `#tags` (Auto-Tags), Google Drive Sync, Live PDF/Αναμετάδοση & Live Simulation Links.
+    * **PLUS:** 20 αρχεία, έως 10 σελίδες ανά δικό μας αρχείο (PDF πολλών σελίδων ανοίγουν κανονικά εντός ορίου MB), 10 MB χώρος, 5 AI/ημ. ή 20/εβδ., Google Drive Sync (PDF), Live PDF & Live Αναμετάδοση.
+    * **FREE (default για κάθε νέα εγγραφή):** 5 αρχεία, έως 4 σελίδες/δικό μας αρχείο, 5 MB χώρος, 3 AI/ημ. ή 10/εβδ.
+  * **Λειτουργία Επισκέπτη (Guest):** 1 προσωρινό αρχείο έως 3 σελίδες, 0 AI κλήσεις, μηδενική αποθήκευση (με κλείσιμο/έξοδο χάνονται όλα), με όλα τα τοπικά εργαλεία & προσομοιώσεις ενεργά.
+  * **Liquid Upgrade Modal (`LiquidUpgradeModal.tsx`):** Όλα τα AI/Drive/Live κουμπιά ανοίγουν το liquid-glass modal με ζωντανή σύγκριση πλάνων, τρέχουσα χρήση και επικοινωνία στο `FreiderikosKostas@gmail.com`. Το κουμπί **`Live (Προβολή 16:9)`** μεταφέρθηκε από το Landing Page μέσα στο μενού προφίλ (γκρι όταν ανενεργό, πράσινο όταν ενεργό, μόνο για **PLUS & ULTRA**), ενώ τα κουμπιά **`Idle`** και **`Admin`** είναι αυστηρά Admin-only.
+* **Δημόσιος Demo Φάκελος «Σημειώσεις» & Αντίγραφο σε Φάκελο (`publicShowcaseLogic.ts`, `publicShowcaseSync.ts`):**
+  * Δημόσιος read-only φάκελος **`Σημειώσεις`** (`public_showcase_meta/config` + `public_showcase_notebooks`), ορατός σε Επισκέπτες & Συνδεδεμένους χωρίς να μετράει στα όρια αρχείων/MB.
+  * Sandbox επεξεργασία χωρίς αποθήκευση (επαναφορά στην αρχική κατάσταση με κλείσιμο/επιστροφή), αυτόματο seed 8 εκπαιδευτικών σημειώσεων από τον Admin, ζωντανή ενημέρωση ονόματος/χρώματος/αρχείων μόνο από Admin, και **δέντρο επιλογής φακέλου προορισμού** στο **`Αντίγραφο`** (όπως στη `Μετακίνηση`).
+* **Καθαρή Αλυσίδα 7 Μοντέλων Gemini (`1.100` Δωρεάν Κλήσεις/Ημέρα) & Google AI Studio Monitoring:**
+  * Αφαίρεση Groq/Mistral — καθαρή αλυσίδα Gemini στο `geometryAndAlgorithms.ts`: **`gemini-4-hydrogen` (20)** → **`gemini-3.8-flash` (20)** → **`gemini-3.6-flash` (20)** → **`gemini-3-flash-preview` (20)** → **`gemini-3.5-flash-lite` (500)** → **`gemini-3.1-flash-lite` (500)** → **`gemini-2.5-flash` (20)** (με το `textOCR` prompt 100% ανέπαφο).
+  * **Admin Panel Refresh (`AdminUsageCharts.tsx`, `AdminFirebaseBillingView.tsx`, `AdminOcrAnalyticsView.tsx`, `functions/src/index.ts`):**
+    * **Cross-Project Gemini API Monitoring (`FreiderikosK`):** Η Cloud Function `getAdminFirebaseUsageStats` διαβάζει επίσημα Google Cloud Monitoring metrics (`generativelanguage.googleapis.com`) και από ξεχωριστό GCP project (`Monitoring Viewer`), μαζί με ζωντανό **Firebase Hosting Storage (GB vs 10 GB)**.
+    * **Νέα Διαγράμματα SVG:** Firebase Build 7-ήμερη σύγκριση (Αυτή η εβδομάδα vs Προηγούμενη) για Hosting Downloads, Functions, Firestore Reads & Writes, διαγράμματα Google AI Studio (Requests, Success Rate %, Errors), οριζόντιες μπάρες προόδου στα καρτελάκια σύνοψης, και **στοιβαγμένο ιστόγραμμα AI ανά μοντέλο** (κύρια μπάρα 80 Flash + δυναμική διπλανή μπάρα 1.020 Lite από `24/11/2026`, διακριτά χρώματα ανά τύπο AI).
+* **Βελτιστοποίηση Κόστους Firebase (-90–95% Reads/Writes, Hosting `€0,00/μήνα`) & Auto-Freeze Προσομοιώσεων:**
+  * **Ασφαλής μείωση Firestore Reads/Writes** με 100% διατήρηση άμεσου συγχρονισμού Mac↔iPad: `10s` idle debounce (άμεσο flush σε διαγραφή/μετονομασία/μετακίνηση/αλλαγή αρχείου/κλείσιμο), `persistentLocalCache` multi-tab sharing, chunk-level diffing χωρίς άχρηστα `getDocFromServer` / διπλό `chunk_0`, WebRTC-first Live TV (**0 Firestore writes** με ανοιχτό P2P, πάντα κλειστό στην εκκίνηση), κατάργηση `onSnapshot` compaction echo-loop & `refreshUserDocFromServerOnWake`, IndexedDB cache για το `Σημειώσεις`.
+  * **Μοναδικό Hosting Site (`explainboards.web.app`):** Διαγραφή του `mybestnotes`, απενεργοποίηση του `bestnotes-2026`, retention `2` releases + Artifact Registry cleanup policy (`keep 2`) → Hosting Storage από `16.4 GB` σε `< 0.4 GB` (**€0,00/μήνα**).
+  * **Αυτόματο Πάγωμα Προσομοιώσεων (`0% CPU / 0 RAF`):** Το πάνελ **Sim** και όλες οι προσομοιώσεις ξεκινούν πάντα κλειστές και παγώνουν αυτόματα μόλις κλείσει το Sim, αλλάξει σελίδα/σημείωση ή επιστρέψει στη Βιβλιοθήκη.
+
+---
 
 ### 🚀 Τι Νέο Προστέθηκε στην Έκδοση `buttonHoverAnimations v1.1.2`
 * **Photoshop-Style Live SVG Hover Animations (`RichHoverTooltip.tsx`, `OcrHoverPreviewCard.tsx`):**
