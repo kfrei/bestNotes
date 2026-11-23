@@ -105,20 +105,44 @@ export function renderGravityOverlay(
       continue;
     }
 
-    // 0. Pre-launch u₀ arrow badge when paused at t = 0
+    // 0. Pre-launch u₀ preview when paused at t = 0:
+    //    - When Velocity vector is enabled in the panel -> draw the blue vector arrow + `u₀ = ... m/s`
+    //    - When Velocity vector is OFF -> hide the blue arrow and show ONLY the live `u₀ = ... m/s` value next to the user's drawn arrow
     if (!isRunning && b.trail.length <= 1) {
       const v0Mag = Math.hypot(b.initVx, b.initVy);
       if (v0Mag > 12) {
         const v0Ms = (v0Mag / GRAVITY_PX_PER_M).toFixed(1);
-        drawVectorArrow(
-          ctx,
-          b.cx,
-          b.cy,
-          b.initVx * 0.22,
-          b.initVy * 0.22,
-          '#2563eb',
-          `u₀ = ${v0Ms} m/s`
-        );
+        const label = `u₀ = ${v0Ms} m/s`;
+        if (config.showVelocity) {
+          drawVectorArrow(
+            ctx,
+            b.cx,
+            b.cy,
+            b.initVx * 0.22,
+            b.initVy * 0.22,
+            '#2563eb',
+            label
+          );
+        } else {
+          const dx = b.initVx * 0.22;
+          const dy = b.initVy * 0.22;
+          const len = Math.hypot(dx, dy);
+          const scale = len > 82 ? 82 / len : 1;
+          const ex = b.cx + dx * scale;
+          const ey = b.cy + dy * scale;
+          const ang = Math.atan2(dy, dx);
+          const lx = ex + 6 * Math.cos(ang) - 4;
+          const ly = ey + 6 * Math.sin(ang) - 4;
+          ctx.save();
+          ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+          ctx.lineWidth = 3;
+          ctx.lineJoin = 'round';
+          ctx.strokeText(label, lx, ly);
+          ctx.fillStyle = '#2563eb';
+          ctx.fillText(label, lx, ly);
+          ctx.restore();
+        }
       }
     }
 
