@@ -8889,6 +8889,9 @@ export default function App() {
       clipPolygon: im.clipPolygon ? im.clipPolygon.map((cp) => ({ ...cp })) : undefined,
     })),
     tapes: (p.tapes || []).map((tp) => ({ ...tp })),
+    angleMarks: p.angleMarks
+      ? p.angleMarks.map((m) => ({ ...m, armA: { ...m.armA }, armB: { ...m.armB } }))
+      : undefined,
     ruler: p.ruler ? { ...p.ruler } : undefined,
     springSims: p.springSims
       ? p.springSims.map((sm) => ({
@@ -9208,6 +9211,15 @@ export default function App() {
         ) {
           return false;
         }
+      }
+    }
+
+    const ama = a.angleMarks || [];
+    const amb = b.angleMarks || [];
+    if (ama.length !== amb.length) return false;
+    if (ama !== amb) {
+      for (let i = 0; i < ama.length; i++) {
+        if (ama[i].id !== amb[i].id) return false;
       }
     }
 
@@ -13255,6 +13267,7 @@ export default function App() {
           selectedLassoTextIds.length > 0 ||
           Boolean(activeNodeStrokeId) ||
           Boolean(activeAngleEditor && activeAngleEditor.pageId === pageObj.id) ||
+          Boolean(pageObj.angleMarks?.length) ||
           rulerState.visible ||
           (isShapeTool && lastCreatedShapeIdsRef.current.length > 0) ||
           (isSimulating && Boolean(pageObj.circuitSims?.length)) ||
@@ -13290,7 +13303,7 @@ export default function App() {
             activeAngleEditor && activeAngleEditor.pageId === pageObj.id
               ? `${activeAngleEditor.armA.strokeId}:${activeAngleEditor.armA.armPointIdx}:${activeAngleEditor.armB.strokeId}:${activeAngleEditor.armB.armPointIdx}:${activeAngleEditor.draggingArm || ''}:${activeAngleEditor.snappedDeg ?? ''}`
               : ''
-          }`;
+          }|${(pageObj.angleMarks || []).map((m) => m.id).join(',')}`;
         }
       }
 
@@ -15162,8 +15175,33 @@ export default function App() {
         );
       }
 
-      // 9. Interactive Angle Measurement & Arm-Drag Overlay (Double-Click on any angle vertex)
-      if (isCurrentActivePage && activeAngleEditor && activeAngleEditor.pageId === pageObj.id) {
+      // 9. Persistent & Interactive Green Angle Marks (Double-click vertex to toggle; stays visible after deselecting!)
+      const savedAngles = pageObj.angleMarks || [];
+      let renderedActiveEditor = false;
+      for (const mark of savedAngles) {
+        const markAsEditor: ActiveAngleEditor = {
+          pageId: pageObj.id,
+          armA: mark.armA,
+          armB: mark.armB,
+        };
+        const isCurrentEd =
+          isCurrentActivePage &&
+          activeAngleEditor &&
+          activeAngleEditor.pageId === pageObj.id &&
+          isSameAngleEditor(activeAngleEditor, markAsEditor);
+        if (isCurrentEd) {
+          renderedActiveEditor = true;
+          drawInteractiveAngleOverlay(ctx, pageObj.strokes, activeAngleEditor);
+        } else {
+          drawInteractiveAngleOverlay(ctx, pageObj.strokes, markAsEditor);
+        }
+      }
+      if (
+        !renderedActiveEditor &&
+        isCurrentActivePage &&
+        activeAngleEditor &&
+        activeAngleEditor.pageId === pageObj.id
+      ) {
         drawInteractiveAngleOverlay(ctx, pageObj.strokes, activeAngleEditor);
       }
     });
@@ -41215,12 +41253,39 @@ export default function App() {
         if (foundAngle) {
           lastAngleTapRef.current = null;
           e.preventDefault();
-          setSelectedStrokeIds([]);
-          setSelectedImageIds([]);
-          setSelectedImageId(null);
-          setSelectedLassoTextIds([]);
-          setActiveNodeStrokeId(null);
-          setActiveAngleEditor(foundAngle);
+          const existingIdx = (targetPage.angleMarks || []).findIndex((m) =>
+            isSameAngleEditor({ pageId: targetPage.id, armA: m.armA, armB: m.armB }, foundAngle)
+          );
+          suppressNextUndoRecordRef.current = false;
+          if (existingIdx >= 0) {
+            updateActivePage(
+              (page) => ({
+                ...page,
+                angleMarks: (page.angleMarks || []).filter((_, i) => i !== existingIdx),
+              }),
+              true
+            );
+            setActiveAngleEditor(null);
+          } else {
+            const newMark = {
+              id: `ang-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              armA: { ...foundAngle.armA },
+              armB: { ...foundAngle.armB },
+            };
+            updateActivePage(
+              (page) => ({
+                ...page,
+                angleMarks: [...(page.angleMarks || []), newMark],
+              }),
+              true
+            );
+            setSelectedStrokeIds([]);
+            setSelectedImageIds([]);
+            setSelectedImageId(null);
+            setSelectedLassoTextIds([]);
+            setActiveNodeStrokeId(null);
+            setActiveAngleEditor(foundAngle);
+          }
           return;
         }
       }
@@ -71198,7 +71263,7 @@ export default function App() {
                           }
                         }
 
-                        // Double-click on any angle vertex -> toggle soft emerald-green angle overlay + draggable arms
+                        // Double-click on any angle vertex -> toggle persistent soft green angle mark + arm-drag mode
                         const foundAngle = findAngleVertexAtPoint(
                           { x: ptX, y: ptY },
                           pageObj.strokes,
@@ -71207,9 +71272,37 @@ export default function App() {
                           24
                         );
                         if (foundAngle) {
-                          if (isSameAngleEditor(activeAngleEditorRef.current, foundAngle)) {
+                          const existingIdx = (pageObj.angleMarks || []).findIndex((m) =>
+                            isSameAngleEditor(
+                              { pageId: pageObj.id, armA: m.armA, armB: m.armB },
+                              foundAngle
+                            )
+                          );
+                          suppressNextUndoRecordRef.current = false;
+                          if (existingIdx >= 0) {
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                angleMarks: (page.angleMarks || []).filter(
+                                  (_, i) => i !== existingIdx
+                                ),
+                              }),
+                              true
+                            );
                             setActiveAngleEditor(null);
                           } else {
+                            const newMark = {
+                              id: `ang-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              armA: { ...foundAngle.armA },
+                              armB: { ...foundAngle.armB },
+                            };
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                angleMarks: [...(page.angleMarks || []), newMark],
+                              }),
+                              true
+                            );
                             setSelectedStrokeIds([]);
                             setSelectedImageIds([]);
                             setSelectedImageId(null);

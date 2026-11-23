@@ -427,6 +427,19 @@ export interface AtomSimConfig {
   reactionScale?: number; // Custom scale factor for the Reaction Equation card (default 1.0)
 }
 
+export interface SavedAngleArmRef {
+  strokeId: string;
+  vertexPointIdx: number;
+  armPointIdx: number;
+  closedDuplicateArmIdx?: number;
+}
+
+export interface SavedAngleMark {
+  id: string;
+  armA: SavedAngleArmRef;
+  armB: SavedAngleArmRef;
+}
+
 export interface NotePage {
   id: string;
   title: string;
@@ -455,6 +468,7 @@ export interface NotePage {
   activeAtomSimId?: string;
   heatSims?: HeatSimConfig[];
   activeHeatSimId?: string;
+  angleMarks?: SavedAngleMark[];
   ruler?: {
     visible: boolean;
     x: number;
