@@ -7,6 +7,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  HardDrive,
   RefreshCw,
   Server,
   ShieldCheck,
@@ -326,6 +327,23 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
       periodLabel: 'Σήμερα / 360 MB δωρεάν ανά ημέρα (~10,8 GB/μήνα)',
       subLabel: `Σύνολο μήνα: ${formatCompactBytes(currentMonthRow?.hostingBytes || 0)}`,
       rateLabel: 'Χρέωση υπέρβασης: ~0,14 € / GB',
+    },
+    {
+      title: 'Firebase Hosting Χώρος (Εκδόσεις / Releases)',
+      icon: <HardDrive className="w-4 h-4 text-rose-600" />,
+      used: usage?.hostingStorage?.totalBytes || 0,
+      limit: usage?.hostingStorage?.freeLimitBytes || 10 * 1024 * 1024 * 1024,
+      isBytes: true,
+      periodLabel: 'Σύνολο αποθηκευμένων releases / 10 GB δωρεάν',
+      subLabel:
+        (usage?.hostingStorage?.billableBytes || 0) > 0
+          ? `⚠️ Υπέρβαση ${formatCompactBytes(
+              usage?.hostingStorage?.billableBytes || 0
+            )} — Κράτησε 3 releases στο Firebase Console → Hosting → Release history!`
+          : 'Εντός δωρεάν ορίου 10 GB (0,00 €)',
+      rateLabel: `Χρέωση υπέρβασης: ~0,024 € / GB / μήνα (Τρέχον: ${formatEur(
+        usage?.hostingStorage?.estMonthlyCostEur || 0
+      )})`,
     },
     {
       title: 'Google Gemini OCR API (generativelanguage)',

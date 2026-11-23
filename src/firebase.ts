@@ -308,6 +308,12 @@ export interface AdminFirebaseUsageResponse {
   projectId: string;
   fetchedAt: string;
   monitoringAvailable: boolean;
+  hostingStorage?: {
+    totalBytes: number;
+    freeLimitBytes: number;
+    billableBytes: number;
+    estMonthlyCostEur: number;
+  };
   quotas: {
     freeReadsPerDay: number;
     freeWritesPerDay: number;

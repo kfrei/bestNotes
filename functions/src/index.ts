@@ -398,6 +398,47 @@ async function queryDailyMonitoringSeries(
   return byDate;
 }
 
+async function queryLatestGaugeSumBytes(
+  accessToken: string,
+  metricType: string,
+  nowMs: number
+): Promise<number> {
+  try {
+    const startIso = new Date(nowMs - 48 * 60 * 60 * 1000).toISOString();
+    const endIso = new Date(nowMs).toISOString();
+    const filterExpr = `metric.type="${metricType}"`;
+    const url =
+      `https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/timeSeries` +
+      `?filter=${encodeURIComponent(filterExpr)}` +
+      `&interval.startTime=${encodeURIComponent(startIso)}` +
+      `&interval.endTime=${encodeURIComponent(endIso)}` +
+      `&aggregation.alignmentPeriod=3600s` +
+      `&aggregation.perSeriesAligner=ALIGN_MAX` +
+      `&aggregation.crossSeriesReducer=REDUCE_SUM`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return 0;
+    const data = (await res.json()) as MonitoringResponse;
+    let latestTime = '';
+    let latestVal = 0;
+    for (const ts of data.timeSeries || []) {
+      for (const pt of ts.points || []) {
+        const t = pt.interval?.endTime || pt.interval?.startTime || '';
+        const val = Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0) || 0;
+        if (t >= latestTime && val > 0) {
+          latestTime = t;
+          latestVal = val;
+        }
+      }
+    }
+    return Math.round(latestVal);
+  } catch {
+    return 0;
+  }
+}
+
 async function queryDailyGeminiApiSeries(
   accessToken: string,
   startIso: string,
@@ -499,46 +540,53 @@ export const getAdminFirebaseUsageStats = onCall(
     let geminiApiOkByDate: Record<string, number> = {};
     let geminiApiErrByDate: Record<string, number> = {};
 
+    let hostingStorageBytes = 0;
     if (saToken) {
-      const [reads, writes, deletes, runReqs, cfExecs, hostBytes, geminiApi] = await Promise.all([
-        queryDailyMonitoringSeries(
-          saToken,
-          'firestore.googleapis.com/document/read_count',
-          startIso,
-          endIso
-        ),
-        queryDailyMonitoringSeries(
-          saToken,
-          'firestore.googleapis.com/document/write_count',
-          startIso,
-          endIso
-        ),
-        queryDailyMonitoringSeries(
-          saToken,
-          'firestore.googleapis.com/document/delete_count',
-          startIso,
-          endIso
-        ),
-        queryDailyMonitoringSeries(
-          saToken,
-          'run.googleapis.com/request_count',
-          startIso,
-          endIso
-        ),
-        queryDailyMonitoringSeries(
-          saToken,
-          'cloudfunctions.googleapis.com/function/execution_count',
-          startIso,
-          endIso
-        ),
-        queryDailyMonitoringSeries(
-          saToken,
-          'firebasehosting.googleapis.com/network/sent_bytes_count',
-          startIso,
-          endIso
-        ),
-        queryDailyGeminiApiSeries(saToken, startIso, endIso),
-      ]);
+      const [reads, writes, deletes, runReqs, cfExecs, hostBytes, geminiApi, hostStorageBytes] =
+        await Promise.all([
+          queryDailyMonitoringSeries(
+            saToken,
+            'firestore.googleapis.com/document/read_count',
+            startIso,
+            endIso
+          ),
+          queryDailyMonitoringSeries(
+            saToken,
+            'firestore.googleapis.com/document/write_count',
+            startIso,
+            endIso
+          ),
+          queryDailyMonitoringSeries(
+            saToken,
+            'firestore.googleapis.com/document/delete_count',
+            startIso,
+            endIso
+          ),
+          queryDailyMonitoringSeries(
+            saToken,
+            'run.googleapis.com/request_count',
+            startIso,
+            endIso
+          ),
+          queryDailyMonitoringSeries(
+            saToken,
+            'cloudfunctions.googleapis.com/function/execution_count',
+            startIso,
+            endIso
+          ),
+          queryDailyMonitoringSeries(
+            saToken,
+            'firebasehosting.googleapis.com/network/sent_bytes_count',
+            startIso,
+            endIso
+          ),
+          queryDailyGeminiApiSeries(saToken, startIso, endIso),
+          queryLatestGaugeSumBytes(
+            saToken,
+            'firebasehosting.googleapis.com/storage/total_bytes',
+            now.getTime()
+          ),
+        ]);
       readsByDate = reads;
       writesByDate = writes;
       deletesByDate = deletes;
@@ -547,12 +595,14 @@ export const getAdminFirebaseUsageStats = onCall(
       hostingBytesByDate = hostBytes;
       geminiApiOkByDate = geminiApi.okByDate;
       geminiApiErrByDate = geminiApi.errByDate;
+      hostingStorageBytes = hostStorageBytes;
       monitoringAvailable =
         Object.keys(reads).length > 0 ||
         Object.keys(writes).length > 0 ||
         Object.keys(hostBytes).length > 0 ||
         Object.keys(runReqs).length > 0 ||
-        Object.keys(geminiApi.okByDate).length > 0;
+        Object.keys(geminiApi.okByDate).length > 0 ||
+        hostStorageBytes > 0;
     }
 
     const fnCustomByDate: Record<
@@ -762,6 +812,24 @@ export const getAdminFirebaseUsageStats = onCall(
       m.savedByFreeTierEur = Number((m.savedByFreeTierEur + r.savedByFreeTierEur).toFixed(6));
     }
 
+    const FREE_HOSTING_STORAGE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB free tier total
+    const billableHostingStorageBytes = Math.max(0, hostingStorageBytes - FREE_HOSTING_STORAGE_BYTES);
+    const hostingStorageEstMonthlyCostEur = Number(
+      ((billableHostingStorageBytes / (1024 * 1024 * 1024)) * 0.026 * USD_TO_EUR).toFixed(6)
+    );
+
+    const currentMonthKey = getUtcDateString(now).slice(0, 7);
+    if (monthlyMap[currentMonthKey] && hostingStorageEstMonthlyCostEur > 0) {
+      monthlyMap[currentMonthKey].exactCostEur = Number(
+        (monthlyMap[currentMonthKey].exactCostEur + hostingStorageEstMonthlyCostEur).toFixed(6)
+      );
+      monthlyMap[currentMonthKey].totalWithGeminiEstEur = Number(
+        (
+          monthlyMap[currentMonthKey].totalWithGeminiEstEur + hostingStorageEstMonthlyCostEur
+        ).toFixed(6)
+      );
+    }
+
     const monthly = Object.values(monthlyMap).sort((a, b) => b.month.localeCompare(a.month));
 
     const privData = drivePrivSnap.exists ? drivePrivSnap.data() || {} : {};
@@ -776,6 +844,12 @@ export const getAdminFirebaseUsageStats = onCall(
       projectId: PROJECT_ID,
       fetchedAt: new Date().toISOString(),
       monitoringAvailable,
+      hostingStorage: {
+        totalBytes: hostingStorageBytes,
+        freeLimitBytes: FREE_HOSTING_STORAGE_BYTES,
+        billableBytes: billableHostingStorageBytes,
+        estMonthlyCostEur: hostingStorageEstMonthlyCostEur,
+      },
       quotas: {
         freeReadsPerDay: FREE_READS_PER_DAY,
         freeWritesPerDay: FREE_WRITES_PER_DAY,
