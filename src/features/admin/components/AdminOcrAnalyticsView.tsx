@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import {
   GEMINI_FREE_TIER_DAILY_CAPACITY,
+  GEMINI_FREE_TIER_MODEL_BUCKETS,
   GEMINI_FREE_TIER_ROTATION_MODELS,
   GEMINI_FREE_TIER_RPD_PER_MODEL,
   GEMINI_FREE_TIER_RPM,
@@ -430,16 +431,18 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
         {/* Legend strip according to chart mode */}
         <div className="flex flex-wrap items-center justify-between text-[11px] text-[#64748b] gap-2 pt-1">
           {chartMode === 'quota' && (
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" /> &lt; 75% ημερήσιου ορίου
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> 75%–99% ορίου
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-rose-600" /> ≥ 100% ορίου
-              </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {GEMINI_FREE_TIER_MODEL_BUCKETS.map((m) => (
+                <span key={m.id} className="flex items-center gap-1">
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm shrink-0"
+                    style={{ backgroundColor: m.color }}
+                  />
+                  <span>
+                    {m.shortLabel} ({m.rpd})
+                  </span>
+                </span>
+              ))}
             </div>
           )}
 
@@ -487,24 +490,47 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             const adminC = t.ocrAdminCount || 0;
             const othersC = Math.max(0, total - adminC);
 
-            const dailyPct = Math.round((total / GEMINI_FREE_TIER_DAILY_CAPACITY) * 100);
+            const dailyPct = Number(((total / GEMINI_FREE_TIER_DAILY_CAPACITY) * 100).toFixed(1));
             const dailyRemaining = Math.max(0, GEMINI_FREE_TIER_DAILY_CAPACITY - total);
 
+            // Decompose daily total across the Gemini cascade buckets (bottom -> top)
+            let remForCascade = total;
+            const modelSegments: Array<{
+              id: string;
+              shortLabel: string;
+              used: number;
+              rpd: number;
+              color: string;
+              pctOfBar: number;
+            }> = [];
+            for (const bucket of GEMINI_FREE_TIER_MODEL_BUCKETS) {
+              if (remForCascade <= 0) break;
+              const used = Math.min(remForCascade, bucket.rpd);
+              remForCascade -= used;
+              modelSegments.push({
+                id: bucket.id,
+                shortLabel: bucket.shortLabel,
+                used,
+                rpd: bucket.rpd,
+                color: bucket.color,
+                pctOfBar: total > 0 ? (used / total) * 100 : 0,
+              });
+            }
+            const modelBreakdownLabel =
+              modelSegments.length > 0
+                ? modelSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
+                : 'Καμία κλήση';
+
+            // Scale bar height cleanly against the visible peak (min 100) so stacked model layers are always legible
+            const quotaVisualScaleMax = Math.max(maxOcrInChart, 100);
             const barHeight =
               chartMode === 'quota'
                 ? total > 0
-                  ? Math.min(100, Math.max(8, dailyPct))
+                  ? Math.min(100, Math.max(10, Math.round((total / quotaVisualScaleMax) * 100)))
                   : 4
                 : total > 0
                 ? Math.max(10, Math.round((total / maxOcrInChart) * 100))
                 : 4;
-
-            const quotaBarColor =
-              total >= GEMINI_FREE_TIER_DAILY_CAPACITY
-                ? 'bg-rose-600'
-                : dailyPct >= 75
-                ? 'bg-amber-500'
-                : 'bg-emerald-600';
 
             const textPct = total > 0 ? (textC / total) * 100 : 0;
             const mathPct = total > 0 ? (mathC / total) * 100 : 0;
@@ -518,7 +544,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               <div key={t.date} className="flex flex-col items-center gap-1 h-full justify-end group">
                 {total > 0 && (
                   <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums">
-                    {chartMode === 'quota' ? `${dailyPct}%` : total}
+                    {chartMode === 'quota' ? `${total}` : total}
                   </span>
                 )}
 
@@ -526,10 +552,21 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                 <div
                   style={{ height: `${barHeight}%` }}
                   className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
-                  title={`${t.date}: ${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (${dailyPct}% ορίου, υπόλοιπο: ${dailyRemaining}) | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
+                  title={`${t.date}: ${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (${dailyPct}% ορίου, υπόλοιπο: ${dailyRemaining}) | Μοντέλα: ${modelBreakdownLabel} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
                 >
                   {chartMode === 'quota' && total > 0 && (
-                    <div style={{ height: '100%' }} className={`w-full ${quotaBarColor}`} />
+                    <>
+                      {[...modelSegments].reverse().map((seg) => (
+                        <div
+                          key={seg.id}
+                          style={{
+                            height: `${seg.pctOfBar}%`,
+                            backgroundColor: seg.color,
+                          }}
+                          className="w-full border-b border-white/25 last:border-b-0"
+                        />
+                      ))}
+                    </>
                   )}
 
                   {chartMode === 'type' && (

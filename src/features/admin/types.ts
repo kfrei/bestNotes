@@ -52,12 +52,31 @@ export interface DailyTrafficStats {
   updatedAt: string;            // ISO timestamp
 }
 
+export interface GeminiModelBucket {
+  id: string;
+  shortLabel: string;
+  rpd: number;
+  color: string;
+}
+
+export const GEMINI_FREE_TIER_MODEL_BUCKETS: readonly GeminiModelBucket[] = [
+  { id: 'gemini-4-hydrogen', shortLabel: '4 Hydrogen', rpd: 20, color: '#6366f1' },
+  { id: 'gemini-3.8-flash', shortLabel: '3.8 Flash', rpd: 20, color: '#2563eb' },
+  { id: 'gemini-3.6-flash', shortLabel: '3.6 Flash', rpd: 20, color: '#0891b2' },
+  { id: 'gemini-3-flash-preview', shortLabel: '3 Flash', rpd: 20, color: '#10b981' },
+  { id: 'gemini-3.5-flash-lite', shortLabel: '3.5 Lite', rpd: 500, color: '#f59e0b' },
+  { id: 'gemini-3.1-flash-lite', shortLabel: '3.1 Lite', rpd: 500, color: '#f97316' },
+  { id: 'gemini-2.5-flash', shortLabel: '2.5 Flash', rpd: 20, color: '#e11d48' },
+];
+
 export const GEMINI_FREE_TIER_RPD_PER_MODEL = 20;
 export const GEMINI_FREE_TIER_RPM = 5;
 export const GEMINI_FREE_TIER_TPM = 250_000;
-export const GEMINI_FREE_TIER_ROTATION_MODELS = 5;
-export const GEMINI_FREE_TIER_DAILY_CAPACITY =
-  GEMINI_FREE_TIER_RPD_PER_MODEL * GEMINI_FREE_TIER_ROTATION_MODELS; // 100 req/day across 5 Flash/Lite models
+export const GEMINI_FREE_TIER_ROTATION_MODELS = GEMINI_FREE_TIER_MODEL_BUCKETS.length;
+export const GEMINI_FREE_TIER_DAILY_CAPACITY = GEMINI_FREE_TIER_MODEL_BUCKETS.reduce(
+  (sum, m) => sum + m.rpd,
+  0
+); // 1,100 req/day across 7 pure Gemini models
 
 export interface DailyOcrMetrics {
   todayTotal: number;
