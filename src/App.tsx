@@ -59900,10 +59900,20 @@ export default function App() {
                             setIsFullBleedWidth(true);
                             setViewMode('editor');
                           }}
-                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 border border-emerald-300/90 text-xs font-bold text-emerald-800 transition cursor-pointer shadow-2xs"
+                          className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer shadow-2xs ${
+                            isTvReceiverMode || isLiveTvBroadcasting
+                              ? 'bg-emerald-100/90 hover:bg-emerald-200/90 border-emerald-300/90 text-emerald-800'
+                              : 'bg-slate-100 hover:bg-slate-200/80 border-slate-300/90 text-slate-700'
+                          }`}
                           title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (PLUS & ULTRA)"
                         >
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              isTvReceiverMode || isLiveTvBroadcasting
+                                ? 'bg-emerald-500 animate-pulse'
+                                : 'bg-slate-400'
+                            }`}
+                          />
                           <span>Live (Προβολή 16:9)</span>
                         </button>
                       )}
