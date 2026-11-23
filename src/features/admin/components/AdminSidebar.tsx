@@ -45,7 +45,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
     {
       id: 'perf',
-      label: 'Απόδοση & Προσομοιώσεις',
+      label: 'Απόδοση',
       icon: <Gauge className="w-5 h-5" />,
     },
     {
