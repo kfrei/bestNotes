@@ -9,7 +9,7 @@ rules_version = '2';
 // Collection: user_profiles
 // Document ID: {userId} (must match authenticated user's UID and data.uid)
 // Fields:
-//   - uid: string (required, 1..128 chars, matches {userId}) - authenticated user identifier
+//   - uid: string (required, 1..128 chars, immutable, matches {userId}) - authenticated user identifier
 //   - email: string (required, 1..320 chars) - user account email address
 //   - displayName: string (required, 0..256 chars) - user display or full name
 //   - photoURL: string (optional, 0..2048 chars) - user avatar image URL
@@ -21,6 +21,30 @@ rules_version = '2';
 //   - activeDaysCount: number (required, >= 0) - count of distinct active usage days
 //   - avgDailyMinutes: number (required, >= 0) - calculated average active usage in minutes/day
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of profile metric update
+//   - planId: string (optional, 1..64 chars, admin-writable only; non-admin create may omit or set 'free') - assigned subscription plan ID
+//   - aiDayKey: string (optional, 0..16 chars) - current daily AI quota window key (YYYY-MM-DD)
+//   - aiDayCount: int (optional, 0..1000000) - AI calls consumed in current day window
+//   - aiWeekKey: string (optional, 0..16 chars) - current weekly AI quota window key (YYYY-Www)
+//   - aiWeekCount: int (optional, 0..1000000) - AI calls consumed in current week window
+//   - aiTotalCount: int (optional, 0..100000000) - lifetime AI calls consumed
+//
+// Collection: app_plans
+// Document ID: {planId} (must match data.id, immutable; 'free', 'plus', 'ultra' cannot be deleted)
+// Fields:
+//   - id: string (required, 1..64 chars, immutable, matches {planId}) - unique plan identifier
+//   - name: string (required, 1..80 chars) - display name of the plan
+//   - description: string (required, 0..500 chars) - plan summary text
+//   - badgeColor: string (required, 1..40 chars) - UI badge color string
+//   - order: int (required, -1000..100000) - display sort order
+//   - isBuiltIn: bool (required) - whether plan is a built-in tier
+//   - isUnlimited: bool (required) - whether plan bypasses quota limits
+//   - maxFiles: int (required, -1..100000) - max files limit (-1 for unlimited)
+//   - maxPagesPerNativeFile: int (required, -1..100000) - max pages per native file (-1 for unlimited)
+//   - maxStorageMb: int (required, -1..1000000) - max storage in MB (-1 for unlimited)
+//   - aiCallsPerDay: int (required, -1..100000) - daily AI call quota (-1 for unlimited)
+//   - aiCallsPerWeek: int (required, -1..1000000) - weekly AI call quota (-1 for unlimited)
+//   - allowAutoTags: bool (required) - whether AI auto-tagging is enabled
+//   - updatedAt: string (required, 1..64 chars) - ISO timestamp of last plan update
 //
 // Collection: users
 // Document ID: {userId} (must match authenticated user's UID)
@@ -168,6 +192,21 @@ service cloud.firestore {
          request.resource.data[field] >= 0);
     }
 
+    // Validate required integer field within inclusive [minVal, maxVal] bounds
+    function isValidIntRange(field, minVal, maxVal) {
+      return request.resource.data[field] is int &&
+        request.resource.data[field] >= minVal &&
+        request.resource.data[field] <= maxVal;
+    }
+
+    // Validate optional integer field within inclusive [minVal, maxVal] bounds
+    function isValidOptionalIntRange(field, minVal, maxVal) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is int &&
+         request.resource.data[field] >= minVal &&
+         request.resource.data[field] <= maxVal);
+    }
+
     // Validate that immutable fields have not been modified during an update
     function areImmutableFieldsUnchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
@@ -176,6 +215,56 @@ service cloud.firestore {
     // ===============================================================
     // Domain Validators (Used in BOTH create and update rules)
     // ===============================================================
+
+    function isValidSubscriptionPlan(data, planId) {
+      return hasOnlyAllowedFields([
+          'id',
+          'name',
+          'description',
+          'badgeColor',
+          'order',
+          'isBuiltIn',
+          'isUnlimited',
+          'maxFiles',
+          'maxPagesPerNativeFile',
+          'maxStorageMb',
+          'aiCallsPerDay',
+          'aiCallsPerWeek',
+          'allowAutoTags',
+          'updatedAt'
+        ]) &&
+        hasRequiredFields([
+          'id',
+          'name',
+          'description',
+          'badgeColor',
+          'order',
+          'isBuiltIn',
+          'isUnlimited',
+          'maxFiles',
+          'maxPagesPerNativeFile',
+          'maxStorageMb',
+          'aiCallsPerDay',
+          'aiCallsPerWeek',
+          'allowAutoTags',
+          'updatedAt'
+        ]) &&
+        data.id == planId &&
+        validStringLength('id', 1, 64) &&
+        validStringLength('name', 1, 80) &&
+        validStringLength('description', 0, 500) &&
+        validStringLength('badgeColor', 1, 40) &&
+        isValidIntRange('order', -1000, 100000) &&
+        data.isBuiltIn is bool &&
+        data.isUnlimited is bool &&
+        isValidIntRange('maxFiles', -1, 100000) &&
+        isValidIntRange('maxPagesPerNativeFile', -1, 100000) &&
+        isValidIntRange('maxStorageMb', -1, 1000000) &&
+        isValidIntRange('aiCallsPerDay', -1, 100000) &&
+        isValidIntRange('aiCallsPerWeek', -1, 1000000) &&
+        data.allowAutoTags is bool &&
+        validStringLength('updatedAt', 1, 64);
+    }
 
     function isValidUserProfile(data, userId) {
       return hasOnlyAllowedFields([
@@ -190,7 +279,13 @@ service cloud.firestore {
           'totalActiveSeconds',
           'activeDaysCount',
           'avgDailyMinutes',
-          'updatedAt'
+          'updatedAt',
+          'planId',
+          'aiDayKey',
+          'aiDayCount',
+          'aiWeekKey',
+          'aiWeekCount',
+          'aiTotalCount'
         ]) &&
         hasRequiredFields([
           'uid',
@@ -217,7 +312,13 @@ service cloud.firestore {
         isValidNumber('totalActiveSeconds') &&
         isValidNumber('activeDaysCount') &&
         isValidNumber('avgDailyMinutes') &&
-        validStringLength('updatedAt', 1, 100);
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalString('planId', 1, 64) &&
+        isValidOptionalString('aiDayKey', 0, 16) &&
+        isValidOptionalIntRange('aiDayCount', 0, 1000000) &&
+        isValidOptionalString('aiWeekKey', 0, 16) &&
+        isValidOptionalIntRange('aiWeekCount', 0, 1000000) &&
+        isValidOptionalIntRange('aiTotalCount', 0, 100000000);
     }
 
     function isValidUserDoc(data) {
@@ -349,9 +450,24 @@ service cloud.firestore {
     // Collection Rules
     // ===============================================================
 
+    match /app_plans/{planId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSubscriptionPlan(request.resource.data, planId);
+      allow delete: if isAdmin() && !(planId in ['free', 'plus', 'ultra']);
+    }
+
     match /user_profiles/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data, userId);
+      allow create: if isValidUserProfile(request.resource.data, userId) && (
+        isAdmin() ||
+        (isOwner(userId) &&
+          (!('planId' in request.resource.data) || request.resource.data.planId == 'free'))
+      );
+      allow update: if isValidUserProfile(request.resource.data, userId) &&
+        areImmutableFieldsUnchanged(['uid']) && (
+        isAdmin() ||
+        (isOwner(userId) && areImmutableFieldsUnchanged(['planId']))
+      );
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -382,7 +498,7 @@ service cloud.firestore {
     }
 
     match /app_config/gemini {
-      allow get: if true;
+      allow get: if isAuthenticated();
       allow create, update: if isAdmin() && isValidAppConfigGemini(request.resource.data);
     }
 

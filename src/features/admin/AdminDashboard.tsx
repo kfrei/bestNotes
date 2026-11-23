@@ -15,9 +15,18 @@ import {
   Sparkles,
   Coins,
   Gauge,
+  Crown,
 } from 'lucide-react';
 import type { AdminTab, UserProfileStats, DailyTrafficStats } from './types';
 import type { Notebook } from '../../types/note';
+import type { SubscriptionPlan } from '../plans/types';
+import {
+  fetchSubscriptionPlans,
+  saveSubscriptionPlan,
+  deleteSubscriptionPlan,
+  updateUserPlanIdInCloud,
+  readCachedPlansSync,
+} from '../plans/plansService';
 import {
   fetchAdminFirebaseUsageStats,
   type AdminFirebaseUsageResponse,
@@ -38,6 +47,7 @@ import { AdminTrafficView } from './components/AdminTrafficView';
 import { AdminOcrAnalyticsView } from './components/AdminOcrAnalyticsView';
 import { AdminFirebaseBillingView } from './components/AdminFirebaseBillingView';
 import { AdminPerformanceView } from './components/AdminPerformanceView';
+import { AdminPlansView } from './components/AdminPlansView';
 
 export interface AdminDashboardProps {
   currentUser: User | null;
@@ -62,6 +72,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return [];
   });
   const [trafficHistory, setTrafficHistory] = useState<DailyTrafficStats[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>(() => readCachedPlansSync());
+  const [isPlansLoading, setIsPlansLoading] = useState<boolean>(false);
   const [firebaseUsage, setFirebaseUsage] = useState<AdminFirebaseUsageResponse | null>(null);
   const [isFirebaseUsageLoading, setIsFirebaseUsageLoading] = useState<boolean>(true);
   const [firebaseUsageError, setFirebaseUsageError] = useState<string | null>(null);
@@ -87,17 +99,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const loadPlans = async () => {
+    setIsPlansLoading(true);
+    try {
+      const list = await fetchSubscriptionPlans();
+      setPlans(list);
+    } finally {
+      setIsPlansLoading(false);
+    }
+  };
+
+  const handleSavePlan = async (plan: SubscriptionPlan) => {
+    await saveSubscriptionPlan(plan);
+    await loadPlans();
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    await deleteSubscriptionPlan(planId);
+    await loadPlans();
+  };
+
+  const handleChangeUserPlan = async (targetUser: UserProfileStats, nextPlanId: string) => {
+    await updateUserPlanIdInCloud(targetUser, nextPlanId);
+    setUsers((prev) =>
+      prev.map((u) => (u.uid === targetUser.uid ? { ...u, planId: nextPlanId } : u))
+    );
+  };
+
   const loadData = async () => {
     if (!isAdmin) return;
     setIsLoading(true);
     setIsTrafficLoading(true);
     setErrorMsg(null);
     try {
-      const [userList, trafficList] = await Promise.all([
+      const [userList, trafficList, plansList] = await Promise.all([
         fetchAdminUsersList(currentUser, notebooks),
         fetchDailyTrafficHistory(),
+        fetchSubscriptionPlans(),
       ]);
       setUsers(userList);
+      setPlans(plansList);
 
       // Merge & backfill historical dates from registered users so timeline covers all online history
       const dateMap: Record<string, DailyTrafficStats> = {};
@@ -280,6 +321,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Επισκόπηση Πλατφόρμας</span>
                 </>
               )}
+              {currentTab === 'plans' && (
+                <>
+                  <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
+                    <Crown className="w-5 h-5 text-[#1b2a4a]" />
+                  </div>
+                  <span>Πλάνα Συνδρομής, Όρια & Κατάλογος AI Tokens</span>
+                </>
+              )}
               {currentTab === 'billing' && (
                 <>
                   <div className="w-9 h-9 rounded-xl bg-[#eef3f8] border border-[#1b2a4a]/20 flex items-center justify-center text-[#1b2a4a] shadow-2xs">
@@ -427,11 +476,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <AdminUsersTable
                 users={users}
+                plans={plans}
+                onChangeUserPlan={handleChangeUserPlan}
                 onRefresh={loadData}
                 isRefreshing={isLoading}
               />
             </div>
           </div>
+        )}
+
+        {/* Tab 1A: Plans & Limits Management + AI Token Features Catalog */}
+        {currentTab === 'plans' && (
+          <AdminPlansView
+            plans={plans}
+            users={users}
+            isLoading={isPlansLoading}
+            onSavePlan={handleSavePlan}
+            onDeletePlan={handleDeletePlan}
+            onRefresh={() => void loadPlans()}
+          />
         )}
 
         {/* Tab 1B: Dedicated Firebase Daily & Monthly Calls & Exact Cost Page */}
@@ -473,6 +536,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <AdminUsersTable
               users={users}
+              plans={plans}
+              onChangeUserPlan={handleChangeUserPlan}
               onRefresh={loadData}
               isRefreshing={isLoading}
             />

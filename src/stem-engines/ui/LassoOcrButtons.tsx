@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Type, ChevronDown, FlaskConical, Atom, Code2 } from 'lucide-react';
+import { Type, ChevronDown, FlaskConical, Atom, Code2, Lock } from 'lucide-react';
 import { OcrHoverPreviewCard, type OcrHoverPreviewMode } from './OcrHoverPreviewCard';
 
 export interface LassoOcrButtonsProps {
   isConvertingHandwriting: boolean;
+  isAiUnavailable?: boolean;
+  aiUnavailableHint?: string;
   openMenu: 'math' | 'chem' | null;
   setOpenMenu: (menu: 'math' | 'chem' | null | ((prev: 'math' | 'chem' | null) => 'math' | 'chem' | null)) => void;
   onConvertTextOcr: () => void;
@@ -18,6 +20,8 @@ export interface LassoOcrButtonsProps {
 
 export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
   isConvertingHandwriting,
+  isAiUnavailable = false,
+  aiUnavailableHint,
   openMenu,
   setOpenMenu,
   onConvertTextOcr,
@@ -52,11 +56,14 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
           className={`flex items-center gap-1 px-2.5 py-0.5 rounded-[6px] border text-[11px] font-bold transition cursor-pointer whitespace-nowrap ${
             isConvertingHandwriting
               ? 'bg-[#e4ded2] text-[#64748b] border-[#dfd8cb] cursor-wait'
+              : isAiUnavailable
+              ? 'bg-[#fdfbf7]/60 hover:bg-[#e8e2d6]/80 text-[#234978]/55 border-[#dfd8cb]/80 opacity-60 hover:opacity-85'
               : 'bg-[#fdfbf7] hover:bg-[#e8e2d6] text-[#234978] border-[#dfd8cb] shadow-2xs'
           }`}
+          title={isAiUnavailable ? aiUnavailableHint || 'Όριο AI — Κλικ για λεπτομέρειες πλάνων' : undefined}
           aria-label="textOCR: Άμεση μετατροπή χειρόγραφου κειμένου"
         >
-          <Type className="w-3.5 h-3.5" />
+          {isAiUnavailable ? <Lock className="w-3 h-3 opacity-80" /> : <Type className="w-3.5 h-3.5" />}
           <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
         </button>
         {hoveredTextOcr && !openMenu && !isConvertingHandwriting && (
@@ -108,7 +115,8 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               disabled={isConvertingHandwriting}
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'equation' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
-              } text-[#234978]`}
+              } text-[#234978] ${isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''}`}
+              title={isAiUnavailable ? aiUnavailableHint : undefined}
               aria-label="MathOCR: Εξίσωση / LaTeX"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -117,7 +125,10 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>Εξίσωση</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">MathOCR / LaTeX</span>
+              <span className="text-[10px] text-[#64748b] font-medium flex items-center gap-1">
+                {isAiUnavailable && <Lock className="w-2.5 h-2.5" />}
+                <span>MathOCR / LaTeX</span>
+              </span>
             </button>
             <button
               type="button"
@@ -130,7 +141,8 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               disabled={isConvertingHandwriting}
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'graph' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
-              } text-[#234978]`}
+              } text-[#234978] ${isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''}`}
+              title={isAiUnavailable ? aiUnavailableHint : undefined}
               aria-label="Διάγραμμα OCR"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -139,7 +151,10 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>Διάγραμμα</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">Συναρτήσεις / Άξονες</span>
+              <span className="text-[10px] text-[#64748b] font-medium flex items-center gap-1">
+                {isAiUnavailable && <Lock className="w-2.5 h-2.5" />}
+                <span>Συναρτήσεις / Άξονες</span>
+              </span>
             </button>
             <button
               type="button"
@@ -173,7 +188,8 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               disabled={isConvertingHandwriting}
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredMathMode === 'code' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
-              } text-[#234978]`}
+              } text-[#234978] ${isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''}`}
+              title={isAiUnavailable ? aiUnavailableHint : undefined}
               aria-label="Κώδικας OCR"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -182,7 +198,10 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>Κώδικας</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">ΑΕΠΠ / Εσοχές</span>
+              <span className="text-[10px] text-[#64748b] font-medium flex items-center gap-1">
+                {isAiUnavailable && <Lock className="w-2.5 h-2.5" />}
+                <span>ΑΕΠΠ / Εσοχές</span>
+              </span>
             </button>
             <OcrHoverPreviewCard mode={hoveredMathMode} />
           </div>
@@ -231,7 +250,8 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               disabled={isConvertingHandwriting}
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredChemMode === 'reaction' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
-              } text-[#234978]`}
+              } text-[#234978] ${isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''}`}
+              title={isAiUnavailable ? aiUnavailableHint : undefined}
               aria-label="ChemOCR: Αντιδράσεις"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -240,7 +260,10 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>Αντιδράσεις</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">ChemOCR</span>
+              <span className="text-[10px] text-[#64748b] font-medium flex items-center gap-1">
+                {isAiUnavailable && <Lock className="w-2.5 h-2.5" />}
+                <span>ChemOCR</span>
+              </span>
             </button>
             <button
               type="button"
@@ -253,7 +276,8 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
               disabled={isConvertingHandwriting}
               className={`flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${
                 hoveredChemMode === 'molecule3d' ? 'bg-[#efebe3]' : 'hover:bg-[#efebe3]'
-              } text-[#234978]`}
+              } text-[#234978] ${isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''}`}
+              title={isAiUnavailable ? aiUnavailableHint : undefined}
               aria-label="3D Μόριο"
             >
               <span className="flex items-center gap-2 font-semibold text-xs">
@@ -262,7 +286,10 @@ export const LassoOcrButtons: React.FC<LassoOcrButtonsProps> = ({
                 </span>
                 <span>3D Μόριο</span>
               </span>
-              <span className="text-[10px] text-[#64748b] font-medium">3D.OCR / Νέφη</span>
+              <span className="text-[10px] text-[#64748b] font-medium flex items-center gap-1">
+                {isAiUnavailable && <Lock className="w-2.5 h-2.5" />}
+                <span>3D.OCR / Νέφη</span>
+              </span>
             </button>
             <button
               type="button"

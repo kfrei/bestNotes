@@ -17,6 +17,7 @@ import {
 } from '../../../firebase';
 import type { Notebook } from '../../../types/note';
 import type { UserProfileStats, AdminAggregateMetrics } from '../types';
+import { computeTotalNotebooksSizeBytes as unifiedComputeTotalNotebooksSizeBytes } from '../../../utils/notebookStorageSize';
 
 export const ADMIN_EMAIL = 'freiderikoskostas@gmail.com';
 
@@ -94,22 +95,10 @@ export function getUserActivitySummaryLocally(uid: string): {
 }
 
 /**
- * Estimates total storage bytes consumed by user's notebooks
+ * Estimates total storage bytes consumed by user's notebooks (unified with App.tsx)
  */
 export function computeTotalNotebooksSizeBytes(notebooks: Notebook[]): number {
-  let bytes = 0;
-  for (const nb of notebooks) {
-    bytes += (nb.title?.length || 0) * 2;
-    for (const p of nb.pages || []) {
-      bytes += p.backgroundDataUrl?.length || 0;
-      bytes += (p.strokes?.length || 0) * 80;
-      bytes += (p.texts?.length || 0) * 50;
-      for (const im of p.images || []) {
-        bytes += im.dataUrl?.length || 0;
-      }
-    }
-  }
-  return bytes;
+  return unifiedComputeTotalNotebooksSizeBytes(notebooks);
 }
 
 /**

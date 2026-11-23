@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Coins,
   Gauge,
+  Crown,
 } from 'lucide-react';
 import type { AdminTab } from '../types';
 
@@ -31,6 +32,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'overview',
       label: 'Επισκόπηση',
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: 'plans',
+      label: 'Πλάνα & Όρια',
+      icon: <Crown className="w-5 h-5" />,
     },
     {
       id: 'billing',

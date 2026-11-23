@@ -393,6 +393,29 @@ import {
   trackFileCreation,
 } from './features/admin';
 import {
+  LiquidUpgradeModal,
+  GUEST_LIMITS,
+  fetchSubscriptionPlans,
+  readCachedPlansSync,
+  fetchUserPlanAndUsage,
+  syncUserAiUsageToCloud,
+  resolveEffectivePlan,
+  normalizeAiUsage,
+  incrementAiUsage,
+  checkFileCreationAllowed,
+  checkPageAdditionAllowed,
+  checkStorageAllowed,
+  checkAiCallAllowed,
+  checkAutoTagsAllowed,
+  type SubscriptionPlan,
+  type UserAiUsage,
+  type UpgradeModalContext,
+} from './features/plans';
+import {
+  computeNotebookSizeBytes,
+  computeTotalNotebooksSizeBytes,
+} from './utils/notebookStorageSize';
+import {
   MIND_MAPS_CATALOG,
   type MindMapLibraryItem,
   type MindMapSubject,
@@ -1425,9 +1448,10 @@ export default function App() {
   }, []);
 
   const initialSession = useMemo(() => {
+    if (!initialAuthUid) return null;
     try {
       const raw =
-        (initialAuthUid ? localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`) : null) ||
+        localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`) ||
         localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
       if (raw) {
         return JSON.parse(raw) as {
@@ -1507,9 +1531,13 @@ export default function App() {
           }
         }
       }
+      // Guest mode (!authUid): never hydrate *_latest caches — always start clean & ephemeral!
+      if (!authUid) {
+        return createDefaultBlankNotebooks();
+      }
       // 2. Try library shelf cache (preserves ALL notes with thumbnails for instant library shelf display!)
       const libRaw =
-        (authUid ? localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_${authUid}`) : null) ||
+        localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_${authUid}`) ||
         localStorage.getItem(`${LIBRARY_CACHE_STORAGE_KEY}_latest`);
       if (libRaw) {
         const parsed = JSON.parse(libRaw);
@@ -1521,7 +1549,7 @@ export default function App() {
       }
       // 2b. Try ultra-fast recent shelf cache (guaranteed to fit under 250KB for instant 1st-frame render!)
       const recRaw =
-        (authUid ? localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_${authUid}`) : null) ||
+        localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_${authUid}`) ||
         localStorage.getItem(`${RECENT_SHELF_CACHE_KEY}_latest`);
       if (recRaw) {
         const parsed = JSON.parse(recRaw);
@@ -1535,7 +1563,7 @@ export default function App() {
       const targetView = initialSession?.viewMode || (initialAuthUid ? 'library' : 'landing');
       if (targetView === 'editor') {
         const activeRaw =
-          (authUid ? localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${authUid}`) : null) ||
+          localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${authUid}`) ||
           localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
         if (activeRaw) {
           const parsed = JSON.parse(activeRaw);
@@ -1583,6 +1611,111 @@ export default function App() {
   const [adminInitialTab, setAdminInitialTab] = useState<'overview' | 'perf' | undefined>(undefined);
   useAppTelemetry(currentUser, notebooks, isAuthResolved);
 
+  // =========================================================================
+  // Subscription Plans, Tier Quotas & AI Entitlements (FREE / PLUS / ULTRA / Guest)
+  // =========================================================================
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>(() =>
+    readCachedPlansSync()
+  );
+  const [assignedPlanId, setAssignedPlanId] = useState<string>('free');
+  const [userAiUsage, setUserAiUsage] = useState<UserAiUsage>(() => normalizeAiUsage(null));
+  const userAiUsageRef = useRef<UserAiUsage>(userAiUsage);
+  userAiUsageRef.current = userAiUsage;
+  const [upgradeModalContext, setUpgradeModalContext] = useState<UpgradeModalContext | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchSubscriptionPlans().then((list) => {
+      if (active && list.length > 0) {
+        setSubscriptionPlans(list);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isAdminOpen]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setAssignedPlanId('free');
+      const fresh = normalizeAiUsage(null);
+      setUserAiUsage(fresh);
+      userAiUsageRef.current = fresh;
+      return;
+    }
+    let active = true;
+    void fetchUserPlanAndUsage(currentUser.uid).then(({ planId, usage }) => {
+      if (!active) return;
+      setAssignedPlanId(planId);
+      setUserAiUsage(usage);
+      userAiUsageRef.current = usage;
+    });
+    return () => {
+      active = false;
+    };
+  }, [currentUser]);
+
+  const activePlan = useMemo(
+    () =>
+      resolveEffectivePlan(
+        Boolean(currentUser),
+        currentUser?.email,
+        assignedPlanId,
+        subscriptionPlans
+      ),
+    [currentUser, assignedPlanId, subscriptionPlans]
+  );
+
+  const aiQuotaStatus = useMemo(
+    () =>
+      checkAiCallAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+        usage: userAiUsage,
+      }),
+    [currentUser, activePlan, userAiUsage]
+  );
+
+  const isAiUnavailable = !aiQuotaStatus.allowed;
+  const canUseAutoTags = useMemo(
+    () =>
+      checkAutoTagsAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+      }).allowed,
+    [currentUser, activePlan]
+  );
+
+  const consumeAiQuotaOrOpenModal = useCallback(
+    (featureLabel: string): boolean => {
+      const check = checkAiCallAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+        usage: userAiUsageRef.current,
+      });
+      if (!check.allowed) {
+        setUpgradeModalContext({
+          reason: check.reason || 'ai_daily',
+          featureLabel,
+          currentValue: check.currentValue,
+          limitValue: check.limitValue,
+        });
+        return false;
+      }
+      if (currentUser) {
+        const nextUsage = incrementAiUsage(userAiUsageRef.current);
+        userAiUsageRef.current = nextUsage;
+        setUserAiUsage(nextUsage);
+        void syncUserAiUsageToCloud(currentUser.uid, nextUsage, {
+          email: currentUser.email,
+          displayName: currentUser.displayName,
+        });
+      }
+      return true;
+    },
+    [currentUser, activePlan]
+  );
+
   const explicitLandingNavRef = useRef<boolean>(false);
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
   const [isIndexedDbLoaded, setIsIndexedDbLoaded] = useState<boolean>(() => !initialAuthUid);
@@ -1609,6 +1742,102 @@ export default function App() {
   const [activePageIndex, setActivePageIndex] = useState<number>(() => {
     return typeof initialSession?.activePageIndex === 'number' ? initialSession.activePageIndex : 0;
   });
+
+  const checkFileAndStorageOrOpenModal = useCallback(
+    (additionalFiles = 1, additionalBytes = 0): boolean => {
+      const nonEmptyNotebooksCount = notebooks.filter(
+        (n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+      ).length;
+      const effectiveFilesCount = currentUser
+        ? nonEmptyNotebooksCount
+        : Math.max(openNotebookIds.length, nonEmptyNotebooksCount);
+      const fileCheck = checkFileCreationAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+        currentFilesCount: effectiveFilesCount,
+        additionalFiles,
+      });
+      if (!fileCheck.allowed) {
+        setUpgradeModalContext({
+          reason: fileCheck.reason || 'files',
+          currentValue: fileCheck.currentValue,
+          limitValue: fileCheck.limitValue,
+        });
+        return false;
+      }
+      const totalBytes = computeTotalNotebooksSizeBytes(notebooks);
+      const storageCheck = checkStorageAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+        currentTotalBytes: totalBytes,
+        additionalBytes,
+      });
+      if (!storageCheck.allowed) {
+        setUpgradeModalContext({
+          reason: storageCheck.reason || 'storage',
+          currentValue: storageCheck.currentValue,
+          limitValue: storageCheck.limitValue,
+        });
+        return false;
+      }
+      return true;
+    },
+    [currentUser, activePlan, notebooks, openNotebookIds.length]
+  );
+
+  const checkPageLimitOrOpenModal = useCallback(
+    (targetNb: Notebook, additionalPages = 1, additionalBytes = 0): boolean => {
+      const isNativeNotebook = targetNb.sourceFormat !== '.pdf';
+      const pageCheck = checkPageAdditionAllowed({
+        isAuthenticated: Boolean(currentUser),
+        plan: activePlan,
+        currentPagesCount: targetNb.pages.length,
+        isNativeNotebook,
+        additionalPages,
+      });
+      if (!pageCheck.allowed) {
+        setUpgradeModalContext({
+          reason: pageCheck.reason || 'pages',
+          currentValue: pageCheck.currentValue,
+          limitValue: pageCheck.limitValue,
+        });
+        return false;
+      }
+      if (additionalBytes > 0) {
+        const totalBytes = computeTotalNotebooksSizeBytes(notebooks);
+        const storageCheck = checkStorageAllowed({
+          isAuthenticated: Boolean(currentUser),
+          plan: activePlan,
+          currentTotalBytes: totalBytes,
+          additionalBytes,
+        });
+        if (!storageCheck.allowed) {
+          setUpgradeModalContext({
+            reason: storageCheck.reason || 'storage',
+            currentValue: storageCheck.currentValue,
+            limitValue: storageCheck.limitValue,
+          });
+          return false;
+        }
+      }
+      return true;
+    },
+    [currentUser, activePlan, notebooks]
+  );
+
+  const clearGuestEphemeralWorkspace = useCallback(() => {
+    if (currentUser) return;
+    setNotebooks([]);
+    setOpenNotebookIds([]);
+    setActiveNotebookId('');
+    setActivePageIndex(0);
+    try {
+      localStorage.removeItem(`${UI_SESSION_STORAGE_KEY}_latest`);
+      localStorage.removeItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
+    } catch {
+      // ignore
+    }
+  }, [currentUser]);
 
   const initialZoom =
     typeof initialSession?.zoom === 'number' && Number.isFinite(initialSession.zoom)
@@ -4506,12 +4735,11 @@ export default function App() {
 
   useEffect(() => {
     const uid = currentUser?.uid || initialAuthUid;
+    if (!uid) return;
     try {
       const serialized = JSON.stringify(buildCurrentSessionSnapshot());
       localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
-      if (uid) {
-        localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
-      }
+      localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
     } catch {
       // ignore
     }
@@ -4520,12 +4748,11 @@ export default function App() {
   useEffect(() => {
     const flushSessionBeforeReload = () => {
       const uid = currentUser?.uid || initialAuthUid;
+      if (!uid) return;
       try {
         const serialized = JSON.stringify(buildCurrentSessionSnapshot());
         localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
-        if (uid) {
-          localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
-        }
+        localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
         const allNbs = notebooksRef.current && notebooksRef.current.length > 0 ? notebooksRef.current : notebooks;
         if (allNbs && allNbs.length > 0) {
           if (uid) {
@@ -5440,6 +5667,18 @@ export default function App() {
 
   const triggerSmartAutoTagsForNotebook = useCallback(
     async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
+      // Auto-Tags (#tags) is ULTRA-only: silent background triggers skip quietly; manual click opens Liquid Upgrade Modal
+      if (!canUseAutoTags) {
+        if (!silent) {
+          setUpgradeModalContext({
+            reason: 'auto_tags',
+            featureLabel: '✨ Auto-Tags',
+            currentValue: activePlan?.name || 'Επισκέπτης',
+            limitValue: 'Μόνο ULTRA',
+          });
+        }
+        return;
+      }
       // Do not spend AI resources automatically extracting tags for PDFs, standalone images, or documents with > 3 pages
       if (
         silent &&
@@ -5576,11 +5815,12 @@ export default function App() {
         setIsAutoTaggingNbId((prev) => (prev === targetNb.id ? null : prev));
       }
     },
-    [showToast]
+    [showToast, canUseAutoTags, activePlan, currentUser]
   );
 
   // Automatically extract #tags for notebooks (<= 3 pages) when untagged OR when handwritten strokes are added
   useEffect(() => {
+    if (!canUseAutoTags) return;
     if (currentUser && !hasCompletedInitialCloudLoadRef.current) return;
     const genericShapeTagNorms = new Set([
       'σχημα',
@@ -5646,52 +5886,8 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notebooks, viewMode, triggerSmartAutoTagsForNotebook]);
 
-  const notebookByteSizeCacheRef = useRef<WeakMap<Notebook, number>>(new WeakMap());
-  const pageByteSizeCacheRef = useRef<WeakMap<NotePage, number>>(new WeakMap());
-
   const getNotebookSizeBytes = useCallback((nb: Notebook): number => {
-    const cachedNb = notebookByteSizeCacheRef.current.get(nb);
-    if (cachedNb !== undefined) return cachedNb;
-    const hasNativeSize = typeof nb.nativeFileSizeBytes === 'number' && nb.nativeFileSizeBytes > 0;
-    let totalBytes = hasNativeSize ? nb.nativeFileSizeBytes! : 256 + (nb.title?.length || 0) * 2;
-    const pages = nb.pages || [];
-    for (let i = 0; i < pages.length; i++) {
-      const p = pages[i];
-      let pBytes = pageByteSizeCacheRef.current.get(p);
-      if (pBytes === undefined) {
-        pBytes = hasNativeSize ? 0 : 240 + (p.backgroundDataUrl?.length || 0);
-        const imgs = p.images || [];
-        for (let j = 0; j < imgs.length; j++) {
-          pBytes += 180 + (imgs[j].dataUrl?.length || 0);
-        }
-        const strokes = p.strokes || [];
-        for (let j = 0; j < strokes.length; j++) {
-          const cs = compactStrokeForStorage(strokes[j]);
-          pBytes += 96 + (cs.points?.length || 0) * 22;
-        }
-        const texts = p.texts || [];
-        for (let j = 0; j < texts.length; j++) {
-          pBytes += 160 + (texts[j].text?.length || 0) * 3;
-        }
-        const heatSims = p.heatSims || [];
-        for (let j = 0; j < heatSims.length; j++) {
-          const hs = heatSims[j];
-          pBytes += 480 + (hs.objects?.length || 0) * 280 + (hs.history?.length || 0) * 64;
-        }
-        const springSims = p.springSims || [];
-        for (let j = 0; j < springSims.length; j++) {
-          pBytes += 420;
-        }
-        const circuitSims = p.circuitSims || [];
-        for (let j = 0; j < circuitSims.length; j++) {
-          pBytes += 420;
-        }
-        pageByteSizeCacheRef.current.set(p, pBytes);
-      }
-      totalBytes += pBytes;
-    }
-    notebookByteSizeCacheRef.current.set(nb, totalBytes);
-    return totalBytes;
+    return computeNotebookSizeBytes(nb);
   }, []);
 
   const formatNotebookSizeLabel = useCallback((bytes: number): string => {
@@ -16161,6 +16357,7 @@ export default function App() {
 
   const insertPageAtIndex = useCallback(
     (insertIdx: number) => {
+      if (!checkPageLimitOrOpenModal(activeNotebook, 1)) return;
       const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length, insertIdx));
       const refPage = activeNotebook.pages[Math.min(clampedIdx, activeNotebook.pages.length - 1)] || activePage;
       const newPage: NotePage = {
@@ -16217,7 +16414,7 @@ export default function App() {
           : `📄 Προστέθηκε Νέα Σελίδα στη μέση (Θέση #${clampedIdx + 1})!`
       );
     },
-    [activeNotebook.id, activeNotebook.pages, activePage, isCleanProjectorMode, applyPaperTransformDirect, showToast]
+    [activeNotebook, activePage, isCleanProjectorMode, applyPaperTransformDirect, showToast, checkPageLimitOrOpenModal]
   );
 
   const insertNewPageRelative = useCallback(
@@ -16237,6 +16434,10 @@ export default function App() {
     (sourceIdx: number) => {
       const srcPage = activeNotebook.pages[sourceIdx];
       if (!srcPage) return;
+      const approxPageBytes =
+        (srcPage.backgroundDataUrl?.length || 0) +
+        (srcPage.images || []).reduce((acc, im) => acc + (im.dataUrl?.length || 0), 0);
+      if (!checkPageLimitOrOpenModal(activeNotebook, 1, approxPageBytes)) return;
       const cloned: NotePage = {
         ...clonePageFast(srcPage),
         id: `page-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -16270,7 +16471,7 @@ export default function App() {
       applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
       showToast(`📑 Διπλασιάστηκε η Σελίδα #${sourceIdx + 1} στη θέση #${insertIdx + 1}!`);
     },
-    [activeNotebook.id, activeNotebook.pages, clonePageFast, applyPaperTransformDirect, showToast]
+    [activeNotebook, clonePageFast, applyPaperTransformDirect, showToast, checkPageLimitOrOpenModal]
   );
 
   const deletePageAtIndex = useCallback(
@@ -53505,6 +53706,7 @@ export default function App() {
   );
 
   const handleCreateNewNoteTab = useCallback(() => {
+    if (!checkFileAndStorageOrOpenModal(1, 1024)) return;
     pauseAndReleaseSimulationsRef.current({ closingTab: false });
     const newNb: Notebook = {
       id: `nb-${Date.now()}`,
@@ -53541,13 +53743,23 @@ export default function App() {
     setPan({ x: 0, y: 0 });
     setViewMode('editor');
     showToast(`📄 Νέα Σημείωση: «${newNb.title}»`);
-  }, [notebooks.length, activeLibraryFolder, activeNotebook?.folder, showToast, currentUser]);
+  }, [notebooks.length, activeLibraryFolder, activeNotebook?.folder, showToast, currentUser, checkFileAndStorageOrOpenModal]);
 
   const handleCloseCurrentTab = useCallback(() => {
     if (viewMode !== 'editor') return;
     const targetCloseId = activeNotebookId || activeNotebook?.id;
     if (!targetCloseId) return;
     pauseAndReleaseSimulationsRef.current({ targetNotebookId: targetCloseId, closingTab: true });
+    if (!currentUser) {
+      setIsClosingDocument(true);
+      window.setTimeout(() => {
+        setIsClosingDocument(false);
+        clearGuestEphemeralWorkspace();
+        setViewMode('landing');
+        showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+      }, 110);
+      return;
+    }
     const rem = openNotebookIds.filter(
       (id) => id !== targetCloseId && notebooks.some((n) => n.id === id)
     );
@@ -53567,7 +53779,7 @@ export default function App() {
         activeDrawingPageIndexRef.current = 0;
       }
     }, 110);
-  }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder]);
+  }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder, currentUser, clearGuestEphemeralWorkspace, showToast]);
 
   // Global Tab Shortcuts: Cmd+T / Ctrl+T / Alt+T (New File Tab) & Cmd+W / Ctrl+W / Alt+W (Close Current Tab)
   useEffect(() => {
@@ -54608,9 +54820,14 @@ export default function App() {
       (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
     );
     if (selStrokes.length === 0 && selImages.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('textOCR');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο κείμενο ή μια εικόνα με κείμενο για μετατροπή σε Κείμενο OCR!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('textOCR')) return;
     trackAiAction('text', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
@@ -54799,6 +55016,9 @@ export default function App() {
     computeMaxFitFontSizeForBox,
     updateActivePage,
     showToast,
+    isAiUnavailable,
+    consumeAiQuotaOrOpenModal,
+    currentUser,
   ]);
 
   // 1b. Manual (on-demand) Lasso Handwriting or Image -> Code / Greek ΑΕΠΠ Pseudocode (ΓΛΩΣΣΑ) OCR with automatic indentation (inside Math menu)
@@ -54832,9 +55052,14 @@ export default function App() {
       (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
     );
     if (selStrokes.length === 0 && selImages.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('Κώδικας OCR');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τον χειρόγραφο κώδικα ή μια εικόνα με Ψευδογλώσσα/Κώδικα!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('Κώδικας OCR')) return;
     trackAiAction('math', currentUser);
 
     const strokeWithBounds = selStrokes.map((st) => ({ st, b: getStrokeBounds(st) }));
@@ -55047,6 +55272,9 @@ export default function App() {
     measureWrappedTextLayout,
     updateActivePage,
     showToast,
+    isAiUnavailable,
+    consumeAiQuotaOrOpenModal,
+    currentUser,
   ]);
 
   // 2. Manual (on-demand) Lasso Handwriting or Image -> MathOCR / MathType (KaTeX fractions, ⇒, =, units) via Gemini Vision
@@ -55080,9 +55308,14 @@ export default function App() {
       (im) => imgIdSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
     );
     if (selStrokes.length === 0 && selImages.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('MathOCR (Εξίσωση)');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('MathOCR (Εξίσωση)')) return;
     trackAiAction('math', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
@@ -55301,6 +55534,9 @@ export default function App() {
     loadImageElementForOcr,
     updateActivePage,
     showToast,
+    isAiUnavailable,
+    consumeAiQuotaOrOpenModal,
+    currentUser,
   ]);
 
   const handleConvertLassoToChemOCR = useCallback(async () => {
@@ -55321,9 +55557,14 @@ export default function App() {
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
     if (selStrokes.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('ChemOCR (Αντιδράσεις)');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική αντίδραση (π.χ. C + O2 -> CO2)!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('ChemOCR (Αντιδράσεις)')) return;
     trackAiAction('chem', currentUser);
 
     let minX = Infinity;
@@ -55455,6 +55696,10 @@ export default function App() {
     triggerAtomReactionAnimation,
     updateActivePage,
     showToast,
+    isAiUnavailable,
+    consumeAiQuotaOrOpenModal,
+    activePlan,
+    currentUser,
   ]);
 
   const handleCheckChemistryInTextBox = useCallback(
@@ -55525,8 +55770,25 @@ export default function App() {
         showToast(
           `🧪 Έλεγχος Αντίδρασης («${finalEq}»)... Κάνε κλικ σε οποιοδήποτε αντιδρών ή προϊόν για εμφάνιση της δομής του.`
         );
-        // Αν η εξίσωση είναι σύνθετη (π.χ. Οξειδοαναγωγή ή Οργανική Χημεία) και δεν βρέθηκε τοπική διόρθωση, ρώτα το Gemini AI!
+        // Αν η εξίσωση είναι σύνθετη (π.χ. Οξειδοαναγωγή ή Οργανική Χημεία) και δεν βρέθηκε τοπική διόρθωση, ρώτα το Gemini AI (μόνο αν υπάρχει διαθέσιμο AI quota)!
         if (rawUserStr.includes('->') || rawUserStr.includes('→') || rawUserStr.includes('+')) {
+          const chemAiCheck = checkAiCallAllowed({
+            isAuthenticated: Boolean(currentUser),
+            plan: activePlan,
+            usage: userAiUsageRef.current,
+          });
+          if (!chemAiCheck.allowed) {
+            return;
+          }
+          if (currentUser) {
+            const nextUsage = incrementAiUsage(userAiUsageRef.current);
+            userAiUsageRef.current = nextUsage;
+            setUserAiUsage(nextUsage);
+            void syncUserAiUsageToCloud(currentUser.uid, nextUsage, {
+              email: currentUser.email,
+              displayName: currentUser.displayName,
+            });
+          }
           trackAiAction('chem', currentUser);
           void analyzeTypedChemistryWithGemini(rawUserStr).then((aiRes) => {
             const aiCorr = aiRes?.correctedEquation?.trim();
@@ -55596,9 +55858,14 @@ export default function App() {
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
     if (selStrokes.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('3D Μόριο OCR');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική ένωση (π.χ. H2O, CH4, CO2, NH3)!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('3D Μόριο OCR')) return;
     trackAiAction('chem', currentUser);
 
     let minX = Infinity;
@@ -56095,9 +56362,14 @@ export default function App() {
     );
     const selStrokes = nonGraphStrokes.length > 0 ? nonGraphStrokes : rawSelStrokes;
     if (selStrokes.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('Διάγραμμα OCR');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
       return;
     }
+    if (!consumeAiQuotaOrOpenModal('Διάγραμμα OCR')) return;
     trackAiAction('math', currentUser);
 
     // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
@@ -57396,6 +57668,10 @@ export default function App() {
       : activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
 
     if (selImgs.length === 0 && selStrokes.length === 0) {
+      if (isAiUnavailable) {
+        consumeAiQuotaOrOpenModal('✨ Ζωντάνεμα');
+        return;
+      }
       showToast('ℹ️ Επίλεξε πρώτα μια εικόνα ή ένα σχέδιο με το Lasso!');
       return;
     }
@@ -57501,6 +57777,12 @@ export default function App() {
             : im
         ),
       }));
+    }
+
+    if (!existingSpec) {
+      if (!consumeAiQuotaOrOpenModal('✨ Ζωντάνεμα')) {
+        return;
+      }
     }
 
     setAiAnimateModal({
@@ -57654,6 +57936,10 @@ export default function App() {
       await handlePdfOrDocFileChange(e);
       return;
     }
+    if (!checkFileAndStorageOrOpenModal(1, file.size || 0)) {
+      e.target.value = '';
+      return;
+    }
     try {
       const importedNb = await importGoodnotesFile(file);
       userEditedInSessionRef.current.add(importedNb.id);
@@ -57707,9 +57993,17 @@ export default function App() {
     });
     if (archiveFiles.length > 0) {
       let lastImported: Notebook | null = null;
+      let importedArchiveCount = 0;
+      let importedArchiveBytes = 0;
       for (const archFile of archiveFiles) {
+        const nextBytes = importedArchiveBytes + (archFile.size || 0);
+        if (!checkFileAndStorageOrOpenModal(importedArchiveCount + 1, nextBytes)) {
+          break;
+        }
         try {
           const importedNb = await importGoodnotesFile(archFile);
+          importedArchiveCount += 1;
+          importedArchiveBytes = nextBytes;
           const finalFolder =
             targetFolderOverride !== undefined
               ? targetFolderOverride
@@ -57755,6 +58049,27 @@ export default function App() {
         forceNewNotebook ||
         pdfImportModeRef.current === 'new-notebook' ||
         viewMode === 'library';
+      const incomingRawBytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
+      if (isNewDocMode) {
+        if (!checkFileAndStorageOrOpenModal(1, incomingRawBytes)) {
+          return;
+        }
+      } else {
+        const storageOk = checkStorageAllowed({
+          isAuthenticated: Boolean(currentUser),
+          plan: activePlan,
+          currentTotalBytes: computeTotalNotebooksSizeBytes(notebooks),
+          additionalBytes: incomingRawBytes,
+        });
+        if (!storageOk.allowed) {
+          setUpgradeModalContext({
+            reason: storageOk.reason || 'storage',
+            currentValue: storageOk.currentValue,
+            limitValue: storageOk.limitValue,
+          });
+          return;
+        }
+      }
       const targetNbId = isNewDocMode ? `nb-doc-${Date.now()}` : activeNotebook.id;
       let hasPdf = false;
       let totalNativeBytes = 0;
@@ -57783,7 +58098,8 @@ export default function App() {
             (curr, total) => {
               setStatusBanner(`⏳ Φόρτωση PDF "${file.name}": Σελίδα ${curr} από ${total}...`);
             },
-            targetNbId
+            targetNbId,
+            Boolean(currentUser)
           );
           importedPages.push(...pdfPages);
         } else {
@@ -57800,6 +58116,16 @@ export default function App() {
       }
 
       if (isNewDocMode) {
+        // Guests are capped at GUEST_LIMITS.maxPagesPerNativeFile (3 pages) even on imported PDFs
+        if (!currentUser && importedPages.length > GUEST_LIMITS.maxPagesPerNativeFile) {
+          setStatusBanner(null);
+          setUpgradeModalContext({
+            reason: 'pages',
+            currentValue: `${importedPages.length} / ${GUEST_LIMITS.maxPagesPerNativeFile} σελίδες (Επισκέπτης)`,
+            limitValue: `${GUEST_LIMITS.maxPagesPerNativeFile} σελίδες`,
+          });
+          return;
+        }
         const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|gif|webp|bmp|svg)$/i, '');
         const assignedFolder =
           targetFolderOverride !== undefined ? targetFolderOverride : activeLibraryFolder || '';
@@ -57841,6 +58167,12 @@ export default function App() {
           !activePage.backgroundDataUrl &&
           (activePage.images?.length || 0) === 0 &&
           (activePage.texts?.length || 0) === 0;
+
+        const netAddedPages = Math.max(0, importedPages.length - (isCurrentPageEmpty ? 1 : 0));
+        if (netAddedPages > 0 && !checkPageLimitOrOpenModal(activeNotebook, netAddedPages)) {
+          setStatusBanner(null);
+          return;
+        }
 
         const targetInsertIdx = isCurrentPageEmpty ? activePageIndex : activePageIndex + 1;
         let newTopY = 0;
@@ -58014,6 +58346,9 @@ export default function App() {
             onClick={() => {
               explicitLandingNavRef.current = true;
               pauseAndReleaseSimulations({ leavingEditor: true });
+              if (!currentUser && viewMode === 'editor') {
+                clearGuestEphemeralWorkspace();
+              }
               setViewMode('landing');
             }}
             className="flex items-center justify-center p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
@@ -58034,6 +58369,9 @@ export default function App() {
                   setActiveLibraryFolder(null);
                   setShowLibraryFavoritesOnly(false);
                   setIsClosingDocument(false);
+                  if (!currentUser) {
+                    clearGuestEphemeralWorkspace();
+                  }
                   setViewMode('library');
                 }, 110);
               } else {
@@ -58056,13 +58394,13 @@ export default function App() {
               showToast('🔄 Ανανέωση εφαρμογής & συγχρονισμός Cloud...');
               try {
                 const uid = currentUser?.uid || initialAuthUid;
-                const serialized = JSON.stringify(buildCurrentSessionSnapshot());
-                localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
                 if (uid) {
+                  const serialized = JSON.stringify(buildCurrentSessionSnapshot());
+                  localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
                   localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
-                }
-                if (uid && notebooksRef.current.length > 0) {
-                  saveLibraryShelfCache(uid, notebooksRef.current);
+                  if (notebooksRef.current.length > 0) {
+                    saveLibraryShelfCache(uid, notebooksRef.current);
+                  }
                 }
               } catch {
                 // ignore
@@ -58209,6 +58547,16 @@ export default function App() {
                     onClick={(e) => {
                       e.stopPropagation();
                       pauseAndReleaseSimulations({ targetNotebookId: nb.id, closingTab: true });
+                      if (!currentUser) {
+                        setIsClosingDocument(true);
+                        window.setTimeout(() => {
+                          setIsClosingDocument(false);
+                          clearGuestEphemeralWorkspace();
+                          setViewMode('landing');
+                          showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+                        }, 110);
+                        return;
+                      }
                       const rem = openNotebookIds.filter(
                         (id) => id !== nb.id && notebooks.some((n) => n.id === id)
                       );
@@ -59486,6 +59834,9 @@ export default function App() {
               };
 
               const duplicateNotebookInLibrary = (nb: Notebook) => {
+                if (!checkFileAndStorageOrOpenModal(1, computeNotebookSizeBytes(nb))) {
+                  return;
+                }
                 const newId = `nb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
                 const origTime = nb.updatedAt ? new Date(nb.updatedAt).getTime() : Date.now();
                 const adjacentIso = new Date(
@@ -59502,11 +59853,13 @@ export default function App() {
                   updatedAt: adjacentIso,
                   pages: clonedPages,
                 };
-                void loadRawPdfFromIndexedDB(nb.id).then((buf) => {
-                  if (buf) {
-                    void saveRawPdfToIndexedDB(newId, buf.slice(0));
-                  }
-                });
+                if (currentUser) {
+                  void loadRawPdfFromIndexedDB(nb.id).then((buf) => {
+                    if (buf) {
+                      void saveRawPdfToIndexedDB(newId, buf.slice(0));
+                    }
+                  });
+                }
                 userEditedInSessionRef.current.add(newId);
                 setNotebooks((prev) => {
                   const idx = prev.findIndex((item) => item.id === nb.id);
@@ -60051,9 +60404,28 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUpgradeModalContext({
+                            reason: 'view_plans',
+                            featureLabel: activePlan?.name || 'Επισκέπτης',
+                          })
+                        }
+                        className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/90 hover:bg-[#eef3f8] border border-[#dfd8cb] text-xs font-extrabold text-[#1b2a4a] shadow-2xs transition cursor-pointer"
+                        title="Προβολή πλάνου & ορίων"
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: activePlan?.badgeColor || '#64748b' }}
+                        />
+                        <span>{activePlan ? `Πλάνο ${activePlan.name}` : 'Επισκέπτης'}</span>
+                      </button>
+
                       <button
                         onClick={() => {
+                          if (!checkFileAndStorageOrOpenModal(1, 1024)) return;
                           const newNb: Notebook = {
                             id: `nb-${Date.now()}`,
                             title: `Σημείωση ${notebooks.length + 1}`,
@@ -60203,6 +60575,14 @@ export default function App() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => {
+                                  if (
+                                    !checkFileAndStorageOrOpenModal(
+                                      1,
+                                      computeNotebookSizeBytes(delNb)
+                                    )
+                                  ) {
+                                    return;
+                                  }
                                   sessionDeletedNotebookIds.delete(delNb.id);
                                   sessionRestoredNotebookIds.add(delNb.id);
                                   const nowIso = getMonotonicIsoTimestamp(
@@ -61425,14 +61805,24 @@ export default function App() {
                                         void triggerSmartAutoTagsForNotebook(nb, [], false);
                                         setLibraryTagEditorNbId(null);
                                       }}
-                                      className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 disabled:opacity-50 transition cursor-pointer"
-                                      title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τα χειρόγραφα και τις εικόνες της σημείωσης"
+                                      className={`w-full flex items-center justify-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold disabled:opacity-50 transition cursor-pointer ${
+                                        canUseAutoTags
+                                          ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                                          : 'bg-slate-100/80 hover:bg-slate-200/80 border-slate-200 text-slate-500 opacity-65 hover:opacity-90'
+                                      }`}
+                                      title={
+                                        canUseAutoTags
+                                          ? 'Αυτόματη εξαγωγή 3–4 βασικών #tags από τα χειρόγραφα και τις εικόνες της σημείωσης'
+                                          : 'Μόνο στο πλάνο ULTRA — Κλικ για πληροφορίες πλάνων'
+                                      }
                                     >
                                       <Sparkles className="w-3 h-3" />
                                       <span>
                                         {isAutoTaggingNbId === nb.id
                                           ? 'Ανάλυση σημείωσης...'
-                                          : '✨ Auto-Tags (Χειρόγραφα & Εικόνες)'}
+                                          : canUseAutoTags
+                                          ? '✨ Auto-Tags (Χειρόγραφα & Εικόνες)'
+                                          : '🔒 Auto-Tags (ULTRA)'}
                                       </span>
                                     </button>
                                   </div>
@@ -64868,8 +65258,14 @@ export default function App() {
 
                       <button
                         onClick={() => void handleOpenAiAnimateForSelection()}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#234978] font-semibold cursor-pointer whitespace-nowrap transition"
-                        title="Ζωντάνεμα: Άμεσο Ζωντανό Σκίτσο με Ήχο στην τεχνοτροπία σας!"
+                        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg hover:bg-[#fdfbf7] text-[#234978] font-semibold cursor-pointer whitespace-nowrap transition ${
+                          isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''
+                        }`}
+                        title={
+                          isAiUnavailable
+                            ? 'Όριο AI — Κλικ για λεπτομέρειες πλάνων'
+                            : 'Ζωντάνεμα: Άμεσο Ζωντανό Σκίτσο με Ήχο στην τεχνοτροπία σας!'
+                        }
                       >
                         <Sparkles className="w-3.5 h-3.5 text-[#475569]" />
                         <span>Ζωντάνεμα</span>
@@ -64972,6 +65368,12 @@ export default function App() {
                     {(selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || selectedImageIds.length > 0) && (
                       <LassoOcrButtons
                         isConvertingHandwriting={isConvertingHandwriting}
+                        isAiUnavailable={isAiUnavailable}
+                        aiUnavailableHint={
+                          !currentUser
+                            ? 'Επισκέπτης: 0 κλήσεις AI — Κλικ για πληροφορίες πλάνων'
+                            : 'Έφτασες το όριο AI — Κλικ για λεπτομέρειες πλάνων'
+                        }
                         openMenu={openLassoOcrMenu}
                         setOpenMenu={setOpenLassoOcrMenu}
                         onConvertTextOcr={() => void handleConvertLassoToCalligraphic()}
@@ -76108,6 +76510,7 @@ export default function App() {
                     type="button"
                     disabled={aiAnimateModal.isAnalyzing}
                     onClick={async () => {
+                      if (!consumeAiQuotaOrOpenModal('✨ Ζωντάνεμα (Επανανάλυση)')) return;
                       setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
                       trackAiAction('anim', currentUser);
                       const re = await analyzeImageForSmartSketchAnimation(
@@ -76140,7 +76543,9 @@ export default function App() {
                         }));
                       }
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-bold shadow-2xs cursor-pointer shrink-0"
+                    className={`px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-bold shadow-2xs cursor-pointer shrink-0 ${
+                      isAiUnavailable ? 'opacity-55 hover:opacity-85' : ''
+                    }`}
                   >
                     🔄 Επανανάλυση
                   </button>
@@ -76169,6 +76574,7 @@ export default function App() {
                     onKeyDown={async (e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
+                        if (!consumeAiQuotaOrOpenModal('✨ Ζωντάνεμα (Οδηγία)')) return;
                         setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
                         trackAiAction('anim', currentUser);
                         const re = await analyzeImageForSmartSketchAnimation(
@@ -76367,6 +76773,19 @@ export default function App() {
         dpr={CANVAS_DPR}
       />
       <RichHoverTooltipHost />
+      <LiquidUpgradeModal
+        isOpen={Boolean(upgradeModalContext)}
+        onClose={() => setUpgradeModalContext(null)}
+        context={upgradeModalContext}
+        plans={subscriptionPlans}
+        currentPlan={activePlan}
+        isAuthenticated={Boolean(currentUser)}
+        aiUsage={userAiUsage}
+        onSignInGoogle={() => {
+          setAuthMode('signin');
+          setShowAuthModal(true);
+        }}
+      />
     </div>
   );
 }

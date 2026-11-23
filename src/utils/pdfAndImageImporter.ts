@@ -344,10 +344,11 @@ export async function renderPdfFileToPages(
   file: File,
   _defaultTemplate: PaperTemplateType = 'blank',
   onProgress?: (current: number, total: number) => void,
-  notebookId?: string
+  notebookId?: string,
+  persistToIndexedDb = true
 ): Promise<NotePage[]> {
   const arrayBuffer = await file.arrayBuffer();
-  if (notebookId) {
+  if (notebookId && persistToIndexedDb) {
     await saveRawPdfToIndexedDB(notebookId, arrayBuffer.slice(0));
   }
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });

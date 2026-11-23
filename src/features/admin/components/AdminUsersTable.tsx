@@ -9,26 +9,34 @@ import {
   Clock,
   UserCheck,
   RefreshCw,
+  Crown,
 } from 'lucide-react';
 import type { UserProfileStats } from '../types';
+import type { SubscriptionPlan } from '../../plans/types';
 import { formatBytes, formatMinutesLabel, ADMIN_EMAIL } from '../services/userStatsService';
 
 export interface AdminUsersTableProps {
   users: UserProfileStats[];
+  plans?: SubscriptionPlan[];
+  onChangeUserPlan?: (user: UserProfileStats, nextPlanId: string) => Promise<void>;
   onRefresh: () => void;
   isRefreshing?: boolean;
 }
 
-type SortField = 'displayName' | 'createdAt' | 'notebooksCount' | 'totalSizeBytes' | 'avgDailyMinutes' | 'lastSeenAt';
+type SortField = 'displayName' | 'planId' | 'createdAt' | 'notebooksCount' | 'totalSizeBytes' | 'avgDailyMinutes' | 'lastSeenAt';
 
 export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
   users,
+  plans = [],
+  onChangeUserPlan,
   onRefresh,
   isRefreshing,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortField, setSortField] = useState<SortField>('lastSeenAt');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [updatingPlanUid, setUpdatingPlanUid] = useState<string | null>(null);
+  const [planStatusMsg, setPlanStatusMsg] = useState<string | null>(null);
 
   const filteredAndSortedUsers = useMemo(() => {
     let result = users.slice();
@@ -44,8 +52,18 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
     }
 
     result.sort((a, b) => {
-      let valA: any = a[sortField];
-      let valB: any = b[sortField];
+      let valA: any =
+        sortField === 'planId'
+          ? a.email === ADMIN_EMAIL
+            ? 'ultra'
+            : a.planId || 'free'
+          : a[sortField];
+      let valB: any =
+        sortField === 'planId'
+          ? b.email === ADMIN_EMAIL
+            ? 'ultra'
+            : b.planId || 'free'
+          : b[sortField];
 
       if (typeof valA === 'string') {
         const cmp = valA.localeCompare(valB, 'el');
@@ -75,6 +93,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
       'UID',
       'Ονοματεπώνυμο',
       'Email',
+      'Πλάνο',
       'Ημ/νία Εγγραφής',
       'Τελευταία Σύνδεση',
       'Αποθηκευμένα Αρχεία',
@@ -87,6 +106,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
       `"${u.uid}"`,
       `"${u.displayName || ''}"`,
       `"${u.email || ''}"`,
+      `"${u.email === ADMIN_EMAIL ? 'ULTRA' : (u.planId || 'free').toUpperCase()}"`,
       `"${u.createdAt || ''}"`,
       `"${u.lastSeenAt || ''}"`,
       u.notebooksCount || 0,
@@ -142,6 +162,13 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
         </div>
       </div>
 
+      {/* Plan change feedback */}
+      {planStatusMsg && (
+        <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+          {planStatusMsg}
+        </div>
+      )}
+
       {/* Table Container */}
       <div className="ipados-liquid-glass bg-[#fdfbf7]/80 backdrop-blur-2xl border border-white/85 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -155,6 +182,17 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                     className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
                   >
                     <span>Χρήστης</span>
+                    <ArrowUpDown className="w-3 h-3" />
+                  </button>
+                </th>
+                <th className="py-3 px-4">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('planId')}
+                    className="flex items-center gap-1 hover:text-[#1b2a4a] cursor-pointer"
+                  >
+                    <Crown className="w-3 h-3" />
+                    <span>Πλάνο</span>
                     <ArrowUpDown className="w-3 h-3" />
                   </button>
                 </th>
@@ -213,7 +251,7 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
             <tbody className="divide-y divide-[#dfd8cb]/60">
               {filteredAndSortedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500 font-semibold">
+                  <td colSpan={7} className="py-8 text-center text-slate-500 font-semibold">
                     Δεν βρέθηκαν χρήστες που να ταιριάζουν με την αναζήτηση.
                   </td>
                 </tr>
@@ -236,7 +274,13 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                       })
                     : '—';
 
-                  const isAdminUser = u.email === ADMIN_EMAIL;
+                  const isAdminUser =
+                    (u.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+                  const rawPlanId = (u.planId || 'free').toLowerCase();
+                  const effectiveSelectPlanId =
+                    plans.length === 0 || plans.some((p) => p.id === rawPlanId)
+                      ? rawPlanId
+                      : 'free';
                   return (
                     <tr
                       key={u.uid}
@@ -284,6 +328,62 @@ export const AdminUsersTable: React.FC<AdminUsersTableProps> = ({
                             </p>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Plan Selector */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {isAdminUser ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#7c3aed] text-white text-[10.5px] font-black uppercase tracking-wider shadow-2xs">
+                            <Crown className="w-3 h-3" />
+                            <span>ULTRA (Admin)</span>
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              aria-label={`Πλάνο χρήστη ${u.displayName || u.email}`}
+                              value={effectiveSelectPlanId}
+                              disabled={updatingPlanUid === u.uid || !onChangeUserPlan}
+                              onChange={async (e) => {
+                                if (!onChangeUserPlan) return;
+                                const nextPlanId = e.target.value;
+                                setUpdatingPlanUid(u.uid);
+                                setPlanStatusMsg(null);
+                                try {
+                                  await onChangeUserPlan(u, nextPlanId);
+                                  const matchedPlan = plans.find((p) => p.id === nextPlanId);
+                                  setPlanStatusMsg(
+                                    `✅ Το πλάνο του χρήστη «${u.displayName || u.email}» άλλαξε σε ${
+                                      matchedPlan?.name || nextPlanId.toUpperCase()
+                                    }.`
+                                  );
+                                } catch (err: any) {
+                                  setPlanStatusMsg(
+                                    `⚠️ Σφάλμα αλλαγής πλάνου: ${err?.message || 'Δοκίμασε ξανά.'}`
+                                  );
+                                } finally {
+                                  setUpdatingPlanUid(null);
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-[#dfd8cb] text-[11px] font-extrabold text-[#1b2a4a] focus:outline-none focus:border-[#1b2a4a] cursor-pointer disabled:opacity-50"
+                            >
+                              {(plans.length > 0
+                                ? plans
+                                : [
+                                    { id: 'free', name: 'FREE' },
+                                    { id: 'plus', name: 'PLUS' },
+                                    { id: 'ultra', name: 'ULTRA' },
+                                  ]
+                              ).map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                            {updatingPlanUid === u.uid && (
+                              <RefreshCw className="w-3 h-3 animate-spin text-[#1b2a4a]" />
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Registration Date */}

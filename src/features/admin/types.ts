@@ -16,9 +16,15 @@ export interface UserProfileStats {
   activeDaysCount: number;    // number of distinct active days
   avgDailyMinutes: number;    // (totalActiveSeconds / 60) / activeDaysCount
   updatedAt: string;       // ISO timestamp
+  planId?: string;         // 'free' | 'plus' | 'ultra' | custom plan id
+  aiDayKey?: string;       // YYYY-MM-DD
+  aiDayCount?: number;     // AI calls used on aiDayKey
+  aiWeekKey?: string;      // YYYY-Www
+  aiWeekCount?: number;    // AI calls used on aiWeekKey
+  aiTotalCount?: number;   // cumulative AI calls
 }
 
-export type AdminTab = 'overview' | 'billing' | 'perf' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
+export type AdminTab = 'overview' | 'plans' | 'billing' | 'perf' | 'traffic' | 'ocr' | 'users' | 'storage' | 'activity';
 
 export type AiActionKind = 'text' | 'math' | 'chem' | 'anim';
 
