@@ -374,7 +374,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               <Calendar className="w-3.5 h-3.5 text-[#1b2a4a]" />
               <span>
                 {chartMode === 'quota'
-                  ? `Ημερήσια Χρήση AI (% Ημερήσιου Ορίου ${GEMINI_FREE_TIER_DAILY_CAPACITY})`
+                  ? `Ημερήσια Χρήση AI (Βασικό Όριο 80 Flash + 1.020 Lite)`
                   : chartMode === 'type'
                   ? 'Ημερήσιο Ιστόγραμμα AI ανά Τύπο (Κείμενο, Math, Χημεία, Ζωντάνεμα)'
                   : 'Ημερήσια Κατανομή AI: Admin vs Υπόλοιποι Χρήστες'}
@@ -382,7 +382,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             </h3>
             <p className="text-[11px] text-[#64748b] mt-0.5">
               {chartMode === 'quota'
-                ? `Σήμερα: ${ocrMetrics.todayTotal}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (${ocrMetrics.todayUsedPercent}%) | Τελευταίες ${recentDays.length} ημέρες`
+                ? `Σήμερα: ${ocrMetrics.todayTotal}/80 Flash (${Math.min(100, Math.round((ocrMetrics.todayTotal / 80) * 100))}%) • Σύνολο δωρεάν: ${GEMINI_FREE_TIER_DAILY_CAPACITY}/ημ. | Τελευταίες ${recentDays.length} ημέρες`
                 : `Τελευταίες ${recentDays.length} καταγεγραμμένες ημέρες`}
             </p>
           </div>
@@ -399,7 +399,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               }`}
             >
               <Gauge className="w-3.5 h-3.5" />
-              <span>% Ημερήσιου Ορίου ({GEMINI_FREE_TIER_DAILY_CAPACITY})</span>
+              <span>% Ορίου (80 + 1.020)</span>
             </button>
             <button
               type="button"
@@ -490,47 +490,72 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             const adminC = t.ocrAdminCount || 0;
             const othersC = Math.max(0, total - adminC);
 
-            const dailyPct = Number(((total / GEMINI_FREE_TIER_DAILY_CAPACITY) * 100).toFixed(1));
             const dailyRemaining = Math.max(0, GEMINI_FREE_TIER_DAILY_CAPACITY - total);
 
-            // Decompose daily total across the Gemini cascade buckets (bottom -> top)
-            let remForCascade = total;
-            const modelSegments: Array<{
-              id: string;
-              shortLabel: string;
-              used: number;
-              rpd: number;
-              color: string;
-              pctOfBar: number;
-            }> = [];
-            for (const bucket of GEMINI_FREE_TIER_MODEL_BUCKETS) {
-              if (remForCascade <= 0) break;
-              const used = Math.min(remForCascade, bucket.rpd);
-              remForCascade -= used;
-              modelSegments.push({
-                id: bucket.id,
-                shortLabel: bucket.shortLabel,
-                used,
-                rpd: bucket.rpd,
-                color: bucket.color,
-                pctOfBar: total > 0 ? (used / total) * 100 : 0,
-              });
-            }
+            // Split into Primary Flash Tier (80: 4 Hydrogen, 3.8, 3.6, 3 Flash) + Dynamic Lite Overflow Bar (1,020: 3.5 Lite, 3.1 Lite, 2.5 Flash)
+            const PRIMARY_FLASH_LIMIT = 80;
+            const OVERFLOW_LITE_LIMIT = GEMINI_FREE_TIER_DAILY_CAPACITY - PRIMARY_FLASH_LIMIT; // 1020
+            const primaryUsed = Math.min(total, PRIMARY_FLASH_LIMIT);
+            const overflowUsed = Math.max(0, total - PRIMARY_FLASH_LIMIT);
+            const primaryPct = Math.round((primaryUsed / PRIMARY_FLASH_LIMIT) * 100);
+            const overflowPct = Number(((overflowUsed / OVERFLOW_LITE_LIMIT) * 100).toFixed(1));
+
+            const buildBucketSegments = (
+              count: number,
+              buckets: readonly typeof GEMINI_FREE_TIER_MODEL_BUCKETS[number][]
+            ) => {
+              let rem = count;
+              const segs: Array<{
+                id: string;
+                shortLabel: string;
+                used: number;
+                rpd: number;
+                color: string;
+                pctOfBar: number;
+              }> = [];
+              for (const b of buckets) {
+                if (rem <= 0) break;
+                const used = Math.min(rem, b.rpd);
+                rem -= used;
+                segs.push({
+                  id: b.id,
+                  shortLabel: b.shortLabel,
+                  used,
+                  rpd: b.rpd,
+                  color: b.color,
+                  pctOfBar: count > 0 ? (used / count) * 100 : 0,
+                });
+              }
+              return segs;
+            };
+
+            const primarySegments = buildBucketSegments(
+              primaryUsed,
+              GEMINI_FREE_TIER_MODEL_BUCKETS.slice(0, 4)
+            );
+            const overflowSegments = buildBucketSegments(
+              overflowUsed,
+              GEMINI_FREE_TIER_MODEL_BUCKETS.slice(4)
+            );
+            const allSegments = [...primarySegments, ...overflowSegments];
             const modelBreakdownLabel =
-              modelSegments.length > 0
-                ? modelSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
+              allSegments.length > 0
+                ? allSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
                 : 'Καμία κλήση';
 
-            // Scale bar height cleanly against the visible peak (min 100) so stacked model layers are always legible
-            const quotaVisualScaleMax = Math.max(maxOcrInChart, 100);
             const barHeight =
               chartMode === 'quota'
-                ? total > 0
-                  ? Math.min(100, Math.max(10, Math.round((total / quotaVisualScaleMax) * 100)))
+                ? primaryUsed > 0
+                  ? Math.min(100, Math.max(10, primaryPct))
                   : 4
                 : total > 0
                 ? Math.max(10, Math.round((total / maxOcrInChart) * 100))
                 : 4;
+
+            const overflowBarHeight =
+              overflowUsed > 0
+                ? Math.min(100, Math.max(12, Math.round((overflowUsed / OVERFLOW_LITE_LIMIT) * 100)))
+                : 0;
 
             const textPct = total > 0 ? (textC / total) * 100 : 0;
             const mathPct = total > 0 ? (mathC / total) * 100 : 0;
@@ -543,20 +568,79 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             return (
               <div key={t.date} className="flex flex-col items-center gap-1 h-full justify-end group">
                 {total > 0 && (
-                  <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums">
-                    {chartMode === 'quota' ? `${total}` : total}
+                  <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums whitespace-nowrap">
+                    {chartMode === 'quota'
+                      ? overflowUsed > 0
+                        ? `100% +${overflowUsed}`
+                        : `${primaryPct}%`
+                      : total}
                   </span>
                 )}
 
-                {/* Vertical Bar */}
+                {/* Vertical Bar(s) — Primary 80-limit Flash bar + dynamic side Lite overflow bar (1,020) when total > 80 */}
                 <div
-                  style={{ height: `${barHeight}%` }}
-                  className="w-full max-w-[28px] rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90"
-                  title={`${t.date}: ${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (${dailyPct}% ορίου, υπόλοιπο: ${dailyRemaining}) | Μοντέλα: ${modelBreakdownLabel} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
+                  className="w-full flex items-end justify-center gap-0.5 h-full"
+                  title={`${t.date}: ${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (Κύρια Flash: ${primaryUsed}/80 = ${primaryPct}%${
+                    overflowUsed > 0 ? ` • Απόθεμα Lite: +${overflowUsed}/${OVERFLOW_LITE_LIMIT} (${overflowPct}%)` : ''
+                  }, υπόλοιπο: ${dailyRemaining}) | Μοντέλα: ${modelBreakdownLabel} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
                 >
-                  {chartMode === 'quota' && total > 0 && (
-                    <>
-                      {[...modelSegments].reverse().map((seg) => (
+                  <div
+                    style={{ height: `${barHeight}%` }}
+                    className={`${
+                      chartMode === 'quota' && overflowUsed > 0 ? 'w-[14px]' : 'w-full max-w-[28px]'
+                    } rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90`}
+                  >
+                    {chartMode === 'quota' && primaryUsed > 0 && (
+                      <>
+                        {[...primarySegments].reverse().map((seg) => (
+                          <div
+                            key={seg.id}
+                            style={{
+                              height: `${seg.pctOfBar}%`,
+                              backgroundColor: seg.color,
+                            }}
+                            className="w-full border-b border-white/25 last:border-b-0"
+                          />
+                        ))}
+                      </>
+                    )}
+
+                    {chartMode === 'type' && (
+                      <>
+                        {animPct > 0 && (
+                          <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
+                        )}
+                        {chemPct > 0 && (
+                          <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
+                        )}
+                        {mathPct > 0 && (
+                          <div style={{ height: `${mathPct}%` }} className="w-full bg-[#2b4a7a]" />
+                        )}
+                        {textPct > 0 && (
+                          <div style={{ height: `${textPct}%` }} className="w-full bg-[#1b2a4a]" />
+                        )}
+                      </>
+                    )}
+
+                    {chartMode === 'attribution' && (
+                      <>
+                        {othersPct > 0 && (
+                          <div style={{ height: `${othersPct}%` }} className="w-full bg-[#7a8a9e]" />
+                        )}
+                        {adminPct > 0 && (
+                          <div style={{ height: `${adminPct}%` }} className="w-full bg-[#1b2a4a]" />
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Dynamic Overflow Bar (1,020 Lite Reserve) — appears ONLY on days with > 80 calls */}
+                  {chartMode === 'quota' && overflowUsed > 0 && (
+                    <div
+                      style={{ height: `${overflowBarHeight}%` }}
+                      className="w-[14px] rounded-t-md overflow-hidden flex flex-col justify-end bg-amber-100 ring-1 ring-amber-400/60 transition-all shadow-2xs group-hover:opacity-90"
+                    >
+                      {[...overflowSegments].reverse().map((seg) => (
                         <div
                           key={seg.id}
                           style={{
@@ -566,35 +650,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                           className="w-full border-b border-white/25 last:border-b-0"
                         />
                       ))}
-                    </>
-                  )}
-
-                  {chartMode === 'type' && (
-                    <>
-                      {animPct > 0 && (
-                        <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
-                      )}
-                      {chemPct > 0 && (
-                        <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
-                      )}
-                      {mathPct > 0 && (
-                        <div style={{ height: `${mathPct}%` }} className="w-full bg-[#2b4a7a]" />
-                      )}
-                      {textPct > 0 && (
-                        <div style={{ height: `${textPct}%` }} className="w-full bg-[#1b2a4a]" />
-                      )}
-                    </>
-                  )}
-
-                  {chartMode === 'attribution' && (
-                    <>
-                      {othersPct > 0 && (
-                        <div style={{ height: `${othersPct}%` }} className="w-full bg-[#7a8a9e]" />
-                      )}
-                      {adminPct > 0 && (
-                        <div style={{ height: `${adminPct}%` }} className="w-full bg-[#1b2a4a]" />
-                      )}
-                    </>
+                    </div>
                   )}
                 </div>
 
