@@ -1379,7 +1379,6 @@ export const AuthModal: React.FC<{
 export const LandingPage: React.FC<LandingPageProps> = ({
   currentUser,
   onEnterApp,
-  onEnterLiveTvMode,
   onOpenAuthModal,
   showAuthModal,
   setShowAuthModal,
@@ -1628,17 +1627,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   {currentUser.displayName || currentUser.email || 'Χρήστης'}
                 </span>
               </div>
-            )}
-
-            {onEnterLiveTvMode && (
-              <button
-                type="button"
-                onClick={onEnterLiveTvMode}
-                className="min-w-[102px] h-9 px-3.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 text-emerald-800 border border-emerald-200/90 text-xs sm:text-[13px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
-              >
-                <span>Live</span>
-              </button>
             )}
 
             {currentUser ? (

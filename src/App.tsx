@@ -1747,6 +1747,10 @@ export default function App() {
   const canUseGoogleDriveSyncRef = useRef(canUseGoogleDriveSync);
   canUseGoogleDriveSyncRef.current = canUseGoogleDriveSync;
 
+  const canUseLiveBroadcast = Boolean(
+    currentUser && activePlan && (activePlan.isUnlimited || activePlan.id !== 'free')
+  );
+
   const consumeAiQuotaOrOpenModal = useCallback(
     (featureLabel: string): boolean => {
       const check = checkAiCallAllowed({
@@ -9172,6 +9176,15 @@ export default function App() {
   }, [notebooks, deletedCloudNotebooks, currentUser, cloudInitialLoaded, pushNotebookToCloudTracked]);
 
   const handleDownloadLivePdfHtml = useCallback(async () => {
+    if (!canUseLiveBroadcast) {
+      setUpgradeModalContext({
+        reason: 'live_broadcast',
+        featureLabel: 'Live PDF',
+        currentValue: activePlan?.name || 'Επισκέπτης',
+        limitValue: 'PLUS / ULTRA',
+      });
+      return;
+    }
     try {
       showToast(`🎬 Δημιουργία Διαδραστικού Live PDF «${activeNotebook.title}.live.html»...`);
       const blob = await exportNotebookToLivePdfHtml(activeNotebook);
@@ -58749,18 +58762,6 @@ export default function App() {
     return (
       <LandingPage
         currentUser={currentUser}
-        onEnterLiveTvMode={() => {
-          const docEl = document.documentElement as any;
-          if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
-            if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
-            else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-          }
-          isTvReceiverModeRef.current = true;
-          setIsTvReceiverMode(true);
-          setIsCleanProjectorMode(true);
-          setIsFullBleedWidth(true);
-          setViewMode('editor');
-        }}
         onEnterApp={() => {
           explicitLandingNavRef.current = false;
           if (!currentUser) {
@@ -59325,17 +59326,13 @@ export default function App() {
               <div className="relative flex items-center">
                 <button
                   onClick={() => {
-                    if (!currentUser) {
-                      const docEl = document.documentElement as any;
-                      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
-                        if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
-                        else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-                      }
-                      isTvReceiverModeRef.current = true;
-                      setIsTvReceiverMode(true);
-                      setIsCleanProjectorMode(true);
-                      setIsFullBleedWidth(true);
-                      setViewMode('editor');
+                    if (!canUseLiveBroadcast) {
+                      setUpgradeModalContext({
+                        reason: 'live_broadcast',
+                        featureLabel: 'Live Αναμετάδοση (Live TV)',
+                        currentValue: activePlan?.name || 'Επισκέπτης',
+                        limitValue: 'PLUS / ULTRA',
+                      });
                       return;
                     }
                     if (!isLiveTvBroadcasting) {
@@ -59347,14 +59344,16 @@ export default function App() {
                       setIsLiveTvBroadcasting(true);
                       setShowLiveTvMenu(true);
                       showToast(
-                        'Ξεκίνησε η Live TV Εκπομπή από το iPad! Στον Διαδραστικό πάτα «Live 16:9»!'
+                        'Ξεκίνησε η Live TV Εκπομπή από το iPad! Στον Διαδραστικό πάτα «Live» από το Προφίλ!'
                       );
                       return;
                     }
                     setShowLiveTvMenu((v) => !v);
                   }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                    isLiveTvBroadcasting
+                    !canUseLiveBroadcast
+                      ? 'bg-[#263961]/55 text-sky-200/60 hover:bg-[#31487a]/75'
+                      : isLiveTvBroadcasting
                       ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
                       : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
                   }`}
@@ -59485,6 +59484,15 @@ export default function App() {
               {/* Live PDF Interactive Player & Standalone Export Button (No Edit Tools, Only Simulation Interaction + Play/Stop) */}
               <button
                 onClick={() => {
+                  if (!canUseLiveBroadcast) {
+                    setUpgradeModalContext({
+                      reason: 'live_broadcast',
+                      featureLabel: 'Live PDF',
+                      currentValue: activePlan?.name || 'Επισκέπτης',
+                      limitValue: 'PLUS / ULTRA',
+                    });
+                    return;
+                  }
                   const next = !isLivePdfMode;
                   setIsLivePdfMode(next);
                   if (next) {
@@ -59508,7 +59516,9 @@ export default function App() {
                   }
                 }}
                 className={`flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                  isLivePdfMode
+                  !canUseLiveBroadcast
+                    ? 'bg-[#263961]/55 text-sky-200/60 hover:bg-[#31487a]/75'
+                    : isLivePdfMode
                     ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
                     : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
                 }`}
@@ -59539,28 +59549,9 @@ export default function App() {
             </>
           )}
 
-          {/* Direct Login / Sign-Up Pill + Live 16:9 Board Button when in Guest Mode (only in editor when verified not logged in) */}
+          {/* Direct Login / Sign-Up Pill when in Guest Mode (only in editor when verified not logged in) */}
           {viewMode === 'editor' && isAuthResolved && !currentUser && !isKnownAuthenticated && (
             <>
-              <button
-                type="button"
-                onClick={() => {
-                  const docEl = document.documentElement as any;
-                  if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
-                    if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
-                    else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-                  }
-                  isTvReceiverModeRef.current = true;
-                  setIsTvReceiverMode(true);
-                  setIsCleanProjectorMode(true);
-                  setIsFullBleedWidth(true);
-                  setViewMode('editor');
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] font-semibold text-sky-200 hover:text-white transition cursor-pointer"
-                title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
-              >
-                <span>📺 Live 16:9</span>
-              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -59678,6 +59669,34 @@ export default function App() {
                             <span>Admin</span>
                           </button>
                         </div>
+                      )}
+                      {canUseLiveBroadcast && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            const docEl = document.documentElement as any;
+                            if (
+                              !document.fullscreenElement &&
+                              !(document as any).webkitFullscreenElement
+                            ) {
+                              if (docEl.requestFullscreen)
+                                void docEl.requestFullscreen().catch(() => {});
+                              else if (docEl.webkitRequestFullscreen)
+                                docEl.webkitRequestFullscreen();
+                            }
+                            isTvReceiverModeRef.current = true;
+                            setIsTvReceiverMode(true);
+                            setIsCleanProjectorMode(true);
+                            setIsFullBleedWidth(true);
+                            setViewMode('editor');
+                          }}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 border border-emerald-300/90 text-xs font-bold text-emerald-800 transition cursor-pointer shadow-2xs"
+                          title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (PLUS & ULTRA)"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span>Live (Προβολή 16:9)</span>
+                        </button>
                       )}
                       <button
                         onClick={async () => {

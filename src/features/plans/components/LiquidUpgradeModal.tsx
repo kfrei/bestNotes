@@ -74,6 +74,18 @@ function getReasonHeadline(ctx: UpgradeModalContext | null): {
         subtitle:
           'Η σύνδεση και ο αυτόματος συγχρονισμός σημειώσεων PDF με το Google Drive διατίθεται στα πλάνα PLUS και ULTRA (δεν περιλαμβάνεται σε Επισκέπτη ή FREE).',
       };
+    case 'live_broadcast':
+      return {
+        title: 'Τα Live PDF & Live Αναμετάδοση είναι διαθέσιμα σε PLUS & ULTRA',
+        subtitle:
+          'Η ζωντανή 16:9 αναμετάδοση (Live TV) και η εξαγωγή διαδραστικού Live PDF διατίθενται από το πλάνο PLUS και πάνω.',
+      };
+    case 'live_sim_links':
+      return {
+        title: 'Τα Live Simulation Links είναι διαθέσιμα αποκλειστικά στο ULTRA',
+        subtitle:
+          'Η δημιουργία και κοινή χρήση διαδραστικών Live Simulation Links περιλαμβάνεται αποκλειστικά στο πλάνο ULTRA.',
+      };
     case 'files':
       return {
         title: 'Έφτασες το όριο αρχείων του πλάνου σου',
@@ -377,6 +389,36 @@ export const LiquidUpgradeModal: React.FC<LiquidUpgradeModalProps> = ({
                       >
                         <Cloud className="w-3 h-3 inline mr-1 -mt-0.5" />
                         Google Drive Sync (PDF)
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      {plan.isUnlimited || plan.id !== 'free' ? (
+                        <Check
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            isUltra ? 'text-emerald-300' : 'text-emerald-600'
+                          }`}
+                        />
+                      ) : (
+                        <Lock className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                      )}
+                      <span
+                        className={
+                          plan.isUnlimited || plan.id !== 'free'
+                            ? 'font-semibold'
+                            : 'text-slate-400 line-through'
+                        }
+                      >
+                        Live PDF &amp; Live Αναμετάδοση
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      {isUltra ? (
+                        <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-300" />
+                      ) : (
+                        <Lock className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                      )}
+                      <span className={isUltra ? 'font-semibold' : 'text-slate-400 line-through'}>
+                        Live Simulation Links
                       </span>
                     </li>
                     <li className="flex items-start gap-2">

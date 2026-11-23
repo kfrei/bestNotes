@@ -58,6 +58,8 @@ export type LimitHitKind =
   | 'ai_guest'
   | 'auto_tags'
   | 'drive_sync'
+  | 'live_broadcast'
+  | 'live_sim_links'
   | 'guest_save';
 
 export interface UpgradeModalContext {
