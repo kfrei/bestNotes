@@ -5205,32 +5205,41 @@ export default function App() {
         return;
       }
       const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-      if (remoteTime && (nb.updatedAt || '') < remoteTime && !sessionRestoredNotebookIds.has(nb.id)) {
-        return;
+      let nbToSave = nb;
+      let effectiveExplicitJson = explicitJson;
+      if (remoteTime && (nb.updatedAt || '') < remoteTime) {
+        if (sessionRestoredNotebookIds.has(nb.id) || userEditedInSessionRef.current.has(nb.id)) {
+          // Cross-device clock skew guard: bump updatedAt strictly above remoteTime so Firestore rules never reject a newer local edit!
+          const bumpedIso = getMonotonicIsoTimestamp(nb.updatedAt, remoteTime);
+          nbToSave = { ...nb, updatedAt: bumpedIso };
+          effectiveExplicitJson = undefined;
+        } else {
+          return;
+        }
       }
-      const existingRetryTimer = failedSyncRetryTimersRef.current.get(nb.id);
+      const existingRetryTimer = failedSyncRetryTimersRef.current.get(nbToSave.id);
       if (existingRetryTimer !== undefined) {
         window.clearTimeout(existingRetryTimer);
-        failedSyncRetryTimersRef.current.delete(nb.id);
+        failedSyncRetryTimersRef.current.delete(nbToSave.id);
       }
-      const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
-      lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-      inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
+      const dataJson = effectiveExplicitJson ?? serializeNotebookForFirestore(nbToSave);
+      lastSyncedJsonMapRef.current.set(nbToSave.id, dataJson);
+      inFlightSavesMapRef.current.set(nbToSave.id, (inFlightSavesMapRef.current.get(nbToSave.id) || 0) + 1);
       setSyncStatus('syncing');
-      saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
+      saveNotebookToFirestoreChunked(uid, nbToSave, dataJson, deviceIdRef.current)
         .then((didWrite) => {
           if (didWrite) {
-            lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
-            if (nb.updatedAt) {
-              const curRem = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-              if (!curRem || nb.updatedAt >= curRem) {
-                remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+            lastSeenRemoteJsonMapRef.current.set(nbToSave.id, dataJson);
+            if (nbToSave.updatedAt) {
+              const curRem = remoteUpdatedAtMapRef.current.get(nbToSave.id) || '';
+              if (!curRem || nbToSave.updatedAt >= curRem) {
+                remoteUpdatedAtMapRef.current.set(nbToSave.id, nbToSave.updatedAt);
               }
             }
           } else {
             // Only clear if no newer write replaced this dataJson in the meantime
-            if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) {
-              lastSyncedJsonMapRef.current.delete(nb.id);
+            if (lastSyncedJsonMapRef.current.get(nbToSave.id) === dataJson) {
+              lastSyncedJsonMapRef.current.delete(nbToSave.id);
             }
           }
         })
@@ -5338,27 +5347,22 @@ export default function App() {
       setRenamingNotebookId(null);
       setRenamingNotebookContext(null);
       if (!trimmed) return;
-      let changed = false;
-      let updatedNb: Notebook | null = null;
-      const nowIso = new Date().toISOString();
-      userEditedInSessionRef.current.add(nbId);
-      setNotebooks((prev) =>
-        prev.map((nb) => {
-          if (nb.id !== nbId) return nb;
-          if (nb.title === trimmed) return nb;
-          changed = true;
-          updatedNb = { ...nb, title: trimmed, updatedAt: nowIso };
-          return updatedNb;
-        })
+      const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
+      if (!existingNb || existingNb.title === trimmed) return;
+      const nowIso = getMonotonicIsoTimestamp(
+        existingNb.updatedAt,
+        remoteUpdatedAtMapRef.current.get(nbId)
       );
-      if (changed) {
-        if (currentUser && updatedNb) {
-          pushNotebookToCloudTracked(currentUser.uid, updatedNb);
-        }
-        setIsDirty(true);
-        setSyncStatus('dirty');
-        showToast(`✏️ Μετονομάστηκε σε «${trimmed}»!`);
+      const updatedNb: Notebook = { ...existingNb, title: trimmed, updatedAt: nowIso };
+      userEditedInSessionRef.current.add(nbId);
+      saveUserEditedSessionIds(userEditedInSessionRef.current);
+      setNotebooks((prev) => prev.map((nb) => (nb.id === nbId ? updatedNb : nb)));
+      if (currentUser) {
+        pushNotebookToCloudTracked(currentUser.uid, updatedNb);
       }
+      setIsDirty(true);
+      setSyncStatus('dirty');
+      showToast(`✏️ Μετονομάστηκε σε «${trimmed}»!`);
     },
     [showToast, currentUser, pushNotebookToCloudTracked]
   );
@@ -5375,55 +5379,53 @@ export default function App() {
         .filter((t) => t.length >= 2);
       if (newTags.length === 0) return;
 
+      const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
+      if (!existingNb) return;
+      const existing = existingNb.tags || [];
+      const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
+      const merged = [...existing];
       let addedCount = 0;
-      let updatedNb: Notebook | null = null;
-      const nowIso = new Date().toISOString();
-      userEditedInSessionRef.current.add(nbId);
-      setNotebooks((prev) =>
-        prev.map((nb) => {
-          if (nb.id !== nbId) return nb;
-          const existing = nb.tags || [];
-          const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
-          const merged = [...existing];
-          for (const nt of newTags) {
-            const norm = normalizeGreekSearchText(nt);
-            if (norm && !existingNorm.has(norm)) {
-              existingNorm.add(norm);
-              merged.push(nt);
-              addedCount++;
-            }
-          }
-          if (merged.length === existing.length) return nb;
-          updatedNb = { ...nb, tags: merged, updatedAt: nowIso };
-          return updatedNb;
-        })
-      );
-      if (addedCount > 0) {
-        if (currentUser && updatedNb) {
-          pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+      for (const nt of newTags) {
+        const norm = normalizeGreekSearchText(nt);
+        if (norm && !existingNorm.has(norm)) {
+          existingNorm.add(norm);
+          merged.push(nt);
+          addedCount++;
         }
-        setIsDirty(true);
-        setSyncStatus('dirty');
-        showToast(`🏷️ Προστέθηκαν ${addedCount} tag(s) στη σημείωση!`);
       }
+      if (addedCount === 0) return;
+      const nowIso = getMonotonicIsoTimestamp(
+        existingNb.updatedAt,
+        remoteUpdatedAtMapRef.current.get(nbId)
+      );
+      const updatedNb: Notebook = { ...existingNb, tags: merged, updatedAt: nowIso };
+      userEditedInSessionRef.current.add(nbId);
+      saveUserEditedSessionIds(userEditedInSessionRef.current);
+      setNotebooks((prev) => prev.map((nb) => (nb.id === nbId ? updatedNb : nb)));
+      if (currentUser) {
+        pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+      }
+      setIsDirty(true);
+      setSyncStatus('dirty');
+      showToast(`🏷️ Προστέθηκαν ${addedCount} tag(s) στη σημείωση!`);
     },
     [showToast, currentUser, pushNotebookToCloudTracked]
   );
 
   const removeTagFromNotebook = useCallback(
     (nbId: string, tagToRemove: string) => {
-      let updatedNb: Notebook | null = null;
-      const nowIso = new Date().toISOString();
-      userEditedInSessionRef.current.add(nbId);
-      setNotebooks((prev) =>
-        prev.map((nb) => {
-          if (nb.id !== nbId) return nb;
-          const nextTags = (nb.tags || []).filter((t) => t !== tagToRemove);
-          updatedNb = { ...nb, tags: nextTags, updatedAt: nowIso };
-          return updatedNb;
-        })
+      const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
+      if (!existingNb) return;
+      const nextTags = (existingNb.tags || []).filter((t) => t !== tagToRemove);
+      const nowIso = getMonotonicIsoTimestamp(
+        existingNb.updatedAt,
+        remoteUpdatedAtMapRef.current.get(nbId)
       );
-      if (currentUser && updatedNb) {
+      const updatedNb: Notebook = { ...existingNb, tags: nextTags, updatedAt: nowIso };
+      userEditedInSessionRef.current.add(nbId);
+      saveUserEditedSessionIds(userEditedInSessionRef.current);
+      setNotebooks((prev) => prev.map((nb) => (nb.id === nbId ? updatedNb : nb)));
+      if (currentUser) {
         pushNotebookToCloudTracked(currentUser.uid, updatedNb);
       }
       setIsDirty(true);
@@ -5708,17 +5710,20 @@ export default function App() {
   const changeNotebookFolder = useCallback(
     (nbId: string, nextFolder: string) => {
       const cleanFolder = nextFolder.trim();
-      const nowIso = new Date().toISOString();
-      let updatedNb: Notebook | null = null;
-      userEditedInSessionRef.current.add(nbId);
-      setNotebooks((prev) =>
-        prev.map((nb) => {
-          if (nb.id !== nbId) return nb;
-          updatedNb = { ...nb, folder: cleanFolder, updatedAt: nowIso };
-          return updatedNb;
-        })
+      const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
+      if (!existingNb) {
+        setFolderPickerNbId(null);
+        return;
+      }
+      const nowIso = getMonotonicIsoTimestamp(
+        existingNb.updatedAt,
+        remoteUpdatedAtMapRef.current.get(nbId)
       );
-      if (currentUser && updatedNb) {
+      const updatedNb: Notebook = { ...existingNb, folder: cleanFolder, updatedAt: nowIso };
+      userEditedInSessionRef.current.add(nbId);
+      saveUserEditedSessionIds(userEditedInSessionRef.current);
+      setNotebooks((prev) => prev.map((nb) => (nb.id === nbId ? updatedNb : nb)));
+      if (currentUser) {
         pushNotebookToCloudTracked(currentUser.uid, updatedNb);
       }
       setFolderPickerNbId(null);
@@ -6305,8 +6310,15 @@ export default function App() {
               const parsed = JSON.parse(fullJson) as Notebook;
               if (parsed && parsed.id && Array.isArray(parsed.pages)) {
                 if (data.deleted === true || sessionDeletedNotebookIds.has(data.id)) {
-                  softDeletedList.push(parsed);
-                  remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+                  const delTs = data.updatedAt || parsed.updatedAt || '';
+                  if (delTs) {
+                    const prevRemTs = remoteUpdatedAtMapRef.current.get(data.id) || '';
+                    if (!prevRemTs || delTs > prevRemTs) {
+                      remoteUpdatedAtMapRef.current.set(data.id, delTs);
+                    }
+                  }
+                  softDeletedList.push(delTs ? { ...parsed, updatedAt: delTs } : parsed);
+                  remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: delTs });
                   return;
                 }
 
@@ -6349,6 +6361,12 @@ export default function App() {
           }
 
           if (data.deleted === true) {
+            if (typeof data.updatedAt === 'string' && data.updatedAt.length > 0) {
+              const prevRemTs = remoteUpdatedAtMapRef.current.get(data.id) || '';
+              if (!prevRemTs || data.updatedAt > prevRemTs) {
+                remoteUpdatedAtMapRef.current.set(data.id, data.updatedAt);
+              }
+            }
             // Empty dataJson with deleted:true means permanently purged from Recycle Bin on a device
             if (!data.dataJson || (typeof data.dataJson === 'string' && data.dataJson.trim().length === 0)) {
               purgedRemoteIds.add(data.id);
@@ -59445,9 +59463,13 @@ export default function App() {
 
               const toggleNotebookFavorite = (nb: Notebook) => {
                 const nextFav = !nb.favorite;
-                const nowIso = new Date().toISOString();
+                const nowIso = getMonotonicIsoTimestamp(
+                  nb.updatedAt,
+                  remoteUpdatedAtMapRef.current.get(nb.id)
+                );
                 const updatedNb: Notebook = { ...nb, favorite: nextFav, updatedAt: nowIso };
                 userEditedInSessionRef.current.add(nb.id);
+                saveUserEditedSessionIds(userEditedInSessionRef.current);
                 setNotebooks((prev) =>
                   prev.map((item) => (item.id === nb.id ? updatedNb : item))
                 );
@@ -60118,17 +60140,23 @@ export default function App() {
                               if (currentUser) {
                                 void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, []);
                                 for (const item of toPurge) {
-                                  void setDoc(
-                                    doc(db, 'users', currentUser.uid, 'notebooks', item.id),
-                                    {
-                                      id: item.id,
-                                      title: '',
-                                      updatedAt: new Date().toISOString(),
-                                      dataJson: '',
-                                      deleted: true,
-                                      deviceId: deviceIdRef.current,
-                                    }
+                                  const purgeIso = getMonotonicIsoTimestamp(
+                                    item.updatedAt,
+                                    remoteUpdatedAtMapRef.current.get(item.id)
                                   );
+                                  remoteUpdatedAtMapRef.current.set(item.id, purgeIso);
+                                  const nbDocRef = doc(db, 'users', currentUser.uid, 'notebooks', item.id);
+                                  void setDoc(nbDocRef, {
+                                    id: item.id,
+                                    title: '',
+                                    updatedAt: purgeIso,
+                                    dataJson: '',
+                                    deleted: true,
+                                    deviceId: deviceIdRef.current,
+                                  }).catch(() => {
+                                    // Clock-skew fallback: owner deleteDoc is always permitted by Firestore rules
+                                    void deleteDoc(nbDocRef).catch(() => {});
+                                  });
                                 }
                               }
                               showToast('🗑️ Ο Κάδος άδειασε οριστικά!');
@@ -60220,17 +60248,23 @@ export default function App() {
                                   saveUserEditedSessionIds(userEditedInSessionRef.current);
                                   if (currentUser) {
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
-                                    void setDoc(
-                                      doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
-                                      {
-                                        id: delNb.id,
-                                        title: '',
-                                        updatedAt: new Date().toISOString(),
-                                        dataJson: '',
-                                        deleted: true,
-                                        deviceId: deviceIdRef.current,
-                                      }
+                                    const purgeIso = getMonotonicIsoTimestamp(
+                                      delNb.updatedAt,
+                                      remoteUpdatedAtMapRef.current.get(delNb.id)
                                     );
+                                    remoteUpdatedAtMapRef.current.set(delNb.id, purgeIso);
+                                    const nbDocRef = doc(db, 'users', currentUser.uid, 'notebooks', delNb.id);
+                                    void setDoc(nbDocRef, {
+                                      id: delNb.id,
+                                      title: '',
+                                      updatedAt: purgeIso,
+                                      dataJson: '',
+                                      deleted: true,
+                                      deviceId: deviceIdRef.current,
+                                    }).catch(() => {
+                                      // Clock-skew fallback: owner deleteDoc is always permitted by Firestore rules
+                                      void deleteDoc(nbDocRef).catch(() => {});
+                                    });
                                   }
                                   setDeletedCloudNotebooks((prev) =>
                                     prev.filter((n) => n.id !== delNb.id)
