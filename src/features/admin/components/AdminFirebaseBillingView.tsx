@@ -232,55 +232,138 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb]">
-            <div className="text-[10.5px] font-bold text-slate-500">Σημερινό Κόστος</div>
-            <div className="text-base font-black text-emerald-700 mt-0.5">
-              {formatEur(todayRow?.exactCostEur || 0)}
+        {(() => {
+          const readsToday = todayRow?.fsReads || 0;
+          const readsPct = Math.min(100, (readsToday / Math.max(1, quotas.freeReadsPerDay)) * 100);
+          const writesToday = todayRow?.fsWrites || 0;
+          const writesPct = Math.min(100, (writesToday / Math.max(1, quotas.freeWritesPerDay)) * 100);
+          const fnMonth = currentMonthRow?.fnCalls || 0;
+          const fnPct = Math.min(100, (fnMonth / Math.max(1, quotas.freeFunctionsPerMonth)) * 100);
+          const monthCost = currentMonthRow?.exactCostEur || 0;
+          const budgetLimit = Math.max(1, quotas.budgetAlertEur || 5);
+          const costPct = Math.min(100, (monthCost / budgetLimit) * 100);
+
+          const barColor = (pct: number) =>
+            pct >= 90 ? 'bg-rose-600' : pct >= 70 ? 'bg-amber-500' : 'bg-[#1b2a4a]';
+          const badgeClass = (pct: number) =>
+            pct >= 90
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : pct >= 70
+              ? 'bg-amber-50 text-amber-700 border-amber-200'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          const fmtPct = (pct: number) =>
+            pct > 0 && pct < 0.1 ? '<0,1%' : `${Math.round(pct)}%`;
+
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb] flex flex-col justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10.5px] font-bold text-slate-500">Σημερινό Κόστος</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-extrabold border tabular-nums ${badgeClass(costPct)}`}>
+                    {fmtPct(costPct)}
+                  </span>
+                </div>
+                <div className="text-base font-black text-emerald-700 tabular-nums">
+                  {formatEur(todayRow?.exactCostEur || 0)}
+                </div>
+                <div className="space-y-1">
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(monthCost > 0 ? 3 : 0, costPct)}%` }}
+                      className={`h-full rounded-full transition-all ${costPct >= 90 ? 'bg-rose-600' : costPct >= 70 ? 'bg-amber-500' : 'bg-emerald-600'}`}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 tabular-nums">
+                    Μήνας: {formatEur(monthCost)} / {budgetLimit} €
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb] flex flex-col justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10.5px] font-bold text-slate-500">Reads Σήμερα</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-extrabold border tabular-nums ${badgeClass(readsPct)}`}>
+                    {fmtPct(readsPct)}
+                  </span>
+                </div>
+                <div className="text-base font-black text-[#1b2a4a] tabular-nums">
+                  {readsToday.toLocaleString('el-GR')}
+                </div>
+                <div className="space-y-1">
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(readsToday > 0 ? 2 : 0, readsPct)}%` }}
+                      className={`h-full rounded-full transition-all ${barColor(readsPct)}`}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 tabular-nums">
+                    {readsToday.toLocaleString('el-GR')} / {quotas.freeReadsPerDay.toLocaleString('el-GR')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb] flex flex-col justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10.5px] font-bold text-slate-500">Writes Σήμερα</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-extrabold border tabular-nums ${badgeClass(writesPct)}`}>
+                    {fmtPct(writesPct)}
+                  </span>
+                </div>
+                <div className="text-base font-black text-[#1b2a4a] tabular-nums">
+                  {writesToday.toLocaleString('el-GR')}
+                </div>
+                <div className="space-y-1">
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(writesToday > 0 ? 2 : 0, writesPct)}%` }}
+                      className={`h-full rounded-full transition-all ${barColor(writesPct)}`}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 tabular-nums">
+                    {writesToday.toLocaleString('el-GR')} / {quotas.freeWritesPerDay.toLocaleString('el-GR')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb] flex flex-col justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10.5px] font-bold text-slate-500">Functions (Μήνας)</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-extrabold border tabular-nums ${badgeClass(fnPct)}`}>
+                    {fmtPct(fnPct)}
+                  </span>
+                </div>
+                <div className="text-base font-black text-[#1b2a4a] tabular-nums">
+                  {fnMonth.toLocaleString('el-GR')}
+                </div>
+                <div className="space-y-1">
+                  <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(fnMonth > 0 ? 2 : 0, fnPct)}%` }}
+                      className={`h-full rounded-full transition-all ${barColor(fnPct)}`}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 tabular-nums">
+                    {fnMonth.toLocaleString('el-GR')} / {quotas.freeFunctionsPerMonth.toLocaleString('el-GR')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb] flex flex-col justify-between gap-1.5">
+                <div className="text-[10.5px] font-bold text-slate-500">Αθόρυβο Drive Sync</div>
+                <div
+                  className={`text-xs font-extrabold ${
+                    usage?.driveOfflineStatus?.linked ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
+                >
+                  {usage?.driveOfflineStatus?.linked ? '🟢 Μόνιμα Ενεργό' : '🟡 Εκκρεμεί 1 κλικ'}
+                </div>
+                <div className="text-[10px] text-slate-400 truncate">
+                  {usage?.driveOfflineStatus?.email || 'Χωρίς λευκά παράθυρα'}
+                </div>
+              </div>
             </div>
-            <div className="text-[10px] text-slate-400">
-              Μήνας: {formatEur(currentMonthRow?.exactCostEur || 0)}
-            </div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb]">
-            <div className="text-[10.5px] font-bold text-slate-500">Reads Σήμερα</div>
-            <div className="text-base font-black text-[#1b2a4a] mt-0.5">
-              {(todayRow?.fsReads || 0).toLocaleString('el-GR')}
-            </div>
-            <div className="text-[10px] text-slate-400">
-              Δωρεάν: {quotas.freeReadsPerDay.toLocaleString('el-GR')}/ημ
-            </div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb]">
-            <div className="text-[10.5px] font-bold text-slate-500">Writes Σήμερα</div>
-            <div className="text-base font-black text-[#1b2a4a] mt-0.5">
-              {(todayRow?.fsWrites || 0).toLocaleString('el-GR')}
-            </div>
-            <div className="text-[10px] text-slate-400">
-              Δωρεάν: {quotas.freeWritesPerDay.toLocaleString('el-GR')}/ημ
-            </div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb]">
-            <div className="text-[10.5px] font-bold text-slate-500">Functions (Μήνας)</div>
-            <div className="text-base font-black text-[#1b2a4a] mt-0.5">
-              {(currentMonthRow?.fnCalls || 0).toLocaleString('el-GR')}
-            </div>
-            <div className="text-[10px] text-slate-400">Δωρεάν: 2.000.000/μήνα</div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white border border-[#dfd8cb]">
-            <div className="text-[10.5px] font-bold text-slate-500">Αθόρυβο Drive Sync</div>
-            <div
-              className={`text-xs font-extrabold mt-1 ${
-                usage?.driveOfflineStatus?.linked ? 'text-emerald-700' : 'text-amber-700'
-              }`}
-            >
-              {usage?.driveOfflineStatus?.linked ? '🟢 Μόνιμα Ενεργό' : '🟡 Εκκρεμεί 1 κλικ'}
-            </div>
-            <div className="text-[10px] text-slate-400 truncate">
-              {usage?.driveOfflineStatus?.email || 'Χωρίς λευκά παράθυρα'}
-            </div>
-          </div>
-        </div>
+          );
+        })()}
       </div>
     );
   }
