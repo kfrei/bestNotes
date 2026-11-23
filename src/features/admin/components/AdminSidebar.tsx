@@ -50,7 +50,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
     {
       id: 'traffic',
-      label: 'Κίνηση & Επισκέπτες',
+      label: 'Κίνηση',
       icon: <TrendingUp className="w-5 h-5" />,
     },
     {
