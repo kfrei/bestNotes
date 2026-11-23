@@ -5242,21 +5242,18 @@ function getMistralVisionApiKey(): string {
 function getPrioritizedVisionModels(baseModels?: string[]): string[] {
   const now = Date.now();
   const defaults = baseModels ?? [
+    'gemini-4-hydrogen',
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
     'gemini-3-flash-preview',
-    'gemini-robotics-er-2-preview',
-    'gemini-flash-latest',
-    'groq:qwen/qwen3.8-27b',
-    'mistral:ministral-14b-latest',
-    'mistral:ministral-8b-latest',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
-    'gemini-flash-lite-latest',
+    'gemini-2.5-flash',
   ];
   const all = Array.from(
     new Set([
       ...(cachedWorkingVisionModel &&
-      !cachedWorkingVisionModel.startsWith('groq:') &&
-      !cachedWorkingVisionModel.startsWith('mistral:')
+      defaults.includes(cachedWorkingVisionModel)
         ? [cachedWorkingVisionModel]
         : []),
       ...defaults,
@@ -5273,21 +5270,26 @@ function getPrioritizedVisionModels(baseModels?: string[]): string[] {
       active.push(m);
     }
   }
-  // Only try active (non-429) models first; if all are marked exhausted, fall back to Groq + Mistral + Gemini Lite
+  // Only try active (non-429) Gemini models first; if all are marked exhausted, retry the high-RPD Gemini Flash Lite models
   if (active.length > 0) {
     return active;
   }
   currentCallSaw429 = true;
   return [
-    'groq:qwen/qwen3.8-27b',
-    'mistral:ministral-14b-latest',
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
-    'gemini-flash-lite-latest',
+    'gemini-4-hydrogen',
+    'gemini-3.8-flash',
   ];
 }
 
 function buildVisionGenerationConfig(cleanModelName: string): Record<string, any> {
+  if (cleanModelName.startsWith('gemini-4')) {
+    return {
+      responseMimeType: 'application/json',
+      thinkingConfig: { thinkingLevel: 'low' },
+    };
+  }
   const isLite = cleanModelName.includes('lite');
   if (isLite) {
     return {
@@ -15787,11 +15789,14 @@ IMPORTANT RULES FOR "effects":
     },
   ];
 
-  // Put gemini-3.5-flash-lite FIRST: it responds in ~2.3s with 200 OK and uses only 1 request (preserving Free Tier RPM quota!)
+  // Pure Gemini chain: fast high-RPD Flash Lite + Gemini 4 Hydrogen & 3.8/3.6 Flash fallbacks
   const candidateModels = [
-    'gemini-3.5-flash-lite',
-    'gemini-3-flash-preview',
+    'gemini-4-hydrogen',
     'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-3.6-flash',
+    'gemini-3-flash-preview',
   ];
 
   for (const key of apiKeys) {
