@@ -2493,9 +2493,7 @@ export default function App() {
   // Layers, Shape Library, Simulation & Selection
   const [activeLayerId, setActiveLayerId] = useState<string>(() => initialSession?.activeLayerId || 'layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(() => Boolean(initialSession?.showLayersPanel));
-  const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(() =>
-    Boolean(initialSession?.showSimulationPanel)
-  );
+  const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(false);
   const [simActiveCategory, setSimActiveCategory] = useState<
     'circuits' | 'springs' | 'forces' | 'atoms' | 'heat' | 'gravity' | null
   >(() => {
@@ -5110,6 +5108,31 @@ export default function App() {
     if (!showSimulationPanel) return;
     syncSimCategoryToPage(activePage);
   }, [showSimulationPanel, activePage.id, syncSimCategoryToPage]);
+
+  // Master Simulation Auto-Freeze:
+  // Simulations ALWAYS start paused and ONLY run live while on the active editor page with Sim panel (or Live PDF) open.
+  // Closing Sim, leaving editor, or switching notebook/page immediately freezes every simulation (0% CPU / 0 RAF).
+  useEffect(() => {
+    if (viewMode !== 'editor' || (!showSimulationPanel && !isLivePdfMode)) {
+      setIsSimulating(false);
+      setIsSpringPaused(true);
+      setIsSpringSimulating(false);
+      setIsGravityRunning(false);
+      setHeatStopwatchRunning(false);
+      heatSimLiveRef.current?.pauseHeatingAndSim?.();
+      markSimLoopStopped();
+    }
+  }, [viewMode, showSimulationPanel, isLivePdfMode]);
+
+  useEffect(() => {
+    setIsSimulating(false);
+    setIsSpringPaused(true);
+    setIsSpringSimulating(false);
+    setIsGravityRunning(false);
+    setHeatStopwatchRunning(false);
+    heatSimLiveRef.current?.pauseHeatingAndSim?.();
+    markSimLoopStopped();
+  }, [activeNotebook.id, activePage.id]);
 
   // On-demand PDF page renderer tick & resolver (so 170-page PDFs stay at their exact 13.1 MB native size!)
   const [, setPdfPageRenderTick] = useState<number>(0);
@@ -37863,22 +37886,25 @@ export default function App() {
       }
 
       ctx.restore();
+      const isSimInteractionLive =
+        viewMode === 'editor' && (showSimulationPanel || isLivePdfMode);
       const willContinueSimRaf = Boolean(
-        anyCircuitActivelyFlowing ||
-        (isSpringSimulating && !isSpringPaused) ||
-        hasProposal ||
-        springSettleAnim !== null ||
-        springPhaseShiftAnim !== null ||
-        hookeLineAnim !== null ||
-        forceSimAnim !== null ||
-        forceSimAnimRef.current !== null ||
-        anyAtomRotating ||
-        draggingAtomHandleRef.current !== null ||
-        atomReactionAnim !== null ||
-        atomReactionAnimRef.current !== null ||
-        (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
-        isSharedHeatVisuallyActive ||
-        (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
+        (isSimInteractionLive &&
+          (anyCircuitActivelyFlowing ||
+            (isSpringSimulating && !isSpringPaused) ||
+            hasProposal ||
+            springSettleAnim !== null ||
+            springPhaseShiftAnim !== null ||
+            hookeLineAnim !== null ||
+            forceSimAnim !== null ||
+            forceSimAnimRef.current !== null ||
+            anyAtomRotating ||
+            draggingAtomHandleRef.current !== null ||
+            atomReactionAnim !== null ||
+            atomReactionAnimRef.current !== null ||
+            (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
+            isSharedHeatVisuallyActive)) ||
+          (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       );
       if (willContinueSimRaf) {
         const activeLabels: string[] = [];
