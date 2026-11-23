@@ -61888,14 +61888,8 @@ export default function App() {
                                     ) : (
                                       <div className="mt-1 -mr-1.5 flex items-center gap-1.5">
                                         {isShowcaseRoot && (
-                                          <span
-                                            className={`px-2 py-0.5 rounded-full text-[9.5px] font-extrabold tracking-wide border shadow-2xs backdrop-blur-xs ${
-                                              isAdminUser
-                                                ? 'bg-amber-50/95 text-amber-800 border-amber-300/90'
-                                                : 'bg-sky-50/95 text-[#234978] border-sky-200/90'
-                                            }`}
-                                          >
-                                            {isAdminUser ? 'Demo • Δημόσιο' : 'Demo • Δοκιμή'}
+                                          <span className="text-[10px] font-bold tracking-wide text-slate-700/75 whitespace-nowrap">
+                                            Δημόσιο
                                           </span>
                                         )}
                                         {!isLockedShowcaseFolder && (
@@ -62845,14 +62839,8 @@ export default function App() {
                                     {folder.name}
                                   </p>
                                   {isShowcaseRoot && (
-                                    <span
-                                      className={`shrink-0 px-2 py-0.5 rounded-full text-[9.5px] font-extrabold tracking-wide border ${
-                                        isAdminUser
-                                          ? 'bg-amber-50 text-amber-800 border-amber-300/90'
-                                          : 'bg-sky-50 text-[#234978] border-sky-200/90'
-                                      }`}
-                                    >
-                                      {isAdminUser ? 'Demo • Δημόσιο' : 'Demo • Δοκιμή'}
+                                    <span className="shrink-0 text-[10px] font-bold tracking-wide text-slate-600/80 whitespace-nowrap">
+                                      Δημόσιο
                                     </span>
                                   )}
                                 </div>
