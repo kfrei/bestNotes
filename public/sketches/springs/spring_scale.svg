@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="512" height="512">
+  <defs>
+    <linearGradient id="scaleBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a5744a" stop-opacity="0.55"/>
+      <stop offset="35%" stop-color="#f3e2cf" stop-opacity="0.75"/>
+      <stop offset="78%" stop-color="#b5835a" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#6b3c1d" stop-opacity="0.7"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#5a3015" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Top weighing pan -->
+    <path d="M 46 44 Q 120 62, 194 44 L 186 58 Q 120 74, 54 58 Z" fill="url(#scaleBody)" stroke-width="2.8"/>
+    <ellipse cx="120" cy="44" rx="74" ry="8" fill="#f5e6d6" fill-opacity="0.65" stroke-width="2.4"/>
+
+    <!-- Pan support stem -->
+    <rect x="111" y="62" width="18" height="24" fill="#d7b18e" fill-opacity="0.65" stroke-width="2.4"/>
+
+    <!-- Main scale housing (trapezoidal vintage kitchen/lab scale) -->
+    <path d="M 64 86 L 176 86 L 194 206 C 194 212, 188 216, 182 216 L 58 216 C 52 216, 46 212, 46 206 Z" fill="url(#scaleBody)" stroke-width="3"/>
+    <!-- Base feet -->
+    <rect x="54" y="216" width="22" height="7" rx="3" fill="#6b3c1d" fill-opacity="0.7" stroke-width="2"/>
+    <rect x="164" y="216" width="22" height="7" rx="3" fill="#6b3c1d" fill-opacity="0.7" stroke-width="2"/>
+
+    <!-- Engraving hatching on housing sides -->
+    <g stroke="#5a3015" stroke-width="1" stroke-opacity="0.35">
+      <line x1="69" y1="96" x2="55" y2="202"/>
+      <line x1="74" y1="96" x2="61" y2="202"/>
+      <line x1="171" y1="96" x2="185" y2="202"/>
+      <line x1="166" y1="96" x2="179" y2="202"/>
+    </g>
+
+    <!-- Cutaway circular dial showing internal spring + gauge -->
+    <circle cx="120" cy="148" r="46" fill="#fffaf4" fill-opacity="0.92" stroke-width="3"/>
+    <circle cx="120" cy="148" r="40" stroke="#7c4824" stroke-width="1.2" stroke-dasharray="2 3"/>
+
+    <!-- Dial tick marks -->
+    <g stroke="#5a3015" stroke-width="1.8">
+      <line x1="120" y1="106" x2="120" y2="114"/>
+      <line x1="162" y1="148" x2="154" y2="148"/>
+      <line x1="78" y1="148" x2="86" y2="148"/>
+      <line x1="120" y1="190" x2="120" y2="182"/>
+      <line x1="150" y1="118" x2="144" y2="124"/>
+      <line x1="90" y1="118" x2="96" y2="124"/>
+      <line x1="150" y1="178" x2="144" y2="172"/>
+      <line x1="90" y1="178" x2="96" y2="172"/>
+    </g>
+
+    <!-- Visible cutaway spring behind the dial -->
+    <path d="M 113 118 C 113 115, 127 115, 127 119 C 127 123, 113 122, 113 126 C 113 130, 127 129, 127 133 C 127 137, 113 136, 113 140 C 113 144, 127 143, 127 147 C 127 151, 113 150, 113 154 C 113 158, 127 157, 127 161 C 127 165, 113 164, 113 168" stroke="#9c663b" stroke-width="2.2" stroke-opacity="0.72"/>
+
+    <!-- Gauge needle pointing to ~2.5 kg -->
+    <line x1="120" y1="148" x2="146" y2="124" stroke="#4a2510" stroke-width="3"/>
+    <circle cx="120" cy="148" r="5" fill="#5a3015" stroke="#fffaf4" stroke-width="1.4"/>
+    <text x="120" y="177" text-anchor="middle" font-family="Georgia, serif" font-size="11" font-weight="700" fill="#5a3015" stroke="none">kg</text>
+  </g>
+</svg>

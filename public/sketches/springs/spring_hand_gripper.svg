@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="512" height="512">
+  <defs>
+    <linearGradient id="gripHandle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6b3c1d" stop-opacity="0.82"/>
+      <stop offset="35%" stop-color="#c99e77" stop-opacity="0.72"/>
+      <stop offset="75%" stop-color="#7c4824" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#4a2510" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#5a3015" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Top torsion coil spring (3 concentric engraved loops) -->
+    <circle cx="120" cy="54" r="28" stroke="#4a2510" stroke-width="8.5"/>
+    <circle cx="120" cy="54" r="28" stroke="#e7ccb2" stroke-width="2.6"/>
+    <circle cx="120" cy="54" r="21" stroke="#5a3015" stroke-width="6.5"/>
+    <circle cx="120" cy="54" r="21" stroke="#d7b18e" stroke-width="2"/>
+    <circle cx="120" cy="54" r="13" fill="#fffaf4" fill-opacity="0.85" stroke="#5a3015" stroke-width="2.4"/>
+
+    <!-- Spring arms extending down into handles -->
+    <line x1="97" y1="69" x2="82" y2="104" stroke="#4a2510" stroke-width="7"/>
+    <line x1="97" y1="69" x2="82" y2="104" stroke="#e7ccb2" stroke-width="2"/>
+    <line x1="143" y1="69" x2="158" y2="104" stroke="#4a2510" stroke-width="7"/>
+    <line x1="143" y1="69" x2="158" y2="104" stroke="#e7ccb2" stroke-width="2"/>
+
+    <!-- Left knurled handle -->
+    <g transform="rotate(20 68 156)">
+      <rect x="52" y="100" width="32" height="114" rx="10" fill="url(#gripHandle)" stroke="#4a2510" stroke-width="2.8"/>
+      <!-- Knurling diamond cross-hatching -->
+      <g stroke="#fffaf4" stroke-width="1" stroke-opacity="0.45">
+        <line x1="56" y1="115" x2="80" y2="132"/>
+        <line x1="56" y1="130" x2="80" y2="147"/>
+        <line x1="56" y1="145" x2="80" y2="162"/>
+        <line x1="56" y1="160" x2="80" y2="177"/>
+        <line x1="56" y1="175" x2="80" y2="192"/>
+        <line x1="80" y1="115" x2="56" y2="132"/>
+        <line x1="80" y1="130" x2="56" y2="147"/>
+        <line x1="80" y1="145" x2="56" y2="162"/>
+        <line x1="80" y1="160" x2="56" y2="177"/>
+        <line x1="80" y1="175" x2="56" y2="192"/>
+      </g>
+    </g>
+
+    <!-- Right knurled handle -->
+    <g transform="rotate(-20 172 156)">
+      <rect x="156" y="100" width="32" height="114" rx="10" fill="url(#gripHandle)" stroke="#4a2510" stroke-width="2.8"/>
+      <g stroke="#fffaf4" stroke-width="1" stroke-opacity="0.45">
+        <line x1="160" y1="115" x2="184" y2="132"/>
+        <line x1="160" y1="130" x2="184" y2="147"/>
+        <line x1="160" y1="145" x2="184" y2="162"/>
+        <line x1="160" y1="160" x2="184" y2="177"/>
+        <line x1="160" y1="175" x2="184" y2="192"/>
+        <line x1="184" y1="115" x2="160" y2="132"/>
+        <line x1="184" y1="130" x2="160" y2="147"/>
+        <line x1="184" y1="145" x2="160" y2="162"/>
+        <line x1="184" y1="160" x2="160" y2="177"/>
+        <line x1="184" y1="175" x2="160" y2="192"/>
+      </g>
+    </g>
+
+    <!-- Squeeze direction arrows between handles -->
+    <path d="M 96 168 L 112 168" stroke="#7c4824" stroke-width="2.2"/>
+    <polyline points="107,163 112,168 107,173" stroke="#7c4824" stroke-width="2.2"/>
+    <path d="M 144 168 L 128 168" stroke="#7c4824" stroke-width="2.2"/>
+    <polyline points="133,163 128,168 133,173" stroke="#7c4824" stroke-width="2.2"/>
+  </g>
+</svg>

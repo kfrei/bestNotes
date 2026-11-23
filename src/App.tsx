@@ -2954,7 +2954,7 @@ export default function App() {
     () => initialSession?.stickerCategoryFilter || 'Όλα'
   );
   const [sketchSubFilter, setSketchSubFilter] = useState<
-    'all' | 'scientists' | 'physics' | 'nature'
+    'all' | 'scientists' | 'physics' | 'springs' | 'nature'
   >('all');
   const [libVisibleCount, setLibVisibleCount] = useState<number>(36);
   const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>(
@@ -66395,15 +66395,18 @@ export default function App() {
                       item.id.startsWith('sk-sun-solar-') ||
                       item.id.startsWith('sk-drought-') ||
                       item.id.startsWith('sk-volcano-');
+                    const isSpringAppSketch = (item: StickerCatalogItem) =>
+                      item.id.startsWith('sk-spring-');
                     const qNorm = normalizeGreekText(stickerSearchQuery.trim());
                     const filteredCurated = CURATED_STICKERS_CATALOG.filter((item) => {
                       if (isSketchesMode) {
                         if (item.category !== 'Μονόχρωμα Σκίτσα') return false;
                         if (sketchSubFilter === 'scientists' && !isScientistSketch(item)) return false;
                         if (sketchSubFilter === 'nature' && !isNatureSketch(item)) return false;
+                        if (sketchSubFilter === 'springs' && !isSpringAppSketch(item)) return false;
                         if (
                           sketchSubFilter === 'physics' &&
-                          (isScientistSketch(item) || isNatureSketch(item))
+                          (isScientistSketch(item) || isNatureSketch(item) || isSpringAppSketch(item))
                         ) {
                           return false;
                         }
@@ -66634,6 +66637,7 @@ export default function App() {
                                 [
                                   { id: 'all', label: 'Όλα' },
                                   { id: 'scientists', label: 'Φυσικοί & Επιστήμονες' },
+                                  { id: 'springs', label: 'Εφαρμογές Ελατηρίων' },
                                   { id: 'physics', label: 'Φυσική & Πειράματα' },
                                   { id: 'nature', label: 'Κύκλος Νερού & Γεωλογία' },
                                 ] as const

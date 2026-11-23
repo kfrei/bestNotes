@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="512" height="512">
+  <defs>
+    <linearGradient id="penBarrel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3e2cf" stop-opacity="0.8"/>
+      <stop offset="45%" stop-color="#c99e77" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#6b3c1d" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#5a3015" stroke-linecap="round" stroke-linejoin="round" fill="none" transform="rotate(-35 120 120)">
+    <!-- Click button at back -->
+    <rect x="206" y="109" width="20" height="22" rx="4" fill="#9c663b" fill-opacity="0.65" stroke-width="2.6"/>
+    <!-- Click spark lines -->
+    <g stroke="#7c4824" stroke-width="1.8">
+      <line x1="230" y1="112" x2="236" y2="106"/>
+      <line x1="232" y1="120" x2="238" y2="120"/>
+      <line x1="230" y1="128" x2="236" y2="134"/>
+    </g>
+
+    <!-- Rear barrel -->
+    <rect x="136" y="103" width="70" height="34" rx="4" fill="url(#penBarrel)" stroke-width="2.8"/>
+    <!-- Pocket clip -->
+    <path d="M 196 103 L 196 93 L 146 93 C 142 93, 142 98, 146 98 L 154 98" fill="#d7b18e" fill-opacity="0.55" stroke-width="2.4"/>
+    <!-- Engraving lines on rear barrel -->
+    <line x1="144" y1="129" x2="198" y2="129" stroke="#5a3015" stroke-width="1.1" stroke-opacity="0.45"/>
+    <line x1="144" y1="133" x2="198" y2="133" stroke="#5a3015" stroke-width="0.9" stroke-opacity="0.35"/>
+
+    <!-- Transparent cutaway section showing internal ink tube & return spring -->
+    <rect x="64" y="103" width="72" height="34" fill="#fffaf4" fill-opacity="0.88" stroke="#7c4824" stroke-width="2" stroke-dasharray="4 2.5"/>
+    <!-- Internal ink refill rod -->
+    <rect x="52" y="116" width="84" height="8" fill="#c99e77" fill-opacity="0.55" stroke="#5a3015" stroke-width="1.8"/>
+
+    <!-- Fine metallic compression spring around the refill rod -->
+    <path d="M 68 110 C 71 110, 71 130, 74 130 C 77 130, 77 110, 80 110 C 83 110, 83 130, 86 130 C 89 130, 89 110, 92 110 C 95 110, 95 130, 98 130 C 101 130, 101 110, 104 110 C 107 110, 107 130, 110 130 C 113 130, 113 110, 116 110 C 119 110, 119 130, 122 130" stroke="#4a2510" stroke-width="2.8"/>
+
+    <!-- Front cone tip & ballpoint nib -->
+    <path d="M 64 103 L 22 116 L 22 124 L 64 137 Z" fill="url(#penBarrel)" stroke-width="2.8"/>
+    <path d="M 22 117 L 10 120 L 22 123 Z" fill="#4a2510" stroke-width="2"/>
+    <circle cx="9" cy="120" r="2.2" fill="#4a2510" stroke="none"/>
+  </g>
+</svg>
