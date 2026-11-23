@@ -3227,13 +3227,7 @@ export default function App() {
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
   const liveTvSenderRef = useRef<LiveTvSenderEngine | null>(null);
   const liveTvReceiverRef = useRef<LiveTvReceiverEngine | null>(null);
-  const [isLiveTvBroadcasting, setIsLiveTvBroadcasting] = useState<boolean>(() => {
-    try {
-      return window.sessionStorage.getItem('bn-live-tv-broadcasting') === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [isLiveTvBroadcasting, setIsLiveTvBroadcasting] = useState<boolean>(false);
   const [showLiveTvMenu, setShowLiveTvMenu] = useState<boolean>(false);
   const [liveTvStatus, setLiveTvStatus] = useState<{
     connected: boolean;
@@ -59545,11 +59539,6 @@ export default function App() {
                       return;
                     }
                     if (!isLiveTvBroadcasting) {
-                      try {
-                        window.sessionStorage.setItem('bn-live-tv-broadcasting', '1');
-                      } catch {
-                        // ignore
-                      }
                       setIsLiveTvBroadcasting(true);
                       setShowLiveTvMenu(true);
                       showToast(
