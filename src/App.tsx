@@ -57943,6 +57943,7 @@ export default function App() {
     try {
       const importedNb = await importGoodnotesFile(file);
       userEditedInSessionRef.current.add(importedNb.id);
+      trackFileCreation(currentUser);
       setNotebooks((prev) => [importedNb, ...prev]);
       setOpenNotebookIds((prev) => (prev.includes(importedNb.id) ? prev : [...prev, importedNb.id]));
       setActiveNotebookId(importedNb.id);
@@ -59861,6 +59862,7 @@ export default function App() {
                   });
                 }
                 userEditedInSessionRef.current.add(newId);
+                trackFileCreation(currentUser);
                 setNotebooks((prev) => {
                   const idx = prev.findIndex((item) => item.id === nb.id);
                   if (idx === -1) return [newNb, ...prev];
@@ -60451,6 +60453,7 @@ export default function App() {
                             ],
                           };
                           userEditedInSessionRef.current.add(newNb.id);
+                          trackFileCreation(currentUser);
                           recordNotebookOpened(newNb.id);
                           setNotebooks((prev) => [newNb, ...prev]);
                           setOpenNotebookIds((prev) => [...prev, newNb.id]);
