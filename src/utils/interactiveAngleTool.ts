@@ -379,11 +379,14 @@ export function computeSnappedAngleArmPosition(
     };
   }
 
+  // Always step in exact integer degrees (1°..180°)
+  const intDeg = Math.max(1, Math.min(180, Math.round(absDeg)));
+  const intAng = fixedAng + sign * ((intDeg * Math.PI) / 180);
   return {
-    x: vertex.x + dist * Math.cos(rawAng),
-    y: vertex.y + dist * Math.sin(rawAng),
+    x: vertex.x + dist * Math.cos(intAng),
+    y: vertex.y + dist * Math.sin(intAng),
     snappedDeg: null,
-    deg: absDeg,
+    deg: intDeg,
   };
 }
 
@@ -543,8 +546,7 @@ export function drawInteractiveAngleOverlay(
   const ly = vertex.y + labelDist * Math.sin(midAngle);
 
   const rounded = Math.round(deg);
-  const labelText =
-    Math.abs(deg - rounded) < 0.15 ? `${rounded}°` : `${deg.toFixed(1)}°`;
+  const labelText = `${rounded}°`;
 
   ctx.font = `${isSnapped ? '700' : '600'} 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   ctx.textAlign = 'center';
