@@ -51,9 +51,7 @@ const CLOSED_POLY_SHAPE_TYPES = new Set([
 ]);
 
 const PRIMARY_SNAP_ANGLES = [30, 45, 60, 90, 120];
-const SECONDARY_SNAP_ANGLES = [135, 150, 180];
-const PRIMARY_SNAP_TOL_DEG = 3.5;
-const SECONDARY_SNAP_TOL_DEG = 2.4;
+const PRIMARY_SNAP_TOL_DEG = 0.85;
 
 function normalizeSignedAngle(rad: number): number {
   let d = rad;
@@ -357,15 +355,6 @@ export function computeSnappedAngleArmPosition(
     if (delta <= PRIMARY_SNAP_TOL_DEG && delta < bestDelta) {
       bestDelta = delta;
       snappedDeg = target;
-    }
-  }
-  if (snappedDeg === null) {
-    for (const target of SECONDARY_SNAP_ANGLES) {
-      const delta = Math.abs(absDeg - target);
-      if (delta <= SECONDARY_SNAP_TOL_DEG && delta < bestDelta) {
-        bestDelta = delta;
-        snappedDeg = target;
-      }
     }
   }
 
