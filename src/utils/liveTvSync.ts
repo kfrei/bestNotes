@@ -176,6 +176,7 @@ export class LiveTvSenderEngine {
   }) => void;
 
   private latencyMs: number | null = null;
+  private isDestroyed = false;
 
   constructor(
     roomId: string,
@@ -336,6 +337,22 @@ export class LiveTvSenderEngine {
     this.stateDc = stateDc;
 
     const onChannelOpen = () => {
+      // Cancel pending Cloud fallback timers ONLY for channels that are actually open (0 Firestore writes!)
+      if (fastDc.readyState === 'open' && this.pendingVpFirestoreTimer !== null) {
+        window.clearTimeout(this.pendingVpFirestoreTimer);
+        this.pendingVpFirestoreTimer = null;
+      }
+      if (
+        (fastDc.readyState === 'open' || stateDc.readyState === 'open') &&
+        this.pendingInkFirestoreTimer !== null
+      ) {
+        window.clearTimeout(this.pendingInkFirestoreTimer);
+        this.pendingInkFirestoreTimer = null;
+      }
+      if (stateDc.readyState === 'open' && this.pendingPagesFirestoreTimer !== null) {
+        window.clearTimeout(this.pendingPagesFirestoreTimer);
+        this.pendingPagesFirestoreTimer = null;
+      }
       this.emitStatus();
       // Immediately push current viewport, sim state, and full pages over WebRTC!
       if (this.latestVpPacket && fastDc.readyState === 'open') {
@@ -349,10 +366,44 @@ export class LiveTvSenderEngine {
       }
     };
 
+    let didFlushCloseFallback = false;
+    const onChannelClose = () => {
+      this.emitStatus();
+      // If WebRTC drops mid-lesson while still broadcasting, push one catch-up snapshot to Firestore
+      // so the Receiver's Cloud fallback immediately reflects the latest page/viewport/sim state.
+      if (
+        !didFlushCloseFallback &&
+        !this.isDestroyed &&
+        Boolean(this.currentReceiverId) &&
+        this.fastDc === fastDc &&
+        this.stateDc === stateDc &&
+        fastDc.readyState !== 'open' &&
+        stateDc.readyState !== 'open'
+      ) {
+        didFlushCloseFallback = true;
+        const payload: Record<string, string> = {
+          roomId: this.roomId,
+          updatedAt: new Date().toISOString(),
+        };
+        if (this.latestVpPacket) {
+          payload.viewportJson = JSON.stringify(this.latestVpPacket);
+        }
+        if (this.latestSimPacket) {
+          payload.simStateJson = JSON.stringify(this.latestSimPacket);
+        }
+        if (this.latestPagesPacket) {
+          payload.pageJson = buildFirestoreSafePagesJson(this.latestPagesPacket);
+        }
+        if (Object.keys(payload).length > 2) {
+          void setDoc(doc(db, 'live_rooms', this.roomId), payload, { merge: true }).catch(() => {});
+        }
+      }
+    };
+
     fastDc.onopen = onChannelOpen;
     stateDc.onopen = onChannelOpen;
-    fastDc.onclose = () => this.emitStatus();
-    stateDc.onclose = () => this.emitStatus();
+    fastDc.onclose = onChannelClose;
+    stateDc.onclose = onChannelClose;
 
     fastDc.onmessage = (ev) => {
       try {
@@ -423,14 +474,21 @@ export class LiveTvSenderEngine {
     };
     this.latestVpPacket = packet;
 
-    // 1. Instant 60fps WebRTC DataChannel send (< 10ms latency!)
+    // 1. Instant 60fps WebRTC DataChannel send (< 10ms latency, 0 Firestore writes!)
     const sentRtc =
       this.fastDc?.readyState === 'open' &&
       sendChunkedOverChannel(this.fastDc, JSON.stringify(packet));
+    if (sentRtc) {
+      if (this.pendingVpFirestoreTimer !== null) {
+        window.clearTimeout(this.pendingVpFirestoreTimer);
+        this.pendingVpFirestoreTimer = null;
+      }
+      return;
+    }
 
-    // 2. Firestore real-time stream (throttled to 75ms when on Cloud fallback, or 600ms heartbeat when on WebRTC)
+    // 2. Throttled Firestore fallback (300ms) ONLY when WebRTC P2P is NOT connected
     const now = performance.now();
-    const minInterval = sentRtc ? 600 : 75;
+    const minInterval = 300;
     const elapsed = now - this.lastVpFirestoreWriteMs;
     if (elapsed >= minInterval) {
       this.lastVpFirestoreWriteMs = now;
@@ -446,6 +504,7 @@ export class LiveTvSenderEngine {
     } else if (this.pendingVpFirestoreTimer === null) {
       this.pendingVpFirestoreTimer = window.setTimeout(() => {
         this.pendingVpFirestoreTimer = null;
+        if (this.fastDc?.readyState === 'open') return;
         this.lastVpFirestoreWriteMs = performance.now();
         if (this.latestVpPacket) {
           void setDoc(
@@ -470,50 +529,58 @@ export class LiveTvSenderEngine {
     };
     this.latestInkPacket = packet;
 
-    // 1. Instant 60fps WebRTC DataChannel send
+    // 1. Instant 60fps WebRTC DataChannel send (prefer reliable stateDc for stroke end; 0 Firestore writes!)
     const raw = JSON.stringify(packet);
-    const sentRtc =
-      (this.fastDc?.readyState === 'open' && sendChunkedOverChannel(this.fastDc, raw)) ||
-      (this.stateDc?.readyState === 'open' && sendChunkedOverChannel(this.stateDc, raw));
-
-    // 2. Firestore real-time stream when WebRTC is not open (or when ending stroke)
-    if (!sentRtc || !ink.active) {
-      const now = performance.now();
-      const minInterval = !ink.active ? 0 : 85;
-      const elapsed = now - this.lastInkFirestoreWriteMs;
-      if (elapsed >= minInterval) {
-        this.lastInkFirestoreWriteMs = now;
-        if (raw.length <= 90000) {
-          void setDoc(
-            doc(db, 'live_rooms', this.roomId),
-            {
-              roomId: this.roomId,
-              liveInkJson: raw,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          ).catch(() => {});
-        }
-      } else if (this.pendingInkFirestoreTimer === null) {
-        this.pendingInkFirestoreTimer = window.setTimeout(() => {
-          this.pendingInkFirestoreTimer = null;
-          this.lastInkFirestoreWriteMs = performance.now();
-          if (this.latestInkPacket) {
-            const latestRaw = JSON.stringify(this.latestInkPacket);
-            if (latestRaw.length <= 90000) {
-              void setDoc(
-                doc(db, 'live_rooms', this.roomId),
-                {
-                  roomId: this.roomId,
-                  liveInkJson: latestRaw,
-                  updatedAt: new Date().toISOString(),
-                },
-                { merge: true }
-              ).catch(() => {});
-            }
-          }
-        }, minInterval - elapsed);
+    const sentRtc = !ink.active
+      ? (this.stateDc?.readyState === 'open' && sendChunkedOverChannel(this.stateDc, raw)) ||
+        (this.fastDc?.readyState === 'open' && sendChunkedOverChannel(this.fastDc, raw))
+      : (this.fastDc?.readyState === 'open' && sendChunkedOverChannel(this.fastDc, raw)) ||
+        (this.stateDc?.readyState === 'open' && sendChunkedOverChannel(this.stateDc, raw));
+    if (sentRtc) {
+      if (this.pendingInkFirestoreTimer !== null) {
+        window.clearTimeout(this.pendingInkFirestoreTimer);
+        this.pendingInkFirestoreTimer = null;
       }
+      return;
+    }
+
+    // 2. Throttled Firestore fallback (280ms while drawing, 0ms on stroke end) ONLY when WebRTC is NOT connected
+    const now = performance.now();
+    const minInterval = !ink.active ? 0 : 280;
+    const elapsed = now - this.lastInkFirestoreWriteMs;
+    if (elapsed >= minInterval) {
+      this.lastInkFirestoreWriteMs = now;
+      if (raw.length <= 90000) {
+        void setDoc(
+          doc(db, 'live_rooms', this.roomId),
+          {
+            roomId: this.roomId,
+            liveInkJson: raw,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+    } else if (this.pendingInkFirestoreTimer === null) {
+      this.pendingInkFirestoreTimer = window.setTimeout(() => {
+        this.pendingInkFirestoreTimer = null;
+        if (this.fastDc?.readyState === 'open' || this.stateDc?.readyState === 'open') return;
+        this.lastInkFirestoreWriteMs = performance.now();
+        if (this.latestInkPacket) {
+          const latestRaw = JSON.stringify(this.latestInkPacket);
+          if (latestRaw.length <= 90000) {
+            void setDoc(
+              doc(db, 'live_rooms', this.roomId),
+              {
+                roomId: this.roomId,
+                liveInkJson: latestRaw,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            ).catch(() => {});
+          }
+        }
+      }, minInterval - elapsed);
     }
   }
 
@@ -525,20 +592,22 @@ export class LiveTvSenderEngine {
     };
     const raw = JSON.stringify(packet);
 
-    // 1. Instant <10ms WebRTC DataChannel send (both fastDc and stateDc for guaranteed + immediate delivery)
+    // 1. Instant <10ms WebRTC DataChannel send (both fastDc and stateDc for guaranteed + immediate delivery, 0 Firestore writes!)
     const sentFast =
       this.fastDc?.readyState === 'open' && sendChunkedOverChannel(this.fastDc, raw);
     const sentState =
       this.stateDc?.readyState === 'open' && sendChunkedOverChannel(this.stateDc, raw);
-    const sentRtc = Boolean(sentFast || sentState);
+    if (sentFast || sentState) {
+      return;
+    }
 
-    // 2. Cloud stream fallback (or immediate stroke removal sync via lightweight liveInkJson < 90KB)
+    // 2. Cloud stream fallback ONLY when WebRTC P2P is NOT connected
     const hasStrokeDiff =
       eraseData.removedIds.length > 0 ||
       Boolean(eraseData.addedStrokes && eraseData.addedStrokes.length > 0);
-    if ((!sentRtc || hasStrokeDiff) && raw.length <= 90000) {
+    if (raw.length <= 90000) {
       const now = performance.now();
-      const minInterval = hasStrokeDiff ? 0 : 75;
+      const minInterval = hasStrokeDiff ? 0 : 280;
       const elapsed = now - this.lastInkFirestoreWriteMs;
       if (elapsed >= minInterval) {
         this.lastInkFirestoreWriteMs = now;
@@ -563,10 +632,11 @@ export class LiveTvSenderEngine {
     };
     this.latestSimPacket = packet;
     const raw = JSON.stringify(packet);
-    if (this.stateDc?.readyState === 'open') {
-      sendChunkedOverChannel(this.stateDc, raw);
-    } else if (this.fastDc?.readyState === 'open') {
-      sendChunkedOverChannel(this.fastDc, raw);
+    const sentRtc =
+      (this.stateDc?.readyState === 'open' && sendChunkedOverChannel(this.stateDc, raw)) ||
+      (this.fastDc?.readyState === 'open' && sendChunkedOverChannel(this.fastDc, raw));
+    if (sentRtc) {
+      return;
     }
     void setDoc(
       doc(db, 'live_rooms', this.roomId),
@@ -589,9 +659,17 @@ export class LiveTvSenderEngine {
     const sentRtc =
       this.stateDc?.readyState === 'open' &&
       sendChunkedOverChannel(this.stateDc, JSON.stringify(packet));
+    if (sentRtc) {
+      if (this.pendingPagesFirestoreTimer !== null) {
+        window.clearTimeout(this.pendingPagesFirestoreTimer);
+        this.pendingPagesFirestoreTimer = null;
+      }
+      return;
+    }
 
+    // Throttled Firestore fallback (1500ms) ONLY when WebRTC P2P is NOT connected
     const now = performance.now();
-    const minInterval = sentRtc ? 800 : 300;
+    const minInterval = 1500;
     const elapsed = now - this.lastPagesFirestoreWriteMs;
     if (elapsed >= minInterval) {
       this.lastPagesFirestoreWriteMs = now;
@@ -608,6 +686,7 @@ export class LiveTvSenderEngine {
     } else if (this.pendingPagesFirestoreTimer === null) {
       this.pendingPagesFirestoreTimer = window.setTimeout(() => {
         this.pendingPagesFirestoreTimer = null;
+        if (this.stateDc?.readyState === 'open') return;
         this.lastPagesFirestoreWriteMs = performance.now();
         if (this.latestPagesPacket) {
           const safeFirestoreJson = buildFirestoreSafePagesJson(this.latestPagesPacket);
@@ -663,6 +742,7 @@ export class LiveTvSenderEngine {
   }
 
   public destroy() {
+    this.isDestroyed = true;
     if (this.pingTimer !== null) window.clearInterval(this.pingTimer);
     if (this.candidateFlushTimer !== null) window.clearTimeout(this.candidateFlushTimer);
     if (this.pendingVpFirestoreTimer !== null) window.clearTimeout(this.pendingVpFirestoreTimer);

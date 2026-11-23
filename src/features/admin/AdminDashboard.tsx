@@ -102,7 +102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadPlans = async () => {
     setIsPlansLoading(true);
     try {
-      const list = await fetchSubscriptionPlans();
+      const list = await fetchSubscriptionPlans(true);
       setPlans(list);
     } finally {
       setIsPlansLoading(false);
@@ -135,7 +135,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const [userList, trafficList, plansList] = await Promise.all([
         fetchAdminUsersList(currentUser, notebooks),
         fetchDailyTrafficHistory(),
-        fetchSubscriptionPlans(),
+        fetchSubscriptionPlans(true),
       ]);
       setUsers(userList);
       setPlans(plansList);

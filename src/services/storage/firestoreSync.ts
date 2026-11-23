@@ -21,6 +21,49 @@ import {
 export const sessionDeletedNotebookIds = new Set<string>();
 export const sessionRestoredNotebookIds = new Set<string>();
 
+// In-memory sync caches keyed by `${uid}::${nbId}` to eliminate per-save getDocFromServer reads
+// and avoid rewriting unchanged chunks on multi-chunk notebooks.
+const knownRemoteChunkCountMap = new Map<string, number>();
+const lastWrittenChunksMap = new Map<string, string[]>();
+
+function makeSyncCacheKey(uid: string, nbId: string): string {
+  return `${uid}::${nbId}`;
+}
+
+export function recordRemoteNotebookChunkCount(
+  uid: string,
+  nbId: string,
+  chunkCount: number
+): void {
+  knownRemoteChunkCountMap.set(makeSyncCacheKey(uid, nbId), Math.max(0, chunkCount));
+}
+
+export function clearNotebookWrittenChunksCache(uid: string, nbId?: string): void {
+  if (nbId) {
+    lastWrittenChunksMap.delete(makeSyncCacheKey(uid, nbId));
+    return;
+  }
+  const prefix = `${uid}::`;
+  for (const k of Array.from(lastWrittenChunksMap.keys())) {
+    if (k.startsWith(prefix)) lastWrittenChunksMap.delete(k);
+  }
+}
+
+export function clearAllNotebookSyncCaches(uid?: string): void {
+  if (!uid) {
+    knownRemoteChunkCountMap.clear();
+    lastWrittenChunksMap.clear();
+    return;
+  }
+  const prefix = `${uid}::`;
+  for (const k of Array.from(knownRemoteChunkCountMap.keys())) {
+    if (k.startsWith(prefix)) knownRemoteChunkCountMap.delete(k);
+  }
+  for (const k of Array.from(lastWrittenChunksMap.keys())) {
+    if (k.startsWith(prefix)) lastWrittenChunksMap.delete(k);
+  }
+}
+
 export function getMonotonicIsoTimestamp(...candidates: (string | undefined)[]): string {
   let maxMs = Date.now();
   for (const c of candidates) {
@@ -83,7 +126,8 @@ export async function saveNotebookToFirestoreChunked(
   uid: string,
   nb: Notebook,
   dataJson: string,
-  deviceId: string
+  deviceId: string,
+  options?: { skipServerPreRead?: boolean; knownPrevChunkCount?: number }
 ): Promise<boolean> {
   if (sessionDeletedNotebookIds.has(nb.id)) {
     return false;
@@ -91,45 +135,53 @@ export async function saveNotebookToFirestoreChunked(
   const updatedAt = nb.updatedAt || new Date().toISOString();
   const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
   const primaryRef = doc(db, 'users', uid, 'notebooks', nb.id);
-  let prevChunkCount = 0;
+  const cacheKey = makeSyncCacheKey(uid, nb.id);
+  const hasCachedChunkCount =
+    typeof options?.knownPrevChunkCount === 'number' || knownRemoteChunkCountMap.has(cacheKey);
+  let prevChunkCount =
+    typeof options?.knownPrevChunkCount === 'number'
+      ? Math.max(0, options.knownPrevChunkCount)
+      : knownRemoteChunkCountMap.get(cacheKey) ?? 0;
 
   // STRICT SERVER-SIDE TIMESTAMP & TOMBSTONE GUARD:
-  // Query live Firestore server before writing so a second device (e.g. second Mac mini or iPad opened later)
-  // can NEVER overwrite a newer Cloud document or resurrect a soft-deleted document!
-  try {
-    const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
-    if (sessionDeletedNotebookIds.has(nb.id)) {
-      return false;
-    }
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
-      if (existingData?.deleted === true && !sessionRestoredNotebookIds.has(nb.id)) {
-        console.warn(`[CloudSync] Blocked background resurrection of soft-deleted notebook ${nb.id}`);
+  // Only query live Firestore server before writing when the caller does NOT already have
+  // live onSnapshot state (skipServerPreRead !== true and chunk count unknown).
+  if (!options?.skipServerPreRead && !hasCachedChunkCount) {
+    try {
+      const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
+      if (sessionDeletedNotebookIds.has(nb.id)) {
         return false;
       }
-      const cloudUpdatedAt = typeof existingData?.updatedAt === 'string' ? existingData.updatedAt : '';
-      if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && !sessionRestoredNotebookIds.has(nb.id)) {
-        console.warn(
-          `[CloudSync] Blocked stale overwrite of ${nb.id} (local ${updatedAt} < cloud ${cloudUpdatedAt})`
-        );
-        return false;
-      }
-      if (
-        typeof existingData?.dataJson === 'string' &&
-        existingData.dataJson.startsWith('{"__chunked":true')
-      ) {
-        try {
-          const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
-          if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
-            prevChunkCount = oldManifest.chunkCount;
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data();
+        if (existingData?.deleted === true && !sessionRestoredNotebookIds.has(nb.id)) {
+          console.warn(`[CloudSync] Blocked background resurrection of soft-deleted notebook ${nb.id}`);
+          return false;
+        }
+        const cloudUpdatedAt = typeof existingData?.updatedAt === 'string' ? existingData.updatedAt : '';
+        if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && !sessionRestoredNotebookIds.has(nb.id)) {
+          console.warn(
+            `[CloudSync] Blocked stale overwrite of ${nb.id} (local ${updatedAt} < cloud ${cloudUpdatedAt})`
+          );
+          return false;
+        }
+        if (
+          typeof existingData?.dataJson === 'string' &&
+          existingData.dataJson.startsWith('{"__chunked":true')
+        ) {
+          try {
+            const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
+            if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
+              prevChunkCount = oldManifest.chunkCount;
+            }
+          } catch {
+            // ignore
           }
-        } catch {
-          // ignore
         }
       }
+    } catch {
+      // Offline or transient network error -> proceed
     }
-  } catch {
-    // Offline or transient network error -> proceed
   }
 
   const dataByteLen = getUtf8ByteLength(dataJson);
@@ -167,12 +219,15 @@ export async function saveNotebookToFirestoreChunked(
         { merge: true }
       );
     }
+    knownRemoteChunkCountMap.set(cacheKey, 0);
+    lastWrittenChunksMap.delete(cacheKey);
     return true;
   }
 
   // Multi-chunk storage for large notebooks (>750 KB UTF-8 bytes, e.g. Greek text or cropped high-res images)
   const chunks = splitStringByUtf8Bytes(dataJson, FIRESTORE_CHUNK_SIZE);
 
+  let manifestIncludesChunk0 = true;
   let manifestJson = JSON.stringify({
     __chunked: true,
     chunkCount: chunks.length,
@@ -182,6 +237,7 @@ export async function saveNotebookToFirestoreChunked(
   });
   // Guard against JSON escaping pushing manifestJson+chunk0 over Firestore's 1 MiB UTF-8 doc limit
   if (getUtf8ByteLength(manifestJson) > 900000) {
+    manifestIncludesChunk0 = false;
     manifestJson = JSON.stringify({
       __chunked: true,
       chunkCount: chunks.length,
@@ -190,10 +246,20 @@ export async function saveNotebookToFirestoreChunked(
     });
   }
 
-  // Commit all chunks (0..N-1) AND the primary manifest doc in a SINGLE atomic writeBatch whenever possible!
-  if (chunks.length <= 14) {
+  // When manifest already embeds chunk0, skip writing redundant __chunk_0 doc!
+  const chunkStartIdx = manifestIncludesChunk0 ? 1 : 0;
+  const prevWrittenChunks = lastWrittenChunksMap.get(cacheKey);
+  const changedChunkIndices: number[] = [];
+  for (let cIdx = chunkStartIdx; cIdx < chunks.length; cIdx++) {
+    if (!prevWrittenChunks || prevWrittenChunks[cIdx] !== chunks[cIdx]) {
+      changedChunkIndices.push(cIdx);
+    }
+  }
+
+  // Commit all changed chunks AND the primary manifest doc in a SINGLE atomic writeBatch whenever possible!
+  if (changedChunkIndices.length <= 14) {
     const batch = writeBatch(db);
-    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+    for (const cIdx of changedChunkIndices) {
       const chunkDocId = `${nb.id}__chunk_${cIdx}`;
       batch.set(
         doc(db, 'users', uid, 'notebooks', chunkDocId),
@@ -226,14 +292,20 @@ export async function saveNotebookToFirestoreChunked(
       }
     }
     await batch.commit();
+    knownRemoteChunkCountMap.set(cacheKey, chunks.length);
+    lastWrittenChunksMap.set(
+      cacheKey,
+      manifestIncludesChunk0 ? ['', ...chunks.slice(1)] : chunks.slice()
+    );
     return true;
   }
 
   // Fallback for huge multi-batch notebooks (> 6 MB)
-  for (let batchStart = 0; batchStart < chunks.length; batchStart += 6) {
+  for (let batchStart = 0; batchStart < changedChunkIndices.length; batchStart += 6) {
     const batchPromises: Promise<void>[] = [];
-    const batchEnd = Math.min(chunks.length, batchStart + 6);
-    for (let cIdx = batchStart; cIdx < batchEnd; cIdx++) {
+    const batchEnd = Math.min(changedChunkIndices.length, batchStart + 6);
+    for (let idx = batchStart; idx < batchEnd; idx++) {
+      const cIdx = changedChunkIndices[idx];
       const chunkDocId = `${nb.id}__chunk_${cIdx}`;
       batchPromises.push(
         setDoc(
@@ -271,5 +343,10 @@ export async function saveNotebookToFirestoreChunked(
       void deleteDoc(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`)).catch(() => {});
     }
   }
+  knownRemoteChunkCountMap.set(cacheKey, chunks.length);
+  lastWrittenChunksMap.set(
+    cacheKey,
+    manifestIncludesChunk0 ? ['', ...chunks.slice(1)] : chunks.slice()
+  );
   return true;
 }

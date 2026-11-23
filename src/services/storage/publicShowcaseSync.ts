@@ -14,6 +14,7 @@ import {
   deleteDoc,
   writeBatch,
   getDoc,
+  getDocs,
   getDocFromServer,
   onSnapshot,
 } from 'firebase/firestore';
@@ -53,36 +54,59 @@ export async function saveShowcaseMetaToFirestore(
   await setDoc(ref, payload, { merge: true });
 }
 
+const knownShowcaseChunkCountMap = new Map<string, number>();
+const lastWrittenShowcaseChunksMap = new Map<string, string[]>();
+
+export function recordRemoteShowcaseChunkCount(nbId: string, chunkCount: number): void {
+  knownShowcaseChunkCountMap.set(nbId, Math.max(0, chunkCount));
+}
+
+export function clearShowcaseWrittenChunksCache(nbId?: string): void {
+  if (nbId) {
+    lastWrittenShowcaseChunksMap.delete(nbId);
+  } else {
+    lastWrittenShowcaseChunksMap.clear();
+  }
+}
+
 export async function saveShowcaseNotebookToFirestoreChunked(
   nb: Notebook,
   dataJson: string,
-  deviceId: string
+  deviceId: string,
+  options?: { skipServerPreRead?: boolean; knownPrevChunkCount?: number }
 ): Promise<boolean> {
   const updatedAt = nb.updatedAt || new Date().toISOString();
   const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
   const primaryRef = doc(db, PUBLIC_SHOWCASE_NOTEBOOKS_COLLECTION, nb.id);
-  let prevChunkCount = 0;
+  const hasCachedChunkCount =
+    typeof options?.knownPrevChunkCount === 'number' || knownShowcaseChunkCountMap.has(nb.id);
+  let prevChunkCount =
+    typeof options?.knownPrevChunkCount === 'number'
+      ? Math.max(0, options.knownPrevChunkCount)
+      : knownShowcaseChunkCountMap.get(nb.id) ?? 0;
 
-  try {
-    const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
-      if (
-        typeof existingData?.dataJson === 'string' &&
-        existingData.dataJson.startsWith('{"__chunked":true')
-      ) {
-        try {
-          const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
-          if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
-            prevChunkCount = oldManifest.chunkCount;
+  if (!options?.skipServerPreRead && !hasCachedChunkCount) {
+    try {
+      const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data();
+        if (
+          typeof existingData?.dataJson === 'string' &&
+          existingData.dataJson.startsWith('{"__chunked":true')
+        ) {
+          try {
+            const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
+            if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
+              prevChunkCount = oldManifest.chunkCount;
+            }
+          } catch {
+            // ignore
           }
-        } catch {
-          // ignore
         }
       }
+    } catch {
+      // Offline or transient network error -> proceed
     }
-  } catch {
-    // Offline or transient network error -> proceed
   }
 
   const dataByteLen = getUtf8ByteLength(dataJson);
@@ -120,11 +144,14 @@ export async function saveShowcaseNotebookToFirestoreChunked(
         { merge: true }
       );
     }
+    knownShowcaseChunkCountMap.set(nb.id, 0);
+    lastWrittenShowcaseChunksMap.delete(nb.id);
     return true;
   }
 
   const chunks = splitStringByUtf8Bytes(dataJson, FIRESTORE_CHUNK_SIZE);
 
+  let manifestIncludesChunk0 = true;
   let manifestJson = JSON.stringify({
     __chunked: true,
     chunkCount: chunks.length,
@@ -133,6 +160,7 @@ export async function saveShowcaseNotebookToFirestoreChunked(
     chunk0: chunks[0],
   });
   if (getUtf8ByteLength(manifestJson) > 900000) {
+    manifestIncludesChunk0 = false;
     manifestJson = JSON.stringify({
       __chunked: true,
       chunkCount: chunks.length,
@@ -141,9 +169,18 @@ export async function saveShowcaseNotebookToFirestoreChunked(
     });
   }
 
-  if (chunks.length <= 14) {
+  const chunkStartIdx = manifestIncludesChunk0 ? 1 : 0;
+  const prevWrittenChunks = lastWrittenShowcaseChunksMap.get(nb.id);
+  const changedChunkIndices: number[] = [];
+  for (let cIdx = chunkStartIdx; cIdx < chunks.length; cIdx++) {
+    if (!prevWrittenChunks || prevWrittenChunks[cIdx] !== chunks[cIdx]) {
+      changedChunkIndices.push(cIdx);
+    }
+  }
+
+  if (changedChunkIndices.length <= 14) {
     const batch = writeBatch(db);
-    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+    for (const cIdx of changedChunkIndices) {
       const chunkDocId = `${nb.id}__chunk_${cIdx}`;
       batch.set(
         doc(db, PUBLIC_SHOWCASE_NOTEBOOKS_COLLECTION, chunkDocId),
@@ -176,13 +213,19 @@ export async function saveShowcaseNotebookToFirestoreChunked(
       }
     }
     await batch.commit();
+    knownShowcaseChunkCountMap.set(nb.id, chunks.length);
+    lastWrittenShowcaseChunksMap.set(
+      nb.id,
+      manifestIncludesChunk0 ? ['', ...chunks.slice(1)] : chunks.slice()
+    );
     return true;
   }
 
-  for (let batchStart = 0; batchStart < chunks.length; batchStart += 6) {
+  for (let batchStart = 0; batchStart < changedChunkIndices.length; batchStart += 6) {
     const batchPromises: Promise<void>[] = [];
-    const batchEnd = Math.min(chunks.length, batchStart + 6);
-    for (let cIdx = batchStart; cIdx < batchEnd; cIdx++) {
+    const batchEnd = Math.min(changedChunkIndices.length, batchStart + 6);
+    for (let idx = batchStart; idx < batchEnd; idx++) {
+      const cIdx = changedChunkIndices[idx];
       const chunkDocId = `${nb.id}__chunk_${cIdx}`;
       batchPromises.push(
         setDoc(
@@ -222,6 +265,11 @@ export async function saveShowcaseNotebookToFirestoreChunked(
       ).catch(() => {});
     }
   }
+  knownShowcaseChunkCountMap.set(nb.id, chunks.length);
+  lastWrittenShowcaseChunksMap.set(
+    nb.id,
+    manifestIncludesChunk0 ? ['', ...chunks.slice(1)] : chunks.slice()
+  );
   return true;
 }
 
@@ -242,6 +290,17 @@ export async function softDeleteShowcaseNotebookInFirestore(
     },
     { merge: true }
   );
+  lastWrittenShowcaseChunksMap.delete(nb.id);
+}
+
+export async function fetchPublicShowcaseNotebooksOnce(): Promise<RawShowcaseFirestoreDoc[]> {
+  const colRef = collection(db, PUBLIC_SHOWCASE_NOTEBOOKS_COLLECTION);
+  const snap = await getDocs(colRef);
+  const rawDocs: RawShowcaseFirestoreDoc[] = [];
+  snap.forEach((docSnap) => {
+    rawDocs.push({ id: docSnap.id, data: docSnap.data() });
+  });
+  return rawDocs;
 }
 
 export function subscribePublicShowcaseMeta(

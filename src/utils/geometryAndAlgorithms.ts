@@ -5249,6 +5249,7 @@ function getPrioritizedVisionModels(baseModels?: string[]): string[] {
     'mistral:ministral-14b-latest',
     'mistral:ministral-8b-latest',
     'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
     'gemini-flash-lite-latest',
   ];
   const all = Array.from(
@@ -5281,6 +5282,7 @@ function getPrioritizedVisionModels(baseModels?: string[]): string[] {
     'groq:qwen/qwen3.8-27b',
     'mistral:ministral-14b-latest',
     'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
     'gemini-flash-lite-latest',
   ];
 }
@@ -5534,7 +5536,11 @@ export async function generateSmartGreekTagsFromImages(
     }
   }
 
-  const candidateModels = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
+  const candidateModels = [
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
+  ];
 
   const tryGenerateWithModel = async (
     modelName: string,

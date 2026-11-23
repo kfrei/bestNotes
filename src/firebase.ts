@@ -14,6 +14,9 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   collection,
   getDoc,
@@ -47,7 +50,17 @@ export const firebaseApp = initializeApp(firebaseConfig);
 export const driveFirebaseApp = initializeApp(firebaseConfig, 'bestnotes-drive-oauth');
 export const auth = getAuth(firebaseApp);
 export const driveAuth = getAuth(driveFirebaseApp);
-export const db = getFirestore(firebaseApp);
+export const db = (() => {
+  try {
+    return initializeFirestore(firebaseApp, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch {
+    return getFirestore(firebaseApp);
+  }
+})();
 export const cloudFunctions = getFunctions(firebaseApp, 'europe-west1');
 
 export const googleProvider = new GoogleAuthProvider();

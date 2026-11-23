@@ -32,6 +32,8 @@ import {
 const PLANS_COLLECTION = 'app_plans';
 const AI_USAGE_LOCAL_PREFIX = 'bestnotes_ai_usage_';
 const PLANS_CACHE_KEY = 'bestnotes_plans_cache_v1';
+const PLANS_CACHE_TS_KEY = 'bestnotes_plans_cache_ts_v1';
+const PLANS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Reads cached plans synchronously from localStorage for instant 0ms startup (Zero-Slowdown).
@@ -54,6 +56,15 @@ export function readCachedPlansSync(): SubscriptionPlan[] {
 function writeCachedPlans(plans: SubscriptionPlan[]): void {
   try {
     localStorage.setItem(PLANS_CACHE_KEY, JSON.stringify(plans));
+    localStorage.setItem(PLANS_CACHE_TS_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
+}
+
+function invalidateCachedPlansTimestamp(): void {
+  try {
+    localStorage.removeItem(PLANS_CACHE_TS_KEY);
   } catch {
     // ignore
   }
@@ -61,8 +72,24 @@ function writeCachedPlans(plans: SubscriptionPlan[]): void {
 
 /**
  * Fetches all subscription plans from Firestore `app_plans` and merges with built-in defaults.
+ * Uses a 12h localStorage TTL for regular clients to avoid redundant collection reads;
+ * pass `forceRefresh = true` on Admin refresh/save to bypass TTL.
  */
-export async function fetchSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+export async function fetchSubscriptionPlans(forceRefresh = false): Promise<SubscriptionPlan[]> {
+  if (!forceRefresh) {
+    try {
+      const raw = localStorage.getItem(PLANS_CACHE_KEY);
+      const ts = Number(localStorage.getItem(PLANS_CACHE_TS_KEY) || '0');
+      if (raw && Number.isFinite(ts) && ts > 0 && Date.now() - ts < PLANS_CACHE_TTL_MS) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return mergePlansWithDefaults(parsed);
+        }
+      }
+    } catch {
+      // ignore cache parse error and fetch fresh
+    }
+  }
   try {
     const colRef = collection(db, PLANS_COLLECTION);
     const snap = await getDocs(colRef);
@@ -130,6 +157,7 @@ export async function saveSubscriptionPlan(plan: SubscriptionPlan): Promise<Subs
   };
 
   await setDoc(doc(db, PLANS_COLLECTION, cleanId), payload, { merge: true });
+  invalidateCachedPlansTimestamp();
   return payload;
 }
 
@@ -142,6 +170,7 @@ export async function deleteSubscriptionPlan(planId: string): Promise<void> {
     throw new Error('Δεν επιτρέπεται η διαγραφή των βασικών πλάνων (FREE, PLUS, ULTRA).');
   }
   await deleteDoc(doc(db, PLANS_COLLECTION, cleanId));
+  invalidateCachedPlansTimestamp();
 }
 
 /**

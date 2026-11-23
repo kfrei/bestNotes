@@ -99,7 +99,6 @@ import {
   doc,
   collection,
   getDoc,
-  getDocFromServer,
   setDoc,
   deleteDoc,
   writeBatch,
@@ -368,6 +367,8 @@ import {
   loadNotebooksFromIndexedDB,
   saveCustomFoldersToIndexedDB,
   loadCustomFoldersFromIndexedDB,
+  saveShowcaseCacheToIndexedDB,
+  loadShowcaseCacheFromIndexedDB,
   saveCustomFoldersToLocalAndIdb,
   saveLibraryShelfCache,
   saveNotebooksToLocalAndIdb,
@@ -375,6 +376,9 @@ import {
   sessionRestoredNotebookIds,
   getMonotonicIsoTimestamp,
   saveNotebookToFirestoreChunked,
+  recordRemoteNotebookChunkCount,
+  clearNotebookWrittenChunksCache,
+  clearAllNotebookSyncCaches,
   DEFAULT_SHOWCASE_FOLDER_NAME,
   DEFAULT_SHOWCASE_FOLDER_COLOR,
   DEFAULT_SHOWCASE_FOLDER_ICON,
@@ -388,9 +392,12 @@ import {
   reassembleShowcaseNotebooksFromDocs,
   saveShowcaseMetaToFirestore,
   saveShowcaseNotebookToFirestoreChunked,
+  recordRemoteShowcaseChunkCount,
+  clearShowcaseWrittenChunksCache,
   softDeleteShowcaseNotebookInFirestore,
   subscribePublicShowcaseMeta,
   subscribePublicShowcaseNotebooks,
+  fetchPublicShowcaseNotebooksOnce,
   type PublicShowcaseMeta,
   type RawShowcaseFirestoreDoc,
 } from './services/storage';
@@ -3406,28 +3413,42 @@ export default function App() {
     () => localStorage.getItem('bestnotes_custom_gemini_key') || ''
   );
 
-  // Automatically fetch the Gemini API Key from Firebase Firestore (`app_config/gemini`) on startup
+  // Automatically fetch the Gemini API Key from Firebase Firestore (`app_config/gemini`) with 12h localStorage TTL
   useEffect(() => {
-    const unsub = onSnapshot(
-      doc(db, 'app_config', 'gemini'),
-      (snap) => {
+    const GEMINI_KEY_TS_STORAGE = 'bestnotes_custom_gemini_key_fetched_at';
+    const GEMINI_KEY_TTL_MS = 12 * 60 * 60 * 1000;
+    try {
+      const cachedKey = (localStorage.getItem('bestnotes_custom_gemini_key') || '').trim();
+      const fetchedAt = Number(localStorage.getItem(GEMINI_KEY_TS_STORAGE) || '0');
+      if (cachedKey && Number.isFinite(fetchedAt) && fetchedAt > 0 && Date.now() - fetchedAt < GEMINI_KEY_TTL_MS) {
+        return;
+      }
+    } catch {
+      // ignore localStorage read error
+    }
+    let cancelled = false;
+    void getDoc(doc(db, 'app_config', 'gemini'))
+      .then((snap) => {
+        if (cancelled) return;
         if (snap.exists()) {
           const remoteKey = String(snap.data()?.geminiApiKey || '').trim();
           if (remoteKey) {
             setCustomGeminiKey(remoteKey);
             try {
               localStorage.setItem('bestnotes_custom_gemini_key', remoteKey);
+              localStorage.setItem(GEMINI_KEY_TS_STORAGE, String(Date.now()));
             } catch {
               // ignore
             }
           }
         }
-      },
-      () => {
+      })
+      .catch(() => {
         // ignore read error if offline
-      }
-    );
-    return () => unsub();
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -5548,6 +5569,9 @@ export default function App() {
       if (sessionDeletedNotebookIds.has(nb.id)) {
         return;
       }
+      if (!isShowcase && remoteDeletedIdsRef.current.has(nb.id) && !sessionRestoredNotebookIds.has(nb.id)) {
+        return;
+      }
       const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
       let nbToSave = nb;
       let effectiveExplicitJson = explicitJson;
@@ -5570,14 +5594,26 @@ export default function App() {
       lastSyncedJsonMapRef.current.set(nbToSave.id, dataJson);
       inFlightSavesMapRef.current.set(nbToSave.id, (inFlightSavesMapRef.current.get(nbToSave.id) || 0) + 1);
       setSyncStatus('syncing');
+      const saveOpts = { skipServerPreRead: hasCompletedInitialCloudLoadRef.current };
       const savePromise = isShowcase
-        ? saveShowcaseNotebookToFirestoreChunked(nbToSave, dataJson, deviceIdRef.current)
-        : saveNotebookToFirestoreChunked(uid, nbToSave, dataJson, deviceIdRef.current);
+        ? saveShowcaseNotebookToFirestoreChunked(nbToSave, dataJson, deviceIdRef.current, saveOpts)
+        : saveNotebookToFirestoreChunked(uid, nbToSave, dataJson, deviceIdRef.current, saveOpts);
       savePromise
         .then((didWrite) => {
           if (didWrite) {
             if (isShowcase) {
               showcaseMasterNotebooksRef.current.set(nbToSave.id, structuredClone(nbToSave));
+              // Bump public_showcase_meta/config.updatedAt monotonically so non-admin IndexedDB caches always refresh
+              const curMeta = publicShowcaseMetaRef.current;
+              void saveShowcaseMetaToFirestore({
+                folderName: curMeta?.folderName || showcaseFolderNameRef.current || DEFAULT_SHOWCASE_FOLDER_NAME,
+                folderColor: curMeta?.folderColor || DEFAULT_SHOWCASE_FOLDER_COLOR,
+                folderIcon: curMeta?.folderIcon || DEFAULT_SHOWCASE_FOLDER_ICON,
+                seeded: curMeta?.seeded ?? true,
+                seededAt: curMeta?.seededAt,
+                updatedAt: getMonotonicIsoTimestamp(nbToSave.updatedAt, curMeta?.updatedAt),
+                deviceId: deviceIdRef.current,
+              }).catch(() => {});
             }
             lastSeenRemoteJsonMapRef.current.set(nbToSave.id, dataJson);
             if (nbToSave.updatedAt) {
@@ -6141,9 +6177,20 @@ export default function App() {
         }
         if (currentUser) {
           pushNotebookToCloudTracked(currentUser.uid, personalNb);
-          void softDeleteShowcaseNotebookInFirestore(existingNb, nowIso, deviceIdRef.current).catch(
-            () => {}
-          );
+          void softDeleteShowcaseNotebookInFirestore(existingNb, nowIso, deviceIdRef.current)
+            .then(() => {
+              const curMeta = publicShowcaseMetaRef.current;
+              return saveShowcaseMetaToFirestore({
+                folderName: curMeta?.folderName || showcaseFolderNameRef.current || DEFAULT_SHOWCASE_FOLDER_NAME,
+                folderColor: curMeta?.folderColor || DEFAULT_SHOWCASE_FOLDER_COLOR,
+                folderIcon: curMeta?.folderIcon || DEFAULT_SHOWCASE_FOLDER_ICON,
+                seeded: curMeta?.seeded ?? true,
+                seededAt: curMeta?.seededAt,
+                updatedAt: getMonotonicIsoTimestamp(nowIso, curMeta?.updatedAt),
+                deviceId: deviceIdRef.current,
+              });
+            })
+            .catch(() => {});
         }
         setFolderPickerNbId(null);
         setIsDirty(true);
@@ -6579,6 +6626,16 @@ export default function App() {
       }
     }, 10000);
 
+    const parsedSnapshotDocCache = new Map<
+      string,
+      {
+        sig: string;
+        entry: { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string };
+        softDeletedNb?: Notebook;
+        rescuedStyles: CustomFolderMeta[];
+      }
+    >();
+
     const unsubNotebooks = onSnapshot(
       nbsColRef,
       (snapshot) => {
@@ -6710,8 +6767,25 @@ export default function App() {
           }
 
           if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+            const isSessionDel = sessionDeletedNotebookIds.has(data.id);
+            const docSig = `${data.updatedAt || ''}|${data.deleted === true ? '1' : '0'}|${isSessionDel ? '1' : '0'}|${data.dataJson.length}|${data.deviceId || ''}`;
+            const cachedParsed = parsedSnapshotDocCache.get(data.id);
+            if (cachedParsed && cachedParsed.sig === docSig) {
+              if (cachedParsed.softDeletedNb) {
+                softDeletedList.push(cachedParsed.softDeletedNb);
+              }
+              if (cachedParsed.rescuedStyles.length > 0) {
+                for (const st of cachedParsed.rescuedStyles) {
+                  rescuedFolderStyles.push(st);
+                }
+              }
+              remoteMap.set(data.id, cachedParsed.entry);
+              return;
+            }
+
             try {
               let fullJson = data.dataJson;
+              let remoteChunkCount = 0;
               if (fullJson.startsWith('{"__chunked":true')) {
                 const manifest = JSON.parse(fullJson) as {
                   __chunked: boolean;
@@ -6719,6 +6793,7 @@ export default function App() {
                   chunk0?: string;
                   version?: string;
                 };
+                remoteChunkCount = typeof manifest.chunkCount === 'number' ? manifest.chunkCount : 0;
                 const parts: string[] = [];
                 let startIdx = 0;
                 if (typeof manifest.chunk0 === 'string') {
@@ -6745,9 +6820,14 @@ export default function App() {
                 fullJson = parts.join('');
               }
 
+              recordRemoteNotebookChunkCount(uid, data.id, remoteChunkCount);
+              if (data.deviceId && data.deviceId !== deviceIdRef.current) {
+                clearNotebookWrittenChunksCache(uid, data.id);
+              }
+
               const parsed = JSON.parse(fullJson) as Notebook;
               if (parsed && parsed.id && Array.isArray(parsed.pages)) {
-                if (data.deleted === true || sessionDeletedNotebookIds.has(data.id)) {
+                if (data.deleted === true || isSessionDel) {
                   const delTs = data.updatedAt || parsed.updatedAt || '';
                   if (delTs) {
                     const prevRemTs = remoteUpdatedAtMapRef.current.get(data.id) || '';
@@ -6755,23 +6835,34 @@ export default function App() {
                       remoteUpdatedAtMapRef.current.set(data.id, delTs);
                     }
                   }
-                  softDeletedList.push(delTs ? { ...parsed, updatedAt: delTs } : parsed);
-                  remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: delTs });
+                  const softDelNb = delTs ? { ...parsed, updatedAt: delTs } : parsed;
+                  const delEntry = { deleted: true, deviceId: data.deviceId, updatedAt: delTs };
+                  softDeletedList.push(softDelNb);
+                  remoteMap.set(data.id, delEntry);
+                  parsedSnapshotDocCache.set(data.id, {
+                    sig: docSig,
+                    entry: delEntry,
+                    softDeletedNb: softDelNb,
+                    rescuedStyles: [],
+                  });
                   return;
                 }
 
                 const { nb: repairedRemoteNb, repaired: remoteWasRepaired } =
                   repairNotebookPagesAndMetrisiMazas(parsed);
+                const docRescuedStyles: CustomFolderMeta[] = [];
                 if (repairedRemoteNb.folderStyles && typeof repairedRemoteNb.folderStyles === 'object') {
                   for (const [fKey, fStyle] of Object.entries(repairedRemoteNb.folderStyles)) {
                     if (fKey && fStyle) {
-                      rescuedFolderStyles.push({
+                      const styleEntry: CustomFolderMeta = {
                         name: fKey,
                         updatedAt: fStyle.updatedAt || repairedRemoteNb.updatedAt || '',
                         color: fStyle.color,
                         icon: fStyle.icon,
                         favorite: fStyle.favorite,
-                      });
+                      };
+                      docRescuedStyles.push(styleEntry);
+                      rescuedFolderStyles.push(styleEntry);
                     }
                   }
                 }
@@ -6779,7 +6870,7 @@ export default function App() {
                   ? serializeNotebookForFirestore(repairedRemoteNb)
                   : fullJson;
 
-                remoteMap.set(repairedRemoteNb.id, {
+                const parsedEntry = {
                   nb: repairedRemoteNb,
                   deleted: false,
                   deviceId: data.deviceId,
@@ -6787,10 +6878,15 @@ export default function App() {
                   updatedAt: remoteWasRepaired
                     ? repairedRemoteNb.updatedAt
                     : data.updatedAt || repairedRemoteNb.updatedAt,
+                };
+                remoteMap.set(repairedRemoteNb.id, parsedEntry);
+                parsedSnapshotDocCache.set(data.id, {
+                  sig: docSig,
+                  entry: parsedEntry,
+                  rescuedStyles: docRescuedStyles,
                 });
-                if (remoteWasRepaired) {
-                  pushNotebookToCloudTracked(uid, repairedRemoteNb, effectiveDataJson);
-                }
+                // NEVER auto-push compaction/repair-only changes back to Firestore inside onSnapshot
+                // (prevents cascading cross-device write/read echo-loops).
                 return;
               }
             } catch {
@@ -7071,6 +7167,12 @@ export default function App() {
             pushNotebookToCloudTracked(uid, nbToPush);
           }
         }
+        // Prune removed/purged doc IDs from parsedSnapshotDocCache so it stays bounded
+        for (const cachedId of Array.from(parsedSnapshotDocCache.keys())) {
+          if (!allRemotePrimaryIds.has(cachedId)) {
+            parsedSnapshotDocCache.delete(cachedId);
+          }
+        }
       },
       () => {
         // Ignore transient offline errors
@@ -7180,64 +7282,11 @@ export default function App() {
       }
     );
 
-    const refreshUserDocFromServerOnWake = () => {
-      if (document.visibilityState === 'hidden') return;
-      void getDocFromServer(foldersMetaDocRef)
-        .then((snap) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data && typeof data.dataJson === 'string' && data.dataJson.length > 0) {
-              mergeAndApplyRemoteFolders(
-                data.dataJson,
-                typeof data.updatedAt === 'string' ? data.updatedAt : '',
-                false
-              );
-            }
-          }
-        })
-        .catch(() => {
-          // ignore if offline
-        });
-      void getDocFromServer(driveSyncMetaDocRef)
-        .then((snap) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data && typeof data.dataJson === 'string' && data.dataJson.length > 0) {
-              mergeAndApplyRemoteDriveSyncMeta(
-                data.dataJson,
-                typeof data.updatedAt === 'string' ? data.updatedAt : '',
-                false
-              );
-            }
-          }
-        })
-        .catch(() => {
-          // ignore if offline
-        });
-      void getDocFromServer(userDocRef)
-        .then((snap) => {
-          if (snap.exists()) {
-            applyRemoteUserDocData(snap.data(), false);
-          }
-        })
-        .catch(() => {
-          // ignore if offline
-        });
-    };
-
-    // Immediately pull live server folders on initial mount AND whenever the device wakes up / gains focus
-    refreshUserDocFromServerOnWake();
-    document.addEventListener('visibilitychange', refreshUserDocFromServerOnWake);
-    window.addEventListener('focus', refreshUserDocFromServerOnWake);
-    window.addEventListener('pageshow', refreshUserDocFromServerOnWake);
-
     return () => {
       window.clearTimeout(offlineLoadFallbackTimer);
       unsubNotebooks();
       unsubUserDoc();
-      document.removeEventListener('visibilitychange', refreshUserDocFromServerOnWake);
-      window.removeEventListener('focus', refreshUserDocFromServerOnWake);
-      window.removeEventListener('pageshow', refreshUserDocFromServerOnWake);
+      clearAllNotebookSyncCaches(uid);
     };
   }, [currentUser, pushNotebookToCloudTracked, pushDriveSyncMetaToCloud]);
 
@@ -7308,6 +7357,101 @@ export default function App() {
       });
     };
 
+    const recordShowcaseChunkCounts = (rawDocs: RawShowcaseFirestoreDoc[]) => {
+      for (const entry of rawDocs) {
+        if (!entry?.id || !entry?.data || entry.id.includes('__chunk_')) continue;
+        let cCount = 0;
+        if (
+          typeof entry.data.dataJson === 'string' &&
+          entry.data.dataJson.startsWith('{"__chunked":true')
+        ) {
+          try {
+            const m = JSON.parse(entry.data.dataJson) as { chunkCount?: number };
+            if (typeof m.chunkCount === 'number' && m.chunkCount > 0) {
+              cCount = m.chunkCount;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        recordRemoteShowcaseChunkCount(entry.id, cCount);
+        if (entry.data.deviceId && entry.data.deviceId !== deviceIdRef.current) {
+          clearShowcaseWrittenChunksCache(entry.id);
+        }
+      }
+    };
+
+    let cancelled = false;
+    let cachedShowcaseUpdatedAt = '';
+    let lastFetchedMetaUpdatedAt = '';
+    let idbCacheReady = false;
+    let pendingMetaForNonAdmin: { meta: PublicShowcaseMeta | null; exists: boolean; fromCache: boolean } | null = null;
+
+    const handleNonAdminShowcaseMeta = (
+      meta: PublicShowcaseMeta | null,
+      exists: boolean,
+      fromCache: boolean
+    ) => {
+      if (cancelled) return;
+      const targetUpdatedAt = meta?.updatedAt || '';
+      if (targetUpdatedAt) {
+        if (
+          (cachedShowcaseUpdatedAt === targetUpdatedAt || lastFetchedMetaUpdatedAt === targetUpdatedAt) &&
+          rawShowcaseDocsRef.current.length > 0
+        ) {
+          return;
+        }
+        lastFetchedMetaUpdatedAt = targetUpdatedAt;
+        void fetchPublicShowcaseNotebooksOnce()
+          .then((rawDocs) => {
+            if (cancelled) return;
+            rawShowcaseDocsRef.current = rawDocs;
+            cachedShowcaseUpdatedAt = targetUpdatedAt;
+            recordShowcaseChunkCounts(rawDocs);
+            mergeShowcaseNotebooksIntoState(rawDocs, showcaseFolderNameRef.current);
+            void saveShowcaseCacheToIndexedDB(targetUpdatedAt, rawDocs);
+          })
+          .catch((err) => {
+            console.warn('[Showcase] Could not fetch public_showcase_notebooks:', err);
+            if (lastFetchedMetaUpdatedAt === targetUpdatedAt) {
+              lastFetchedMetaUpdatedAt = '';
+            }
+          });
+      } else if (!exists && !fromCache && rawShowcaseDocsRef.current.length === 0 && lastFetchedMetaUpdatedAt !== '__none__') {
+        lastFetchedMetaUpdatedAt = '__none__';
+        void fetchPublicShowcaseNotebooksOnce()
+          .then((rawDocs) => {
+            if (cancelled) return;
+            rawShowcaseDocsRef.current = rawDocs;
+            recordShowcaseChunkCounts(rawDocs);
+            mergeShowcaseNotebooksIntoState(rawDocs, showcaseFolderNameRef.current);
+          })
+          .catch(() => {});
+      }
+    };
+
+    // For non-admin users, hydrate showcase notebooks instantly from IndexedDB cache first
+    // and only fetch `public_showcase_notebooks` via getDocs when `public_showcase_meta/config.updatedAt` changes!
+    if (!isAdminUser) {
+      void loadShowcaseCacheFromIndexedDB().then((cached) => {
+        if (cancelled) return;
+        idbCacheReady = true;
+        if (cached && cached.rawDocs.length > 0) {
+          cachedShowcaseUpdatedAt = cached.updatedAt;
+          if (rawShowcaseDocsRef.current.length === 0) {
+            rawShowcaseDocsRef.current = cached.rawDocs;
+            recordShowcaseChunkCounts(cached.rawDocs);
+            mergeShowcaseNotebooksIntoState(cached.rawDocs, showcaseFolderNameRef.current);
+          }
+        }
+        if (pendingMetaForNonAdmin) {
+          const p = pendingMetaForNonAdmin;
+          pendingMetaForNonAdmin = null;
+          handleNonAdminShowcaseMeta(p.meta, p.exists, p.fromCache);
+        }
+      });
+    }
+
     const unsubMeta = subscribePublicShowcaseMeta((meta, exists, fromCache) => {
       if (!fromCache || exists) {
         setHasLoadedShowcaseMeta(true);
@@ -7318,18 +7462,34 @@ export default function App() {
       if (rawShowcaseDocsRef.current.length > 0) {
         mergeShowcaseNotebooksIntoState(rawShowcaseDocsRef.current, nextFolderName);
       }
+      if (!isAdminUser) {
+        if (!idbCacheReady) {
+          pendingMetaForNonAdmin = { meta, exists, fromCache };
+        } else {
+          handleNonAdminShowcaseMeta(meta, exists, fromCache);
+        }
+      }
     });
 
-    const unsubNotebooks = subscribePublicShowcaseNotebooks((rawDocs) => {
-      rawShowcaseDocsRef.current = rawDocs;
-      mergeShowcaseNotebooksIntoState(rawDocs, showcaseFolderNameRef.current);
-    });
+    // Admin keeps live onSnapshot on `public_showcase_notebooks` so edits stay 100% instant
+    const unsubNotebooks = isAdminUser
+      ? subscribePublicShowcaseNotebooks((rawDocs) => {
+          rawShowcaseDocsRef.current = rawDocs;
+          recordShowcaseChunkCounts(rawDocs);
+          mergeShowcaseNotebooksIntoState(rawDocs, showcaseFolderNameRef.current);
+          const metaTs = publicShowcaseMetaRef.current?.updatedAt;
+          if (metaTs) {
+            void saveShowcaseCacheToIndexedDB(metaTs, rawDocs);
+          }
+        })
+      : () => {};
 
     return () => {
+      cancelled = true;
       unsubMeta();
       unsubNotebooks();
     };
-  }, []);
+  }, [isAdminUser]);
 
   // One-time automatic Admin seed of the 8 demo notebooks into `public_showcase_notebooks`
   useEffect(() => {
@@ -7383,7 +7543,22 @@ export default function App() {
     })();
   }, [isAdminUser, currentUser, cloudInitialLoaded, hasLoadedShowcaseMeta, publicShowcaseMeta, notebooks, showToast]);
 
+  const cloudIdleSyncTimerRef = useRef<number | null>(null);
+  const cloudMaxWaitSyncTimerRef = useRef<number | null>(null);
+
+  const clearPendingCloudSyncTimers = useCallback(() => {
+    if (cloudIdleSyncTimerRef.current !== null) {
+      window.clearTimeout(cloudIdleSyncTimerRef.current);
+      cloudIdleSyncTimerRef.current = null;
+    }
+    if (cloudMaxWaitSyncTimerRef.current !== null) {
+      window.clearTimeout(cloudMaxWaitSyncTimerRef.current);
+      cloudMaxWaitSyncTimerRef.current = null;
+    }
+  }, []);
+
   const performCloudFirestoreSyncNow = useCallback(() => {
+    clearPendingCloudSyncTimers();
     if (!currentUser || !hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current) {
       return false;
     }
@@ -7413,19 +7588,42 @@ export default function App() {
         // ignore
       }
     }
+    if (!pushedAny && inFlightSavesMapRef.current.size === 0) {
+      setIsDirty(false);
+      setSyncStatus('synced');
+    }
     return pushedAny;
-  }, [currentUser, pushNotebookToCloudTracked]);
+  }, [currentUser, pushNotebookToCloudTracked, clearPendingCloudSyncTimers]);
 
-  // 2. Fast Local Save (IndexedDB + LocalStorage) on change + 20-second Cloud Firestore Auto-Sync countdown!
+  // 2. Fast Local Save (IndexedDB + LocalStorage) on change + Safe Idle Debounce (10s idle / 45s max-wait) Cloud Firestore Sync
   const secondsToNextDrivePdfSyncRef = useRef<number>(120);
   const hasPendingDrivePdfSyncRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      clearPendingCloudSyncTimers();
+    };
+  }, [currentUser, clearPendingCloudSyncTimers]);
+
+  // 100% immediate flush on notebook switch or exiting editor (library view)
+  const prevFlushActiveNbIdRef = useRef<string>(activeNotebookId);
+  const prevFlushViewModeRef = useRef<typeof viewMode>(viewMode);
+  useEffect(() => {
+    const nbSwitched = prevFlushActiveNbIdRef.current !== activeNotebookId;
+    const exitedEditor = prevFlushViewModeRef.current === 'editor' && viewMode !== 'editor';
+    prevFlushActiveNbIdRef.current = activeNotebookId;
+    prevFlushViewModeRef.current = viewMode;
+    if ((nbSwitched || exitedEditor) && currentUser && hasLoadedIndexedDbRef.current) {
+      saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
+      performCloudFirestoreSyncNow();
+    }
+  }, [activeNotebookId, viewMode, currentUser, performCloudFirestoreSyncNow]);
 
   useEffect(() => {
     if (!currentUser) return;
     // CRITICAL: Never overwrite IndexedDB with stale localStorage state before initial IndexedDB load has completed!
     if (!hasLoadedIndexedDbRef.current) return;
     const uid = currentUser.uid;
-    let fastCloudTimer: number | null = null;
     const timer = window.setTimeout(() => {
       saveNotebooksToLocalAndIdb(uid, notebooks);
       if (!hasCompletedInitialCloudLoadRef.current) return;
@@ -7453,17 +7651,26 @@ export default function App() {
         hasPendingDrivePdfSyncRef.current = true;
         setIsDirty(true);
         setSyncStatus('dirty');
-        fastCloudTimer = window.setTimeout(() => {
+        // 10s idle debounce after last stroke batch
+        if (cloudIdleSyncTimerRef.current !== null) {
+          window.clearTimeout(cloudIdleSyncTimerRef.current);
+        }
+        cloudIdleSyncTimerRef.current = window.setTimeout(() => {
+          cloudIdleSyncTimerRef.current = null;
           // Do NOT prematurely mark synced here; pushNotebookToCloudTracked marks 'synced' ONLY after Firestore confirms the write!
           performCloudFirestoreSyncNow();
-        }, 1500);
+        }, 10000);
+        // 45s max-wait during continuous writing so long non-stop writing still checkpoints to Cloud
+        if (cloudMaxWaitSyncTimerRef.current === null) {
+          cloudMaxWaitSyncTimerRef.current = window.setTimeout(() => {
+            cloudMaxWaitSyncTimerRef.current = null;
+            performCloudFirestoreSyncNow();
+          }, 45000);
+        }
       }
     }, 250);
     return () => {
       window.clearTimeout(timer);
-      if (fastCloudTimer !== null) {
-        window.clearTimeout(fastCloudTimer);
-      }
     };
   }, [currentUser, notebooks, performCloudFirestoreSyncNow]);
 
@@ -7476,7 +7683,10 @@ export default function App() {
         if (driveSyncMetaPushTimerRef.current !== null) {
           pushDriveSyncMetaToCloud(true);
         }
-        if (userEditedFoldersInSessionRef.current) {
+        if (
+          userEditedFoldersInSessionRef.current &&
+          JSON.stringify(customFoldersRef.current) !== lastSyncedMetaRef.current.folders
+        ) {
           commitUserFoldersChange(customFoldersRef.current);
         }
       }
@@ -7487,7 +7697,10 @@ export default function App() {
       if (driveSyncMetaPushTimerRef.current !== null) {
         pushDriveSyncMetaToCloud(true);
       }
-      if (userEditedFoldersInSessionRef.current) {
+      if (
+        userEditedFoldersInSessionRef.current &&
+        JSON.stringify(customFoldersRef.current) !== lastSyncedMetaRef.current.folders
+      ) {
         commitUserFoldersChange(customFoldersRef.current);
       }
     };
@@ -8555,7 +8768,10 @@ export default function App() {
             window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
           );
           if (currentUser) {
-            pushNotebookToCloudTracked(currentUser.uid, nb);
+            const nbJson = serializeNotebookForFirestore(nb);
+            if (lastSyncedJsonMapRef.current.get(nb.id) !== nbJson) {
+              pushNotebookToCloudTracked(currentUser.uid, nb, nbJson);
+            }
           }
           try {
             const upRes = await syncNotebookPdfToGoogleDrive(
@@ -9277,26 +9493,10 @@ export default function App() {
     [activeNotebook, showToast]
   );
 
-  // 20-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
-  const secondsToNextSyncRef = useRef<number>(20);
+  // 2-minute (120s) Google Drive PDF Auto-Sync loop (Cloud Firestore sync is handled by the 10s idle / 45s max-wait debounce + immediate lifecycle flushes)
   useEffect(() => {
     const interval = window.setInterval(() => {
-      // 1) Cloud Firestore Sync every 20 seconds (zero 1Hz React re-renders while editing or simulating!)
-      if (!isDirty) {
-        secondsToNextSyncRef.current = 20;
-      } else if (secondsToNextSyncRef.current <= 1) {
-        secondsToNextSyncRef.current = 20;
-        setSyncStatus('syncing');
-        performCloudFirestoreSyncNow();
-        window.setTimeout(() => {
-          setSyncStatus('synced');
-          setIsDirty(false);
-        }, 350);
-      } else {
-        secondsToNextSyncRef.current -= 1;
-      }
-
-      // 2) Google Drive PDF Sync (/BestNotes):
+      // Google Drive PDF Sync (/BestNotes):
       //    a) Incremental sync 2 minutes after editing the active note
       //    b) Scheduled automatic full sync:
       //       - Smart Schedule (-1): 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00 (1h), then 16:00, 18:00, 20:00 (2h)
@@ -9342,12 +9542,10 @@ export default function App() {
     }, 1000);
     return () => clearInterval(interval);
   }, [
-    isDirty,
     driveAccessToken,
     driveAutoSyncIntervalMin,
     lastDriveAutoSyncAt,
     notebooks.length,
-    performCloudFirestoreSyncNow,
     performDrivePdfSync,
     performAllNotebooksDrivePdfSync,
   ]);
@@ -37922,7 +38120,7 @@ export default function App() {
     };
   }, [isLiveTvBroadcasting, isTvReceiverMode, isCleanProjectorMode]);
 
-  // Continuously push committed pages, simulation state & viewport from Sender (iPad)
+  // Continuously push committed pages & viewport from Sender (iPad)
   useEffect(() => {
     const sender = liveTvSenderRef.current;
     if (!isLiveTvBroadcasting || !sender || isTvReceiverMode || isCleanProjectorMode || viewMode !== 'editor') return;
@@ -37941,19 +38139,6 @@ export default function App() {
         pages: activeNotebook.pages,
       });
     }
-    sender.sendSimState({
-      isSimulating,
-      simCircuitSwitchClosed,
-      simShowElectrons,
-      simParticleStyle,
-      simFlowDirection,
-      simShowDarkWireTrack,
-      simSpeedMultiplier,
-      isSpringSimulating,
-      isSpringPaused,
-      springElapsedSec: springSimElapsedRef.current,
-      draggingSpringDispPx: draggingSpringMassRef.current?.currentDisplacementPx ?? null,
-    });
     sender.sendViewport({
       z: zoomRef.current,
       baseZ: senderBaseZ,
@@ -37973,6 +38158,30 @@ export default function App() {
     activePageIndex,
     pageWidth,
     isFullBleedWidth,
+  ]);
+
+  // Decoupled simulation state push so regular strokes on activeNotebook never trigger redundant sendSimState calls
+  useEffect(() => {
+    const sender = liveTvSenderRef.current;
+    if (!isLiveTvBroadcasting || !sender || isTvReceiverMode || isCleanProjectorMode || viewMode !== 'editor') return;
+    sender.sendSimState({
+      isSimulating,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simParticleStyle,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      simSpeedMultiplier,
+      isSpringSimulating,
+      isSpringPaused,
+      springElapsedSec: springSimElapsedRef.current,
+      draggingSpringDispPx: draggingSpringMassRef.current?.currentDisplacementPx ?? null,
+    });
+  }, [
+    isLiveTvBroadcasting,
+    isTvReceiverMode,
+    isCleanProjectorMode,
+    viewMode,
     isSimulating,
     simCircuitSwitchClosed,
     simShowElectrons,
@@ -61029,10 +61238,24 @@ export default function App() {
                       nb,
                       nowIso,
                       deviceIdRef.current
-                    ).catch((err) => {
-                      console.error('[Showcase] Failed to delete showcase notebook:', err);
-                    });
+                    )
+                      .then(() => {
+                        const curMeta = publicShowcaseMetaRef.current;
+                        return saveShowcaseMetaToFirestore({
+                          folderName: curMeta?.folderName || showcaseFolderNameRef.current || DEFAULT_SHOWCASE_FOLDER_NAME,
+                          folderColor: curMeta?.folderColor || DEFAULT_SHOWCASE_FOLDER_COLOR,
+                          folderIcon: curMeta?.folderIcon || DEFAULT_SHOWCASE_FOLDER_ICON,
+                          seeded: curMeta?.seeded ?? true,
+                          seededAt: curMeta?.seededAt,
+                          updatedAt: getMonotonicIsoTimestamp(nowIso, curMeta?.updatedAt),
+                          deviceId: deviceIdRef.current,
+                        });
+                      })
+                      .catch((err) => {
+                        console.error('[Showcase] Failed to delete showcase notebook:', err);
+                      });
                   } else {
+                    clearNotebookWrittenChunksCache(currentUser.uid, nb.id);
                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextLocalBin);
                     const softDeleteJson = serializeNotebookForFirestore(nb);
                     void setDoc(
@@ -61496,6 +61719,7 @@ export default function App() {
                                   userEditedInSessionRef.current.add(delNb.id);
                                   saveUserEditedSessionIds(userEditedInSessionRef.current);
                                   if (currentUser) {
+                                    clearNotebookWrittenChunksCache(currentUser.uid, delNb.id);
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     pushNotebookToCloudTracked(currentUser.uid, restoredNb);
                                   }
@@ -61525,6 +61749,7 @@ export default function App() {
                                   userEditedInSessionRef.current.delete(delNb.id);
                                   saveUserEditedSessionIds(userEditedInSessionRef.current);
                                   if (currentUser) {
+                                    clearNotebookWrittenChunksCache(currentUser.uid, delNb.id);
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     const purgeIso = getMonotonicIsoTimestamp(
                                       delNb.updatedAt,

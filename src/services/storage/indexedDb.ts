@@ -118,3 +118,49 @@ export async function loadCustomFoldersFromIndexedDB(
     return null;
   }
 }
+
+const SHOWCASE_CACHE_IDB_KEY = '__public_showcase_cache_v1';
+
+export interface ShowcaseIdbCachePayload {
+  updatedAt: string;
+  rawDocs: { id: string; data: Record<string, any> }[];
+}
+
+export async function saveShowcaseCacheToIndexedDB(
+  updatedAt: string,
+  rawDocs: { id: string; data: Record<string, any> }[]
+): Promise<void> {
+  try {
+    const idb = await openBestNotesIdb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put({ updatedAt, rawDocs }, SHOWCASE_CACHE_IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+    });
+  } catch {
+    // ignore
+  }
+}
+
+export async function loadShowcaseCacheFromIndexedDB(): Promise<ShowcaseIdbCachePayload | null> {
+  try {
+    const idb = await openBestNotesIdb();
+    return await new Promise<ShowcaseIdbCachePayload | null>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(SHOWCASE_CACHE_IDB_KEY);
+      req.onsuccess = () => {
+        const res = req.result as ShowcaseIdbCachePayload | undefined;
+        if (res && typeof res.updatedAt === 'string' && Array.isArray(res.rawDocs)) {
+          resolve(res);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
