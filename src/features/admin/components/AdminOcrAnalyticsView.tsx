@@ -529,19 +529,21 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               return segs;
             };
 
-            const primarySegments = buildBucketSegments(
-              primaryUsed,
-              GEMINI_FREE_TIER_MODEL_BUCKETS.slice(0, 4)
-            );
-            const overflowSegments = buildBucketSegments(
-              overflowUsed,
-              GEMINI_FREE_TIER_MODEL_BUCKETS.slice(4)
-            );
+            // Apply the new 7-model Gemini cascade breakdown ONLY from 2026-11-24 onwards;
+            // earlier historical days ran under the legacy rotation and render as a clean neutral bar.
+            const isNewCascadeDay = t.date >= '2026-11-24';
+            const primarySegments = isNewCascadeDay
+              ? buildBucketSegments(primaryUsed, GEMINI_FREE_TIER_MODEL_BUCKETS.slice(0, 4))
+              : [];
+            const overflowSegments = isNewCascadeDay
+              ? buildBucketSegments(overflowUsed, GEMINI_FREE_TIER_MODEL_BUCKETS.slice(4))
+              : [];
             const allSegments = [...primarySegments, ...overflowSegments];
-            const modelBreakdownLabel =
-              allSegments.length > 0
-                ? allSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
-                : 'Καμία κλήση';
+            const modelBreakdownLabel = !isNewCascadeDay
+              ? 'Παλαιό σχήμα (πριν 24/11)'
+              : allSegments.length > 0
+              ? allSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
+              : 'Καμία κλήση';
 
             const barHeight =
               chartMode === 'quota'
@@ -587,22 +589,28 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                   <div
                     style={{ height: `${barHeight}%` }}
                     className={`${
-                      chartMode === 'quota' && overflowUsed > 0 ? 'w-[14px]' : 'w-full max-w-[28px]'
+                      chartMode === 'quota' && isNewCascadeDay && overflowUsed > 0
+                        ? 'w-[14px]'
+                        : 'w-full max-w-[28px]'
                     } rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90`}
                   >
                     {chartMode === 'quota' && primaryUsed > 0 && (
-                      <>
-                        {[...primarySegments].reverse().map((seg) => (
-                          <div
-                            key={seg.id}
-                            style={{
-                              height: `${seg.pctOfBar}%`,
-                              backgroundColor: seg.color,
-                            }}
-                            className="w-full border-b border-white/25 last:border-b-0"
-                          />
-                        ))}
-                      </>
+                      isNewCascadeDay ? (
+                        <>
+                          {[...primarySegments].reverse().map((seg) => (
+                            <div
+                              key={seg.id}
+                              style={{
+                                height: `${seg.pctOfBar}%`,
+                                backgroundColor: seg.color,
+                              }}
+                              className="w-full border-b border-white/25 last:border-b-0"
+                            />
+                          ))}
+                        </>
+                      ) : (
+                        <div style={{ height: '100%' }} className="w-full bg-slate-400/80" />
+                      )
                     )}
 
                     {chartMode === 'type' && (
@@ -634,8 +642,8 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                     )}
                   </div>
 
-                  {/* Dynamic Overflow Bar (1,020 Lite Reserve) — appears ONLY on days with > 80 calls */}
-                  {chartMode === 'quota' && overflowUsed > 0 && (
+                  {/* Dynamic Overflow Bar (1,020 Lite Reserve) — appears ONLY on days >= 2026-11-24 with > 80 calls */}
+                  {chartMode === 'quota' && isNewCascadeDay && overflowUsed > 0 && (
                     <div
                       style={{ height: `${overflowBarHeight}%` }}
                       className="w-[14px] rounded-t-md overflow-hidden flex flex-col justify-end bg-amber-100 ring-1 ring-amber-400/60 transition-all shadow-2xs group-hover:opacity-90"
