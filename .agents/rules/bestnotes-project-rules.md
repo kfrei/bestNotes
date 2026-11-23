@@ -26,8 +26,9 @@ description: Permanent project rules, deploy workflow, architecture invariants, 
 ## 4. Undo-First Guarantee
 - Every feature that adds, modifies, merges, slices, or deletes strokes, shapes, images, texts, or `angleMarks` **MUST** support 100% 1-click Undo: always reset `suppressNextUndoRecordRef.current = false` before `updateActivePage(..., true)` (or explicitly push an Undo snapshot).
 
-## 5. Zero-Slowdown & Auto-Freeze Invariants
-- **Idle cost:** `0.00 ms / 0 RAF` when idle; use pure CSS `@keyframes` for hover tooltips.
+## 5. UI Consistency, Zero-Slowdown & Fluidity Invariants
+- **UI & Liquid Glass Consistency:** Every new button, modal, dropdown, or panel MUST follow the existing BestNotes / ExplainBoards design language — warm cream/paper **Liquid Glass** (`ipados-liquid-glass`, `bg-[#fdfbf7]/90`, `backdrop-blur-2xl`, soft `#dfd8cb` / `border-white/85` borders), deep navy accents (`#1b2a4a` / `#234978`), crisp monochrome icons, matching button sizes/radii (`rounded-xl`/`rounded-2xl`/`rounded-3xl`) with adjacent controls, and clean Greek labels.
+- **120Hz Writing, Scroll & Responsiveness:** Never degrade Apple Pencil / stylus drawing latency, touch/trackpad scrolling, pinch-zoom, or UI responsiveness. Avoid React state re-renders inside hot pointer/draw/drag loops, keep canvas rendering allocation-light, and maintain `0.00 ms / 0 RAF` when idle (use pure CSS `@keyframes` for hover tooltips).
 - **Simulations:** The `Sim` panel and all simulations MUST start closed/paused on startup and auto-freeze immediately when `Sim` closes, when returning to Library, or when switching notebooks/pages (preserving static snapshots on canvas).
 - **Live TV 16:9:** MUST always start OFF (`false`) on startup (never auto-resume from `sessionStorage`) and use WebRTC-first (0 Firestore writes while P2P DataChannels are open).
 
