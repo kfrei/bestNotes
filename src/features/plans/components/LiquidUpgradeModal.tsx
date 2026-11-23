@@ -14,6 +14,7 @@ import {
   HardDrive,
   Wand2,
   Tags,
+  Cloud,
 } from 'lucide-react';
 import {
   UPGRADE_CONTACT_EMAIL,
@@ -66,6 +67,12 @@ function getReasonHeadline(ctx: UpgradeModalContext | null): {
         title: 'Τα αυτόματα #tags (Auto-Tags) είναι διαθέσιμα στο ULTRA',
         subtitle:
           'Η αυτόματη ανάλυση χειρόγραφων και εικόνων για εξαγωγή #tags περιλαμβάνεται αποκλειστικά στο πλάνο ULTRA.',
+      };
+    case 'drive_sync':
+      return {
+        title: 'Ο συγχρονισμός Google Drive είναι διαθέσιμος σε PLUS & ULTRA',
+        subtitle:
+          'Η σύνδεση και ο αυτόματος συγχρονισμός σημειώσεων PDF με το Google Drive διατίθεται στα πλάνα PLUS και ULTRA (δεν περιλαμβάνεται σε Επισκέπτη ή FREE).',
       };
     case 'files':
       return {
@@ -350,6 +357,27 @@ export const LiquidUpgradeModal: React.FC<LiquidUpgradeModalProps> = ({
                         }`}
                       />
                       <span className="font-semibold">AI: {aiLabel}</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      {plan.isUnlimited || plan.id !== 'free' ? (
+                        <Check
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            isUltra ? 'text-emerald-300' : 'text-emerald-600'
+                          }`}
+                        />
+                      ) : (
+                        <Lock className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                      )}
+                      <span
+                        className={
+                          plan.isUnlimited || plan.id !== 'free'
+                            ? 'font-semibold'
+                            : 'text-slate-400 line-through'
+                        }
+                      >
+                        <Cloud className="w-3 h-3 inline mr-1 -mt-0.5" />
+                        Google Drive Sync (PDF)
+                      </span>
                     </li>
                     <li className="flex items-start gap-2">
                       {plan.allowAutoTags || plan.isUnlimited ? (

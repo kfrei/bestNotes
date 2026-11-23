@@ -1686,6 +1686,16 @@ export default function App() {
     [currentUser, activePlan]
   );
 
+  const isAdminUser = Boolean(
+    currentUser?.email && currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+  );
+
+  const canUseGoogleDriveSync = Boolean(
+    currentUser && activePlan && (activePlan.isUnlimited || activePlan.id !== 'free')
+  );
+  const canUseGoogleDriveSyncRef = useRef(canUseGoogleDriveSync);
+  canUseGoogleDriveSyncRef.current = canUseGoogleDriveSync;
+
   const consumeAiQuotaOrOpenModal = useCallback(
     (featureLabel: string): boolean => {
       const check = checkAiCallAllowed({
@@ -7245,7 +7255,24 @@ export default function App() {
     ) => {
       if (!currentUser) {
         if (showFeedback) {
-          showToast('🔒 Λειτουργία Επισκέπτη (Προσωρινή): Κάνε Σύνδεση / Εγγραφή από το προφίλ 👤 για αποθήκευση!');
+          setUpgradeModalContext({
+            reason: 'drive_sync',
+            featureLabel: 'Google Drive Sync (PDF)',
+            currentValue: 'Επισκέπτης',
+            limitValue: 'PLUS / ULTRA',
+          });
+        }
+        return;
+      }
+
+      if (!canUseGoogleDriveSyncRef.current) {
+        if (showFeedback) {
+          setUpgradeModalContext({
+            reason: 'drive_sync',
+            featureLabel: 'Google Drive Sync (PDF)',
+            currentValue: activePlan?.name || 'FREE',
+            limitValue: 'PLUS / ULTRA',
+          });
         }
         return;
       }
@@ -7573,6 +7600,17 @@ export default function App() {
 
   const performAllNotebooksDrivePdfSync = useCallback(
     async (overrideToken?: string, silentBackground = false) => {
+      if (!canUseGoogleDriveSyncRef.current) {
+        if (!silentBackground) {
+          setUpgradeModalContext({
+            reason: 'drive_sync',
+            featureLabel: 'Google Drive Sync (PDF)',
+            currentValue: activePlan?.name || 'Επισκέπτης',
+            limitValue: 'PLUS / ULTRA',
+          });
+        }
+        return;
+      }
       let token = overrideToken ?? driveAccessToken;
       if (!token) {
         try {
@@ -7838,6 +7876,17 @@ export default function App() {
     ) => {
       const PENDING_SYNC_KEY = 'bestnotes_pending_drive_folder_sync_v1';
       const isAutoResume = Boolean(resumeOpts?.isAutoResume);
+      if (!canUseGoogleDriveSyncRef.current) {
+        if (!isAutoResume) {
+          setUpgradeModalContext({
+            reason: 'drive_sync',
+            featureLabel: 'Google Drive Sync (PDF)',
+            currentValue: activePlan?.name || 'Επισκέπτης',
+            limitValue: 'PLUS / ULTRA',
+          });
+        }
+        return;
+      }
       const normFolder = (p: string) =>
         (p || '')
           .split('/')
@@ -8856,7 +8905,7 @@ export default function App() {
       //    b) Scheduled automatic full sync:
       //       - Smart Schedule (-1): 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00 (1h), then 16:00, 18:00, 20:00 (2h)
       //       - Fixed Interval (30/60/120/240 min)
-      if (secondsToNextDrivePdfSyncRef.current <= 1) {
+      if (canUseGoogleDriveSyncRef.current && secondsToNextDrivePdfSyncRef.current <= 1) {
         secondsToNextDrivePdfSyncRef.current = 60;
         let isScheduledDue = false;
         let pendingSlotKey: string | null = null;
@@ -59022,7 +59071,7 @@ export default function App() {
           )}
 
           {/* Persistent Admin Live Performance Portal (trigger lives inside User Profile dropdown) */}
-          {currentUser?.email === ADMIN_EMAIL && (
+          {isAdminUser && (
             <AdminPerfPill
               renderTrigger={false}
               isOpen={showAdminPerfPanel}
@@ -59100,7 +59149,7 @@ export default function App() {
 
                   {currentUser ? (
                     <>
-                      {currentUser?.email === ADMIN_EMAIL && (
+                      {isAdminUser && (
                         <div className="grid grid-cols-2 gap-1.5">
                           <AdminPerfDropdownButton
                             isOpen={showAdminPerfPanel}
@@ -59187,19 +59236,50 @@ export default function App() {
                       <Cloud className="w-3.5 h-3.5 text-[#234978]" />
                       <span>Google Drive Sync (PDF)</span>
                     </span>
-                    {(driveAccessToken || driveEmail) && (
-                      <span
-                        className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${
-                          driveOfflineLinked
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                            : 'bg-[#efebe3] border-[#dfd8cb] text-[#234978]'
-                        }`}
-                      >
-                        {driveOfflineLinked ? '🟢 Αθόρυβο Sync' : 'Συνδεδεμένο'}
+                    {!canUseGoogleDriveSync ? (
+                      <span className="px-1.5 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-800 text-[9px] font-extrabold">
+                        PLUS / ULTRA
                       </span>
+                    ) : (
+                      (driveAccessToken || driveEmail) && (
+                        <span
+                          className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${
+                            driveOfflineLinked
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-[#efebe3] border-[#dfd8cb] text-[#234978]'
+                          }`}
+                        >
+                          {driveOfflineLinked ? '🟢 Αθόρυβο Sync' : 'Συνδεδεμένο'}
+                        </span>
+                      )
                     )}
                   </div>
 
+                  {!canUseGoogleDriveSync ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-[#64748b] leading-snug">
+                        Η σύνδεση και ο αυτόματος συγχρονισμός σημειώσεων σε <b>PDF</b> με το Google Drive διατίθεται αποκλειστικά στα πλάνα <b>PLUS</b> και <b>ULTRA</b>.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          setUpgradeModalContext({
+                            reason: 'drive_sync',
+                            featureLabel: 'Google Drive Sync (PDF)',
+                            currentValue: activePlan?.name || 'Επισκέπτης',
+                            limitValue: 'PLUS / ULTRA',
+                          });
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#234978]/55 hover:bg-[#234978]/75 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                        title="Διαθέσιμο στα πλάνα PLUS & ULTRA"
+                      >
+                        <Cloud className="w-4 h-4 opacity-80" />
+                        <span>🔒 Google Drive Sync (PLUS / ULTRA)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
                   <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 space-y-1">
                     <div className="text-[10px] font-semibold text-[#64748b] flex items-center justify-between">
                       <span>Φάκελος Προορισμού Google Drive:</span>
@@ -59425,6 +59505,8 @@ export default function App() {
                         <span>Google Drive Login</span>
                       </button>
                     </div>
+                  )}
+                    </>
                   )}
                 </div>
               </div>

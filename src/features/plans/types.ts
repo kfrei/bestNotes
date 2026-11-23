@@ -57,6 +57,7 @@ export type LimitHitKind =
   | 'ai_weekly'
   | 'ai_guest'
   | 'auto_tags'
+  | 'drive_sync'
   | 'guest_save';
 
 export interface UpgradeModalContext {
