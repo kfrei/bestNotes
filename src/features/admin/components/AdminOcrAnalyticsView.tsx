@@ -719,8 +719,8 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               <tr className="bg-[#efebe3]/60 text-[#1b2a4a] font-bold border-b border-[#dfd8cb]">
                 <th className="py-2.5 px-3.5">Ημερομηνία</th>
                 <th className="py-2.5 px-3">Σύνολο AI</th>
-                <th className="py-2.5 px-3">% Ημ. Ορίου ({GEMINI_FREE_TIER_DAILY_CAPACITY})</th>
-                <th className="py-2.5 px-3">Υπόλοιπο Σήμερα</th>
+                <th className="py-2.5 px-3">% Ημ. Ορίου</th>
+                <th className="py-2.5 px-3">Υπόλοιπο Ημέρας</th>
                 <th className="py-2.5 px-3">Admin (Εσύ)</th>
                 <th className="py-2.5 px-3">Άλλοι / Guests</th>
                 <th className="py-2.5 px-3">Κείμενο</th>
@@ -748,10 +748,9 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                   const total = t.ocrTotalCount || 0;
                   const adminCount = t.ocrAdminCount || 0;
                   const othersCount = Math.max(0, total - adminCount);
-                  const dailyPct = Number(
-                    ((total / GEMINI_FREE_TIER_DAILY_CAPACITY) * 100).toFixed(1)
-                  );
-                  const remaining = Math.max(0, GEMINI_FREE_TIER_DAILY_CAPACITY - total);
+                  const rowLimit = t.date >= '2026-11-24' ? GEMINI_FREE_TIER_DAILY_CAPACITY : 100;
+                  const dailyPct = Number(((total / rowLimit) * 100).toFixed(1));
+                  const remaining = Math.max(0, rowLimit - total);
 
                   return (
                     <tr key={t.date} className="hover:bg-white/80 transition-colors">
@@ -762,7 +761,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                       <td className="py-2.5 px-3">
                         <span
                           className={`px-2 py-0.5 rounded-full font-bold text-[11px] border tabular-nums ${
-                            total >= GEMINI_FREE_TIER_DAILY_CAPACITY
+                            total >= rowLimit
                               ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : dailyPct >= 75
                               ? 'bg-amber-50 text-amber-700 border-amber-200'
