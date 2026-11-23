@@ -449,16 +449,16 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
           {chartMode === 'type' && (
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#1b2a4a]" /> Κείμενο
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" /> Κείμενο
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#2b4a7a]" /> Μαθηματικά
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Μαθηματικά
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#4b6a9a]" /> Χημεία
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> Χημεία
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#5c4a72]" /> Ζωντάνεμα
+                <span className="w-2.5 h-2.5 rounded-sm bg-purple-600" /> Ζωντάνεμα
               </span>
             </div>
           )}
@@ -545,9 +545,23 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
               ? allSegments.map((s) => `${s.shortLabel}: ${s.used}/${s.rpd}`).join(', ')
               : 'Καμία κλήση';
 
+            // Legacy dates (< 2026-11-24) used the old 100-req/day quota and green/amber/red thresholds
+            const LEGACY_LIMIT = 100;
+            const legacyPct = Math.round((total / LEGACY_LIMIT) * 100);
+            const legacyBarColor =
+              total >= LEGACY_LIMIT
+                ? 'bg-rose-600'
+                : legacyPct >= 75
+                ? 'bg-amber-500'
+                : 'bg-emerald-600';
+
             const barHeight =
               chartMode === 'quota'
-                ? primaryUsed > 0
+                ? !isNewCascadeDay
+                  ? total > 0
+                    ? Math.min(100, Math.max(8, legacyPct))
+                    : 4
+                  : primaryUsed > 0
                   ? Math.min(100, Math.max(10, primaryPct))
                   : 4
                 : total > 0
@@ -555,7 +569,7 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                 : 4;
 
             const overflowBarHeight =
-              overflowUsed > 0
+              isNewCascadeDay && overflowUsed > 0
                 ? Math.min(100, Math.max(12, Math.round((overflowUsed / OVERFLOW_LITE_LIMIT) * 100)))
                 : 0;
 
@@ -567,34 +581,42 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
             const adminPct = total > 0 ? Math.min(100, (adminC / total) * 100) : 0;
             const othersPct = total > 0 ? Math.max(0, 100 - adminPct) : 0;
 
+            const quotaTooltipSummary = !isNewCascadeDay
+              ? `${total}/${LEGACY_LIMIT} (${legacyPct}% παλαιού ορίου 100)`
+              : `${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (Κύρια Flash: ${primaryUsed}/80 = ${primaryPct}%${
+                  overflowUsed > 0
+                    ? ` • Απόθεμα Lite: +${overflowUsed}/${OVERFLOW_LITE_LIMIT} (${overflowPct}%)`
+                    : ''
+                }, υπόλοιπο: ${dailyRemaining})`;
+
             return (
               <div key={t.date} className="flex flex-col items-center gap-1 h-full justify-end group">
                 {total > 0 && (
                   <span className="text-[10px] font-extrabold text-[#1b2a4a] tabular-nums whitespace-nowrap">
                     {chartMode === 'quota'
-                      ? overflowUsed > 0
+                      ? !isNewCascadeDay
+                        ? `${legacyPct}%`
+                        : overflowUsed > 0
                         ? `100% +${overflowUsed}`
                         : `${primaryPct}%`
                       : total}
                   </span>
                 )}
 
-                {/* Vertical Bar(s) — Primary 80-limit Flash bar + dynamic side Lite overflow bar (1,020) when total > 80 */}
+                {/* Vertical Bar(s) — Legacy 100-limit bar (< 24/11) OR Primary 80-limit Flash + dynamic 1,020 Lite bar (>= 24/11) */}
                 <div
-                  className="w-full flex items-end justify-center gap-0.5 h-full"
-                  title={`${t.date}: ${total}/${GEMINI_FREE_TIER_DAILY_CAPACITY} (Κύρια Flash: ${primaryUsed}/80 = ${primaryPct}%${
-                    overflowUsed > 0 ? ` • Απόθεμα Lite: +${overflowUsed}/${OVERFLOW_LITE_LIMIT} (${overflowPct}%)` : ''
-                  }, υπόλοιπο: ${dailyRemaining}) | Μοντέλα: ${modelBreakdownLabel} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
+                  style={{ height: `${barHeight}%` }}
+                  className="w-full flex items-end justify-center gap-0.5"
+                  title={`${t.date}: ${quotaTooltipSummary} | Μοντέλα: ${modelBreakdownLabel} | ${textC} κείμενο, ${mathC} μαθηματικά, ${chemC} χημεία, ${animC} ζωντάνεμα | Admin: ${adminC}, Άλλοι: ${othersC}`}
                 >
                   <div
-                    style={{ height: `${barHeight}%` }}
                     className={`${
                       chartMode === 'quota' && isNewCascadeDay && overflowUsed > 0
                         ? 'w-[14px]'
                         : 'w-full max-w-[28px]'
-                    } rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90`}
+                    } h-full rounded-t-md overflow-hidden flex flex-col justify-end bg-slate-200 transition-all shadow-2xs group-hover:opacity-90`}
                   >
-                    {chartMode === 'quota' && primaryUsed > 0 && (
+                    {chartMode === 'quota' && total > 0 && (
                       isNewCascadeDay ? (
                         <>
                           {[...primarySegments].reverse().map((seg) => (
@@ -609,23 +631,23 @@ export const AdminOcrAnalyticsView: React.FC<AdminOcrAnalyticsViewProps> = ({
                           ))}
                         </>
                       ) : (
-                        <div style={{ height: '100%' }} className="w-full bg-slate-400/80" />
+                        <div style={{ height: '100%' }} className={`w-full ${legacyBarColor}`} />
                       )
                     )}
 
                     {chartMode === 'type' && (
                       <>
                         {animPct > 0 && (
-                          <div style={{ height: `${animPct}%` }} className="w-full bg-[#5c4a72]" />
+                          <div style={{ height: `${animPct}%` }} className="w-full bg-purple-600" />
                         )}
                         {chemPct > 0 && (
-                          <div style={{ height: `${chemPct}%` }} className="w-full bg-[#4b6a9a]" />
+                          <div style={{ height: `${chemPct}%` }} className="w-full bg-amber-500" />
                         )}
                         {mathPct > 0 && (
-                          <div style={{ height: `${mathPct}%` }} className="w-full bg-[#2b4a7a]" />
+                          <div style={{ height: `${mathPct}%` }} className="w-full bg-emerald-500" />
                         )}
                         {textPct > 0 && (
-                          <div style={{ height: `${textPct}%` }} className="w-full bg-[#1b2a4a]" />
+                          <div style={{ height: `${textPct}%` }} className="w-full bg-blue-600" />
                         )}
                       </>
                     )}
