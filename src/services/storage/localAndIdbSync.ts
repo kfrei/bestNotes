@@ -22,6 +22,7 @@ import {
   saveNotebooksToIndexedDB,
   saveCustomFoldersToIndexedDB,
 } from './indexedDb';
+import { isShowcaseNotebook } from './publicShowcaseLogic';
 
 export function saveCustomFoldersToLocalAndIdb(
   uid: string,
@@ -52,7 +53,9 @@ export function saveCustomFoldersToLocalAndIdb(
 export function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
   if (!uid || !Array.isArray(nbs) || nbs.length === 0) return;
   try {
-    const valid = nbs.filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0));
+    const valid = nbs.filter(
+      (n) => !isShowcaseNotebook(n) && !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+    );
     if (valid.length === 0) return;
 
     const sortedByRecent = [...valid].sort(
@@ -151,8 +154,9 @@ export function saveLibraryShelfCache(uid: string, nbs: Notebook[]): void {
 }
 
 export function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
-  void saveNotebooksToIndexedDB(uid, nbs);
-  saveLibraryShelfCache(uid, nbs);
+  const personalNbs = nbs.filter((n) => !isShowcaseNotebook(n));
+  void saveNotebooksToIndexedDB(uid, personalNbs);
+  saveLibraryShelfCache(uid, personalNbs);
   try {
     // 1. Always cache the currently active notebook in localStorage if it fits (up to 1.8MB)
     // so on page refresh, the active notebook is ready SYNCHRONOUSLY on the very first frame!
@@ -167,7 +171,7 @@ export function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
         // ignore
       }
     }
-    const targetNb = (activeId ? nbs.find((n) => n.id === activeId) : null) || nbs[0];
+    const targetNb = (activeId ? personalNbs.find((n) => n.id === activeId) : null) || personalNbs[0];
     if (targetNb) {
       try {
         const activeSerialized = JSON.stringify(cleanNotebookForStorage(targetNb));
@@ -183,8 +187,8 @@ export function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
     // 2. Full collection check for localStorage (if whole collection fits under 1.5MB)
     // Accurately estimate stroke, image, text, and simulation payload sizes so multi-MB closed notebooks never trigger wasted JSON.stringify!
     let estimatedChars = 0;
-    for (let i = 0; i < nbs.length; i++) {
-      const pages = nbs[i].pages || [];
+    for (let i = 0; i < personalNbs.length; i++) {
+      const pages = personalNbs[i].pages || [];
       for (let j = 0; j < pages.length; j++) {
         const pg = pages[j];
         estimatedChars += (pg.backgroundDataUrl?.length || 0) + 256;
@@ -210,7 +214,7 @@ export function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
       localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
       return;
     }
-    const serialized = JSON.stringify(nbs.map(cleanNotebookForStorage));
+    const serialized = JSON.stringify(personalNbs.map(cleanNotebookForStorage));
     if (serialized.length <= 1500000) {
       localStorage.setItem(`${STORAGE_KEY}_${uid}`, serialized);
     } else {

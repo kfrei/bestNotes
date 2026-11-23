@@ -502,6 +502,7 @@ export interface Notebook {
   updatedAt: string;
   sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes' | '.pdf' | '.image';
   nativeFileSizeBytes?: number; // Exact original file size in bytes (e.g. 13.1 MB PDF stays 13.1 MB)
+  isShowcase?: boolean; // Public read-only demo notebook managed by Admin (`public_showcase_notebooks`)
   pages: NotePage[];
 }
 

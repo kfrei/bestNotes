@@ -375,6 +375,24 @@ import {
   sessionRestoredNotebookIds,
   getMonotonicIsoTimestamp,
   saveNotebookToFirestoreChunked,
+  DEFAULT_SHOWCASE_FOLDER_NAME,
+  DEFAULT_SHOWCASE_FOLDER_COLOR,
+  DEFAULT_SHOWCASE_FOLDER_ICON,
+  SHOWCASE_ID_PREFIX,
+  isShowcaseNotebook,
+  isShowcaseFolderPath,
+  isExactShowcaseRootFolder,
+  findInitialShowcaseSeedMatches,
+  buildShowcaseCloneFromNotebook,
+  buildPersonalCopyFromShowcase,
+  reassembleShowcaseNotebooksFromDocs,
+  saveShowcaseMetaToFirestore,
+  saveShowcaseNotebookToFirestoreChunked,
+  softDeleteShowcaseNotebookInFirestore,
+  subscribePublicShowcaseMeta,
+  subscribePublicShowcaseNotebooks,
+  type PublicShowcaseMeta,
+  type RawShowcaseFirestoreDoc,
 } from './services/storage';
 import {
   buildLibraryFilterChips,
@@ -1609,7 +1627,11 @@ export default function App() {
   const { isAdminOpen, openAdmin, closeAdmin } = useAdminRoute();
   const [showAdminPerfPanel, setShowAdminPerfPanel] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<'overview' | 'perf' | undefined>(undefined);
-  useAppTelemetry(currentUser, notebooks, isAuthResolved);
+  const personalNotebooksForTelemetry = useMemo(
+    () => notebooks.filter((n) => !isShowcaseNotebook(n)),
+    [notebooks]
+  );
+  useAppTelemetry(currentUser, personalNotebooksForTelemetry, isAuthResolved);
 
   // =========================================================================
   // Subscription Plans, Tier Quotas & AI Entitlements (FREE / PLUS / ULTRA / Guest)
@@ -1689,6 +1711,35 @@ export default function App() {
   const isAdminUser = Boolean(
     currentUser?.email && currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
   );
+  const isAdminUserRef = useRef<boolean>(isAdminUser);
+  isAdminUserRef.current = isAdminUser;
+
+  // Public Showcase / Demo Folder (`Σημειώσεις`) state & master snapshots
+  const [publicShowcaseMeta, setPublicShowcaseMeta] = useState<PublicShowcaseMeta | null>(null);
+  const publicShowcaseMetaRef = useRef<PublicShowcaseMeta | null>(null);
+  publicShowcaseMetaRef.current = publicShowcaseMeta;
+  const [hasLoadedShowcaseMeta, setHasLoadedShowcaseMeta] = useState<boolean>(false);
+  const showcaseMasterNotebooksRef = useRef<Map<string, Notebook>>(new Map());
+  const rawShowcaseDocsRef = useRef<RawShowcaseFirestoreDoc[]>([]);
+  const hasTriggeredInitialShowcaseSeedRef = useRef<boolean>(false);
+  const showcaseFolderName = publicShowcaseMeta?.folderName || DEFAULT_SHOWCASE_FOLDER_NAME;
+  const showcaseFolderNameRef = useRef<string>(showcaseFolderName);
+  showcaseFolderNameRef.current = showcaseFolderName;
+
+  const buildFreshShowcaseClones = useCallback((): Notebook[] => {
+    return Array.from(showcaseMasterNotebooksRef.current.values()).map((nb) =>
+      structuredClone(nb)
+    );
+  }, []);
+
+  const restoreShowcaseNotebookToMaster = useCallback((nbId: string) => {
+    if (isAdminUserRef.current) return;
+    const master = showcaseMasterNotebooksRef.current.get(nbId);
+    if (!master) return;
+    const freshClone = structuredClone(master);
+    userEditedInSessionRef.current.delete(nbId);
+    setNotebooks((prev) => prev.map((n) => (n.id === nbId ? freshClone : n)));
+  }, []);
 
   const canUseGoogleDriveSync = Boolean(
     currentUser && activePlan && (activePlan.isUnlimited || activePlan.id !== 'free')
@@ -1744,6 +1795,8 @@ export default function App() {
     }
     return [];
   });
+  const openNotebookIdsRef = useRef<string[]>(openNotebookIds);
+  openNotebookIdsRef.current = openNotebookIds;
   const [activeNotebookId, setActiveNotebookId] = useState<string>(() => {
     return initialSession?.activeNotebookId && initialSession.activeNotebookId !== 'nb-blank-1'
       ? initialSession.activeNotebookId
@@ -1755,12 +1808,16 @@ export default function App() {
 
   const checkFileAndStorageOrOpenModal = useCallback(
     (additionalFiles = 1, additionalBytes = 0): boolean => {
-      const nonEmptyNotebooksCount = notebooks.filter(
+      const personalNotebooks = notebooks.filter((n) => !isShowcaseNotebook(n));
+      const nonEmptyNotebooksCount = personalNotebooks.filter(
         (n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+      ).length;
+      const personalOpenCount = openNotebookIds.filter(
+        (id) => !id.startsWith(SHOWCASE_ID_PREFIX)
       ).length;
       const effectiveFilesCount = currentUser
         ? nonEmptyNotebooksCount
-        : Math.max(openNotebookIds.length, nonEmptyNotebooksCount);
+        : Math.max(personalOpenCount, nonEmptyNotebooksCount);
       const fileCheck = checkFileCreationAllowed({
         isAuthenticated: Boolean(currentUser),
         plan: activePlan,
@@ -1775,7 +1832,7 @@ export default function App() {
         });
         return false;
       }
-      const totalBytes = computeTotalNotebooksSizeBytes(notebooks);
+      const totalBytes = computeTotalNotebooksSizeBytes(personalNotebooks);
       const storageCheck = checkStorageAllowed({
         isAuthenticated: Boolean(currentUser),
         plan: activePlan,
@@ -1792,11 +1849,15 @@ export default function App() {
       }
       return true;
     },
-    [currentUser, activePlan, notebooks, openNotebookIds.length]
+    [currentUser, activePlan, notebooks, openNotebookIds]
   );
 
   const checkPageLimitOrOpenModal = useCallback(
     (targetNb: Notebook, additionalPages = 1, additionalBytes = 0): boolean => {
+      // Public showcase demo notebooks are never blocked by Guest / FREE / PLUS page or storage limits
+      if (isShowcaseNotebook(targetNb)) {
+        return true;
+      }
       const isNativeNotebook = targetNb.sourceFormat !== '.pdf';
       const pageCheck = checkPageAdditionAllowed({
         isAuthenticated: Boolean(currentUser),
@@ -1814,7 +1875,9 @@ export default function App() {
         return false;
       }
       if (additionalBytes > 0) {
-        const totalBytes = computeTotalNotebooksSizeBytes(notebooks);
+        const totalBytes = computeTotalNotebooksSizeBytes(
+          notebooks.filter((n) => !isShowcaseNotebook(n))
+        );
         const storageCheck = checkStorageAllowed({
           isAuthenticated: Boolean(currentUser),
           plan: activePlan,
@@ -1837,7 +1900,7 @@ export default function App() {
 
   const clearGuestEphemeralWorkspace = useCallback(() => {
     if (currentUser) return;
-    setNotebooks([]);
+    setNotebooks(buildFreshShowcaseClones());
     setOpenNotebookIds([]);
     setActiveNotebookId('');
     setActivePageIndex(0);
@@ -1847,7 +1910,7 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, [currentUser]);
+  }, [currentUser, buildFreshShowcaseClones]);
 
   const initialZoom =
     typeof initialSession?.zoom === 'number' && Number.isFinite(initialSession.zoom)
@@ -1908,8 +1971,18 @@ export default function App() {
               // ignore
             }
           }
+          const mergePersonalWithShowcase = (
+            prev: Notebook[],
+            personalNbs: Notebook[]
+          ): Notebook[] => {
+            const existingShowcase = prev.filter((n) => isShowcaseNotebook(n));
+            const showcaseToKeep =
+              existingShowcase.length > 0 ? existingShowcase : buildFreshShowcaseClones();
+            return [...personalNbs.filter((n) => !isShowcaseNotebook(n)), ...showcaseToKeep];
+          };
           if (loadedNbs && loadedNbs.length > 0) {
-            setNotebooks(loadedNbs);
+            const nextPersonal = loadedNbs;
+            setNotebooks((prev) => mergePersonalWithShowcase(prev, nextPersonal));
           } else {
             // Also check library shelf cache before single active notebook
             const libRaw =
@@ -1922,10 +1995,19 @@ export default function App() {
                 const parsed = JSON.parse(libRaw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
                   const cleaned = parsed
-                    .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+                    .filter(
+                      (n: Notebook) =>
+                        !isShowcaseNotebook(n) &&
+                        !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+                    )
                     .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
                   if (cleaned.length > 0) {
-                    setNotebooks((prev) => (prev.length > cleaned.length ? prev : cleaned));
+                    setNotebooks((prev) => {
+                      const prevPersonalCount = prev.filter((n) => !isShowcaseNotebook(n)).length;
+                      return prevPersonalCount > cleaned.length
+                        ? prev
+                        : mergePersonalWithShowcase(prev, cleaned);
+                    });
                     loadedNbs = cleaned;
                   }
                 }
@@ -1940,9 +2022,20 @@ export default function App() {
               if (activeRaw) {
                 try {
                   const parsed = JSON.parse(activeRaw);
-                  if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+                  if (
+                    parsed &&
+                    typeof parsed.id === 'string' &&
+                    !isShowcaseNotebook(parsed) &&
+                    Array.isArray(parsed.pages) &&
+                    parsed.pages.length > 0
+                  ) {
                     const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
-                    setNotebooks((prev) => (prev.length > 1 ? prev : [repaired]));
+                    setNotebooks((prev) => {
+                      const prevPersonalCount = prev.filter((n) => !isShowcaseNotebook(n)).length;
+                      return prevPersonalCount > 1
+                        ? prev
+                        : mergePersonalWithShowcase(prev, [repaired]);
+                    });
                   }
                 } catch {
                   // ignore
@@ -2154,9 +2247,9 @@ export default function App() {
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
           localStorage.removeItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
-          // Guest mode: strictly ephemeral empty library (0 notes, 0 folders, 0 recycle bin)
+          // Guest mode: strictly ephemeral empty personal library + read-only Public Showcase demo notebooks
           const freshBlank = createDefaultBlankNotebooks();
-          setNotebooks(freshBlank);
+          setNotebooks([...freshBlank, ...buildFreshShowcaseClones()]);
           setOpenNotebookIds([]);
           setActiveNotebookId('');
           setActivePageIndex(0);
@@ -5402,11 +5495,15 @@ export default function App() {
 
   const startRenamingNotebook = useCallback(
     (nb: Notebook, context: 'tab' | 'grid-strip' | 'grid-below' | 'list') => {
+      if (isShowcaseNotebook(nb) && !isAdminUserRef.current) {
+        showToast('🔒 Οι demo σημειώσεις δεν μετονομάζονται — κάνε «Αντίγραφο» για δική σου έκδοση.');
+        return;
+      }
       setRenamingNotebookId(nb.id);
       setRenamingNotebookContext(context);
       setRenamingTitleDraft(nb.title);
     },
-    []
+    [showToast]
   );
 
   // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
@@ -5438,6 +5535,11 @@ export default function App() {
 
   const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string, retryAttempt = 0) => {
     try {
+      const isShowcase = isShowcaseNotebook(nb);
+      if (isShowcase && !isAdminUserRef.current) {
+        // Non-admin edits to public showcase notebooks are strictly ephemeral in-memory only
+        return;
+      }
       if (sessionDeletedNotebookIds.has(nb.id)) {
         return;
       }
@@ -5463,9 +5565,15 @@ export default function App() {
       lastSyncedJsonMapRef.current.set(nbToSave.id, dataJson);
       inFlightSavesMapRef.current.set(nbToSave.id, (inFlightSavesMapRef.current.get(nbToSave.id) || 0) + 1);
       setSyncStatus('syncing');
-      saveNotebookToFirestoreChunked(uid, nbToSave, dataJson, deviceIdRef.current)
+      const savePromise = isShowcase
+        ? saveShowcaseNotebookToFirestoreChunked(nbToSave, dataJson, deviceIdRef.current)
+        : saveNotebookToFirestoreChunked(uid, nbToSave, dataJson, deviceIdRef.current);
+      savePromise
         .then((didWrite) => {
           if (didWrite) {
+            if (isShowcase) {
+              showcaseMasterNotebooksRef.current.set(nbToSave.id, structuredClone(nbToSave));
+            }
             lastSeenRemoteJsonMapRef.current.set(nbToSave.id, dataJson);
             if (nbToSave.updatedAt) {
               const curRem = remoteUpdatedAtMapRef.current.get(nbToSave.id) || '';
@@ -5511,6 +5619,7 @@ export default function App() {
             // Confirm 'synced' ONLY when all edited notebooks match lastSyncedJsonMapRef
             let stillUnsynced = false;
             for (const curNb of notebooksRef.current) {
+              if (isShowcaseNotebook(curNb) && !isAdminUserRef.current) continue;
               if (!userEditedInSessionRef.current.has(curNb.id)) continue;
               try {
                 const curJson = serializeNotebookForFirestore(curNb);
@@ -5586,6 +5695,10 @@ export default function App() {
       if (!trimmed) return;
       const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
       if (!existingNb || existingNb.title === trimmed) return;
+      if (isShowcaseNotebook(existingNb) && !isAdminUserRef.current) {
+        showToast('🔒 Οι demo σημειώσεις δεν μετονομάζονται — κάνε «Αντίγραφο» για δική σου έκδοση.');
+        return;
+      }
       const nowIso = getMonotonicIsoTimestamp(
         existingNb.updatedAt,
         remoteUpdatedAtMapRef.current.get(nbId)
@@ -5618,6 +5731,10 @@ export default function App() {
 
       const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
       if (!existingNb) return;
+      if (isShowcaseNotebook(existingNb) && !isAdminUserRef.current) {
+        showToast('🔒 Οι ετικέτες των demo σημειώσεων δεν αποθηκεύονται — κάνε «Αντίγραφο» πρώτα.');
+        return;
+      }
       const existing = existingNb.tags || [];
       const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
       const merged = [...existing];
@@ -5653,6 +5770,10 @@ export default function App() {
     (nbId: string, tagToRemove: string) => {
       const existingNb = notebooksRef.current.find((nb) => nb.id === nbId);
       if (!existingNb) return;
+      if (isShowcaseNotebook(existingNb) && !isAdminUserRef.current) {
+        showToast('🔒 Οι ετικέτες των demo σημειώσεων δεν αποθηκεύονται — κάνε «Αντίγραφο» πρώτα.');
+        return;
+      }
       const nextTags = (existingNb.tags || []).filter((t) => t !== tagToRemove);
       const nowIso = getMonotonicIsoTimestamp(
         existingNb.updatedAt,
@@ -5677,6 +5798,12 @@ export default function App() {
 
   const triggerSmartAutoTagsForNotebook = useCallback(
     async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
+      if (isShowcaseNotebook(targetNb) && !isAdminUserRef.current) {
+        if (!silent) {
+          showToast('🔒 Οι ετικέτες των demo σημειώσεων δεν αποθηκεύονται — κάνε «Αντίγραφο» πρώτα.');
+        }
+        return;
+      }
       // Auto-Tags (#tags) is ULTRA-only: silent background triggers skip quietly; manual click opens Liquid Upgrade Modal
       if (!canUseAutoTags) {
         if (!silent) {
@@ -5921,10 +6048,109 @@ export default function App() {
         setFolderPickerNbId(null);
         return;
       }
+      const liveShowcaseRoot = showcaseFolderNameRef.current;
+      const isTargetShowcase = isShowcaseFolderPath(cleanFolder, liveShowcaseRoot);
+      const isSourceShowcase = isShowcaseNotebook(existingNb);
+
+      if (!isAdminUserRef.current && (isSourceShowcase || isTargetShowcase)) {
+        setFolderPickerNbId(null);
+        showToast(
+          '🔒 Δεν επιτρέπεται μετακίνηση μέσα ή έξω από τον φάκελο Demo — κάνε «Αντίγραφο» για δική σου έκδοση.'
+        );
+        return;
+      }
+
       const nowIso = getMonotonicIsoTimestamp(
         existingNb.updatedAt,
         remoteUpdatedAtMapRef.current.get(nbId)
       );
+
+      // Admin moving a personal notebook INTO the public showcase folder -> publish to `public_showcase_notebooks`
+      if (isAdminUserRef.current && !isSourceShowcase && isTargetShowcase) {
+        const newShowcaseId = `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const publishedNb = buildShowcaseCloneFromNotebook(
+          existingNb,
+          newShowcaseId,
+          cleanFolder,
+          nowIso
+        );
+        sessionDeletedNotebookIds.add(existingNb.id);
+        userEditedInSessionRef.current.delete(existingNb.id);
+        userEditedInSessionRef.current.add(publishedNb.id);
+        saveUserEditedSessionIds(userEditedInSessionRef.current);
+        showcaseMasterNotebooksRef.current.set(publishedNb.id, structuredClone(publishedNb));
+        setNotebooks((prev) =>
+          prev.map((nb) => (nb.id === existingNb.id ? publishedNb : nb))
+        );
+        setOpenNotebookIds((prev) =>
+          prev.map((id) => (id === existingNb.id ? publishedNb.id : id))
+        );
+        if (activeNotebookId === existingNb.id) {
+          setActiveNotebookId(publishedNb.id);
+        }
+        if (currentUser) {
+          pushNotebookToCloudTracked(currentUser.uid, publishedNb);
+          // Soft-delete the old personal notebook doc so it doesn't duplicate
+          void setDoc(
+            doc(db, 'users', currentUser.uid, 'notebooks', existingNb.id),
+            {
+              id: existingNb.id,
+              title: (existingNb.title || 'Σημείωση').slice(0, 900),
+              updatedAt: nowIso,
+              deleted: true,
+              deviceId: deviceIdRef.current,
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+        setFolderPickerNbId(null);
+        setIsDirty(true);
+        setSyncStatus('dirty');
+        showToast(`🌐 Δημοσιεύθηκε στον φάκελο Demo «${cleanFolder}»!`);
+        return;
+      }
+
+      // Admin moving a showcase notebook OUT of the public showcase folder -> convert to personal notebook
+      if (isAdminUserRef.current && isSourceShowcase && !isTargetShowcase) {
+        const newPersonalId = `nb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const { isShowcase: _stripShowcase, ...restNb } = structuredClone(existingNb);
+        const personalNb: Notebook = {
+          ...restNb,
+          id: newPersonalId,
+          folder: cleanFolder,
+          updatedAt: nowIso,
+        };
+        sessionDeletedNotebookIds.add(existingNb.id);
+        showcaseMasterNotebooksRef.current.delete(existingNb.id);
+        userEditedInSessionRef.current.delete(existingNb.id);
+        userEditedInSessionRef.current.add(personalNb.id);
+        saveUserEditedSessionIds(userEditedInSessionRef.current);
+        setNotebooks((prev) =>
+          prev.map((nb) => (nb.id === existingNb.id ? personalNb : nb))
+        );
+        setOpenNotebookIds((prev) =>
+          prev.map((id) => (id === existingNb.id ? personalNb.id : id))
+        );
+        if (activeNotebookId === existingNb.id) {
+          setActiveNotebookId(personalNb.id);
+        }
+        if (currentUser) {
+          pushNotebookToCloudTracked(currentUser.uid, personalNb);
+          void softDeleteShowcaseNotebookInFirestore(existingNb, nowIso, deviceIdRef.current).catch(
+            () => {}
+          );
+        }
+        setFolderPickerNbId(null);
+        setIsDirty(true);
+        setSyncStatus('dirty');
+        showToast(
+          cleanFolder
+            ? `📁 Αφαιρέθηκε από τα Demo και μετακινήθηκε στον φάκελο «${cleanFolder}»!`
+            : '📁 Αφαιρέθηκε από τα Demo και μετακινήθηκε στη Βιβλιοθήκη σου!'
+        );
+        return;
+      }
+
       const updatedNb: Notebook = { ...existingNb, folder: cleanFolder, updatedAt: nowIso };
       userEditedInSessionRef.current.add(nbId);
       saveUserEditedSessionIds(userEditedInSessionRef.current);
@@ -5941,11 +6167,12 @@ export default function App() {
           : '📁 Αφαιρέθηκε ο φάκελος από τη σημείωση!'
       );
     },
-    [showToast, currentUser, pushNotebookToCloudTracked]
+    [showToast, currentUser, pushNotebookToCloudTracked, activeNotebookId]
   );
 
   const startLibraryNotebookPointerDrag = useCallback(
     (e: React.PointerEvent<HTMLElement>, nb: Notebook) => {
+      if (isShowcaseNotebook(nb) && !isAdminUserRef.current) return;
       if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
       if (renamingNotebookId === nb.id) return;
       const targetEl = e.target as HTMLElement | null;
@@ -6670,6 +6897,8 @@ export default function App() {
         if (!isFromCache) {
           const currentLocalMap = new Map<string, Notebook>();
           for (const rawLocalNb of notebooksRef.current) {
+            // Showcase notebooks live in `public_showcase_notebooks`, never in `users/{uid}/notebooks`
+            if (isShowcaseNotebook(rawLocalNb)) continue;
             const { nb: localNb } = repairNotebookPagesAndMetrisiMazas(rawLocalNb);
             currentLocalMap.set(localNb.id, localNb);
           }
@@ -7007,6 +7236,148 @@ export default function App() {
     };
   }, [currentUser, pushNotebookToCloudTracked, pushDriveSyncMetaToCloud]);
 
+  // =========================================================================
+  // PUBLIC SHOWCASE / DEMO FOLDER (`Σημειώσεις`) LIVE SUBSCRIPTION & ADMIN SEED
+  // =========================================================================
+  useEffect(() => {
+    const mergeShowcaseNotebooksIntoState = (
+      rawDocs: RawShowcaseFirestoreDoc[],
+      liveFolderName: string
+    ) => {
+      const assembled = reassembleShowcaseNotebooksFromDocs(rawDocs, liveFolderName);
+      const nextMasterMap = new Map<string, Notebook>();
+      for (const nb of assembled) {
+        if (sessionDeletedNotebookIds.has(nb.id)) continue;
+        nextMasterMap.set(nb.id, nb);
+      }
+      showcaseMasterNotebooksRef.current = nextMasterMap;
+
+      setNotebooks((prev) => {
+        const openSet = new Set(openNotebookIdsRef.current);
+        const personalOnly = prev.filter((n) => !isShowcaseNotebook(n));
+        const existingShowcaseById = new Map<string, Notebook>();
+        for (const n of prev) {
+          if (isShowcaseNotebook(n)) {
+            existingShowcaseById.set(n.id, n);
+          }
+        }
+
+        const mergedShowcase: Notebook[] = [];
+        for (const [id, masterNb] of nextMasterMap.entries()) {
+          const existing = existingShowcaseById.get(id);
+          // Preserve active in-memory edits while a showcase notebook is currently open in the editor
+          // (or while Admin has an in-flight save or is actively erasing). Always sync its folder name!
+          if (
+            existing &&
+            (openSet.has(id) ||
+              (isAdminUserRef.current &&
+                ((inFlightSavesMapRef.current.get(id) || 0) > 0 ||
+                  (isActivelyErasingRef.current &&
+                    eraserDidModifyRef.current &&
+                    id === activeNotebookLiveRef.current.id))))
+          ) {
+            mergedShowcase.push(
+              existing.folder === masterNb.folder
+                ? existing
+                : { ...existing, folder: masterNb.folder }
+            );
+          } else {
+            mergedShowcase.push(structuredClone(masterNb));
+          }
+        }
+
+        // Also keep any newly created Admin showcase notebook whose save is still in-flight
+        if (isAdminUserRef.current) {
+          for (const [id, existing] of existingShowcaseById.entries()) {
+            if (
+              !nextMasterMap.has(id) &&
+              !sessionDeletedNotebookIds.has(id) &&
+              (inFlightSavesMapRef.current.get(id) || 0) > 0
+            ) {
+              mergedShowcase.push(existing);
+            }
+          }
+        }
+
+        return [...personalOnly, ...mergedShowcase];
+      });
+    };
+
+    const unsubMeta = subscribePublicShowcaseMeta((meta, exists, fromCache) => {
+      if (!fromCache || exists) {
+        setHasLoadedShowcaseMeta(true);
+      }
+      setPublicShowcaseMeta(meta);
+      const nextFolderName = meta?.folderName || DEFAULT_SHOWCASE_FOLDER_NAME;
+      showcaseFolderNameRef.current = nextFolderName;
+      if (rawShowcaseDocsRef.current.length > 0) {
+        mergeShowcaseNotebooksIntoState(rawShowcaseDocsRef.current, nextFolderName);
+      }
+    });
+
+    const unsubNotebooks = subscribePublicShowcaseNotebooks((rawDocs) => {
+      rawShowcaseDocsRef.current = rawDocs;
+      mergeShowcaseNotebooksIntoState(rawDocs, showcaseFolderNameRef.current);
+    });
+
+    return () => {
+      unsubMeta();
+      unsubNotebooks();
+    };
+  }, []);
+
+  // One-time automatic Admin seed of the 8 demo notebooks into `public_showcase_notebooks`
+  useEffect(() => {
+    if (!isAdminUser || !currentUser || !cloudInitialLoaded || !hasLoadedShowcaseMeta) return;
+    if (hasTriggeredInitialShowcaseSeedRef.current) return;
+    if (publicShowcaseMeta?.seeded === true) {
+      hasTriggeredInitialShowcaseSeedRef.current = true;
+      return;
+    }
+
+    const matches = findInitialShowcaseSeedMatches(notebooks);
+    if (matches.length === 0) return;
+
+    hasTriggeredInitialShowcaseSeedRef.current = true;
+    const todayIso = new Date().toISOString();
+    const targetFolderName = publicShowcaseMeta?.folderName || DEFAULT_SHOWCASE_FOLDER_NAME;
+    const targetFolderColor = publicShowcaseMeta?.folderColor || DEFAULT_SHOWCASE_FOLDER_COLOR;
+    const targetFolderIcon = publicShowcaseMeta?.folderIcon || DEFAULT_SHOWCASE_FOLDER_ICON;
+
+    void (async () => {
+      try {
+        let savedCount = 0;
+        for (const match of matches) {
+          const cloned = buildShowcaseCloneFromNotebook(
+            match.source,
+            match.showcaseId,
+            targetFolderName,
+            todayIso
+          );
+          const dataJson = serializeNotebookForFirestore(cloned);
+          await saveShowcaseNotebookToFirestoreChunked(cloned, dataJson, deviceIdRef.current);
+          showcaseMasterNotebooksRef.current.set(cloned.id, structuredClone(cloned));
+          savedCount++;
+        }
+        await saveShowcaseMetaToFirestore({
+          folderName: targetFolderName,
+          folderColor: targetFolderColor,
+          folderIcon: targetFolderIcon,
+          seeded: true,
+          seededAt: todayIso,
+          updatedAt: todayIso,
+          deviceId: deviceIdRef.current,
+        });
+        showToast(
+          `✨ Δημιουργήθηκε ο δημόσιος φάκελος Demo «${targetFolderName}» με ${savedCount} σημειώσεις!`
+        );
+      } catch (err) {
+        console.error('[Showcase] Initial Admin seed error:', err);
+        hasTriggeredInitialShowcaseSeedRef.current = false;
+      }
+    })();
+  }, [isAdminUser, currentUser, cloudInitialLoaded, hasLoadedShowcaseMeta, publicShowcaseMeta, notebooks, showToast]);
+
   const performCloudFirestoreSyncNow = useCallback(() => {
     if (!currentUser || !hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current) {
       return false;
@@ -7015,6 +7386,9 @@ export default function App() {
     let pushedAny = false;
     for (const nb of notebooksRef.current) {
       try {
+        if (isShowcaseNotebook(nb) && !isAdminUserRef.current) {
+          continue;
+        }
         // CRITICAL MULTI-DEVICE GUARD:
         // 1) Never allow ANY notebook to be uploaded by this device unless the user
         //    has explicitly created, imported, or edited it during this active session (userEditedInSessionRef)!
@@ -7053,6 +7427,9 @@ export default function App() {
       let anyUnsynced = false;
       for (const nb of notebooks) {
         try {
+          if (isShowcaseNotebook(nb) && !isAdminUserRef.current) {
+            continue;
+          }
           if (!userEditedInSessionRef.current.has(nb.id)) {
             continue;
           }
@@ -7699,8 +8076,11 @@ export default function App() {
         const currentLibFolder = viewMode === 'library' ? normFolder(activeLibraryFolder || '') : '';
 
         // Sort notebooks so the currently viewed Library folder (e.g. Γ2) & user school folders sync FIRST,
-        // and heavy seeded demo notebooks sync last!
-        const prioritizedNotebooks = [...notebooks].sort((a, b) => {
+        // and heavy seeded demo notebooks sync last! Never upload read-only public showcase demos to a non-admin's Drive.
+        const driveEligibleNotebooks = notebooks.filter(
+          (n) => isAdminUserRef.current || !isShowcaseNotebook(n)
+        );
+        const prioritizedNotebooks = [...driveEligibleNotebooks].sort((a, b) => {
           const aInCur =
             currentLibFolder &&
             (normFolder(a.folder || '') === currentLibFolder ||
@@ -53755,15 +54135,22 @@ export default function App() {
   );
 
   const handleCreateNewNoteTab = useCallback(() => {
-    if (!checkFileAndStorageOrOpenModal(1, 1024)) return;
+    const rawTargetFolder = activeLibraryFolder || activeNotebook?.folder || '';
+    const isTargetShowcase = isShowcaseFolderPath(rawTargetFolder, showcaseFolderNameRef.current);
+    const effectiveFolder = !isAdminUserRef.current && isTargetShowcase ? '' : rawTargetFolder;
+    const creatingAsShowcase = isAdminUserRef.current && isTargetShowcase;
+    if (!creatingAsShowcase && !checkFileAndStorageOrOpenModal(1, 1024)) return;
     pauseAndReleaseSimulationsRef.current({ closingTab: false });
     const newNb: Notebook = {
-      id: `nb-${Date.now()}`,
+      id: creatingAsShowcase
+        ? `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        : `nb-${Date.now()}`,
       title: `Σημείωση ${notebooks.length + 1}`,
-      folder: activeLibraryFolder || activeNotebook?.folder || '',
+      folder: effectiveFolder,
       coverColor: '#0284c7',
       updatedAt: new Date().toISOString(),
       sourceFormat: '.bestnotes',
+      ...(creatingAsShowcase ? { isShowcase: true } : {}),
       pages: [
         {
           id: `p-${Date.now()}`,
@@ -53782,6 +54169,9 @@ export default function App() {
       ],
     };
     userEditedInSessionRef.current.add(newNb.id);
+    if (creatingAsShowcase) {
+      showcaseMasterNotebooksRef.current.set(newNb.id, structuredClone(newNb));
+    }
     trackFileCreation(currentUser);
     setNotebooks((prev) => [newNb, ...prev]);
     setOpenNotebookIds((prev) => [...prev, newNb.id]);
@@ -53798,14 +54188,34 @@ export default function App() {
     if (viewMode !== 'editor') return;
     const targetCloseId = activeNotebookId || activeNotebook?.id;
     if (!targetCloseId) return;
+    const closingNb = notebooks.find((n) => n.id === targetCloseId) || activeNotebook;
+    const closingIsShowcase = isShowcaseNotebook(closingNb);
     pauseAndReleaseSimulationsRef.current({ targetNotebookId: targetCloseId, closingTab: true });
     if (!currentUser) {
       setIsClosingDocument(true);
       window.setTimeout(() => {
         setIsClosingDocument(false);
-        clearGuestEphemeralWorkspace();
-        setViewMode('landing');
-        showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+        if (closingIsShowcase) {
+          restoreShowcaseNotebookToMaster(targetCloseId);
+          const remGuest = openNotebookIds.filter(
+            (id) => id !== targetCloseId && notebooks.some((n) => n.id === id)
+          );
+          setOpenNotebookIds(remGuest);
+          if (remGuest.length === 0) {
+            setActiveNotebookId('');
+            setActiveLibraryFolder(closingNb?.folder || showcaseFolderNameRef.current);
+            setViewMode('library');
+          } else {
+            setActiveNotebookId(remGuest[remGuest.length - 1]);
+            setActivePageIndex(0);
+            activeDrawingPageIndexRef.current = 0;
+          }
+          showToast('🔄 Οι αλλαγές στη demo σημείωση δεν αποθηκεύτηκαν — επανήλθε στην αρχική κατάσταση.');
+        } else {
+          clearGuestEphemeralWorkspace();
+          setViewMode('landing');
+          showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+        }
       }, 110);
       return;
     }
@@ -53815,6 +54225,10 @@ export default function App() {
     setIsClosingDocument(true);
     window.setTimeout(() => {
       setIsClosingDocument(false);
+      if (closingIsShowcase && !isAdminUserRef.current) {
+        restoreShowcaseNotebookToMaster(targetCloseId);
+        showToast('🔄 Οι αλλαγές στη demo σημείωση δεν αποθηκεύτηκαν — επανήλθε στην αρχική κατάσταση.');
+      }
       setOpenNotebookIds(rem);
       if (rem.length === 0) {
         if (!activeLibraryFolder && activeNotebook?.folder) {
@@ -53828,7 +54242,7 @@ export default function App() {
         activeDrawingPageIndexRef.current = 0;
       }
     }, 110);
-  }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder, currentUser, clearGuestEphemeralWorkspace, showToast]);
+  }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder, currentUser, clearGuestEphemeralWorkspace, restoreShowcaseNotebookToMaster, showToast]);
 
   // Global Tab Shortcuts: Cmd+T / Ctrl+T / Alt+T (New File Tab) & Cmd+W / Ctrl+W / Alt+W (Close Current Tab)
   useEffect(() => {
@@ -58054,13 +58468,33 @@ export default function App() {
           const importedNb = await importGoodnotesFile(archFile);
           importedArchiveCount += 1;
           importedArchiveBytes = nextBytes;
-          const finalFolder =
+          const rawFinalFolder =
             targetFolderOverride !== undefined
               ? targetFolderOverride
               : viewMode === 'library' && activeLibraryFolder
               ? activeLibraryFolder
               : importedNb.folder || '';
-          const nbWithFolder = { ...importedNb, folder: finalFolder };
+          const isFinalShowcase = isShowcaseFolderPath(
+            rawFinalFolder,
+            showcaseFolderNameRef.current
+          );
+          const finalFolder = !isAdminUserRef.current && isFinalShowcase ? '' : rawFinalFolder;
+          const importingAsShowcase = isAdminUserRef.current && isFinalShowcase;
+          const nowIso = new Date().toISOString();
+          const nbWithFolder: Notebook = importingAsShowcase
+            ? buildShowcaseCloneFromNotebook(
+                importedNb,
+                `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                finalFolder,
+                nowIso
+              )
+            : { ...importedNb, folder: finalFolder };
+          if (importingAsShowcase) {
+            showcaseMasterNotebooksRef.current.set(
+              nbWithFolder.id,
+              structuredClone(nbWithFolder)
+            );
+          }
           userEditedInSessionRef.current.add(nbWithFolder.id);
           setNotebooks((prev) => [nbWithFolder, ...prev]);
           setOpenNotebookIds((prev) =>
@@ -58108,7 +58542,9 @@ export default function App() {
         const storageOk = checkStorageAllowed({
           isAuthenticated: Boolean(currentUser),
           plan: activePlan,
-          currentTotalBytes: computeTotalNotebooksSizeBytes(notebooks),
+          currentTotalBytes: computeTotalNotebooksSizeBytes(
+            notebooks.filter((n) => !isShowcaseNotebook(n))
+          ),
           additionalBytes: incomingRawBytes,
         });
         if (!storageOk.allowed) {
@@ -58177,18 +58613,32 @@ export default function App() {
           return;
         }
         const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|gif|webp|bmp|svg)$/i, '');
-        const assignedFolder =
+        const rawAssignedFolder =
           targetFolderOverride !== undefined ? targetFolderOverride : activeLibraryFolder || '';
+        const isAssignedShowcase = isShowcaseFolderPath(
+          rawAssignedFolder,
+          showcaseFolderNameRef.current
+        );
+        const assignedFolder =
+          !isAdminUserRef.current && isAssignedShowcase ? '' : rawAssignedFolder;
+        const creatingShowcaseDoc = isAdminUserRef.current && isAssignedShowcase;
+        const effectiveNewNbId = creatingShowcaseDoc
+          ? `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+          : targetNbId;
         const newNb: Notebook = {
-          id: targetNbId,
+          id: effectiveNewNbId,
           title: baseTitle,
           folder: assignedFolder,
           coverColor: hasPdf ? '#dc2626' : '#0284c7',
           updatedAt: new Date().toISOString(),
           sourceFormat: hasPdf ? '.pdf' : '.image',
           nativeFileSizeBytes: totalNativeBytes > 0 ? totalNativeBytes : undefined,
+          ...(creatingShowcaseDoc ? { isShowcase: true } : {}),
           pages: importedPages,
         };
+        if (creatingShowcaseDoc) {
+          showcaseMasterNotebooksRef.current.set(newNb.id, structuredClone(newNb));
+        }
         userEditedInSessionRef.current.add(newNb.id);
         trackFileCreation(currentUser);
         setNotebooks((prev) => [newNb, ...prev]);
@@ -58311,8 +58761,8 @@ export default function App() {
         onEnterApp={() => {
           explicitLandingNavRef.current = false;
           if (!currentUser) {
-            // Guest mode: always open a completely empty Library so the user can create a new file
-            setNotebooks([]);
+            // Guest mode: show clean Library containing only the read-only Public Showcase demo notebooks
+            setNotebooks(buildFreshShowcaseClones());
             setOpenNotebookIds([]);
             setActiveNotebookId('');
             setActivePageIndex(0);
@@ -58421,6 +58871,21 @@ export default function App() {
                   setIsClosingDocument(false);
                   if (!currentUser) {
                     clearGuestEphemeralWorkspace();
+                  } else if (!isAdminUserRef.current) {
+                    const openShowcaseIds = openNotebookIdsRef.current.filter((id) =>
+                      id.startsWith(SHOWCASE_ID_PREFIX)
+                    );
+                    if (openShowcaseIds.length > 0) {
+                      for (const scId of openShowcaseIds) {
+                        restoreShowcaseNotebookToMaster(scId);
+                      }
+                      setOpenNotebookIds((prev) =>
+                        prev.filter((id) => !id.startsWith(SHOWCASE_ID_PREFIX))
+                      );
+                      if (activeNotebookId.startsWith(SHOWCASE_ID_PREFIX)) {
+                        setActiveNotebookId('');
+                      }
+                    }
                   }
                   setViewMode('library');
                 }, 110);
@@ -58584,26 +59049,58 @@ export default function App() {
                           e.stopPropagation();
                           startRenamingNotebook(nb, 'tab');
                         }}
-                        title="Πάτα για μετονομασία σημείωσης"
+                        title={
+                          isShowcaseNotebook(nb) && !isAdminUser
+                            ? 'Demo σημείωση (οι αλλαγές δεν αποθηκεύονται)'
+                            : 'Πάτα για μετονομασία σημείωσης'
+                        }
                         className={`min-w-0 truncate text-left leading-tight ${
-                          isActive ? 'hover:underline decoration-[#234978]/50 cursor-text' : ''
+                          isActive && !(isShowcaseNotebook(nb) && !isAdminUser)
+                            ? 'hover:underline decoration-[#234978]/50 cursor-text'
+                            : ''
                         }`}
                       >
                         {nb.title}
                       </span>
+                      {isShowcaseNotebook(nb) && !isAdminUser && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300/80 text-[9px] font-extrabold uppercase tracking-wider">
+                          Demo
+                        </span>
+                      )}
                     </div>
                   )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      const closingIsShowcase = isShowcaseNotebook(nb);
                       pauseAndReleaseSimulations({ targetNotebookId: nb.id, closingTab: true });
                       if (!currentUser) {
                         setIsClosingDocument(true);
                         window.setTimeout(() => {
                           setIsClosingDocument(false);
-                          clearGuestEphemeralWorkspace();
-                          setViewMode('landing');
-                          showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+                          if (closingIsShowcase) {
+                            restoreShowcaseNotebookToMaster(nb.id);
+                            const remGuest = openNotebookIds.filter(
+                              (id) => id !== nb.id && notebooks.some((n) => n.id === id)
+                            );
+                            setOpenNotebookIds(remGuest);
+                            if (remGuest.length === 0) {
+                              setActiveNotebookId('');
+                              setActiveLibraryFolder(nb.folder || showcaseFolderNameRef.current);
+                              setViewMode('library');
+                            } else if (activeNotebook.id === nb.id || activeNotebookId === nb.id) {
+                              setActiveNotebookId(remGuest[remGuest.length - 1]);
+                              setActivePageIndex(0);
+                              activeDrawingPageIndexRef.current = 0;
+                            }
+                            showToast(
+                              '🔄 Οι αλλαγές στη demo σημείωση δεν αποθηκεύτηκαν — επανήλθε στην αρχική κατάσταση.'
+                            );
+                          } else {
+                            clearGuestEphemeralWorkspace();
+                            setViewMode('landing');
+                            showToast('ℹ️ Η προσωρινή σημείωση επισκέπτη διαγράφηκε (χωρίς αποθήκευση).');
+                          }
                         }, 110);
                         return;
                       }
@@ -58613,6 +59110,12 @@ export default function App() {
                       setIsClosingDocument(true);
                       window.setTimeout(() => {
                         setIsClosingDocument(false);
+                        if (closingIsShowcase && !isAdminUserRef.current) {
+                          restoreShowcaseNotebookToMaster(nb.id);
+                          showToast(
+                            '🔄 Οι αλλαγές στη demo σημείωση δεν αποθηκεύτηκαν — επανήλθε στην αρχική κατάσταση.'
+                          );
+                        }
                         setOpenNotebookIds(rem);
                         if (rem.length === 0) {
                           if (!activeLibraryFolder && nb.folder) {
@@ -59617,6 +60120,23 @@ export default function App() {
                 if (cf.deleted) continue;
                 ensureFolderHierarchy(cf.name, cf.updatedAt, cf);
               }
+              // Always ensure the Public Showcase folder (`Σημειώσεις` or Admin's renamed name)
+              // is present with Admin's live color & icon for Guests, Users, and Admin!
+              const hasShowcaseNotes = notebooks.some((n) => isShowcaseNotebook(n));
+              if (publicShowcaseMeta || hasShowcaseNotes) {
+                const scName = publicShowcaseMeta?.folderName || DEFAULT_SHOWCASE_FOLDER_NAME;
+                ensureFolderHierarchy(
+                  scName,
+                  publicShowcaseMeta?.updatedAt || new Date().toISOString(),
+                  {
+                    name: scName,
+                    updatedAt: publicShowcaseMeta?.updatedAt || new Date().toISOString(),
+                    color: publicShowcaseMeta?.folderColor || DEFAULT_SHOWCASE_FOLDER_COLOR,
+                    icon: publicShowcaseMeta?.folderIcon || DEFAULT_SHOWCASE_FOLDER_ICON,
+                    favorite: false,
+                  }
+                );
+              }
               for (const nb of notebooks) {
                 const fPath = normalizeFolderPath(nb.folder || '');
                 if (fPath) {
@@ -59847,6 +60367,11 @@ export default function App() {
                 if (activeNotebookId && activeNotebookId !== nb.id) {
                   pauseAndReleaseSimulations({ targetNotebookId: activeNotebookId, closingTab: false });
                 }
+                // For non-admins opening a showcase demo notebook fresh from the Library,
+                // ALWAYS restore from the authoritative master snapshot so no prior edits persist!
+                if (!isAdminUser && isShowcaseNotebook(nb) && !openNotebookIds.includes(nb.id)) {
+                  restoreShowcaseNotebookToMaster(nb.id);
+                }
                 recordNotebookOpened(nb.id);
                 if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                 setActiveNotebookId(nb.id);
@@ -59860,6 +60385,9 @@ export default function App() {
               const toggleFolderFavorite = (targetPath: string) => {
                 const normPath = normalizeFolderPath(targetPath);
                 if (!normPath) return;
+                if (!isAdminUser && isShowcaseFolderPath(normPath, showcaseFolderName)) {
+                  return;
+                }
                 const nowIso = new Date().toISOString();
                 const existingEntry = folderMap.get(normPath);
                 const nextFav = !existingEntry?.favorite;
@@ -59893,6 +60421,10 @@ export default function App() {
               };
 
               const toggleNotebookFavorite = (nb: Notebook) => {
+                if (isShowcaseNotebook(nb) && !isAdminUser) {
+                  showToast('🔒 Κάνε «Αντίγραφο» πρώτα για να αποθηκεύσεις τη σημείωση στα Αγαπημένα σου.');
+                  return;
+                }
                 const nextFav = !nb.favorite;
                 const nowIso = getMonotonicIsoTimestamp(
                   nb.updatedAt,
@@ -59917,6 +60449,75 @@ export default function App() {
               };
 
               const duplicateNotebookInLibrary = (nb: Notebook) => {
+                const sourceIsShowcase = isShowcaseNotebook(nb);
+                // Non-admin duplicating a showcase demo notebook -> creates a personal user-owned copy in Root Library!
+                if (sourceIsShowcase && !isAdminUser) {
+                  const masterNb = showcaseMasterNotebooksRef.current.get(nb.id) || nb;
+                  if (!checkFileAndStorageOrOpenModal(1, computeNotebookSizeBytes(masterNb))) {
+                    return;
+                  }
+                  const nowIso = new Date().toISOString();
+                  const personalCopy = buildPersonalCopyFromShowcase(masterNb, nowIso);
+                  userEditedInSessionRef.current.add(personalCopy.id);
+                  saveUserEditedSessionIds(userEditedInSessionRef.current);
+                  trackFileCreation(currentUser);
+                  setNotebooks((prev) => [personalCopy, ...prev]);
+                  if (currentUser) {
+                    pushNotebookToCloudTracked(currentUser.uid, personalCopy);
+                  }
+                  setIsDirty(true);
+                  setSyncStatus('dirty');
+                  showToast(
+                    `📋 Δημιουργήθηκε προσωπικό αντίγραφο «${personalCopy.title}» στη Βιβλιοθήκη σου! Μπορείς να το μετακινήσεις και να το επεξεργαστείς ελεύθερα.`
+                  );
+                  return;
+                }
+
+                // Admin duplicating inside the showcase folder -> creates a new public showcase notebook!
+                if (
+                  isAdminUser &&
+                  (sourceIsShowcase || isShowcaseFolderPath(nb.folder, showcaseFolderName))
+                ) {
+                  const nowIso = new Date().toISOString();
+                  const newShowcaseId = `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random()
+                    .toString(36)
+                    .slice(2, 6)}`;
+                  const clonedPages = structuredClone(nb.pages).map((p, idx) => ({
+                    ...p,
+                    id: `page-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+                  }));
+                  const newShowcaseNb: Notebook = {
+                    ...buildShowcaseCloneFromNotebook(
+                      nb,
+                      newShowcaseId,
+                      nb.folder || showcaseFolderName,
+                      nowIso
+                    ),
+                    title: `${nb.title}-Copy`,
+                    pages: clonedPages,
+                  };
+                  userEditedInSessionRef.current.add(newShowcaseNb.id);
+                  saveUserEditedSessionIds(userEditedInSessionRef.current);
+                  showcaseMasterNotebooksRef.current.set(
+                    newShowcaseNb.id,
+                    structuredClone(newShowcaseNb)
+                  );
+                  setNotebooks((prev) => {
+                    const idx = prev.findIndex((item) => item.id === nb.id);
+                    if (idx === -1) return [newShowcaseNb, ...prev];
+                    const next = [...prev];
+                    next.splice(idx + 1, 0, newShowcaseNb);
+                    return next;
+                  });
+                  if (currentUser) {
+                    pushNotebookToCloudTracked(currentUser.uid, newShowcaseNb);
+                  }
+                  setIsDirty(true);
+                  setSyncStatus('dirty');
+                  showToast(`🌐 Δημιουργήθηκε νέο demo αντίγραφο «${newShowcaseNb.title}»!`);
+                  return;
+                }
+
                 if (!checkFileAndStorageOrOpenModal(1, computeNotebookSizeBytes(nb))) {
                   return;
                 }
@@ -59968,6 +60569,10 @@ export default function App() {
                 icon?: string;
                 favorite?: boolean;
               }) => {
+                if (!isAdminUser && isShowcaseFolderPath(folder.path, showcaseFolderName)) {
+                  showToast('🔒 Ο φάκελος Demo μπορεί να επεξεργαστεί μόνο από τον Διαχειριστή.');
+                  return;
+                }
                 setEditingFolderModal({
                   originalPath: folder.path,
                   name: folder.name,
@@ -59988,17 +60593,104 @@ export default function App() {
               ) => {
                 const normOrig = normalizeFolderPath(originalPath);
                 if (!normOrig) return;
+                const editingShowcaseRoot = isExactShowcaseRootFolder(normOrig, showcaseFolderName);
+                const editingInsideShowcase = isShowcaseFolderPath(normOrig, showcaseFolderName);
+                if (!isAdminUser && editingInsideShowcase) {
+                  showToast('🔒 Ο φάκελος Demo μπορεί να επεξεργαστεί μόνο από τον Διαχειριστή.');
+                  return;
+                }
                 const cleanLeaf =
                   newLeafName.trim().replace(/^\/+|\/+$/g, '').replace(/\//g, '-') ||
                   normOrig.split('/').slice(-1)[0] ||
                   'Φάκελος';
-                const cleanParent = normalizeFolderPath(newParentPath);
+                const cleanParent = editingShowcaseRoot ? '' : normalizeFolderPath(newParentPath);
                 if (cleanParent === normOrig || cleanParent.startsWith(`${normOrig}/`)) {
                   showToast('⚠️ Δεν μπορείς να μετακινήσεις έναν φάκελο μέσα στον εαυτό του!');
                   return;
                 }
                 const newFullPath = cleanParent ? `${cleanParent}/${cleanLeaf}` : cleanLeaf;
+                if (!isAdminUser && isShowcaseFolderPath(newFullPath, showcaseFolderName)) {
+                  showToast('🔒 Δεν επιτρέπεται η μετακίνηση ή μετονομασία φακέλου μέσα στον φάκελο Demo.');
+                  return;
+                }
                 const nowIso = new Date().toISOString();
+
+                // Admin editing the Public Showcase root folder -> update `public_showcase_meta/config`
+                // so EVERY Guest & signed-in user sees the new folder name, color & icon automatically!
+                if (isAdminUser && editingShowcaseRoot) {
+                  const nextMeta: PublicShowcaseMeta = {
+                    id: 'config',
+                    folderName: newFullPath,
+                    folderColor:
+                      nextColor ?? publicShowcaseMeta?.folderColor ?? DEFAULT_SHOWCASE_FOLDER_COLOR,
+                    folderIcon:
+                      nextIcon ?? publicShowcaseMeta?.folderIcon ?? DEFAULT_SHOWCASE_FOLDER_ICON,
+                    seeded: publicShowcaseMeta?.seeded ?? true,
+                    seededAt: publicShowcaseMeta?.seededAt,
+                    updatedAt: nowIso,
+                    deviceId: deviceIdRef.current,
+                  };
+                  setPublicShowcaseMeta(nextMeta);
+                  showcaseFolderNameRef.current = newFullPath;
+                  void saveShowcaseMetaToFirestore(nextMeta).catch((err) => {
+                    console.error('[Showcase] Failed to save showcase folder meta:', err);
+                  });
+
+                  // Compute renamed showcase notebooks synchronously from notebooksRef.current
+                  // (never populate side-effect arrays inside setNotebooks(prev => ...) in React 19!)
+                  const updatedShowcaseById = new Map<string, Notebook>();
+                  const renamedShowcaseNbs: Notebook[] = [];
+                  for (const nb of notebooksRef.current) {
+                    if (!isShowcaseNotebook(nb)) continue;
+                    const nbF = normalizeFolderPath(nb.folder || '');
+                    const nextNbFolder = nbF.startsWith(`${normOrig}/`)
+                      ? `${newFullPath}${nbF.slice(normOrig.length)}`
+                      : newFullPath;
+                    const updatedNb: Notebook = {
+                      ...nb,
+                      folder: nextNbFolder,
+                      updatedAt: nowIso,
+                    };
+                    updatedShowcaseById.set(updatedNb.id, updatedNb);
+                    showcaseMasterNotebooksRef.current.set(
+                      updatedNb.id,
+                      structuredClone(updatedNb)
+                    );
+                    if (normOrig !== newFullPath) {
+                      userEditedInSessionRef.current.add(updatedNb.id);
+                      renamedShowcaseNbs.push(updatedNb);
+                    }
+                  }
+                  setNotebooks((prev) =>
+                    prev.map((nb) => {
+                      const updated = updatedShowcaseById.get(nb.id);
+                      if (updated) return updated;
+                      if (!isShowcaseNotebook(nb)) return nb;
+                      const nbF = normalizeFolderPath(nb.folder || '');
+                      const nextNbFolder = nbF.startsWith(`${normOrig}/`)
+                        ? `${newFullPath}${nbF.slice(normOrig.length)}`
+                        : newFullPath;
+                      return { ...nb, folder: nextNbFolder, updatedAt: nowIso };
+                    })
+                  );
+                  if (currentUser && renamedShowcaseNbs.length > 0) {
+                    for (const scNb of renamedShowcaseNbs) {
+                      pushNotebookToCloudTracked(currentUser.uid, scNb);
+                    }
+                  }
+                  if (normOrig !== newFullPath && activeLibraryFolder) {
+                    const normActive = normalizeFolderPath(activeLibraryFolder);
+                    if (normActive === normOrig) {
+                      setActiveLibraryFolder(newFullPath);
+                    } else if (normActive.startsWith(`${normOrig}/`)) {
+                      setActiveLibraryFolder(`${newFullPath}${normActive.slice(normOrig.length)}`);
+                    }
+                  }
+                  showToast(
+                    `🌐 Ενημερώθηκε ο δημόσιος φάκελος Demo «${newFullPath}» για όλους τους χρήστες!`
+                  );
+                  return;
+                }
 
                 let foundExact = false;
                 const updatedCustom = customFolders.map((cf) => {
@@ -60184,6 +60876,10 @@ export default function App() {
                 dragOverFolderNameRef.current = null;
                 setDragOverFolderName(null);
                 const destFolder = targetFolderKey === '__ROOT__' ? '' : targetFolderKey;
+                if (!isAdminUser && isShowcaseFolderPath(destFolder, showcaseFolderName)) {
+                  showToast('🔒 Δεν επιτρέπεται η προσθήκη αρχείων στον φάκελο Demo.');
+                  return;
+                }
                 const draggedFolderPath =
                   e.dataTransfer?.getData('text/bestnotes-folder-path') || '';
                 if (draggedFolderPath) {
@@ -60220,14 +60916,25 @@ export default function App() {
               };
 
               const deleteNotebookById = (nb: Notebook) => {
+                if (isShowcaseNotebook(nb) && !isAdminUser) {
+                  showToast('🔒 Οι demo σημειώσεις δεν διαγράφονται.');
+                  return;
+                }
                 setPendingDeleteNotebook(nb);
               };
 
               const confirmDeleteNotebook = (nb: Notebook) => {
                 setPendingDeleteNotebook(null);
+                const deletingShowcase = isShowcaseNotebook(nb);
+                if (deletingShowcase && !isAdminUser) {
+                  return;
+                }
                 sessionDeletedNotebookIds.add(nb.id);
                 sessionRestoredNotebookIds.delete(nb.id);
                 userEditedInSessionRef.current.delete(nb.id);
+                if (deletingShowcase) {
+                  showcaseMasterNotebooksRef.current.delete(nb.id);
+                }
                 const nowIso = getMonotonicIsoTimestamp(
                   nb.updatedAt,
                   remoteUpdatedAtMapRef.current.get(nb.id)
@@ -60269,23 +60976,33 @@ export default function App() {
                 const remaining = notebooks.filter((n) => n.id !== nb.id);
                 if (currentUser) {
                   saveNotebooksToLocalAndIdb(currentUser.uid, remaining);
-                  void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextLocalBin);
                   lastSyncedJsonMapRef.current.delete(nb.id);
-                  const softDeleteJson = serializeNotebookForFirestore(nb);
-                  void setDoc(
-                    doc(db, 'users', currentUser.uid, 'notebooks', nb.id),
-                    {
-                      id: nb.id,
-                      title: (nb.title || 'Σημείωση').slice(0, 900),
-                      updatedAt: nowIso,
-                      ...(softDeleteJson.length <= FIRESTORE_SINGLE_DOC_LIMIT
-                        ? { dataJson: softDeleteJson }
-                        : {}),
-                      deleted: true,
-                      deviceId: deviceIdRef.current,
-                    },
-                    { merge: true }
-                  );
+                  if (deletingShowcase) {
+                    void softDeleteShowcaseNotebookInFirestore(
+                      nb,
+                      nowIso,
+                      deviceIdRef.current
+                    ).catch((err) => {
+                      console.error('[Showcase] Failed to delete showcase notebook:', err);
+                    });
+                  } else {
+                    void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextLocalBin);
+                    const softDeleteJson = serializeNotebookForFirestore(nb);
+                    void setDoc(
+                      doc(db, 'users', currentUser.uid, 'notebooks', nb.id),
+                      {
+                        id: nb.id,
+                        title: (nb.title || 'Σημείωση').slice(0, 900),
+                        updatedAt: nowIso,
+                        ...(softDeleteJson.length <= FIRESTORE_SINGLE_DOC_LIMIT
+                          ? { dataJson: softDeleteJson }
+                          : {}),
+                        deleted: true,
+                        deviceId: deviceIdRef.current,
+                      },
+                      { merge: true }
+                    );
+                  }
                 }
                 pauseAndReleaseSimulations({ targetNotebookId: nb.id, closingTab: true });
                 if (remaining.length === 0) {
@@ -60313,6 +61030,18 @@ export default function App() {
 
               const deleteFolderByName = (folderPathToDelete: string) => {
                 const normTarget = normalizeFolderPath(folderPathToDelete);
+                if (isShowcaseFolderPath(normTarget, showcaseFolderName)) {
+                  if (!isAdminUser) {
+                    showToast('🔒 Δεν επιτρέπεται η διαγραφή του φακέλου Demo.');
+                    return;
+                  }
+                  if (isExactShowcaseRootFolder(normTarget, showcaseFolderName)) {
+                    showToast(
+                      'ℹ️ Ο δημόσιος φάκελος Demo δεν διαγράφεται — μπορείς να αλλάξεις το όνομα/χρώμα του ή να αφαιρέσεις αρχεία από μέσα.'
+                    );
+                    return;
+                  }
+                }
                 const parentOfDeleted = normTarget.includes('/')
                   ? normTarget.split('/').slice(0, -1).join('/')
                   : '';
@@ -60371,6 +61100,13 @@ export default function App() {
                 const createdPaths = namesToCreate.map((n) =>
                   currentFolderPath ? `${currentFolderPath}/${n}` : n
                 );
+                if (
+                  !isAdminUser &&
+                  createdPaths.some((p) => isShowcaseFolderPath(p, showcaseFolderName))
+                ) {
+                  showToast('🔒 Δεν επιτρέπεται η δημιουργία φακέλου μέσα ή με το όνομα του φακέλου Demo.');
+                  return;
+                }
                 const nextCustom = [
                   ...createdPaths.map((p) => ({ name: p, deleted: false, updatedAt: nowIso })),
                   ...customFolders.filter(
@@ -60509,14 +61245,29 @@ export default function App() {
 
                       <button
                         onClick={() => {
-                          if (!checkFileAndStorageOrOpenModal(1, 1024)) return;
+                          const rawTargetFolder = activeLibraryFolder || '';
+                          const isTargetShowcase = isShowcaseFolderPath(
+                            rawTargetFolder,
+                            showcaseFolderName
+                          );
+                          const effectiveFolder =
+                            !isAdminUser && isTargetShowcase ? '' : rawTargetFolder;
+                          const creatingAsShowcase = isAdminUser && isTargetShowcase;
+                          if (!creatingAsShowcase && !checkFileAndStorageOrOpenModal(1, 1024)) {
+                            return;
+                          }
                           const newNb: Notebook = {
-                            id: `nb-${Date.now()}`,
+                            id: creatingAsShowcase
+                              ? `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random()
+                                  .toString(36)
+                                  .slice(2, 6)}`
+                              : `nb-${Date.now()}`,
                             title: `Σημείωση ${notebooks.length + 1}`,
-                            folder: activeLibraryFolder || '',
+                            folder: effectiveFolder,
                             coverColor: '#0284c7',
                             updatedAt: new Date().toISOString(),
                             sourceFormat: '.bestnotes',
+                            ...(creatingAsShowcase ? { isShowcase: true } : {}),
                             pages: [
                               {
                                 id: `p-${Date.now()}`,
@@ -60535,6 +61286,12 @@ export default function App() {
                             ],
                           };
                           userEditedInSessionRef.current.add(newNb.id);
+                          if (creatingAsShowcase) {
+                            showcaseMasterNotebooksRef.current.set(
+                              newNb.id,
+                              structuredClone(newNb)
+                            );
+                          }
                           trackFileCreation(currentUser);
                           recordNotebookOpened(newNb.id);
                           setNotebooks((prev) => [newNb, ...prev]);
@@ -61025,11 +61782,24 @@ export default function App() {
                             {visibleFolders.map((folder) => {
                               const isDropHover = dragOverFolderName === folder.path;
                               const folderColor = folder.color || '#f59e0b';
+                              const isShowcaseFolder = isShowcaseFolderPath(
+                                folder.path,
+                                showcaseFolderName
+                              );
+                              const isShowcaseRoot = isExactShowcaseRootFolder(
+                                folder.path,
+                                showcaseFolderName
+                              );
+                              const isLockedShowcaseFolder = isShowcaseFolder && !isAdminUser;
                               return (
                                 <div
                                   key={folder.path}
-                                  draggable
+                                  draggable={!isLockedShowcaseFolder && !isShowcaseRoot}
                                   onDragStart={(e) => {
+                                    if (isLockedShowcaseFolder || isShowcaseRoot) {
+                                      e.preventDefault();
+                                      return;
+                                    }
                                     e.dataTransfer.setData(
                                       'text/bestnotes-folder-path',
                                       folder.path
@@ -61117,32 +61887,46 @@ export default function App() {
                                       </span>
                                     ) : (
                                       <div className="mt-1 -mr-1.5 flex items-center gap-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleFolderFavorite(folder.path);
-                                          }}
-                                          className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
-                                            folder.favorite
-                                              ? 'bg-amber-50/95 border-amber-300 text-amber-500 hover:bg-amber-100'
-                                              : 'bg-white/75 border-white/80 text-slate-500 hover:text-amber-500 hover:bg-white'
-                                          }`}
-                                          title={
-                                            folder.favorite
-                                              ? 'Αφαίρεση από τα Αγαπημένα'
-                                              : 'Προσθήκη στα Αγαπημένα'
-                                          }
-                                        >
-                                          <Star
-                                            className={`w-3.5 h-3.5 ${
-                                              folder.favorite
-                                                ? 'fill-amber-400 text-amber-500'
-                                                : ''
+                                        {isShowcaseRoot && (
+                                          <span
+                                            className={`px-2 py-0.5 rounded-full text-[9.5px] font-extrabold tracking-wide border shadow-2xs backdrop-blur-xs ${
+                                              isAdminUser
+                                                ? 'bg-amber-50/95 text-amber-800 border-amber-300/90'
+                                                : 'bg-sky-50/95 text-[#234978] border-sky-200/90'
                                             }`}
-                                          />
-                                        </button>
+                                          >
+                                            {isAdminUser ? 'Demo • Δημόσιο' : 'Demo • Δοκιμή'}
+                                          </span>
+                                        )}
+                                        {!isLockedShowcaseFolder && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleFolderFavorite(folder.path);
+                                            }}
+                                            className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
+                                              folder.favorite
+                                                ? 'bg-amber-50/95 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                                : 'bg-white/75 border-white/80 text-slate-500 hover:text-amber-500 hover:bg-white'
+                                            }`}
+                                            title={
+                                              folder.favorite
+                                                ? 'Αφαίρεση από τα Αγαπημένα'
+                                                : 'Προσθήκη στα Αγαπημένα'
+                                            }
+                                          >
+                                            <Star
+                                              className={`w-3.5 h-3.5 ${
+                                                folder.favorite
+                                                  ? 'fill-amber-400 text-amber-500'
+                                                  : ''
+                                              }`}
+                                            />
+                                          </button>
+                                        )}
                                         {(() => {
+                                          if (isLockedShowcaseFolder) return null;
                                           if (!driveAccessToken && !driveEmail) return null;
                                           const isFolderDriveSyncing = Boolean(
                                             driveSyncingAll ||
@@ -61245,28 +62029,32 @@ export default function App() {
                                             </button>
                                           );
                                         })()}
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openFolderEditorModal(folder);
-                                          }}
-                                          className="p-1.5 rounded-lg bg-white/75 hover:bg-[#234978] text-slate-700 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
-                                          title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Μετακίνηση)`}
-                                        >
-                                          <Pen className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteFolderByName(folder.path);
-                                          }}
-                                          className="p-1.5 rounded-lg bg-white/75 hover:bg-rose-600 text-rose-600 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
-                                          title={`Διαγραφή φακέλου "${folder.name}"`}
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {!isLockedShowcaseFolder && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openFolderEditorModal(folder);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-white/75 hover:bg-[#234978] text-slate-700 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
+                                            title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Μετακίνηση)`}
+                                          >
+                                            <Pen className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {!isLockedShowcaseFolder && !isShowcaseRoot && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              deleteFolderByName(folder.path);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-white/75 hover:bg-rose-600 text-rose-600 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
+                                            title={`Διαγραφή φακέλου "${folder.name}"`}
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -61558,12 +62346,14 @@ export default function App() {
                                   }
                                 >
                                   {(() => {
+                                    const isLockedShowcaseNb = isShowcaseNotebook(nb) && !isAdminUser;
                                     const isNbDriveUpToDate = isNotebookDriveSynced(
                                       nb,
                                       driveBasePath
                                     );
                                     const isThisNbUploading = activeDriveUploadingNbId === nb.id;
                                     const needsNbDriveSync =
+                                      !isLockedShowcaseNb &&
                                       Boolean(driveAccessToken || driveEmail) &&
                                       (!isNbDriveUpToDate || isThisNbUploading);
                                     const renderNbDriveBadge = (posClass: string) =>
@@ -61646,6 +62436,12 @@ export default function App() {
                                         data-popover-trigger="lib-folder"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          if (isShowcaseNotebook(nb) && !isAdminUser) {
+                                            showToast(
+                                              '🔒 Demo σημείωση — πάτα «Αντίγραφο» για δική σου έκδοση!'
+                                            );
+                                            return;
+                                          }
                                           setFolderPickerNbId((prev) =>
                                             prev === nb.id ? null : nb.id
                                           );
@@ -61653,12 +62449,16 @@ export default function App() {
                                         className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[92px] cursor-pointer hover:opacity-90"
                                         style={{ backgroundColor: nb.coverColor }}
                                         title={
-                                          nb.folder
+                                          isShowcaseNotebook(nb) && !isAdminUser
+                                            ? 'Demo σημείωση (μόνο για δοκιμή — κάνε Αντίγραφο για δικό σου αρχείο)'
+                                            : nb.folder
                                             ? `Φάκελος: ${nb.folder} (Πάτα για αλλαγή)`
                                             : 'Πάτα για μετακίνηση σε Φάκελο'
                                         }
                                       >
-                                        {nb.sourceFormat === '.pdf'
+                                        {isShowcaseNotebook(nb) && !isAdminUser
+                                          ? 'Demo'
+                                          : nb.sourceFormat === '.pdf'
                                           ? '.pdf'
                                           : nb.sourceFormat === '.image'
                                           ? '.jpg / .png'
@@ -61688,6 +62488,11 @@ export default function App() {
                                             Χωρίς Φάκελο (.bestNotes)
                                           </button>
                                           {Array.from(folderMap.keys())
+                                            .filter(
+                                              (fPath) =>
+                                                isAdminUser ||
+                                                !isShowcaseFolderPath(fPath, showcaseFolderName)
+                                            )
                                             .sort((a, b) => a.localeCompare(b, 'el'))
                                             .map((fPath) => (
                                               <button
@@ -61723,16 +62528,30 @@ export default function App() {
                                       >
                                         <Settings className="w-3.5 h-3.5" />
                                       </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          deleteNotebookById(nb);
-                                        }}
-                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
-                                        title={`Διαγραφή σημείωσης "${nb.title}"`}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                      {isShowcaseNotebook(nb) && !isAdminUser ? (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            duplicateNotebookInLibrary(nb);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-white/95 hover:bg-[#234978] text-[#234978] hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
+                                          title={`Αντίγραφο της demo σημείωσης "${nb.title}" στη Βιβλιοθήκη σου`}
+                                        >
+                                          <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteNotebookById(nb);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
+                                          title={`Διαγραφή σημείωσης "${nb.title}"`}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -61799,20 +62618,22 @@ export default function App() {
                                         title={`Φιλτράρισμα με ${tag}`}
                                       >
                                         <span>{tag}</span>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeTagFromNotebook(nb.id, tag);
-                                          }}
-                                          className={`ml-0.5 ${
-                                            isMatched
-                                              ? 'text-white/80 hover:text-white'
-                                              : 'text-sky-400 hover:text-rose-600'
-                                          } cursor-pointer`}
-                                          title={`Αφαίρεση ${tag}`}
-                                        >
-                                          ×
-                                        </button>
+                                        {!(isShowcaseNotebook(nb) && !isAdminUser) && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              removeTagFromNotebook(nb.id, tag);
+                                            }}
+                                            className={`ml-0.5 ${
+                                              isMatched
+                                                ? 'text-white/80 hover:text-white'
+                                                : 'text-sky-400 hover:text-rose-600'
+                                            } cursor-pointer`}
+                                            title={`Αφαίρεση ${tag}`}
+                                          >
+                                            ×
+                                          </button>
+                                        )}
                                       </span>
                                     );
                                   })}
@@ -61821,21 +62642,23 @@ export default function App() {
                                       +{(nb.tags || []).length - 4}
                                     </span>
                                   )}
-                                  <button
-                                    data-popover-trigger="lib-tags"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setLibraryTagEditorNbId((prev) =>
-                                        prev === nb.id ? null : nb.id
-                                      );
-                                      setLibraryTagInputDraft('');
-                                    }}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-[#234978] text-slate-600 hover:text-white text-[10px] font-semibold transition cursor-pointer"
-                                    title="Προσθήκη λέξεων-κλειδιών (Tags) για αναζήτηση"
-                                  >
-                                    <Tag className="w-2.5 h-2.5" />
-                                    <span>+Tag</span>
-                                  </button>
+                                  {!(isShowcaseNotebook(nb) && !isAdminUser) && (
+                                    <button
+                                      data-popover-trigger="lib-tags"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLibraryTagEditorNbId((prev) =>
+                                          prev === nb.id ? null : nb.id
+                                        );
+                                        setLibraryTagInputDraft('');
+                                      }}
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-[#234978] text-slate-600 hover:text-white text-[10px] font-semibold transition cursor-pointer"
+                                      title="Προσθήκη λέξεων-κλειδιών (Tags) για αναζήτηση"
+                                    >
+                                      <Tag className="w-2.5 h-2.5" />
+                                      <span>+Tag</span>
+                                    </button>
+                                  )}
                                 </div>
 
                                 {searchMatchMap.get(nb.id)?.matchedTextSnippet && (
@@ -61933,11 +62756,24 @@ export default function App() {
                           {visibleFolders.map((folder) => {
                         const isDropHover = dragOverFolderName === folder.path;
                         const folderColor = folder.color || '#f59e0b';
+                        const isShowcaseFolder = isShowcaseFolderPath(
+                          folder.path,
+                          showcaseFolderName
+                        );
+                        const isShowcaseRoot = isExactShowcaseRootFolder(
+                          folder.path,
+                          showcaseFolderName
+                        );
+                        const isLockedShowcaseFolder = isShowcaseFolder && !isAdminUser;
                         return (
                           <div
                             key={`list-folder-${folder.path}`}
-                            draggable
+                            draggable={!isLockedShowcaseFolder && !isShowcaseRoot}
                             onDragStart={(e) => {
+                              if (isLockedShowcaseFolder || isShowcaseRoot) {
+                                e.preventDefault();
+                                return;
+                              }
                               e.dataTransfer.setData('text/bestnotes-folder-path', folder.path);
                               e.dataTransfer.effectAllowed = 'move';
                             }}
@@ -62004,7 +62840,22 @@ export default function App() {
                                 </div>
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <p className="text-sm font-bold text-[#1b2a4a] truncate">
+                                    {folder.name}
+                                  </p>
+                                  {isShowcaseRoot && (
+                                    <span
+                                      className={`shrink-0 px-2 py-0.5 rounded-full text-[9.5px] font-extrabold tracking-wide border ${
+                                        isAdminUser
+                                          ? 'bg-amber-50 text-amber-800 border-amber-300/90'
+                                          : 'bg-sky-50 text-[#234978] border-sky-200/90'
+                                      }`}
+                                    >
+                                      {isAdminUser ? 'Demo • Δημόσιο' : 'Demo • Δοκιμή'}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-500">
                                   Φάκελος •{' '}
                                   {folder.subfolderCount > 0
@@ -62025,30 +62876,33 @@ export default function App() {
                                 </span>
                               ) : (
                                 <>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleFolderFavorite(folder.path);
-                                    }}
-                                    className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
-                                      folder.favorite
-                                        ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
-                                        : 'bg-slate-100 border-transparent text-slate-700 hover:text-amber-500 hover:bg-amber-50/70'
-                                    }`}
-                                    title={
-                                      folder.favorite
-                                        ? 'Αφαίρεση από τα Αγαπημένα'
-                                        : 'Προσθήκη στα Αγαπημένα'
-                                    }
-                                  >
-                                    <Star
-                                      className={`w-4 h-4 ${
-                                        folder.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                  {!isLockedShowcaseFolder && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleFolderFavorite(folder.path);
+                                      }}
+                                      className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
+                                        folder.favorite
+                                          ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                          : 'bg-slate-100 border-transparent text-slate-700 hover:text-amber-500 hover:bg-amber-50/70'
                                       }`}
-                                    />
-                                  </button>
+                                      title={
+                                        folder.favorite
+                                          ? 'Αφαίρεση από τα Αγαπημένα'
+                                          : 'Προσθήκη στα Αγαπημένα'
+                                      }
+                                    >
+                                      <Star
+                                        className={`w-4 h-4 ${
+                                          folder.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                        }`}
+                                      />
+                                    </button>
+                                  )}
                                   {(() => {
+                                    if (isLockedShowcaseFolder) return null;
                                     if (!driveAccessToken && !driveEmail) return null;
                                     const isFolderDriveSyncing = Boolean(
                                       driveSyncingAll ||
@@ -62142,28 +62996,32 @@ export default function App() {
                                       </button>
                                     );
                                   })()}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openFolderEditorModal(folder);
-                                    }}
-                                    className="p-2 rounded-xl bg-slate-100 hover:bg-[#234978] text-slate-700 hover:text-white transition cursor-pointer focus:outline-none"
-                                    title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Θέση)`}
-                                  >
-                                    <Pen className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteFolderByName(folder.path);
-                                    }}
-                                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer focus:outline-none"
-                                    title={`Διαγραφή φακέλου "${folder.name}"`}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                  {!isLockedShowcaseFolder && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openFolderEditorModal(folder);
+                                      }}
+                                      className="p-2 rounded-xl bg-slate-100 hover:bg-[#234978] text-slate-700 hover:text-white transition cursor-pointer focus:outline-none"
+                                      title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Θέση)`}
+                                    >
+                                      <Pen className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {!isLockedShowcaseFolder && !isShowcaseRoot && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteFolderByName(folder.path);
+                                      }}
+                                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer focus:outline-none"
+                                      title={`Διαγραφή φακέλου "${folder.name}"`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -62258,9 +63116,11 @@ export default function App() {
                         const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
                         const nbTs = formatLibraryTimestampParts(nb.updatedAt, nb.id);
                         const p0BgUrl = resolvePageBackgroundUrl(nb.id, nb.pages[0], 'thumb');
+                        const isLockedShowcaseNb = isShowcaseNotebook(nb) && !isAdminUser;
                         const isNbDriveUpToDate = isNotebookDriveSynced(nb, driveBasePath);
                         const isThisNbUploading = activeDriveUploadingNbId === nb.id;
                         const needsNbDriveSync =
+                          !isLockedShowcaseNb &&
                           Boolean(driveAccessToken || driveEmail) &&
                           (!isNbDriveUpToDate || isThisNbUploading);
                         return (
@@ -62400,16 +63260,30 @@ export default function App() {
                               >
                                 <Settings className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteNotebookById(nb);
-                                }}
-                                className="p-2 rounded-lg text-rose-600 hover:bg-rose-600 hover:text-white transition cursor-pointer"
-                                title={`Διαγραφή σημείωσης "${nb.title}"`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {isLockedShowcaseNb ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    duplicateNotebookInLibrary(nb);
+                                  }}
+                                  className="p-2 rounded-lg text-[#234978] hover:bg-[#234978] hover:text-white transition cursor-pointer"
+                                  title={`Αντίγραφο της demo σημείωσης "${nb.title}" στη Βιβλιοθήκη σου`}
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteNotebookById(nb);
+                                  }}
+                                  className="p-2 rounded-lg text-rose-600 hover:bg-rose-600 hover:text-white transition cursor-pointer"
+                                  title={`Διαγραφή σημείωσης "${nb.title}"`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -62518,6 +63392,7 @@ export default function App() {
                     (() => {
                       const targetNb = notebooks.find((n) => n.id === shareMenuTarget.notebookId);
                       if (!targetNb) return null;
+                      const targetIsLockedShowcase = isShowcaseNotebook(targetNb) && !isAdminUser;
 
                       type MoveTreeItem = {
                         path: string;
@@ -62526,7 +63401,9 @@ export default function App() {
                         depth: number;
                         isLastSibling: boolean;
                       };
-                      const allFolders = Array.from(folderMap.values());
+                      const allFolders = Array.from(folderMap.values()).filter(
+                        (f) => isAdminUser || !isShowcaseFolderPath(f.path, showcaseFolderName)
+                      );
                       const childrenByParent = new Map<string, typeof allFolders>();
                       for (const f of allFolders) {
                         const pKey = f.parentPath || '';
@@ -62600,26 +63477,28 @@ export default function App() {
                           </button>
 
                           {/* 3. Αγαπημένο */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShareMenuTarget(null);
-                              toggleNotebookFavorite(targetNb);
-                            }}
-                            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
-                          >
-                            <span className="flex items-center gap-2.5">
-                              <Star
-                                className={`w-4 h-4 text-[#2c3e50] shrink-0 ${
-                                  targetNb.favorite ? 'fill-[#2c3e50]' : ''
-                                }`}
-                              />
-                              <span>Αγαπημένο</span>
-                            </span>
-                            {targetNb.favorite && (
-                              <Check className="w-3.5 h-3.5 text-[#234978] shrink-0" />
-                            )}
-                          </button>
+                          {!targetIsLockedShowcase && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShareMenuTarget(null);
+                                toggleNotebookFavorite(targetNb);
+                              }}
+                              className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978] text-xs font-semibold transition cursor-pointer text-left"
+                            >
+                              <span className="flex items-center gap-2.5">
+                                <Star
+                                  className={`w-4 h-4 text-[#2c3e50] shrink-0 ${
+                                    targetNb.favorite ? 'fill-[#2c3e50]' : ''
+                                  }`}
+                                />
+                                <span>Αγαπημένο</span>
+                              </span>
+                              {targetNb.favorite && (
+                                <Check className="w-3.5 h-3.5 text-[#234978] shrink-0" />
+                              )}
+                            </button>
+                          )}
 
                           {/* 4. Αντίγραφο */}
                           <button
@@ -62632,39 +63511,43 @@ export default function App() {
                           >
                             <span className="flex items-center gap-2.5">
                               <Copy className="w-4 h-4 text-[#2c3e50] shrink-0" />
-                              <span>Αντίγραφο</span>
+                              <span>
+                                {targetIsLockedShowcase ? 'Αντίγραφο (Δικό μου)' : 'Αντίγραφο'}
+                              </span>
                             </span>
                             <span className="text-[10px] font-medium text-[#64748b]">-Copy</span>
                           </button>
 
-                          <div className="my-1 border-t border-[#dfd8cb]/80" />
+                          {!targetIsLockedShowcase && (
+                            <>
+                              <div className="my-1 border-t border-[#dfd8cb]/80" />
 
-                          {/* 5. Μετακίνηση (opens Folder Tree) */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShareMenuTarget((prev) =>
-                                prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
-                              )
-                            }
-                            className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer text-left ${
-                              shareMenuTarget.showMoveTree
-                                ? 'bg-[#efebe3] text-[#234978]'
-                                : 'hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978]'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2.5">
-                              <FolderInput className="w-4 h-4 text-[#2c3e50] shrink-0" />
-                              <span>Μετακίνηση</span>
-                            </span>
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 text-[#64748b] transition-transform ${
-                                shareMenuTarget.showMoveTree ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </button>
+                              {/* 5. Μετακίνηση (opens Folder Tree) */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShareMenuTarget((prev) =>
+                                    prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
+                                  )
+                                }
+                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer text-left ${
+                                  shareMenuTarget.showMoveTree
+                                    ? 'bg-[#efebe3] text-[#234978]'
+                                    : 'hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#234978]'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2.5">
+                                  <FolderInput className="w-4 h-4 text-[#2c3e50] shrink-0" />
+                                  <span>Μετακίνηση</span>
+                                </span>
+                                <ChevronDown
+                                  className={`w-3.5 h-3.5 text-[#64748b] transition-transform ${
+                                    shareMenuTarget.showMoveTree ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </button>
 
-                          {shareMenuTarget.showMoveTree && (
+                              {shareMenuTarget.showMoveTree && (
                             <div className="mt-1 max-h-48 overflow-y-auto p-1.5 bg-[#efebe3]/45 rounded-xl border border-[#dfd8cb] space-y-1">
                               <button
                                 type="button"
@@ -62730,6 +63613,8 @@ export default function App() {
                                 );
                               })}
                             </div>
+                          )}
+                            </>
                           )}
                         </div>
                       );

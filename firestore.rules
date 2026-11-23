@@ -122,6 +122,28 @@ rules_version = '2';
 //   - ocrTotalCount: number (optional, >= 0) - total AI OCR calls count
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of metric update
 //
+// Collection: public_showcase_meta
+// Document ID: config (single config document; must match data.id, immutable)
+// Fields:
+//   - id: string (required, 1..64 chars, immutable, matches {docId} == 'config') - config document identifier
+//   - folderName: string (required, 1..200 chars) - public demo folder display name
+//   - folderColor: string (optional, 0..40 chars) - public demo folder UI color
+//   - folderIcon: string (optional, 0..64 chars) - public demo folder UI icon identifier
+//   - seeded: bool (required) - whether initial showcase notebooks have been seeded
+//   - seededAt: string (optional, 0..100 chars) - ISO timestamp of initial seeding
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last metadata update
+//   - deviceId: string (optional, 0..256 chars) - originating admin device identifier
+//
+// Collection: public_showcase_notebooks
+// Document ID: {notebookId} (primary 'showcase-...' docs and chunked 'showcase-...__chunk_{n}' docs; must match data.id, immutable)
+// Fields:
+//   - id: string (required, 1..256 chars, immutable) - unique notebook or chunk identifier matching {notebookId}
+//   - title: string (required, 0..1000 chars) - notebook display title (or '__CHUNK__' for chunk docs)
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last modification
+//   - dataJson: string (optional, 0..1000000 chars) - serialized notebook content, manifest, or chunk JSON
+//   - deleted: bool (optional) - soft-deletion tombstone flag
+//   - deviceId: string (optional, 0..256 chars) - originating admin device identifier
+//
 // ===============================================================
 
 service cloud.firestore {
@@ -446,6 +468,34 @@ service cloud.firestore {
         isValidOptionalNumber('ocrTotalCount');
     }
 
+    function isValidPublicShowcaseMeta(data, docId) {
+      return hasOnlyAllowedFields([
+          'id',
+          'folderName',
+          'folderColor',
+          'folderIcon',
+          'seeded',
+          'seededAt',
+          'updatedAt',
+          'deviceId'
+        ]) &&
+        hasRequiredFields([
+          'id',
+          'folderName',
+          'seeded',
+          'updatedAt'
+        ]) &&
+        data.id == docId &&
+        validStringLength('id', 1, 64) &&
+        validStringLength('folderName', 1, 200) &&
+        isValidOptionalString('folderColor', 0, 40) &&
+        isValidOptionalString('folderIcon', 0, 64) &&
+        data.seeded is bool &&
+        isValidOptionalString('seededAt', 0, 100) &&
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalString('deviceId', 0, 256);
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -513,6 +563,29 @@ service cloud.firestore {
     match /daily_traffic/{dateId} {
       allow read: if isAdmin();
       allow create, update: if isValidDailyTrafficDoc(request.resource.data, dateId);
+      allow delete: if isAdmin();
+    }
+
+    // Public Showcase / Demo Folder metadata (public read for Guests + Signed-in users, Admin-only write)
+    match /public_showcase_meta/{docId} {
+      allow read: if true;
+      allow create: if isAdmin() &&
+        docId == 'config' &&
+        isValidPublicShowcaseMeta(request.resource.data, docId);
+      allow update: if isAdmin() &&
+        docId == 'config' &&
+        isValidPublicShowcaseMeta(request.resource.data, docId) &&
+        areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    // Public Showcase / Demo Folder notebooks and chunks (public read for Guests + Signed-in users, Admin-only write)
+    match /public_showcase_notebooks/{notebookId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidNotebookDoc(request.resource.data, notebookId);
+      allow update: if isAdmin() &&
+        isValidNotebookDoc(request.resource.data, notebookId) &&
+        areImmutableFieldsUnchanged(['id']);
       allow delete: if isAdmin();
     }
 

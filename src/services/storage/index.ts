@@ -15,3 +15,5 @@ export * from './storageCleaners';
 export * from './indexedDb';
 export * from './localAndIdbSync';
 export * from './firestoreSync';
+export * from './publicShowcaseLogic';
+export * from './publicShowcaseSync';
