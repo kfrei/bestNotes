@@ -7,6 +7,26 @@ const db = admin.firestore();
 
 const PROJECT_ID = 'bestnotes-2026';
 const ADMIN_EMAIL = 'freiderikoskostas@gmail.com';
+const MONITORING_SERVICE_ACCOUNT = '867655609873-compute@developer.gserviceaccount.com';
+
+function sanitizeGcpProjectId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return '';
+  // GCP Project IDs: 6-30 lowercase letters, digits, or hyphens; start with letter; no trailing hyphen
+  return /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(trimmed) ? trimmed : '';
+}
+
+function mergeDateCounts(
+  a: Record<string, number>,
+  b: Record<string, number>
+): Record<string, number> {
+  const out: Record<string, number> = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = (out[k] || 0) + v;
+  }
+  return out;
+}
 
 const GOOGLE_OAUTH_CLIENT_ID = defineString('GOOGLE_OAUTH_CLIENT_ID', {
   default: '867655609873-t8lm31dtq13mkmeuc5tkn8t0odum0bhf.apps.googleusercontent.com',
@@ -356,6 +376,7 @@ interface MonitoringResponse {
     resource?: { labels?: Record<string, string> };
     points?: MonitoringPoint[];
   }>;
+  nextPageToken?: string;
 }
 
 async function queryDailyMonitoringSeries(
@@ -441,46 +462,73 @@ async function queryLatestGaugeSumBytes(
 
 async function queryDailyGeminiApiSeries(
   accessToken: string,
+  projectId: string,
   startIso: string,
   endIso: string
-): Promise<{ okByDate: Record<string, number>; errByDate: Record<string, number> }> {
+): Promise<{
+  okByDate: Record<string, number>;
+  errByDate: Record<string, number>;
+  accessible: boolean;
+  statusCode: number;
+}> {
   const okByDate: Record<string, number> = {};
   const errByDate: Record<string, number> = {};
+  if (!projectId) {
+    return { okByDate, errByDate, accessible: false, statusCode: 0 };
+  }
   try {
     const filterExpr =
       'metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.labels.service="generativelanguage.googleapis.com"';
-    const url =
-      `https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/timeSeries` +
+    const baseUrl =
+      `https://monitoring.googleapis.com/v3/projects/${encodeURIComponent(projectId)}/timeSeries` +
       `?filter=${encodeURIComponent(filterExpr)}` +
       `&interval.startTime=${encodeURIComponent(startIso)}` +
       `&interval.endTime=${encodeURIComponent(endIso)}` +
       `&aggregation.alignmentPeriod=86400s` +
-      `&aggregation.perSeriesAligner=ALIGN_SUM`;
+      `&aggregation.perSeriesAligner=ALIGN_SUM` +
+      `&aggregation.crossSeriesReducer=REDUCE_SUM` +
+      `&aggregation.groupByFields=resource.labels.method` +
+      `&aggregation.groupByFields=metric.labels.response_code_class`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) return { okByDate, errByDate };
-    const data = (await res.json()) as MonitoringResponse;
-    for (const ts of data.timeSeries || []) {
-      const method = ts.resource?.labels?.method || '';
-      if (!method.includes('GenerateContent') && !method.includes('Generate')) continue;
-      const codeClass = ts.metric?.labels?.response_code_class || '';
-      for (const pt of ts.points || []) {
-        const day = pt.interval?.startTime?.slice(0, 10);
-        if (!day) continue;
-        const val = Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0) || 0;
-        if (codeClass === '2xx') {
-          okByDate[day] = (okByDate[day] || 0) + val;
-        } else {
-          errByDate[day] = (errByDate[day] || 0) + val;
+    let pageToken = '';
+    let lastStatus = 200;
+    for (let page = 0; page < 5; page++) {
+      const url = pageToken
+        ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}`
+        : baseUrl;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      lastStatus = res.status;
+      if (!res.ok) {
+        return { okByDate, errByDate, accessible: false, statusCode: res.status };
+      }
+      const data = (await res.json()) as MonitoringResponse;
+      for (const ts of data.timeSeries || []) {
+        const method = ts.resource?.labels?.method || '';
+        const codeClass = ts.metric?.labels?.response_code_class || '';
+        if (method && !method.includes('GenerateContent') && !method.includes('Generate')) {
+          // Keep non-2xx errors when method is unknown/empty; skip read-only ListModels/GetModel calls
+          if (codeClass === '2xx' || method !== 'unknown') continue;
+        }
+        for (const pt of ts.points || []) {
+          const day = pt.interval?.startTime?.slice(0, 10);
+          if (!day) continue;
+          const val = Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0) || 0;
+          if (codeClass === '2xx') {
+            okByDate[day] = (okByDate[day] || 0) + val;
+          } else {
+            errByDate[day] = (errByDate[day] || 0) + val;
+          }
         }
       }
+      if (!data.nextPageToken) break;
+      pageToken = data.nextPageToken;
     }
+    return { okByDate, errByDate, accessible: true, statusCode: lastStatus };
   } catch {
-    // ignore
+    return { okByDate, errByDate, accessible: false, statusCode: 0 };
   }
-  return { okByDate, errByDate };
 }
 
 let cachedAdminUsagePayload: { expiresAt: number; data: unknown } | null = null;
@@ -505,8 +553,39 @@ export const getAdminFirebaseUsageStats = onCall(
     }
 
     const forceRefresh = Boolean(request.data?.forceRefresh);
+    const saveGeminiProjectId = Boolean(request.data?.saveGeminiProjectId);
+    const rawRequestedGeminiProjectId =
+      typeof request.data?.geminiProjectId === 'string'
+        ? request.data.geminiProjectId.trim().toLowerCase()
+        : undefined;
+
+    if (
+      rawRequestedGeminiProjectId !== undefined &&
+      rawRequestedGeminiProjectId !== '' &&
+      !sanitizeGcpProjectId(rawRequestedGeminiProjectId)
+    ) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Μη έγκυρο Google Cloud Project ID (6–30 πεζοί λατινικοί χαρακτήρες, αριθμοί ή παύλες χωρίς τελική παύλα, π.χ. gen-lang-client-0123456789).'
+      );
+    }
+
+    if (saveGeminiProjectId) {
+      const sanitizedToSave = sanitizeGcpProjectId(rawRequestedGeminiProjectId ?? '');
+      await db.collection('app_config').doc('gemini').set(
+        {
+          monitoringProjectId: sanitizedToSave,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      cachedAdminUsagePayload = null;
+    }
+
     const nowMs = Date.now();
-    if (!forceRefresh && cachedAdminUsagePayload && cachedAdminUsagePayload.expiresAt > nowMs) {
+    const bypassCache =
+      forceRefresh || saveGeminiProjectId || rawRequestedGeminiProjectId !== undefined;
+    if (!bypassCache && cachedAdminUsagePayload && cachedAdminUsagePayload.expiresAt > nowMs) {
       return cachedAdminUsagePayload.data;
     }
 
@@ -523,14 +602,30 @@ export const getAdminFirebaseUsageStats = onCall(
     const startIso = start62d.toISOString();
     const endIso = endMidnightTomorrow.toISOString();
 
-    const [saToken, fnDailySnap, trafficSnap, drivePrivSnap] = await Promise.all([
+    const [saToken, fnDailySnap, trafficSnap, drivePrivSnap, geminiConfigSnap] = await Promise.all([
       getRuntimeServiceAccountToken(),
       db.collection('firebase_usage_daily').orderBy('date', 'desc').limit(65).get(),
       db.collection('daily_traffic').orderBy('date', 'desc').limit(65).get(),
       db.collection('drivePrivateTokens').doc(uid).get(),
+      db.collection('app_config').doc('gemini').get(),
     ]);
 
+    const storedGeminiProjectId = sanitizeGcpProjectId(
+      geminiConfigSnap.exists ? geminiConfigSnap.data()?.monitoringProjectId : ''
+    );
+    const envGeminiProjectId = sanitizeGcpProjectId(process.env.GEMINI_MONITORING_PROJECT_ID);
+    const requestedGeminiProjectId =
+      rawRequestedGeminiProjectId !== undefined
+        ? sanitizeGcpProjectId(rawRequestedGeminiProjectId)
+        : undefined;
+    const geminiProjectId =
+      requestedGeminiProjectId !== undefined
+        ? requestedGeminiProjectId
+        : storedGeminiProjectId || envGeminiProjectId || '';
+
     let monitoringAvailable = false;
+    let geminiMonitoringConnected = false;
+    let geminiMonitoringStatusCode = 0;
     let readsByDate: Record<string, number> = {};
     let writesByDate: Record<string, number> = {};
     let deletesByDate: Record<string, number> = {};
@@ -542,66 +637,95 @@ export const getAdminFirebaseUsageStats = onCall(
 
     let hostingStorageBytes = 0;
     if (saToken) {
-      const [reads, writes, deletes, runReqs, cfExecs, hostBytes, geminiApi, hostStorageBytes] =
-        await Promise.all([
-          queryDailyMonitoringSeries(
-            saToken,
-            'firestore.googleapis.com/document/read_count',
-            startIso,
-            endIso
-          ),
-          queryDailyMonitoringSeries(
-            saToken,
-            'firestore.googleapis.com/document/write_count',
-            startIso,
-            endIso
-          ),
-          queryDailyMonitoringSeries(
-            saToken,
-            'firestore.googleapis.com/document/delete_count',
-            startIso,
-            endIso
-          ),
-          queryDailyMonitoringSeries(
-            saToken,
-            'run.googleapis.com/request_count',
-            startIso,
-            endIso
-          ),
-          queryDailyMonitoringSeries(
-            saToken,
-            'cloudfunctions.googleapis.com/function/execution_count',
-            startIso,
-            endIso
-          ),
-          queryDailyMonitoringSeries(
-            saToken,
-            'firebasehosting.googleapis.com/network/sent_bytes_count',
-            startIso,
-            endIso
-          ),
-          queryDailyGeminiApiSeries(saToken, startIso, endIso),
-          queryLatestGaugeSumBytes(
-            saToken,
-            'firebasehosting.googleapis.com/storage/total_bytes',
-            now.getTime()
-          ),
-        ]);
+      const shouldQueryExtraGeminiProject =
+        Boolean(geminiProjectId) && geminiProjectId !== PROJECT_ID;
+
+      const [
+        reads,
+        writes,
+        deletes,
+        runReqs,
+        cfExecs,
+        hostBytes,
+        primaryGeminiApi,
+        extraGeminiApi,
+        hostStorageBytes,
+      ] = await Promise.all([
+        queryDailyMonitoringSeries(
+          saToken,
+          'firestore.googleapis.com/document/read_count',
+          startIso,
+          endIso
+        ),
+        queryDailyMonitoringSeries(
+          saToken,
+          'firestore.googleapis.com/document/write_count',
+          startIso,
+          endIso
+        ),
+        queryDailyMonitoringSeries(
+          saToken,
+          'firestore.googleapis.com/document/delete_count',
+          startIso,
+          endIso
+        ),
+        queryDailyMonitoringSeries(
+          saToken,
+          'run.googleapis.com/request_count',
+          startIso,
+          endIso
+        ),
+        queryDailyMonitoringSeries(
+          saToken,
+          'cloudfunctions.googleapis.com/function/execution_count',
+          startIso,
+          endIso
+        ),
+        queryDailyMonitoringSeries(
+          saToken,
+          'firebasehosting.googleapis.com/network/sent_bytes_count',
+          startIso,
+          endIso
+        ),
+        queryDailyGeminiApiSeries(saToken, PROJECT_ID, startIso, endIso),
+        shouldQueryExtraGeminiProject
+          ? queryDailyGeminiApiSeries(saToken, geminiProjectId, startIso, endIso)
+          : Promise.resolve(null),
+        queryLatestGaugeSumBytes(
+          saToken,
+          'firebasehosting.googleapis.com/storage/total_bytes',
+          now.getTime()
+        ),
+      ]);
       readsByDate = reads;
       writesByDate = writes;
       deletesByDate = deletes;
       runReqByDate = runReqs;
       cfExecByDate = cfExecs;
       hostingBytesByDate = hostBytes;
-      geminiApiOkByDate = geminiApi.okByDate;
-      geminiApiErrByDate = geminiApi.errByDate;
+      geminiApiOkByDate = extraGeminiApi
+        ? mergeDateCounts(primaryGeminiApi.okByDate, extraGeminiApi.okByDate)
+        : primaryGeminiApi.okByDate;
+      geminiApiErrByDate = extraGeminiApi
+        ? mergeDateCounts(primaryGeminiApi.errByDate, extraGeminiApi.errByDate)
+        : primaryGeminiApi.errByDate;
       hostingStorageBytes = hostStorageBytes;
+
+      if (shouldQueryExtraGeminiProject && extraGeminiApi) {
+        geminiMonitoringConnected = extraGeminiApi.accessible;
+        geminiMonitoringStatusCode = extraGeminiApi.statusCode;
+      } else if (geminiProjectId === PROJECT_ID) {
+        geminiMonitoringConnected = primaryGeminiApi.accessible;
+        geminiMonitoringStatusCode = primaryGeminiApi.statusCode;
+      }
+
       monitoringAvailable =
         Object.keys(reads).length > 0 ||
         Object.keys(writes).length > 0 ||
         Object.keys(hostBytes).length > 0 ||
         Object.keys(runReqs).length > 0 ||
-        Object.keys(geminiApi.okByDate).length > 0 ||
+        Object.keys(geminiApiOkByDate).length > 0 ||
+        Object.keys(geminiApiErrByDate).length > 0 ||
         hostStorageBytes > 0;
     }
 
@@ -656,6 +780,7 @@ export const getAdminFirebaseUsageStats = onCall(
       ...Object.keys(cfExecByDate),
       ...Object.keys(hostingBytesByDate),
       ...Object.keys(geminiApiOkByDate),
+      ...Object.keys(geminiApiErrByDate),
       ...Object.keys(fnCustomByDate),
       ...Object.keys(aiByDate),
     ]);
@@ -842,6 +967,10 @@ export const getAdminFirebaseUsageStats = onCall(
 
     const resultPayload = {
       projectId: PROJECT_ID,
+      geminiProjectId,
+      geminiMonitoringConnected,
+      geminiMonitoringStatusCode,
+      monitoringServiceAccount: MONITORING_SERVICE_ACCOUNT,
       fetchedAt: new Date().toISOString(),
       monitoringAvailable,
       hostingStorage: {
@@ -866,10 +995,12 @@ export const getAdminFirebaseUsageStats = onCall(
       monthly,
     };
 
-    cachedAdminUsagePayload = {
-      expiresAt: Date.now() + 60 * 1000,
-      data: resultPayload,
-    };
+    if (rawRequestedGeminiProjectId === undefined || saveGeminiProjectId) {
+      cachedAdminUsagePayload = {
+        expiresAt: Date.now() + 60 * 1000,
+        data: resultPayload,
+      };
+    }
 
     return resultPayload;
   }

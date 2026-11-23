@@ -306,6 +306,10 @@ export interface FirebaseMonthlyUsageRow {
 
 export interface AdminFirebaseUsageResponse {
   projectId: string;
+  geminiProjectId?: string;
+  geminiMonitoringConnected?: boolean;
+  geminiMonitoringStatusCode?: number;
+  monitoringServiceAccount?: string;
   fetchedAt: string;
   monitoringAvailable: boolean;
   hostingStorage?: {
@@ -336,13 +340,20 @@ export interface AdminFirebaseUsageResponse {
 }
 
 export async function fetchAdminFirebaseUsageStats(
-  forceRefresh = false
+  forceRefresh = false,
+  options?: { geminiProjectId?: string; saveGeminiProjectId?: boolean }
 ): Promise<AdminFirebaseUsageResponse> {
-  const fn = httpsCallable<{ forceRefresh?: boolean }, AdminFirebaseUsageResponse>(
-    cloudFunctions,
-    'getAdminFirebaseUsageStats'
-  );
-  const res = await fn({ forceRefresh });
+  const fn = httpsCallable<
+    { forceRefresh?: boolean; geminiProjectId?: string; saveGeminiProjectId?: boolean },
+    AdminFirebaseUsageResponse
+  >(cloudFunctions, 'getAdminFirebaseUsageStats');
+  const res = await fn({
+    forceRefresh: forceRefresh || Boolean(options?.saveGeminiProjectId),
+    ...(options?.geminiProjectId !== undefined
+      ? { geminiProjectId: options.geminiProjectId }
+      : {}),
+    ...(options?.saveGeminiProjectId ? { saveGeminiProjectId: true } : {}),
+  });
   return res.data;
 }
 

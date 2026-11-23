@@ -504,6 +504,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             isLoading={isFirebaseUsageLoading}
             errorMsg={firebaseUsageError}
             onRefresh={loadFirebaseUsage}
+            onUsageUpdated={setFirebaseUsage}
           />
         )}
 

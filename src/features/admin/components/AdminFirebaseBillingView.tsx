@@ -20,12 +20,17 @@ import type {
 } from '../../../firebase';
 import { signInToGoogleDrive, refreshGoogleDriveTokenSilently } from '../../../firebase';
 import { GEMINI_FREE_TIER_DAILY_CAPACITY } from '../types';
+import {
+  FirebaseBuildComparisonSection,
+  GoogleAiStudioUsageSection,
+} from './AdminUsageCharts';
 
 export interface AdminFirebaseBillingViewProps {
   usage: AdminFirebaseUsageResponse | null;
   isLoading: boolean;
   errorMsg?: string | null;
   onRefresh: (force?: boolean) => void;
+  onUsageUpdated?: (next: AdminFirebaseUsageResponse) => void;
   compactOverview?: boolean;
   onOpenFullBillingTab?: () => void;
 }
@@ -108,6 +113,7 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
   isLoading,
   errorMsg,
   onRefresh,
+  onUsageUpdated,
   compactOverview = false,
   onOpenFullBillingTab,
 }) => {
@@ -348,10 +354,19 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
     {
       title: 'Google Gemini OCR API (generativelanguage)',
       icon: <Sparkles className="w-4 h-4 text-purple-700" />,
-      used: todayRow?.geminiApiCalls ?? todayRow?.geminiCalls ?? 0,
+      used: usage?.geminiMonitoringConnected
+        ? todayRow?.geminiApiCalls ?? 0
+        : Math.max(todayRow?.geminiApiCalls ?? 0, todayRow?.geminiCalls ?? 0),
       limit: GEMINI_FREE_TIER_DAILY_CAPACITY,
       periodLabel: `Σήμερα (${todayRow?.geminiApiErrors ? `${todayRow.geminiApiErrors} σφάλμ.` : 'Free Tier'}) • 20 RPD/Flash μοντέλο • 5 RPM • Reset 10:00 π.μ.`,
-      subLabel: `Μήνας: ${(currentMonthRow?.geminiApiCalls ?? currentMonthRow?.geminiCalls ?? 0).toLocaleString('el-GR')} επιτυχείς κλήσεις • Ενεργό key: FreiderikosK (Free Tier)`,
+      subLabel: `Μήνας: ${(usage?.geminiMonitoringConnected
+        ? currentMonthRow?.geminiApiCalls ?? 0
+        : Math.max(currentMonthRow?.geminiApiCalls ?? 0, currentMonthRow?.geminiCalls ?? 0)
+      ).toLocaleString('el-GR')} επιτυχείς κλήσεις • ${
+        usage?.geminiMonitoringConnected && usage?.geminiProjectId
+          ? `Live Monitoring: ${usage.geminiProjectId}`
+          : 'Ενεργό key: FreiderikosK (Free Tier)'
+      }`,
       rateLabel: `Paid Tier 1 αν χρειαστεί (~0,20 €/1.000 OCR): Σήμερα ${formatEur(
         todayRow?.geminiEstCostEur || 0
       )} • Μήνας ${formatEur(currentMonthRow?.geminiEstCostEur || 0)}`,
@@ -552,6 +567,16 @@ export const AdminFirebaseBillingView: React.FC<AdminFirebaseBillingViewProps> =
           </div>
         </div>
       </div>
+
+      {/* Firebase Build-style 7-Day Comparison Charts (This Week vs Last Week) */}
+      <FirebaseBuildComparisonSection usage={usage} />
+
+      {/* Google AI Studio-style Gemini API Usage Charts + Cross-Project FreiderikosK Monitoring Setup */}
+      <GoogleAiStudioUsageSection
+        usage={usage}
+        onRefresh={onRefresh}
+        onUsageUpdated={onUsageUpdated}
+      />
 
       {/* 6 Quota Progress Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
