@@ -49,7 +49,8 @@ export function renderGravityOverlay(
   ctx: CanvasRenderingContext2D,
   bodies: GravityBodyState[],
   config: GravityLabConfig,
-  isRunning: boolean
+  isRunning: boolean,
+  v0FlashIntensity = 0
 ): void {
   ctx.save();
 
@@ -134,13 +135,20 @@ export function renderGravityOverlay(
           const lx = ex + 6 * Math.cos(ang) - 4;
           const ly = ey + 6 * Math.sin(ang) - 4;
           ctx.save();
+          const fScale = 1 + v0FlashIntensity * 0.16;
+          ctx.translate(lx, ly);
+          ctx.scale(fScale, fScale);
           ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-          ctx.lineWidth = 3;
+          if (v0FlashIntensity > 0.02) {
+            ctx.shadowColor = `rgba(37, 99, 235, ${(0.85 * v0FlashIntensity).toFixed(2)})`;
+            ctx.shadowBlur = 12 * v0FlashIntensity;
+          }
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+          ctx.lineWidth = 3.2;
           ctx.lineJoin = 'round';
-          ctx.strokeText(label, lx, ly);
-          ctx.fillStyle = '#2563eb';
-          ctx.fillText(label, lx, ly);
+          ctx.strokeText(label, 0, 0);
+          ctx.fillStyle = v0FlashIntensity > 0.35 ? '#1d4ed8' : '#2563eb';
+          ctx.fillText(label, 0, 0);
           ctx.restore();
         }
       }

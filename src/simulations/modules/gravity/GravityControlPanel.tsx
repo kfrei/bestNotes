@@ -17,6 +17,7 @@ interface GravityControlPanelProps {
   segmentCount: number;
   energy: GravityEnergyStats;
   onToggleBodyPin: (strokeId: string) => void;
+  onSetInitialSpeed?: (speedMs: number) => void;
 }
 
 export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
@@ -34,10 +35,26 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
   segmentCount,
   energy,
   onToggleBodyPin,
+  onSetInitialSpeed,
 }) => {
+  const [editingSpeed, setEditingSpeed] = React.useState(false);
+  const [speedDraft, setSpeedDraft] = React.useState('');
+  const [flashBadge, setFlashBadge] = React.useState(false);
   const maxE = Math.max(0.5, energy.totalJ, energy.kineticJ + energy.potentialJ);
   const kPct = Math.min(100, (energy.kineticJ / maxE) * 100);
   const uPct = Math.min(100, (energy.potentialJ / maxE) * 100);
+
+  const commitSpeedEdit = () => {
+    setEditingSpeed(false);
+    if (!onSetInitialSpeed) return;
+    const normalized = speedDraft.trim().replace(',', '.');
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    const clamped = Math.min(60, Math.round(parsed * 10) / 10);
+    onSetInitialSpeed(clamped);
+    setFlashBadge(true);
+    window.setTimeout(() => setFlashBadge(false), 560);
+  };
 
   return (
     <div className="space-y-3 text-xs text-[#2c3e50]">
@@ -122,9 +139,50 @@ export const GravityControlPanel: React.FC<GravityControlPanelProps> = ({
           Σώματα: <strong>{bodies.filter((b) => !b.pinned).length}</strong> · Επιφάνειες:{' '}
           <strong>{segmentCount > 0 ? '✓' : '—'}</strong>
         </span>
-        <span className="text-[#64748b]">
-          u = <strong>{energy.speedMs.toFixed(1)}</strong> m/s
-        </span>
+        {editingSpeed && !isRunning ? (
+          <span className="inline-flex items-center gap-1 text-[#234978] font-semibold">
+            <span>u =</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoFocus
+              value={speedDraft}
+              onChange={(e) => setSpeedDraft(e.target.value)}
+              onBlur={commitSpeedEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitSpeedEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditingSpeed(false);
+                }
+              }}
+              className="w-11 px-1 py-0.5 text-center rounded bg-white border border-[#2563eb] text-[#1b2a4a] font-bold text-[11px] outline-none"
+            />
+            <span>m/s</span>
+          </span>
+        ) : !isRunning && onSetInitialSpeed && bodies.some((b) => !b.pinned) ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSpeedDraft(energy.speedMs.toFixed(1));
+              setEditingSpeed(true);
+            }}
+            className={`px-1.5 py-0.5 -mr-1 rounded transition cursor-pointer ${
+              flashBadge
+                ? 'bg-blue-100 text-[#1d4ed8] ring-2 ring-blue-400/70'
+                : 'text-[#64748b] hover:bg-[#e5ded1] hover:text-[#1d4ed8]'
+            }`}
+            title="Κλικ για επεξεργασία αρχικής ταχύτητας u₀"
+          >
+            u = <strong className="underline decoration-dotted underline-offset-2">{energy.speedMs.toFixed(1)}</strong> m/s
+          </button>
+        ) : (
+          <span className="text-[#64748b]">
+            u = <strong>{energy.speedMs.toFixed(1)}</strong> m/s
+          </span>
+        )}
       </div>
 
       {/* Contextual Stickmen Signed Forces F / F₁, F₂ (-40..+40 N each + Live Net Resultant Fολ!) */}

@@ -2182,6 +2182,9 @@ export default function App() {
   const gravityOffsetsRef = useRef<
     Map<string, { dx: number; dy: number; dAngle?: number; pivotX?: number; pivotY?: number }>
   >(new Map());
+  const gravityV0FlashIntensityRef = useRef<number>(0);
+  const gravityV0FlashArrowIdsRef = useRef<Set<string>>(new Set());
+  const gravityV0FlashRafRef = useRef<number>(0);
   const gravityHiddenStrokeIdsRef = useRef<Set<string>>(new Set());
   const [gravityBodiesUi, setGravityBodiesUi] = useState<GravityBodyState[]>([]);
   const [gravitySegmentCount, setGravitySegmentCount] = useState<number>(0);
@@ -12147,6 +12150,17 @@ export default function App() {
       ctx.shadowColor = 'rgba(0, 102, 255, 0.32)';
       ctx.shadowBlur = 4;
     }
+    const v0ArrowFlash =
+      gravityV0FlashIntensityRef.current > 0.02 && gravityV0FlashArrowIdsRef.current.has(s.id)
+        ? gravityV0FlashIntensityRef.current
+        : 0;
+    if (v0ArrowFlash > 0) {
+      ctx.shadowColor = `rgba(37, 99, 235, ${(0.92 * v0ArrowFlash).toFixed(2)})`;
+      ctx.shadowBlur = 14 * v0ArrowFlash;
+      if (v0ArrowFlash > 0.35) {
+        ctx.strokeStyle = '#2563eb';
+      }
+    }
 
     if (s.lineStyle === 'dashed') {
       ctx.setLineDash([effectiveLineWidth * 3.2, effectiveLineWidth * 2.2]);
@@ -15143,7 +15157,8 @@ export default function App() {
           ctx,
           gravityBodiesRef.current,
           gravityConfigRef.current,
-          isGravityRunningRef.current
+          isGravityRunningRef.current,
+          gravityV0FlashIntensityRef.current
         );
       }
 
@@ -15246,6 +15261,80 @@ export default function App() {
       refFloorY: 800,
     });
     renderStaticSceneRef.current();
+  }, []);
+
+  const setGravityInitialSpeed = useCallback((speedMs: number) => {
+    const curPage =
+      activeNotebookLiveRef.current.pages[activePageIndexLiveRef.current] ||
+      activeNotebookLiveRef.current.pages[0];
+    const pH = curPage ? getPageLogicalHeight(curPage) : 1123;
+    const vPx = Math.max(0, speedMs) * 60; // GRAVITY_PX_PER_M = 60
+    const arrowIds = new Set<string>();
+
+    for (const b of gravityBodiesRef.current) {
+      if (b.pinned) continue;
+      let ux = 1;
+      let uy = 0;
+      const curMag = Math.hypot(b.initVx, b.initVy);
+      if (curMag > 1e-3) {
+        ux = b.initVx / curMag;
+        uy = b.initVy / curMag;
+      } else if (b.v0ArrowStrokeId && curPage) {
+        const arr = curPage.strokes.find((st) => st.id === b.v0ArrowStrokeId);
+        if (arr && arr.points.length >= 2) {
+          const tail = arr.arrowStart && !arr.arrowEnd ? arr.points[arr.points.length - 1] : arr.points[0];
+          const tip = arr.arrowStart && !arr.arrowEnd ? arr.points[0] : arr.points[arr.points.length - 1];
+          const adx = tip.x - tail.x;
+          const ady = tip.y - tail.y;
+          const alen = Math.hypot(adx, ady);
+          if (alen > 1) {
+            ux = adx / alen;
+            uy = ady / alen;
+          }
+        }
+      }
+      b.initVx = ux * vPx;
+      b.initVy = uy * vPx;
+      b.vx = b.initVx;
+      b.vy = b.initVy;
+      if (b.v0ArrowStrokeId) {
+        arrowIds.add(b.v0ArrowStrokeId);
+      }
+    }
+
+    setGravityEnergyStats(
+      computeGravityEnergyStats(
+        gravityBodiesRef.current,
+        gravitySegmentsRef.current,
+        gravityConfigRef.current,
+        pH
+      )
+    );
+
+    // Brief 560ms double-pulse flash on both the u₀ label and the user's drawn arrow (0 RAF once done!)
+    if (gravityV0FlashRafRef.current) {
+      window.cancelAnimationFrame(gravityV0FlashRafRef.current);
+      gravityV0FlashRafRef.current = 0;
+    }
+    gravityV0FlashArrowIdsRef.current = arrowIds;
+    const startTs = performance.now();
+    const DURATION_MS = 560;
+    const stepFlash = (now: number) => {
+      const t = (now - startTs) / DURATION_MS;
+      if (t >= 1) {
+        gravityV0FlashIntensityRef.current = 0;
+        gravityV0FlashArrowIdsRef.current.clear();
+        gravityV0FlashRafRef.current = 0;
+        if (curPage) staticPageRenderCacheRef.current.delete(curPage.id);
+        renderStaticSceneRef.current();
+        return;
+      }
+      gravityV0FlashIntensityRef.current = Math.abs(Math.sin(t * Math.PI * 2));
+      if (curPage) staticPageRenderCacheRef.current.delete(curPage.id);
+      renderStaticSceneRef.current();
+      gravityV0FlashRafRef.current = window.requestAnimationFrame(stepFlash);
+    };
+    gravityV0FlashRafRef.current = window.requestAnimationFrame(stepFlash);
   }, []);
 
   const resetGravityScene = useCallback(() => {
@@ -67358,6 +67447,7 @@ export default function App() {
                     segmentCount={gravitySegmentCount}
                     energy={gravityEnergyStats}
                     onToggleBodyPin={toggleGravityBodyPin}
+                    onSetInitialSpeed={setGravityInitialSpeed}
                   />
                 ) : simActiveCategory === 'circuits' ? (
                   <CircuitControlPanel
