@@ -57,10 +57,10 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
               </div>
               <div className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-1">
                 <div>
-                  <div className="h-4 w-4/5 rounded-md bn-shimmer mb-2" />
-                  <div className="h-3 w-1/3 rounded-md bn-shimmer" />
+                  <div className="h-5 w-32 rounded-md bn-shimmer mb-2" />
+                  <div className="h-4 w-4/5 rounded-md bn-shimmer" />
                 </div>
-                <div className="h-5 w-32 rounded-md bn-shimmer mt-2" />
+                <div className="h-3 w-1/3 rounded-md bn-shimmer mt-2" />
               </div>
             </div>
           ))}
@@ -120,16 +120,16 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 title={`Άνοιγμα «${rNb.title}» (${fullFolderPath})`}
               >
                 <div>
+                  <span className="inline-block max-w-full break-words px-2.5 py-0.5 rounded-lg bg-indigo-50/90 text-[#234978] text-[10.5px] font-semibold leading-snug mb-1.5">
+                    {fullFolderPath}
+                  </span>
                   <p className="text-[13.5px] font-bold text-[#0f172a] group-hover:text-[#234978] line-clamp-2 leading-snug">
                     {rNb.title}
                   </p>
-                  <p className="text-[11px] font-semibold text-slate-400 mt-1.5 tabular-nums">
-                    {rNbSizeLabel}
-                  </p>
                 </div>
-                <span className="inline-block self-start max-w-full break-words px-2.5 py-1 rounded-lg bg-indigo-50/90 text-[#234978] text-[11px] font-semibold leading-snug mt-2">
-                  {fullFolderPath}
-                </span>
+                <p className="text-[11px] font-semibold text-slate-400 mt-1.5 tabular-nums">
+                  {rNbSizeLabel}
+                </p>
               </div>
             </div>
           );
