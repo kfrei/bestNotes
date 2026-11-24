@@ -61,8 +61,10 @@ function rgba([r, g, b]: [number, number, number], alpha: number): string {
 }
 
 /**
- * Generates an ultra-soft, desaturated grey-tinted palette derived from a folder's hex color
- * (matching the elegance of the ice-blue/slate style without ever looking saturated).
+ * Generates an ultra-soft, multi-tone palette combining:
+ * - Warm beige segments (sand/paper)
+ * - Clean neutral grey segments (slate mist)
+ * - Soft desaturated folder-color accent segments (so not every arc is the same hue)
  */
 function buildFolderTintedPalette(hex?: string): ArcPalette {
   if (!hex) return ROOT_GREIGE_PALETTE;
@@ -70,25 +72,24 @@ function buildFolderTintedPalette(hex?: string): ArcPalette {
   if (!rgb) return ROOT_GREIGE_PALETTE;
 
   const softMist: [number, number, number] = [214, 220, 228];
-  const neutralSlate: [number, number, number] = [148, 160, 174];
-  const warmStone: [number, number, number] = [174, 170, 164];
+  const neutralGrey: [number, number, number] = [156, 163, 175];
+  const coolGrey: [number, number, number] = [140, 148, 160];
+  const warmBeige: [number, number, number] = [198, 186, 168];
+  const deepBeige: [number, number, number] = [174, 162, 144];
 
-  const outer1 = mixRgb(rgb, softMist, 0.42);
-  const outer2 = mixRgb(rgb, warmStone, 0.28);
-  const mid1 = mixRgb(rgb, neutralSlate, 0.30);
-  const mid2 = mixRgb(rgb, softMist, 0.36);
-  const stroke = mixRgb(rgb, neutralSlate, 0.34);
-  const inner = mixRgb(rgb, softMist, 0.26);
-  const innerSt = mixRgb(rgb, warmStone, 0.26);
+  // Only select arcs carry the soft folder hue; the rest stay warm beige & neutral grey
+  const accentOuter = mixRgb(rgb, softMist, 0.44);
+  const accentMid = mixRgb(rgb, softMist, 0.36);
+  const accentStroke = mixRgb(rgb, coolGrey, 0.28);
 
   return {
-    outerFill1: rgba(outer1, 0.25),
-    outerFill2: rgba(outer2, 0.21),
-    midFill1: rgba(mid1, 0.21),
-    midFill2: rgba(mid2, 0.23),
-    midStroke: rgba(stroke, 0.34),
-    innerFill: rgba(inner, 0.17),
-    innerStroke: rgba(innerSt, 0.28),
+    outerFill1: rgba(accentOuter, 0.25),   // Soft folder color (e.g. lavender / ice-blue / sage)
+    outerFill2: rgba(warmBeige, 0.30),     // Warm beige
+    midFill1: rgba(neutralGrey, 0.22),     // Neutral soft grey
+    midFill2: rgba(accentMid, 0.23),       // Soft folder color
+    midStroke: rgba(accentStroke, 0.34),   // Crisp grey-tinted outline
+    innerFill: rgba(deepBeige, 0.24),      // Warm beige inner arc
+    innerStroke: rgba(coolGrey, 0.30),     // Clean grey fine outline
   };
 }
 
