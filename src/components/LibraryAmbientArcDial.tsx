@@ -308,24 +308,26 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
           const y = projY[idx];
           const ct = cellType[idx];
 
-          // Horizontal edge (occasionally omitted to merge adjacent cells into asymmetric pentagons/hexagons)
-          if (c < cols - 1 && !(ct >= 82 && r > 0 && r < rows - 1)) {
+          // Horizontal edge (only allow isolated single-edge omission on alternating parity so no empty strip can ever form)
+          const omitHoriz = ct >= 88 && (r + c) % 2 === 0 && r > 0 && r < rows - 1;
+          if (c < cols - 1 && !omitHoriz) {
             ctx.moveTo(x, y);
             ctx.lineTo(projX[idx + 1], projY[idx + 1]);
           }
-          // Depth edge to nearer row (occasionally omitted on different cells to form organic hexagons)
-          if (r > 0 && !(ct >= 68 && ct < 82 && c > 0 && c < cols - 1)) {
+          // Depth edge to nearer row (isolated on opposite parity so pentagons/hexagons never merge into open strips)
+          const omitDepth = ct >= 76 && ct < 88 && (r + c) % 2 === 1 && c > 0 && c < cols - 1;
+          if (r > 0 && !omitDepth) {
             const nearIdx = (r - 1) * cols + c;
             ctx.moveTo(x, y);
             ctx.lineTo(projX[nearIdx], projY[nearIdx]);
           }
-          // Sparse, non-repeating random diagonals (only ~36% of cells, alternating direction organically)
-          if (r > 0 && c < cols - 1) {
+          // Sparse, non-repeating random diagonals (~34% of cells, alternating direction organically)
+          if (r > 0 && c < cols - 1 && !omitHoriz && !omitDepth) {
             const nearIdx = (r - 1) * cols + c;
-            if (ct < 20) {
+            if (ct < 18) {
               ctx.moveTo(x, y);
               ctx.lineTo(projX[nearIdx + 1], projY[nearIdx + 1]);
-            } else if (ct >= 20 && ct < 36) {
+            } else if (ct >= 18 && ct < 34) {
               ctx.moveTo(projX[idx + 1], projY[idx + 1]);
               ctx.lineTo(projX[nearIdx], projY[nearIdx]);
             }
