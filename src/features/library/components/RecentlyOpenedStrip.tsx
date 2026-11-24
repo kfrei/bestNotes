@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Notebook, NotePage } from '../../../types/note';
-import { LibraryNoteMiniThumb } from '../../../components/LibraryNoteMiniThumb';
 
 function computeVisibleRecentCount(containerWidth: number): number {
   if (containerWidth >= 1260) return 6;
@@ -45,6 +44,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
 }) => {
   void recentOpenedAtMap;
   void formatRecentRelativeLabel;
+  void resolvePageBackgroundUrl;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(() =>
@@ -107,7 +107,6 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       </h2>
       <div className="grid gap-5 sm:gap-6 lg:gap-7 xl:gap-8" style={gridStyle}>
         {recentlyOpenedNotebooks.slice(0, visibleCount).map((rNb) => {
-          const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
           const spineColor = resolveNotebookSpineColor(rNb);
           const rNbBytes = getNotebookSizeBytes(rNb);
           const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
@@ -130,39 +129,29 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
               onPointerLeave={() => onClearThumbHover(rNb.id)}
               onClick={() => onOpenNotebook(rNb)}
               title={`Άνοιγμα «${rNb.title}» (${fullFolderPath})`}
-              className="group relative aspect-[3/4] rounded-r-2xl rounded-l-md overflow-hidden shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer select-none ring-1 ring-slate-200/90 hover:ring-[#234978]/35"
+              className="group relative aspect-[3/4] rounded-r-2xl rounded-l-md overflow-hidden shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer select-none ring-1 ring-slate-200/90 hover:ring-[#234978]/35 bg-white"
+              style={{
+                backgroundColor: '#ffffff',
+                backgroundImage:
+                  'linear-gradient(to right, rgba(148, 163, 184, 0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(148, 163, 184, 0.22) 1px, transparent 1px)',
+                backgroundSize: '12px 12px',
+              }}
             >
-              {/* Full-bleed paper thumbnail with colored left spine */}
-              <LibraryNoteMiniThumb
-                notebookId={rNb.id}
-                title={rNb.title}
-                updatedAt={rNb.updatedAt}
-                coverColor={spineColor}
-                firstPage={rNb.pages[0]}
-                p0BgUrl={p0Url}
-                variant="recent"
-                className="w-full h-full border-0 shadow-none"
-              />
-
-              {/* Soft cool slate-grey graduated veil over paper content for calm visual cohesion (lifts on hover) */}
+              {/* Colored left spine matching the immediate parent folder */}
               <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-2.5 right-0 z-[12] transition-opacity duration-200 group-hover:opacity-35"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(203, 213, 225, 0.56) 0%, rgba(190, 202, 216, 0.42) 46%, rgba(182, 195, 212, 0.62) 100%)',
-                }}
+                className="absolute left-0 top-0 bottom-0 w-2.5 z-10 shadow-2xs"
+                style={{ backgroundColor: spineColor }}
               />
 
-              {/* Top Frosted Liquid Glass Ribbon (inset lower from top edge, full-width over spine) */}
-              <div className="absolute top-6 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)]">
+              {/* Top Frosted Liquid Glass Ribbon (slightly deeper slate-grey, inset from top, full-width over spine) */}
+              <div className="absolute top-6 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-300/72 backdrop-blur-[3px] border-y border-slate-400/55 shadow-[0_2px_10px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.6)]">
                 <p className="text-[11.5px] font-bold text-[#0f172a] group-hover:text-[#234978] truncate leading-snug">
                   {rNb.title}
                 </p>
               </div>
 
-              {/* Bottom Frosted Liquid Glass Ribbon (inset from bottom edge, full-width over spine) */}
-              <div className="absolute bottom-3 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)] flex items-center justify-between gap-1.5">
+              {/* Bottom Frosted Liquid Glass Ribbon (slightly deeper slate-grey, inset from bottom, full-width over spine) */}
+              <div className="absolute bottom-3 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-300/72 backdrop-blur-[3px] border-y border-slate-400/55 shadow-[0_2px_10px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] flex items-center justify-between gap-1.5">
                 <span
                   className="inline-block max-w-[74%] truncate px-2 py-0.5 rounded-md text-white text-[9.5px] font-bold leading-tight shadow-2xs"
                   style={{ backgroundColor: spineColor }}
