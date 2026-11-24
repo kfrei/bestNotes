@@ -59545,6 +59545,7 @@ export default function App() {
               {/* Live TV Interactive Board Sender Control (iPad) / Receiver Mode Button */}
               <div className="relative flex items-center">
                 <button
+                  type="button"
                   onClick={() => {
                     if (!canUseLiveBroadcast) {
                       setUpgradeModalContext({
@@ -59555,24 +59556,20 @@ export default function App() {
                       });
                       return;
                     }
-                    if (!isLiveTvBroadcasting) {
-                      setIsLiveTvBroadcasting(true);
-                      setShowLiveTvMenu(true);
-                      showToast(
-                        'Ξεκίνησε η Live TV Εκπομπή από το iPad! Στον Διαδραστικό πάτα «Live» από το Προφίλ!'
-                      );
-                      return;
-                    }
                     setShowLiveTvMenu((v) => !v);
                   }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer focus:outline-none ${
                     !canUseLiveBroadcast
                       ? 'bg-[#263961]/55 text-slate-300/60 hover:bg-[#31487a]/75'
                       : isLiveTvBroadcasting
-                      ? 'bg-emerald-600/90 hover:bg-emerald-600 text-white ring-1 ring-emerald-400/70 shadow-xs'
+                      ? 'bg-emerald-600/35 hover:bg-emerald-600/45 text-emerald-100 border border-emerald-400/45 shadow-2xs'
                       : 'bg-[#263961] hover:bg-[#31487a] text-slate-200 hover:text-white'
                   }`}
-                  title="Έναρξη / Έλεγχος Live 16:9 Μετάδοσης από το iPad στον Διαδραστικό Πίνακα"
+                  title={
+                    showLiveTvMenu
+                      ? undefined
+                      : 'Μενού Live 16:9 Μετάδοσης στον Διαδραστικό Πίνακα'
+                  }
                 >
                   <span className="flex items-center gap-1.5">
                     <span
@@ -59580,7 +59577,7 @@ export default function App() {
                         !isLiveTvBroadcasting
                           ? 'bg-slate-400'
                           : liveTvStatus.connected
-                          ? 'bg-white animate-pulse'
+                          ? 'bg-emerald-300 animate-pulse'
                           : 'bg-amber-300 animate-ping'
                       }`}
                     />
@@ -59604,13 +59601,17 @@ export default function App() {
                       <div className="flex items-center gap-2 font-bold text-[12px] text-[#1b2a4a]">
                         <span
                           className={`w-2.5 h-2.5 rounded-full ${
-                            liveTvStatus.connected
+                            !isLiveTvBroadcasting
+                              ? 'bg-slate-400'
+                              : liveTvStatus.connected
                               ? 'bg-emerald-500 animate-pulse'
                               : 'bg-amber-400 animate-ping'
                           }`}
                         />
                         <span>
-                          {liveTvStatus.connected
+                          {!isLiveTvBroadcasting
+                            ? 'Live TV 16:9 (Ανενεργό)'
+                            : liveTvStatus.connected
                             ? `Συνδεδεμένο (${
                                 liveTvStatus.mode === 'webrtc'
                                   ? `P2P • ${liveTvStatus.latencyMs ?? 10}ms`
@@ -59639,47 +59640,79 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (liveTvSenderRef.current && activeNotebook) {
-                            const wsWidth =
-                              workspaceRef.current?.clientWidth || window.innerWidth || 980;
-                            const wsHeight =
-                              workspaceRef.current?.clientHeight || window.innerHeight || 820;
-                            const senderBaseZ = isFullBleedWidth
-                              ? wsWidth / Math.max(200, pageWidth)
-                              : 1;
-                            liveTvSenderRef.current.sendPages({
-                              notebookId: activeNotebook.id || 'nb-tv-live',
-                              notebookTitle: activeNotebook.title || 'Live Σημείωση',
-                              activePageIndex,
-                              pages: activeNotebook.pages,
-                            });
-                            liveTvSenderRef.current.sendViewport({
-                              z: zoomRef.current,
-                              baseZ: senderBaseZ,
-                              px: panRef.current.x,
-                              py: panRef.current.y,
-                              w: wsWidth,
-                              h: wsHeight,
-                              pIdx: activePageIndex,
-                              pW: pageWidth,
-                            });
-                            liveTvSenderRef.current.forceHandshake();
-                            setLiveTvJustSynced(true);
-                            showToast('🔄 Στάλθηκε άμεσος συγχρονισμός στον Διαδραστικό Πίνακα!');
+                          if (!isLiveTvBroadcasting) {
+                            setIsLiveTvBroadcasting(true);
+                            setLiveTvJustSynced(false);
+                            showToast(
+                              'Ξεκίνησε η Live TV Εκπομπή! Στον Διαδραστικό πάτα «Live (Προβολή 16:9)» από το Προφίλ.'
+                            );
                           }
                         }}
                         className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border font-bold text-[11px] transition cursor-pointer ${
-                          liveTvJustSynced
-                            ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-xs'
+                          isLiveTvBroadcasting
+                            ? 'bg-emerald-100/85 border-emerald-300/90 text-emerald-800 shadow-2xs'
                             : 'bg-[#efebe3] hover:bg-[#e4ded2] border-[#dfd8cb] text-[#1b2a4a]'
                         }`}
                       >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>{liveTvJustSynced ? 'Συγχρονίστηκε Τώρα' : 'Άμεσος Συγχρονισμός Τώρα'}</span>
+                        {isLiveTvBroadcasting ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {isLiveTvBroadcasting ? 'Μετάδοση Ενεργή' : 'Έναρξη Μετάδοσης TV'}
+                        </span>
                       </button>
+
+                      {isLiveTvBroadcasting && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (liveTvSenderRef.current && activeNotebook) {
+                              const wsWidth =
+                                workspaceRef.current?.clientWidth || window.innerWidth || 980;
+                              const wsHeight =
+                                workspaceRef.current?.clientHeight || window.innerHeight || 820;
+                              const senderBaseZ = isFullBleedWidth
+                                ? wsWidth / Math.max(200, pageWidth)
+                                : 1;
+                              liveTvSenderRef.current.sendPages({
+                                notebookId: activeNotebook.id || 'nb-tv-live',
+                                notebookTitle: activeNotebook.title || 'Live Σημείωση',
+                                activePageIndex,
+                                pages: activeNotebook.pages,
+                              });
+                              liveTvSenderRef.current.sendViewport({
+                                z: zoomRef.current,
+                                baseZ: senderBaseZ,
+                                px: panRef.current.x,
+                                py: panRef.current.y,
+                                w: wsWidth,
+                                h: wsHeight,
+                                pIdx: activePageIndex,
+                                pW: pageWidth,
+                              });
+                              liveTvSenderRef.current.forceHandshake();
+                              setLiveTvJustSynced(true);
+                              showToast('🔄 Στάλθηκε άμεσος συγχρονισμός στον Διαδραστικό Πίνακα!');
+                            }
+                          }}
+                          className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl border font-bold text-[11px] transition cursor-pointer ${
+                            liveTvJustSynced
+                              ? 'bg-emerald-100/85 border-emerald-300/90 text-emerald-800'
+                              : 'bg-[#efebe3] hover:bg-[#e4ded2] border-[#dfd8cb] text-[#1b2a4a]'
+                          }`}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>
+                            {liveTvJustSynced ? 'Συγχρονίστηκε Τώρα' : 'Άμεσος Συγχρονισμός Τώρα'}
+                          </span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
+                        disabled={!isLiveTvBroadcasting}
                         onClick={() => {
                           try {
                             window.sessionStorage.removeItem('bn-live-tv-broadcasting');
@@ -59691,9 +59724,9 @@ export default function App() {
                           setIsLiveTvBroadcasting(false);
                           setLiveTvJustSynced(false);
                           setShowLiveTvMenu(false);
-                          showToast('⏹ Η Live 16:9 Μετάδοση από το iPad σταμάτησε.');
+                          showToast('⏹ Η Live 16:9 Μετάδοση σταμάτησε.');
                         }}
-                        className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#efebe3] hover:bg-[#fae8e8] border border-[#dfd8cb] hover:border-[#f3d4d4] text-[#475569] hover:text-[#b91c1c] font-bold text-[11px] transition cursor-pointer"
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#efebe3] hover:bg-[#fae8e8] border border-[#dfd8cb] hover:border-[#f3d4d4] text-[#475569] hover:text-[#b91c1c] disabled:opacity-45 disabled:pointer-events-none font-bold text-[11px] transition cursor-pointer"
                       >
                         <Square className="w-3 h-3 fill-current" />
                         <span>Διακοπή Μετάδοσης TV</span>
