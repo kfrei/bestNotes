@@ -27,7 +27,7 @@ export interface LibraryNoteMiniThumbProps {
 
 const MINI_THUMB_CONFIG = {
   list: {
-    containerClass: 'w-10 h-[52px] rounded-r-lg rounded-l-[4px]',
+    containerClass: 'w-[54px] h-[72px] rounded-r-xl rounded-l-[5px]',
     spineClass: 'w-1.5',
     svgPadClass: 'pl-1.5',
     maxStrokes: 160,

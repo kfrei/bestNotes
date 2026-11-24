@@ -63192,7 +63192,7 @@ export default function App() {
                             onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                             onDrop={(e) => handleFolderDrop(e, folder.path)}
                             onClick={() => navigateToLibraryFolder(folder.path)}
-                            className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200 cursor-pointer gap-3 shadow-2xs ${
+                            className={`flex items-center justify-between px-4 py-4 rounded-2xl border transition-all duration-200 cursor-pointer gap-3.5 shadow-2xs ${
                               isDropHover
                                 ? 'bg-amber-100/90 border-[#234978] ring-2 ring-inset ring-[#234978]'
                                 : draggingLibraryNbId
@@ -63200,10 +63200,10 @@ export default function App() {
                                 : 'bg-white/95 border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="flex items-center gap-4 min-w-0 flex-1">
                               {/* Mini Two-Tone Classic Folder Silhouette with Custom Icon */}
                               <div
-                                className={`relative w-11 h-9 flex items-center justify-center shrink-0 transition duration-200 ${
+                                className={`relative w-14 h-11 flex items-center justify-center shrink-0 transition duration-200 ${
                                   isDropHover ? 'scale-110' : ''
                                 }`}
                               >
@@ -63536,15 +63536,15 @@ export default function App() {
                             onClick={() => openNotebookDirectly(nb)}
                             style={{
                               contentVisibility: 'auto',
-                              containIntrinsicSize: 'auto 74px',
+                              containIntrinsicSize: 'auto 98px',
                             }}
-                            className={`flex items-center justify-between px-4 py-2.5 rounded-xl border transition cursor-grab active:cursor-grabbing select-none gap-3 shadow-2xs ${
+                            className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border transition cursor-grab active:cursor-grabbing select-none gap-3.5 shadow-2xs ${
                               isDraggingThisNb
                                 ? 'opacity-45 bg-sky-50 border-[#234978]'
                                 : 'bg-white/95 hover:bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                             }`}
                           >
-                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-4 min-w-0 flex-1">
                               <div
                                 onPointerEnter={(e) => handleLibraryThumbPointerEnter(e, nb.id)}
                                 onPointerLeave={() => clearLibraryThumbHoverPreview(nb.id)}
