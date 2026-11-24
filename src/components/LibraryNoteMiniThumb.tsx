@@ -39,7 +39,7 @@ const MINI_THUMB_CONFIG = {
     gridPx: '7px 7px',
   },
   recent: {
-    containerClass: 'w-[76px] h-[102px] rounded-r-xl rounded-l-md',
+    containerClass: 'w-[92px] h-[124px] rounded-r-xl rounded-l-md',
     spineClass: 'w-2',
     svgPadClass: 'pl-2',
     maxStrokes: 240,

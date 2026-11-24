@@ -60659,7 +60659,7 @@ export default function App() {
                         );
                         return bMs - aMs;
                       })
-                      .slice(0, 6)
+                      .slice(0, 4)
                   : [];
 
               const hasValidNotebooks = notebooks.some(
