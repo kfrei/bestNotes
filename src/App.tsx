@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import katex from 'katex';
-import { LibraryAmbientArcDial } from './components/LibraryAmbientArcDial';
+import { LibraryAmbientArcDial, type LibraryBgEffectMode } from './components/LibraryAmbientArcDial';
 import {
   Pen,
   Highlighter,
@@ -3965,6 +3965,23 @@ export default function App() {
     return DEFAULT_DRIVE_BASE_PATH;
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
+  const [libraryBgEffect, setLibraryBgEffect] = useState<LibraryBgEffectMode>(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_library_bg_effect_v1');
+      if (saved === 'arcs' || saved === 'plexus' || saved === 'off') return saved;
+    } catch {
+      // ignore
+    }
+    return 'arcs';
+  });
+  const selectLibraryBgEffect = useCallback((mode: LibraryBgEffectMode) => {
+    setLibraryBgEffect(mode);
+    try {
+      localStorage.setItem('bestnotes_library_bg_effect_v1', mode);
+    } catch {
+      // ignore
+    }
+  }, []);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
   const hasResumedPendingFolderSyncRef = useRef<boolean>(false);
   const [syncingDriveFolderPath, setSyncingDriveFolderPath] = useState<string | null>(() => {
@@ -4238,18 +4255,8 @@ export default function App() {
     const dd = String(now.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}@${String(activeHour).padStart(2, '0')}:00`;
   };
-  const getNextSmartDriveSyncLabel = (now: Date): string => {
-    const h = now.getHours();
-    const m = now.getMinutes();
-    for (const slotH of SMART_DRIVE_SYNC_HOURS) {
-      if (slotH > h || (slotH === h && m === 0)) {
-        return `${String(slotH).padStart(2, '0')}:00`;
-      }
-    }
-    return '08:00 (αύριο)';
-  };
 
-  const [driveAutoSyncIntervalMin, setDriveAutoSyncIntervalMin] = useState<number>(() => {
+  const [driveAutoSyncIntervalMin] = useState<number>(() => {
     try {
       const savedV2 = localStorage.getItem('bestnotes_drive_autosync_min_v2');
       if (savedV2 !== null) {
@@ -59960,6 +59967,24 @@ export default function App() {
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Logout (Αποσύνδεση)</span>
                     </button>
+                      {canUseGoogleDriveSync && (driveAccessToken || driveEmail) && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await signInToGoogleDrive(null, true);
+                              saveDriveCredentials(res.accessToken, res.email || res.displayName);
+                              await performDrivePdfSync(true, res.accessToken, undefined, true);
+                            } catch (err: any) {
+                              showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
+                            }
+                          }}
+                          className="w-full py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[11px] font-semibold text-[#475569] transition cursor-pointer"
+                          title="Αλλαγή ή ανανέωση λογαριασμού Google Drive"
+                        >
+                          Αλλαγή Λογαριασμού
+                        </button>
+                      )}
                   </>
                 ) : (
                     <div className="grid grid-cols-2 gap-1.5">
@@ -60089,63 +60114,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 space-y-1">
-                        <div className="flex items-center justify-between text-[10.5px]">
-                          <span className="font-semibold text-[#64748b]">Αυτόματος Συγχρονισμός:</span>
-                          <select
-                            value={driveAutoSyncIntervalMin}
-                            onChange={(e) => {
-                              const nextMin = Number(e.target.value);
-                              setDriveAutoSyncIntervalMin(nextMin);
-                              try {
-                                localStorage.setItem('bestnotes_drive_autosync_min_v2', String(nextMin));
-                              } catch {
-                                // ignore
-                              }
-                              showToast(
-                                nextMin === -1
-                                  ? '⏱️ Αυτόματο Sync: 08:00–14:00 (κάθε 1 ώρα) & 14:00–20:00 (κάθε 2 ώρες)!'
-                                  : `⏱️ Αυτόματος συγχρονισμός Google Drive: κάθε ${
-                                      nextMin === 30
-                                        ? '30 λεπτά'
-                                        : nextMin === 60
-                                        ? '1 ώρα'
-                                        : nextMin === 120
-                                        ? '2 ώρες'
-                                        : '4 ώρες'
-                                    }!`
-                              );
-                            }}
-                            className="px-1.5 py-0.5 rounded-md bg-[#fdfbf7] border border-[#dfd8cb] text-[10px] font-bold text-[#234978] cursor-pointer focus:outline-none max-w-[160px]"
-                          >
-                            <option value={-1}>08–14 (1ω) & 14–20 (2ω)</option>
-                            <option value={30}>Κάθε 30 λεπτά</option>
-                            <option value={60}>Κάθε 1 ώρα</option>
-                            <option value={120}>Κάθε 2 ώρες</option>
-                            <option value={240}>Κάθε 4 ώρες</option>
-                          </select>
-                        </div>
-                        {driveAutoSyncIntervalMin === -1 && (
-                          <div className="text-[9.5px] text-[#234978] font-semibold">
-                            Πρόγραμμα: 08:00–14:00 (ανά 1ω), 16:00, 18:00, 20:00 • Επόμενο:{' '}
-                            <span className="font-extrabold">
-                              {getNextSmartDriveSyncLabel(new Date())}
-                            </span>
-                          </div>
-                        )}
-                        {lastDriveAutoSyncAt > 0 && (
-                          <div className="text-[9.5px] text-[#64748b]">
-                            Τελευταίος συγχρονισμός:{' '}
-                            <span className="font-semibold text-[#2c3e50]">
-                              {new Date(lastDriveAutoSyncAt).toLocaleTimeString('el-GR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
                       {!driveOfflineLinked && currentUser && (
                         <button
                           type="button"
@@ -60211,8 +60179,8 @@ export default function App() {
                         </span>
                       </button>
 
-                      <div className="flex items-center gap-1.5">
-                        {lastDrivePdfLink && (
+                      {lastDrivePdfLink && (
+                        <div className="flex items-center gap-1.5">
                           <a
                             href={lastDrivePdfLink}
                             target="_blank"
@@ -60223,25 +60191,8 @@ export default function App() {
                             <ExternalLink className="w-3.5 h-3.5" />
                             <span>Άνοιγμα στο Drive</span>
                           </a>
-                        )}
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await signInToGoogleDrive(null, true);
-                              saveDriveCredentials(res.accessToken, res.email || res.displayName);
-                              await performDrivePdfSync(true, res.accessToken, undefined, true);
-                            } catch (err: any) {
-                              showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
-                            }
-                          }}
-                          className={`${
-                            lastDrivePdfLink ? 'px-3' : 'w-full'
-                          } py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[11px] font-semibold text-[#475569] transition cursor-pointer`}
-                          title="Αλλαγή ή ανανέωση λογαριασμού Google Drive"
-                        >
-                          Αλλαγή Λογαριασμού
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -60268,6 +60219,40 @@ export default function App() {
                   )}
                     </>
                   )}
+                </div>
+
+                {/* 3. Library Ambient Background Effect Selector */}
+                <div className="pt-2.5 border-t border-[#dfd8cb]">
+                  <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 space-y-1.5">
+                    <div className="text-[10.5px] font-semibold text-[#64748b]">
+                      Κινούμενο Φόντο:
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {(
+                        [
+                          { id: 'arcs', label: 'Δακτύλιοι' },
+                          { id: 'plexus', label: 'Κόμβοι' },
+                          { id: 'off', label: 'OFF' },
+                        ] as const
+                      ).map((opt) => {
+                        const active = libraryBgEffect === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => selectLibraryBgEffect(opt.id)}
+                            className={`py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer border ${
+                              active
+                                ? 'bg-[#234978] text-white border-[#234978] shadow-2xs'
+                                : 'bg-[#fdfbf7] text-[#475569] border-[#dfd8cb] hover:bg-[#efebe3]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -61439,7 +61424,10 @@ export default function App() {
 
               return (
                 <>
-                  <LibraryAmbientArcDial folderColor={ambientFolderColor} />
+                  <LibraryAmbientArcDial
+                    folderColor={ambientFolderColor}
+                    effectMode={libraryBgEffect}
+                  />
                   <div key={currentFolderPath || 'root'} className="relative z-10 space-y-5">
                   {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
                   <div className="flex items-center justify-between flex-wrap gap-3 bn-library-cascade-1">

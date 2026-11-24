@@ -1,8 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+
+export type LibraryBgEffectMode = 'arcs' | 'plexus' | 'off';
 
 interface LibraryAmbientArcDialProps {
   /** Hex color of the active Library folder (undefined/empty at root → warm beige-grey palette). */
   folderColor?: string;
+  /** Selected ambient background effect: 'arcs' (default), 'plexus' (nodes & edges), or 'off'. */
+  effectMode?: LibraryBgEffectMode;
 }
 
 interface ArcPalette {
@@ -77,19 +81,41 @@ function buildFolderTintedPalette(hex?: string): ArcPalette {
   const warmBeige: [number, number, number] = [198, 186, 168];
   const deepBeige: [number, number, number] = [174, 162, 144];
 
-  // Only select arcs carry the soft folder hue; the rest stay warm beige & neutral grey
   const accentOuter = mixRgb(rgb, softMist, 0.44);
   const accentMid = mixRgb(rgb, softMist, 0.36);
   const accentStroke = mixRgb(rgb, coolGrey, 0.28);
 
   return {
-    outerFill1: rgba(accentOuter, 0.25),   // Soft folder color (e.g. lavender / ice-blue / sage)
-    outerFill2: rgba(warmBeige, 0.30),     // Warm beige
-    midFill1: rgba(neutralGrey, 0.22),     // Neutral soft grey
-    midFill2: rgba(accentMid, 0.23),       // Soft folder color
-    midStroke: rgba(accentStroke, 0.34),   // Crisp grey-tinted outline
-    innerFill: rgba(deepBeige, 0.24),      // Warm beige inner arc
-    innerStroke: rgba(coolGrey, 0.30),     // Clean grey fine outline
+    outerFill1: rgba(accentOuter, 0.25),
+    outerFill2: rgba(warmBeige, 0.30),
+    midFill1: rgba(neutralGrey, 0.22),
+    midFill2: rgba(accentMid, 0.23),
+    midStroke: rgba(accentStroke, 0.34),
+    innerFill: rgba(deepBeige, 0.24),
+    innerStroke: rgba(coolGrey, 0.30),
+  };
+}
+
+function buildPlexusColors(hex?: string): {
+  nodeRgb: [number, number, number];
+  edgeRgb: [number, number, number];
+  hotRgb: [number, number, number];
+} {
+  const defaultColors = {
+    nodeRgb: [142, 134, 122] as [number, number, number],
+    edgeRgb: [162, 154, 142] as [number, number, number],
+    hotRgb: [68, 92, 124] as [number, number, number],
+  };
+  if (!hex) return defaultColors;
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return defaultColors;
+
+  const warmStone: [number, number, number] = [152, 146, 138];
+  const deepNavy: [number, number, number] = [35, 73, 120];
+  return {
+    nodeRgb: mixRgb(rgb, warmStone, 0.38),
+    edgeRgb: mixRgb(rgb, warmStone, 0.26),
+    hotRgb: mixRgb(rgb, deepNavy, 0.55),
   };
 }
 
@@ -128,66 +154,268 @@ const ARC_PATHS = {
   inner3: arcSectorPath(200, 200, 44, 62, 150, 245),
 };
 
+interface PlexusNode {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  glow: number;
+}
+
 /**
- * Pure-CSS (0% JS, 0 RAF) ambient concentric geometric arc dial anchored in the
- * bottom-right corner of the Library view. Smoothly fades out toward the folders
- * and softly adopts a desaturated tint of the currently open folder's color.
+ * Lightweight 30fps-capped Constellation / Plexus canvas (44 nodes, <0.15ms/frame).
+ * Pauses automatically on hidden tab & prefers-reduced-motion, and unmounts outside Library.
+ */
+const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ folderColor }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const colorsRef = useRef(buildPlexusColors(folderColor));
+  colorsRef.current = buildPlexusColors(folderColor);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    const nodeCount = width < 768 ? 26 : 44;
+    const nodes: PlexusNode[] = [];
+    const mouse = { x: -9999, y: -9999, active: false };
+
+    const initNodes = () => {
+      nodes.length = 0;
+      for (let i = 0; i < nodeCount; i++) {
+        nodes.push({
+          x: Math.random() * width,
+          y: 56 + Math.random() * Math.max(200, height - 64),
+          vx: (Math.random() - 0.5) * 0.28,
+          vy: (Math.random() - 0.5) * 0.28,
+          r: 1.7 + Math.random() * 2.1,
+          glow: 0,
+        });
+      }
+    };
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (nodes.length === 0) initNodes();
+    };
+
+    resize();
+
+    const onPointerMove = (e: PointerEvent) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      mouse.active = true;
+    };
+    const onPointerLeave = () => {
+      mouse.active = false;
+    };
+
+    window.addEventListener('resize', resize, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerleave', onPointerLeave, { passive: true });
+
+    let rafId = 0;
+    let lastTs = 0;
+
+    const drawFrame = (ts: number) => {
+      if (document.hidden) {
+        rafId = window.requestAnimationFrame(drawFrame);
+        return;
+      }
+      if (ts - lastTs < 32) {
+        rafId = window.requestAnimationFrame(drawFrame);
+        return;
+      }
+      lastTs = ts;
+
+      ctx.clearRect(0, 0, width, height);
+      const tone = colorsRef.current;
+      const maxDist = Math.min(220, Math.min(width, height) * 0.26);
+      const hoverRadius = Math.min(240, Math.min(width, height) * 0.28);
+      const topBound = 52;
+
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (!prefersReducedMotion) {
+          n.x += n.vx;
+          n.y += n.vy;
+          if (n.x < -12) n.x = width + 12;
+          if (n.x > width + 12) n.x = -12;
+          if (n.y < topBound) {
+            n.y = topBound;
+            n.vy = Math.abs(n.vy);
+          }
+          if (n.y > height + 12) {
+            n.y = height + 12;
+            n.vy = -Math.abs(n.vy);
+          }
+        }
+
+        let targetGlow = 0;
+        if (mouse.active) {
+          const d = Math.hypot(n.x - mouse.x, n.y - mouse.y);
+          if (d < hoverRadius) targetGlow = 1 - d / hoverRadius;
+        }
+        n.glow += (targetGlow - n.glow) * 0.16;
+      }
+
+      // Edges
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < maxDist) {
+            const prox = 1 - d / maxDist;
+            const boost = Math.max(a.glow, b.glow);
+            const alpha = Math.min(0.72, 0.21 * prox + 0.44 * prox * boost);
+            const rgb = boost > 0.12 ? tone.hotRgb : tone.edgeRgb;
+            ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
+            ctx.lineWidth = 0.85 + boost * 0.95;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+
+        if (mouse.active && a.glow > 0.04) {
+          const alpha = Math.min(0.75, 0.45 * a.glow);
+          const rgb = tone.hotRgb;
+          ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
+          ctx.lineWidth = 0.95 * a.glow + 0.4;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(mouse.x, mouse.y);
+          ctx.stroke();
+        }
+      }
+
+      // Nodes
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        const boost = n.glow;
+        const alpha = Math.min(0.85, 0.34 + 0.50 * boost);
+        const rgb = boost > 0.12 ? tone.hotRgb : tone.nodeRgb;
+
+        if (boost > 0.06) {
+          ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.20 * boost).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r + 3.8 + boost * 4.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + boost * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      rafId = window.requestAnimationFrame(drawFrame);
+    };
+
+    rafId = window.requestAnimationFrame(drawFrame);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerleave', onPointerLeave);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ mixBlendMode: 'multiply' }}
+    />
+  );
+});
+
+LibraryPlexusCanvas.displayName = 'LibraryPlexusCanvas';
+
+/**
+ * Ambient background layer for the Library view supporting:
+ * 1. 'arcs'   — Pure-CSS (0% JS / 0 RAF) counter-rotating concentric arcs (default)
+ * 2. 'plexus' — Interactive sparse nodes & edges network with mouse hover highlight
+ * 3. 'off'    — Disabled (zero DOM / zero GPU)
  */
 export const LibraryAmbientArcDial: React.FC<LibraryAmbientArcDialProps> = React.memo(
-  ({ folderColor }) => {
+  ({ folderColor, effectMode = 'arcs' }) => {
     const p = useMemo(() => buildFolderTintedPalette(folderColor), [folderColor]);
+
+    if (effectMode === 'off') return null;
 
     return (
       <div aria-hidden="true" className="bn-library-ambient-arcs-layer">
         <div className="bn-library-ambient-topleft-glow" />
-        <div className="bn-library-ambient-arcs-mask">
-          <div className="bn-library-ambient-arcs-dial">
-            <svg viewBox="0 0 400 400" className="w-full h-full overflow-visible">
-              <g className="bn-arc-ring-outer">
-                <path d={ARC_PATHS.outer1} fill={p.outerFill1} className="bn-arc-color-transition" />
-                <path d={ARC_PATHS.outer2} fill={p.outerFill2} className="bn-arc-color-transition" />
-                <path
-                  d={ARC_PATHS.outer3}
-                  fill="none"
-                  stroke={p.innerStroke}
-                  strokeWidth={1.15}
-                  className="bn-arc-color-transition"
-                />
-              </g>
+        {effectMode === 'plexus' ? (
+          <LibraryPlexusCanvas folderColor={folderColor} />
+        ) : (
+          <div className="bn-library-ambient-arcs-mask">
+            <div className="bn-library-ambient-arcs-dial">
+              <svg viewBox="0 0 400 400" className="w-full h-full overflow-visible">
+                <g className="bn-arc-ring-outer">
+                  <path d={ARC_PATHS.outer1} fill={p.outerFill1} className="bn-arc-color-transition" />
+                  <path d={ARC_PATHS.outer2} fill={p.outerFill2} className="bn-arc-color-transition" />
+                  <path
+                    d={ARC_PATHS.outer3}
+                    fill="none"
+                    stroke={p.innerStroke}
+                    strokeWidth={1.15}
+                    className="bn-arc-color-transition"
+                  />
+                </g>
 
-              <g className="bn-arc-ring-mid">
-                <path d={ARC_PATHS.mid1} fill={p.midFill2} className="bn-arc-color-transition" />
-                <path d={ARC_PATHS.mid2} fill={p.midFill1} className="bn-arc-color-transition" />
-                <path
-                  d={ARC_PATHS.mid3}
-                  fill="none"
-                  stroke={p.midStroke}
-                  strokeWidth={1.25}
-                  className="bn-arc-color-transition"
-                />
-                <path
-                  d={ARC_PATHS.mid4}
-                  fill="none"
-                  stroke={p.midStroke}
-                  strokeWidth={1.25}
-                  className="bn-arc-color-transition"
-                />
-              </g>
+                <g className="bn-arc-ring-mid">
+                  <path d={ARC_PATHS.mid1} fill={p.midFill2} className="bn-arc-color-transition" />
+                  <path d={ARC_PATHS.mid2} fill={p.midFill1} className="bn-arc-color-transition" />
+                  <path
+                    d={ARC_PATHS.mid3}
+                    fill="none"
+                    stroke={p.midStroke}
+                    strokeWidth={1.25}
+                    className="bn-arc-color-transition"
+                  />
+                  <path
+                    d={ARC_PATHS.mid4}
+                    fill="none"
+                    stroke={p.midStroke}
+                    strokeWidth={1.25}
+                    className="bn-arc-color-transition"
+                  />
+                </g>
 
-              <g className="bn-arc-ring-inner">
-                <path d={ARC_PATHS.inner1} fill={p.innerFill} className="bn-arc-color-transition" />
-                <path
-                  d={ARC_PATHS.inner2}
-                  fill="none"
-                  stroke={p.innerStroke}
-                  strokeWidth={1.05}
-                  className="bn-arc-color-transition"
-                />
-                <path d={ARC_PATHS.inner3} fill={p.outerFill2} className="bn-arc-color-transition" />
-              </g>
-            </svg>
+                <g className="bn-arc-ring-inner">
+                  <path d={ARC_PATHS.inner1} fill={p.innerFill} className="bn-arc-color-transition" />
+                  <path
+                    d={ARC_PATHS.inner2}
+                    fill="none"
+                    stroke={p.innerStroke}
+                    strokeWidth={1.05}
+                    className="bn-arc-color-transition"
+                  />
+                  <path d={ARC_PATHS.inner3} fill={p.outerFill2} className="bn-arc-color-transition" />
+                </g>
+              </svg>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
