@@ -70,6 +70,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
   onThumbPointerEnter,
   onClearThumbHover,
 }) => {
+  void onSelectFolder;
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(['__ROOT__']));
 
   // Auto-expand ancestors of the currently opened folder so the user always sees where they are
@@ -227,7 +228,6 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
         <div
           data-library-folder-drop={isLockedShowcase ? undefined : entry.path}
           onClick={() => toggleExpand(entry.path)}
-          onDoubleClick={() => onSelectFolder(entry.path)}
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
           className={`group flex items-center gap-1.5 pr-2 py-1.5 rounded-xl text-[12.5px] cursor-pointer transition-all select-none ${
             isDropHover
@@ -238,7 +238,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
               ? 'bg-[#234978]/12 text-[#1b2a4a] font-bold ring-1 ring-[#234978]/20'
               : 'text-[#2c3e50] hover:bg-[#efebe3]/80 font-semibold'
           }`}
-          title={`Κλικ: άνοιγμα/κλείσιμο φακέλου «${entry.name}» · Διπλό κλικ: προβολή δεξιά (${entry.count} αρχεία)`}
+          title={`Κλικ: άνοιγμα/κλείσιμο φακέλου «${entry.name}» (${entry.count} αρχεία)`}
         >
           <button
             type="button"
@@ -353,7 +353,6 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
             <div
               data-library-folder-drop="__ROOT__"
               onClick={() => toggleExpand('__ROOT__')}
-              onDoubleClick={() => onSelectFolder(null)}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-[12.5px] cursor-pointer transition-all select-none ${
                 isRootDropHover
                   ? isDragCopyMode
@@ -363,7 +362,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
                   ? 'bg-[#234978]/12 text-[#1b2a4a] font-bold ring-1 ring-[#234978]/20'
                   : 'text-[#2c3e50] hover:bg-[#efebe3]/80 font-semibold'
               }`}
-              title="Κλικ: άνοιγμα/κλείσιμο · Διπλό κλικ: προβολή Βιβλιοθήκης δεξιά"
+              title="Κλικ: άνοιγμα/κλείσιμο δέντρου Βιβλιοθήκης"
             >
               <button
                 type="button"
