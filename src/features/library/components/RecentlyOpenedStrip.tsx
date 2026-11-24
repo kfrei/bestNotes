@@ -144,6 +144,16 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 className="w-full h-full border-0 shadow-none"
               />
 
+              {/* Soft warm beige-grey graduated veil over paper content for calm visual cohesion (lifts slightly on hover) */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-2.5 right-0 z-[12] transition-opacity duration-200 group-hover:opacity-45"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(244, 241, 234, 0.56) 0%, rgba(236, 233, 226, 0.36) 44%, rgba(232, 229, 222, 0.58) 100%)',
+                }}
+              />
+
               {/* Top Frosted Liquid Glass Ribbon (inset lower from top edge, full-width over spine) */}
               <div className="absolute top-6 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)]">
                 <p className="text-[11.5px] font-bold text-[#0f172a] group-hover:text-[#234978] truncate leading-snug">
