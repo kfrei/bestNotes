@@ -144,13 +144,13 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 className="w-full h-full border-0 shadow-none"
               />
 
-              {/* Soft warm beige-grey graduated veil over paper content for calm visual cohesion (lifts slightly on hover) */}
+              {/* Soft cool slate-grey graduated veil over paper content for calm visual cohesion (lifts on hover) */}
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-2.5 right-0 z-[12] transition-opacity duration-200 group-hover:opacity-45"
+                className="pointer-events-none absolute inset-y-0 left-2.5 right-0 z-[12] transition-opacity duration-200 group-hover:opacity-35"
                 style={{
                   background:
-                    'linear-gradient(180deg, rgba(244, 241, 234, 0.56) 0%, rgba(236, 233, 226, 0.36) 44%, rgba(232, 229, 222, 0.58) 100%)',
+                    'linear-gradient(180deg, rgba(203, 213, 225, 0.56) 0%, rgba(190, 202, 216, 0.42) 46%, rgba(182, 195, 212, 0.62) 100%)',
                 }}
               />
 
