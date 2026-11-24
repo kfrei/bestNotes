@@ -154,17 +154,10 @@ const ARC_PATHS = {
   inner3: arcSectorPath(200, 200, 44, 62, 150, 245),
 };
 
-interface PlexusNode {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
-}
-
 /**
- * Lightweight 30fps-capped Constellation / Plexus canvas (48 nodes, <0.15ms/frame).
- * Pure ambient drift with zero pointer listeners; pauses on hidden tab & prefers-reduced-motion.
+ * Lightweight 30fps-capped 3D perspective undulating node-mesh carpet ("Κόμβοι").
+ * Zero per-frame allocations (preallocated Float32Arrays), zero pointer listeners,
+ * pauses automatically on hidden tab & prefers-reduced-motion, unmounts outside Library.
  */
 const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ folderColor }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -184,30 +177,30 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    const nodeCount = width < 768 ? 28 : 48;
-    const nodes: PlexusNode[] = [];
-
-    const initNodes = () => {
-      nodes.length = 0;
-      for (let i = 0; i < nodeCount; i++) {
-        nodes.push({
-          x: Math.random() * width,
-          y: 56 + Math.random() * Math.max(200, height - 64),
-          vx: (Math.random() - 0.5) * 0.28,
-          vy: (Math.random() - 0.5) * 0.28,
-          r: 1.9 + Math.random() * 2.2,
-        });
-      }
-    };
+    let cols = width < 768 ? 12 : 19;
+    let rows = width < 768 ? 9 : 12;
+    let total = cols * rows;
+    let projX = new Float32Array(total);
+    let projY = new Float32Array(total);
+    let projScale = new Float32Array(total);
+    let projFade = new Float32Array(total);
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       width = window.innerWidth;
       height = window.innerHeight;
+      cols = width < 768 ? 12 : 19;
+      rows = width < 768 ? 9 : 12;
+      total = cols * rows;
+      if (projX.length !== total) {
+        projX = new Float32Array(total);
+        projY = new Float32Array(total);
+        projScale = new Float32Array(total);
+        projFade = new Float32Array(total);
+      }
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (nodes.length === 0) initNodes();
     };
 
     resize();
@@ -215,6 +208,7 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
 
     let rafId = 0;
     let lastTs = 0;
+    let phase = 0;
 
     const drawFrame = (ts: number) => {
       if (document.hidden) {
@@ -225,63 +219,114 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
         rafId = window.requestAnimationFrame(drawFrame);
         return;
       }
+      const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.032;
       lastTs = ts;
+      if (!prefersReducedMotion) {
+        phase += dt * 0.62; // Slow, calm carpet undulation
+      }
 
       ctx.clearRect(0, 0, width, height);
       const tone = colorsRef.current;
-      const maxDist = Math.min(245, Math.min(width, height) * 0.28);
-      const topBound = 52;
+      const fov = Math.max(width, height) * 0.62;
+      const horizonY = height * 0.56;
 
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        if (!prefersReducedMotion) {
-          n.x += n.vx;
-          n.y += n.vy;
-          if (n.x < -12) n.x = width + 12;
-          if (n.x > width + 12) n.x = -12;
-          if (n.y < topBound) {
-            n.y = topBound;
-            n.vy = Math.abs(n.vy);
-          }
-          if (n.y > height + 12) {
-            n.y = height + 12;
-            n.vy = -Math.abs(n.vy);
-          }
+      // 1. Project 3D undulating carpet grid into screen space
+      for (let r = 0; r < rows; r++) {
+        const depthT = r / (rows - 1); // 0 = near (bottom), 1 = far (horizon)
+        const z = 0.72 + depthT * 3.15;
+        // Soft fade-out toward the horizon (top) and very gentle ease at front edge
+        const horizonFade = Math.pow(1 - depthT, 1.35);
+
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const u = c / (cols - 1) - 0.5; // -0.5 .. +0.5
+          // Spread wide enough to fill viewport edges cleanly
+          const worldX = u * 3.15;
+          const waveY =
+            0.13 * Math.sin(c * 0.52 + phase) +
+            0.10 * Math.cos(r * 0.62 - phase * 0.78) +
+            0.055 * Math.sin((c + r) * 0.38 + phase * 0.55);
+          const worldY = 0.42 + waveY;
+
+          const invZ = 1 / z;
+          projX[idx] = width * 0.5 + worldX * fov * invZ;
+          projY[idx] = horizonY + worldY * fov * 0.56 * invZ;
+          projScale[idx] = invZ;
+          projFade[idx] = horizonFade;
         }
       }
 
-      // Edges
-      for (let i = 0; i < nodes.length; i++) {
-        const a = nodes[i];
-        for (let j = i + 1; j < nodes.length; j++) {
-          const b = nodes[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < maxDist) {
-            const prox = 1 - d / maxDist;
-            const alpha = 0.36 * prox;
-            const rgb = tone.edgeRgb;
-            ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
-            ctx.lineWidth = 1.05;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
+      // 2. Draw wireframe edges (back-to-front for natural depth)
+      const er = tone.edgeRgb[0];
+      const eg = tone.edgeRgb[1];
+      const eb = tone.edgeRgb[2];
+      for (let r = rows - 1; r >= 0; r--) {
+        const rowFade = projFade[r * cols];
+        const edgeAlpha = 0.34 * rowFade;
+        if (edgeAlpha < 0.015) continue;
 
-      // Nodes (soft & subtle so edges carry the geometry cleanly)
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        const rgb = tone.nodeRgb;
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.07)`;
+        ctx.strokeStyle = `rgba(${er},${eg},${eb},${edgeAlpha.toFixed(3)})`;
+        ctx.lineWidth = 0.65 + projScale[r * cols] * 0.48;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + 2.6, 0, Math.PI * 2);
+
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const x = projX[idx];
+          const y = projY[idx];
+
+          // Horizontal edge to right neighbor
+          if (c < cols - 1) {
+            ctx.moveTo(x, y);
+            ctx.lineTo(projX[idx + 1], projY[idx + 1]);
+          }
+          // Depth edge to nearer row
+          if (r > 0) {
+            const nearIdx = (r - 1) * cols + c;
+            ctx.moveTo(x, y);
+            ctx.lineTo(projX[nearIdx], projY[nearIdx]);
+            // Alternating diagonal creates a clean organic triangulated mesh like the reference
+            if ((r + c) % 2 === 0 && c < cols - 1) {
+              ctx.moveTo(x, y);
+              ctx.lineTo(projX[nearIdx + 1], projY[nearIdx + 1]);
+            }
+          }
+        }
+        ctx.stroke();
+      }
+
+      // 3. Draw soft luminous nodes (subtle core + delicate halo scaled by perspective)
+      const nr = tone.nodeRgb[0];
+      const ng = tone.nodeRgb[1];
+      const nb = tone.nodeRgb[2];
+      for (let r = rows - 1; r >= 0; r--) {
+        const rowFade = projFade[r * cols];
+        if (rowFade < 0.03) continue;
+        const scale = projScale[r * cols];
+        const radius = Math.max(0.9, 2.35 * scale);
+        const haloRadius = radius + 2.4 * scale;
+        const coreAlpha = 0.36 * rowFade;
+        const haloAlpha = 0.09 * rowFade;
+
+        ctx.fillStyle = `rgba(${nr},${ng},${nb},${haloAlpha.toFixed(3)})`;
+        ctx.beginPath();
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const x = projX[idx];
+          const y = projY[idx];
+          ctx.moveTo(x + haloRadius, y);
+          ctx.arc(x, y, haloRadius, 0, Math.PI * 2);
+        }
         ctx.fill();
 
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.32)`;
+        ctx.fillStyle = `rgba(${nr},${ng},${nb},${coreAlpha.toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r * 0.9, 0, Math.PI * 2);
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const x = projX[idx];
+          const y = projY[idx];
+          ctx.moveTo(x + radius, y);
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+        }
         ctx.fill();
       }
 
