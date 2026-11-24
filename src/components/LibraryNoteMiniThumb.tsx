@@ -21,6 +21,7 @@ export interface LibraryNoteMiniThumbProps {
   firstPage?: NotePage;
   p0BgUrl?: string;
   variant: 'list' | 'recent' | 'preview';
+  forceWhitePaper?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -123,6 +124,7 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
   firstPage,
   p0BgUrl,
   variant,
+  forceWhitePaper = false,
   className = '',
   style,
 }) => {
@@ -132,15 +134,16 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
   const hasDocBg = Boolean(p0BgUrl || firstPage?.pdfPageNumber);
 
   const paperStyle = useMemo(() => {
-    const bgColor = hasDocBg ? '#ffffff' : getEffectivePaperColor(firstPage);
+    const bgColor = hasDocBg || forceWhitePaper ? '#ffffff' : getEffectivePaperColor(firstPage);
     const rules = getPaperRuleColors(bgColor);
+    const gridLineColor = forceWhitePaper ? 'rgba(148, 163, 184, 0.22)' : rules.grid;
     const tpl = firstPage?.template;
     let bgImage: string | undefined;
     if (!hasDocBg) {
-      if (tpl === 'grid' || tpl === 'dark-grid' || !tpl) {
-        bgImage = `linear-gradient(to right, ${rules.grid} 1px, transparent 1px), linear-gradient(to bottom, ${rules.grid} 1px, transparent 1px)`;
+      if (forceWhitePaper || tpl === 'grid' || tpl === 'dark-grid' || !tpl) {
+        bgImage = `linear-gradient(to right, ${gridLineColor} 1px, transparent 1px), linear-gradient(to bottom, ${gridLineColor} 1px, transparent 1px)`;
       } else if (tpl === 'ruled' || tpl === 'cornell') {
-        bgImage = `linear-gradient(to bottom, ${rules.grid} 1px, transparent 1px)`;
+        bgImage = `linear-gradient(to bottom, ${gridLineColor} 1px, transparent 1px)`;
       } else if (tpl === 'dotted') {
         bgImage = `radial-gradient(${rules.dot} 1px, transparent 1px)`;
       }
@@ -150,7 +153,7 @@ const LibraryNoteMiniThumbInner: React.FC<LibraryNoteMiniThumbProps> = ({
       backgroundImage: bgImage,
       backgroundSize: cfg.gridPx,
     };
-  }, [firstPage, hasDocBg, cfg.gridPx]);
+  }, [firstPage, hasDocBg, forceWhitePaper, cfg.gridPx]);
 
   const svgShapes = useMemo(() => {
     if (!firstPage) return null;
@@ -300,6 +303,7 @@ export const LibraryNoteMiniThumb = React.memo(
     prev.coverColor === next.coverColor &&
     prev.p0BgUrl === next.p0BgUrl &&
     prev.variant === next.variant &&
+    prev.forceWhitePaper === next.forceWhitePaper &&
     prev.firstPage === next.firstPage &&
     prev.className === next.className &&
     prev.style?.width === next.style?.width &&

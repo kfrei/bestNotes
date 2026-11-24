@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Notebook, NotePage } from '../../../types/note';
+import { LibraryNoteMiniThumb } from '../../../components/LibraryNoteMiniThumb';
 
 function computeVisibleRecentCount(containerWidth: number): number {
   if (containerWidth >= 1260) return 6;
@@ -44,7 +45,6 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
 }) => {
   void recentOpenedAtMap;
   void formatRecentRelativeLabel;
-  void resolvePageBackgroundUrl;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(() =>
@@ -107,6 +107,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       </h2>
       <div className="grid gap-5 sm:gap-6 lg:gap-7 xl:gap-8" style={gridStyle}>
         {recentlyOpenedNotebooks.slice(0, visibleCount).map((rNb) => {
+          const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
           const spineColor = resolveNotebookSpineColor(rNb);
           const rNbBytes = getNotebookSizeBytes(rNb);
           const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
@@ -130,17 +131,18 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
               onClick={() => onOpenNotebook(rNb)}
               title={`Άνοιγμα «${rNb.title}» (${fullFolderPath})`}
               className="group relative aspect-[3/4] rounded-r-2xl rounded-l-md overflow-hidden shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer select-none ring-1 ring-slate-200/90 hover:ring-[#234978]/35 bg-white"
-              style={{
-                backgroundColor: '#ffffff',
-                backgroundImage:
-                  'linear-gradient(to right, rgba(148, 163, 184, 0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(148, 163, 184, 0.22) 1px, transparent 1px)',
-                backgroundSize: '12px 12px',
-              }}
             >
-              {/* Colored left spine matching the immediate parent folder */}
-              <div
-                className="absolute left-0 top-0 bottom-0 w-2.5 z-10 shadow-2xs"
-                style={{ backgroundColor: spineColor }}
+              {/* Pure crisp white squared paper with live page content & colored left spine */}
+              <LibraryNoteMiniThumb
+                notebookId={rNb.id}
+                title={rNb.title}
+                updatedAt={rNb.updatedAt}
+                coverColor={spineColor}
+                firstPage={rNb.pages[0]}
+                p0BgUrl={p0Url}
+                variant="recent"
+                forceWhitePaper
+                className="w-full h-full border-0 shadow-none"
               />
 
               {/* Top Frosted Liquid Glass Ribbon (slightly deeper slate-grey, inset from top, full-width over spine) */}
