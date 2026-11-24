@@ -63681,17 +63681,23 @@ export default function App() {
                       const pW = getPageLogicalWidth(p0);
                       const pH = getPageLogicalHeight(p0);
                       const isLandscape = pW > pH;
-                      const cardW = isLandscape ? 320 : 250;
-                      const pageH = Math.min(350, Math.round((cardW * pH) / Math.max(1, pW)));
                       const winW = typeof window !== 'undefined' ? window.innerWidth : 1280;
                       const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+                      const maxPreviewH = Math.min(580, Math.max(380, winH - 120));
+                      const desiredW = isLandscape ? 540 : 410;
+                      const rawH = Math.round((desiredW * pH) / Math.max(1, pW));
+                      const pageH = Math.min(maxPreviewH, rawH);
+                      const cardW =
+                        rawH > maxPreviewH
+                          ? Math.round((pageH * pW) / Math.max(1, pH))
+                          : desiredW;
                       const left = Math.max(
                         16,
-                        Math.min(libraryThumbHoverPreview.anchorRight + 14, winW - cardW - 36)
+                        Math.min(libraryThumbHoverPreview.anchorRight + 16, winW - cardW - 36)
                       );
                       const top = Math.max(
                         52,
-                        Math.min(libraryThumbHoverPreview.anchorTop - 24, winH - pageH - 76)
+                        Math.min(libraryThumbHoverPreview.anchorTop - 24, winH - pageH - 80)
                       );
                       const p0PreviewUrl = resolvePageBackgroundUrl(previewNb.id, p0, 'full');
                       return (

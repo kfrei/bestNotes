@@ -71,7 +71,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   }, [recentlyOpenedNotebooks.length, isLoading]);
 
   const gridStyle: React.CSSProperties = {
-    gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 198px))`,
+    gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))`,
   };
 
   // Skeleton shimmer placeholder while library data is loading (zero CLS, responsive 2-6 compact vertical cards)
@@ -84,7 +84,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
           </h2>
           <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />
         </div>
-        <div className="grid gap-5 sm:gap-6 lg:gap-7" style={gridStyle}>
+        <div className="grid gap-5 sm:gap-6 lg:gap-7 xl:gap-8" style={gridStyle}>
           {Array.from({ length: visibleCount }).map((_, idx) => (
             <div
               key={`recent-skel-${idx}`}
@@ -105,7 +105,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">
         Πρόσφατα Ανοιγμένα
       </h2>
-      <div className="grid gap-5 sm:gap-6 lg:gap-7" style={gridStyle}>
+      <div className="grid gap-5 sm:gap-6 lg:gap-7 xl:gap-8" style={gridStyle}>
         {recentlyOpenedNotebooks.slice(0, visibleCount).map((rNb) => {
           const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
           const spineColor = resolveNotebookSpineColor(rNb);
@@ -144,8 +144,8 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 className="w-full h-full border-0 shadow-none"
               />
 
-              {/* Top Frosted Liquid Glass Ribbon (inset from top edge, full-width over spine) */}
-              <div className="absolute top-3 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)]">
+              {/* Top Frosted Liquid Glass Ribbon (inset lower from top edge, full-width over spine) */}
+              <div className="absolute top-6 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)]">
                 <p className="text-[11.5px] font-bold text-[#0f172a] group-hover:text-[#234978] truncate leading-snug">
                   {rNb.title}
                 </p>
