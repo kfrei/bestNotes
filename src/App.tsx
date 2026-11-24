@@ -63473,18 +63473,18 @@ export default function App() {
                         className={`flex items-center justify-between px-4 py-3.5 min-h-[76px] rounded-xl border border-dashed transition cursor-pointer select-none gap-3 ${
                           isLibraryDropZoneActive
                             ? 'bg-sky-100/90 border-[#234978] ring-2 ring-inset ring-[#234978]'
-                            : 'bg-white/75 border-slate-300/90 hover:bg-white hover:border-slate-400'
+                            : 'bg-[#ebe8e0]/90 border-slate-400/65 hover:bg-[#e3dfd5] hover:border-slate-400 shadow-2xs'
                         }`}
                       >
-                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                          <div className="w-10 h-[52px] rounded-lg border border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-slate-50 text-slate-400">
-                            <Upload className="w-4 h-4" />
+                        <div className="flex items-center gap-4 min-w-0 flex-1 py-1">
+                          <div className="w-[54px] h-[72px] rounded-xl border border-dashed border-slate-400/80 flex items-center justify-center shrink-0 bg-[#f7f5f0]/90 text-[#234978]">
+                            <Upload className="w-5 h-5" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-slate-600 truncate">
+                            <p className="text-[13px] font-bold text-[#1b2a4a] truncate">
                               + Άνοιγμα Αρχείου (Drag &amp; Drop)
                             </p>
-                            <p className="text-[11px] text-slate-400 truncate">
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                               .bestNotes • .pdf • .png • .jpg • .gif
                             </p>
                           </div>
@@ -63499,10 +63499,10 @@ export default function App() {
                         ? [0, 1, 2, 3, 4].map((skIdx) => (
                             <div
                               key={`sk-list-nb-${skIdx}`}
-                              className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200/90 bg-white/95 shadow-2xs select-none pointer-events-none gap-3.5 bn-fast-fade-in"
+                              className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-slate-200/90 bg-white/95 shadow-2xs select-none pointer-events-none gap-4 bn-fast-fade-in"
                             >
-                              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                                <div className="w-10 h-[52px] rounded-r-lg rounded-l-[4px] relative overflow-hidden bn-shimmer border border-slate-200/80 shrink-0">
+                              <div className="flex items-center gap-4 min-w-0 flex-1">
+                                <div className="w-[54px] h-[72px] rounded-r-xl rounded-l-[5px] relative overflow-hidden bn-shimmer border border-slate-200/80 shrink-0">
                                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-300/60" />
                                 </div>
                                 <div className="min-w-0 flex-1">
