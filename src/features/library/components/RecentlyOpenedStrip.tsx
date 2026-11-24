@@ -36,7 +36,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   void recentOpenedAtMap;
   void formatRecentRelativeLabel;
 
-  // Skeleton shimmer placeholder while library data is loading (zero CLS, perfectly matching footprint)
+  // Skeleton shimmer placeholder while library data is loading (zero CLS, 6 compact vertical cards)
   if (isLoading && recentlyOpenedNotebooks.length === 0) {
     return (
       <div className="bn-library-cascade-4 select-none pointer-events-none">
@@ -46,22 +46,13 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
           </h2>
           <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map((idx) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          {[0, 1, 2, 3, 4, 5].map((idx) => (
             <div
               key={`recent-skel-${idx}`}
-              className="bg-white/95 rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-center gap-4"
+              className="aspect-[3/4] rounded-r-2xl rounded-l-md relative overflow-hidden bn-shimmer border border-slate-200/90 shadow-2xs"
             >
-              <div className="w-[92px] h-[124px] rounded-r-xl rounded-l-md shrink-0 relative overflow-hidden bn-shimmer border border-slate-200/80 shadow-2xs">
-                <div className="absolute left-0 top-0 bottom-0 w-2 bg-slate-300/60" />
-              </div>
-              <div className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-1">
-                <div>
-                  <div className="h-5 w-32 rounded-md bn-shimmer mb-2" />
-                  <div className="h-4 w-4/5 rounded-md bn-shimmer" />
-                </div>
-                <div className="h-3 w-1/3 rounded-md bn-shimmer mt-2" />
-              </div>
+              <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-slate-300/60" />
             </div>
           ))}
         </div>
@@ -76,8 +67,8 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
         Πρόσφατα Ανοιγμένα
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {recentlyOpenedNotebooks.slice(0, 4).map((rNb) => {
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        {recentlyOpenedNotebooks.slice(0, 6).map((rNb) => {
           const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
           const rNbBytes = getNotebookSizeBytes(rNb);
           const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
@@ -96,40 +87,39 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 onClearThumbHover();
                 onNotebookPointerDrag(e, rNb);
               }}
+              onPointerEnter={(e) => onThumbPointerEnter(e, rNb.id)}
+              onPointerLeave={() => onClearThumbHover(rNb.id)}
               onClick={() => onOpenNotebook(rNb)}
-              className="group bg-white/95 hover:bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 p-3.5 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition flex items-center gap-4 cursor-pointer select-none"
+              title={`Άνοιγμα «${rNb.title}» (${fullFolderPath})`}
+              className="group relative aspect-[3/4] rounded-r-2xl rounded-l-md overflow-hidden shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer select-none ring-1 ring-slate-200/90 hover:ring-[#234978]/35"
             >
-              <div
-                onPointerEnter={(e) => onThumbPointerEnter(e, rNb.id)}
-                onPointerLeave={() => onClearThumbHover(rNb.id)}
-                className="shrink-0"
-              >
-                <LibraryNoteMiniThumb
-                  notebookId={rNb.id}
-                  title={rNb.title}
-                  updatedAt={rNb.updatedAt}
-                  coverColor={rNb.coverColor}
-                  firstPage={rNb.pages[0]}
-                  p0BgUrl={p0Url}
-                  variant="recent"
-                  className="group-hover:shadow-sm transition"
-                />
-              </div>
-              <div
-                className="min-w-0 flex-1 flex flex-col justify-between self-stretch py-1"
-                title={`Άνοιγμα «${rNb.title}» (${fullFolderPath})`}
-              >
-                <div>
-                  <span className="inline-block max-w-full break-words px-2.5 py-0.5 rounded-lg bg-indigo-50/90 text-[#234978] text-[10.5px] font-semibold leading-snug mb-1.5">
-                    {fullFolderPath}
-                  </span>
-                  <p className="text-[13.5px] font-bold text-[#0f172a] group-hover:text-[#234978] line-clamp-2 leading-snug">
-                    {rNb.title}
-                  </p>
-                </div>
-                <p className="text-[11px] font-semibold text-slate-400 mt-1.5 tabular-nums">
-                  {rNbSizeLabel}
+              {/* Full-bleed paper thumbnail with colored left spine */}
+              <LibraryNoteMiniThumb
+                notebookId={rNb.id}
+                title={rNb.title}
+                updatedAt={rNb.updatedAt}
+                coverColor={rNb.coverColor}
+                firstPage={rNb.pages[0]}
+                p0BgUrl={p0Url}
+                variant="recent"
+                className="w-full h-full border-0 shadow-none"
+              />
+
+              {/* Top Liquid Grey Glass Strip on the paper: Title */}
+              <div className="absolute top-0 left-2.5 right-0 z-10 px-2.5 py-1.5 bg-slate-200/72 backdrop-blur-md border-b border-white/65 shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+                <p className="text-[11.5px] font-bold text-[#0f172a] group-hover:text-[#234978] truncate leading-tight">
+                  {rNb.title}
                 </p>
+              </div>
+
+              {/* Bottom Liquid Grey Glass Strip on the paper: Folder Path + Size */}
+              <div className="absolute bottom-0 left-2.5 right-0 z-10 px-2 py-1.5 bg-slate-200/72 backdrop-blur-md border-t border-white/65 flex items-center justify-between gap-1.5">
+                <span className="inline-block max-w-[76%] truncate px-2 py-0.5 rounded-md bg-[#234978]/90 text-white text-[9.5px] font-bold leading-tight shadow-2xs">
+                  {fullFolderPath}
+                </span>
+                <span className="text-[9.5px] font-semibold text-slate-600 tabular-nums shrink-0">
+                  {rNbSizeLabel}
+                </span>
               </div>
             </div>
           );
