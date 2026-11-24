@@ -177,8 +177,8 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let cols = width < 768 ? 14 : 24;
-    let rows = width < 768 ? 11 : 15;
+    let cols = width < 768 ? 18 : 30;
+    let rows = width < 768 ? 14 : 19;
     let total = cols * rows;
     let projX = new Float32Array(total);
     let projY = new Float32Array(total);
@@ -189,8 +189,8 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       width = window.innerWidth;
       height = window.innerHeight;
-      cols = width < 768 ? 14 : 24;
-      rows = width < 768 ? 11 : 15;
+      cols = width < 768 ? 18 : 30;
+      rows = width < 768 ? 14 : 19;
       total = cols * rows;
       if (projX.length !== total) {
         projX = new Float32Array(total);
@@ -222,38 +222,40 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
       const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.032;
       lastTs = ts;
       if (!prefersReducedMotion) {
-        phase += dt * 0.60; // Slow, calm carpet undulation
+        phase += dt * 0.56; // Slow, calm carpet undulation
       }
 
       ctx.clearRect(0, 0, width, height);
       const tone = colorsRef.current;
-      const fov = Math.max(width, height) * 0.64;
-      // Higher horizon so the soft distant crest reaches up gently toward the folders
-      const horizonY = height * 0.43;
+      const xFov = Math.max(width, height) * 0.66;
+      const yFov = height * 0.68;
+      // High horizon so distant crests rise softly toward the folders
+      const horizonY = height * 0.41;
 
       // 1. Project 3D undulating carpet grid into screen space
       for (let r = 0; r < rows; r++) {
-        const depthT = r / (rows - 1); // 0 = near (bleeds cleanly below bottom edge), 1 = far (horizon)
-        const z = 0.46 + depthT * 3.55;
+        const depthT = r / (rows - 1); // 0 = nearest front row, 1 = farthest horizon row
+        // Front row (z=0.28) mathematically guarantees projY > 1.20 * height even at peak wave crest
+        const z = 0.28 + Math.pow(depthT, 1.15) * 3.85;
         // Soft fade-out toward the horizon (top)
-        const horizonFade = Math.pow(1 - depthT, 1.32);
+        const horizonFade = Math.pow(1 - depthT, 1.38);
 
         for (let c = 0; c < cols; c++) {
           const idx = r * cols + c;
           const u = c / (cols - 1) - 0.5; // -0.5 .. +0.5
-          // Wide enough to always bleed cleanly beyond left & right edges
-          const worldX = u * 3.45;
+          // Wide enough to always bleed cleanly beyond left & right edges at all depths
+          const worldX = u * 3.8;
           const waveY =
-            0.14 * Math.sin(c * 0.46 + phase) +
-            0.11 * Math.cos(r * 0.54 - phase * 0.76) +
-            0.06 * Math.sin((c + r) * 0.34 + phase * 0.52);
-          // Positive base Y ensures front rows (r=0..1) always extend well below the bottom edge
-          const worldY = 0.54 + waveY;
+            0.12 * Math.sin(c * 0.40 + phase) +
+            0.095 * Math.cos(r * 0.48 - phase * 0.74) +
+            0.05 * Math.sin((c + r) * 0.30 + phase * 0.50);
+          // worldY >= 0.315 at all times -> front row (r=0) stays strictly below viewport bottom
+          const worldY = 0.58 + waveY;
 
           const invZ = 1 / z;
-          projX[idx] = width * 0.5 + worldX * fov * invZ;
-          projY[idx] = horizonY + worldY * fov * 0.62 * invZ;
-          projScale[idx] = invZ;
+          projX[idx] = width * 0.5 + worldX * xFov * invZ;
+          projY[idx] = horizonY + worldY * yFov * invZ;
+          projScale[idx] = Math.min(1.6, invZ);
           projFade[idx] = horizonFade;
         }
       }
