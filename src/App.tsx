@@ -4536,9 +4536,16 @@ export default function App() {
   const [activeLibrarySubjectFilter, setActiveLibrarySubjectFilter] = useState<string>('all');
   const [recentOpenedAtMap, setRecentOpenedAtMap] = useState<Record<string, number>>(() => {
     try {
-      const raw = localStorage.getItem('bestnotes_recent_opened_v1');
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      const uid = initialAuthUid;
+      if (!uid) return {};
+      const perUserRaw = localStorage.getItem(`bestnotes_recent_opened_v1_${uid}`);
+      if (perUserRaw) {
+        const parsed = JSON.parse(perUserRaw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+      const legacyRaw = localStorage.getItem('bestnotes_recent_opened_v1');
+      if (legacyRaw) {
+        const parsed = JSON.parse(legacyRaw);
         if (parsed && typeof parsed === 'object') return parsed;
       }
     } catch {
@@ -4546,18 +4553,58 @@ export default function App() {
     }
     return {};
   });
-  const recordNotebookOpened = useCallback((nbId: string) => {
-    const now = Date.now();
-    setRecentOpenedAtMap((prev) => {
-      const next = { ...prev, [nbId]: now };
-      try {
-        localStorage.setItem('bestnotes_recent_opened_v1', JSON.stringify(next));
-      } catch {
-        // ignore
+  useEffect(() => {
+    const uid = currentUser?.uid || null;
+    if (!uid) {
+      // Guest mode always starts with an empty Recently Opened strip (zero cross-account leak / zero persistence)
+      setRecentOpenedAtMap({});
+      return;
+    }
+    try {
+      const perUserKey = `bestnotes_recent_opened_v1_${uid}`;
+      const perUserRaw = localStorage.getItem(perUserKey);
+      if (perUserRaw) {
+        const parsed = JSON.parse(perUserRaw);
+        if (parsed && typeof parsed === 'object') {
+          setRecentOpenedAtMap(parsed);
+          return;
+        }
       }
-      return next;
-    });
-  }, []);
+      // Only migrate legacy global map for the Admin account so brand-new users start completely clean
+      if (isAdminUser) {
+        const legacyRaw = localStorage.getItem('bestnotes_recent_opened_v1');
+        if (legacyRaw) {
+          const parsed = JSON.parse(legacyRaw);
+          if (parsed && typeof parsed === 'object') {
+            setRecentOpenedAtMap(parsed);
+            localStorage.setItem(perUserKey, legacyRaw);
+            return;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setRecentOpenedAtMap({});
+  }, [currentUser?.uid, isAdminUser]);
+  const recordNotebookOpened = useCallback(
+    (nbId: string) => {
+      const now = Date.now();
+      const uid = currentUser?.uid || null;
+      setRecentOpenedAtMap((prev) => {
+        const next = { ...prev, [nbId]: now };
+        if (uid) {
+          try {
+            localStorage.setItem(`bestnotes_recent_opened_v1_${uid}`, JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+        }
+        return next;
+      });
+    },
+    [currentUser?.uid]
+  );
   const [showLibraryFavoritesOnly, setShowLibraryFavoritesOnly] = useState<boolean>(false);
   const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(() =>
     typeof initialSession?.activeLibraryFolder === 'string' && initialSession.activeLibraryFolder.trim().length > 0
@@ -60573,15 +60620,30 @@ export default function App() {
                 !showLibraryFavoritesOnly &&
                 effSubjectFilter === 'all' &&
                 notebooks.length > 0
-                  ? [...notebooks]
+                  ? notebooks
+                      .filter((nb) => {
+                        // Never show empty placeholder blank notebook in Recently Opened
+                        if (nb.id === 'nb-blank-1' && getNotebookContentScore(nb) === 0) {
+                          return false;
+                        }
+                        // Guests only see notebooks they actually opened during this session (starts 100% empty)
+                        if (!currentUser) {
+                          return Boolean(recentOpenedAtMap[nb.id]);
+                        }
+                        // Public showcase demo notebooks appear in Recently Opened ONLY if the user actually opened them
+                        if (isShowcaseNotebook(nb)) {
+                          return Boolean(recentOpenedAtMap[nb.id]);
+                        }
+                        return true;
+                      })
                       .sort((a, b) => {
                         const aMs = Math.max(
                           recentOpenedAtMap[a.id] || 0,
-                          new Date(a.updatedAt || 0).getTime() || 0
+                          isShowcaseNotebook(a) ? 0 : new Date(a.updatedAt || 0).getTime() || 0
                         );
                         const bMs = Math.max(
                           recentOpenedAtMap[b.id] || 0,
-                          new Date(b.updatedAt || 0).getTime() || 0
+                          isShowcaseNotebook(b) ? 0 : new Date(b.updatedAt || 0).getTime() || 0
                         );
                         return bMs - aMs;
                       })
