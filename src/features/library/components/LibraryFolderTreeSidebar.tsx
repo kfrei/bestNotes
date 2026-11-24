@@ -205,7 +205,8 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
       <div key={`tree-folder-${entry.path}`}>
         <div
           data-library-folder-drop={isLockedShowcase ? undefined : entry.path}
-          onClick={() => onSelectFolder(entry.path)}
+          onClick={() => toggleExpand(entry.path)}
+          onDoubleClick={() => onSelectFolder(entry.path)}
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
           className={`group flex items-center gap-1.5 pr-2 py-1.5 rounded-xl text-[12.5px] cursor-pointer transition-all select-none ${
             isDropHover
@@ -216,7 +217,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
               ? 'bg-[#234978]/12 text-[#1b2a4a] font-bold ring-1 ring-[#234978]/20'
               : 'text-[#2c3e50] hover:bg-[#efebe3]/80 font-semibold'
           }`}
-          title={`Φάκελος «${entry.name}» (${entry.count} αρχεία)`}
+          title={`Κλικ: άνοιγμα/κλείσιμο φακέλου «${entry.name}» · Διπλό κλικ: προβολή δεξιά (${entry.count} αρχεία)`}
         >
           <button
             type="button"
@@ -322,7 +323,8 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
           <div>
             <div
               data-library-folder-drop="__ROOT__"
-              onClick={() => onSelectFolder(null)}
+              onClick={() => toggleExpand('__ROOT__')}
+              onDoubleClick={() => onSelectFolder(null)}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-[12.5px] cursor-pointer transition-all select-none ${
                 isRootDropHover
                   ? isDragCopyMode
@@ -332,6 +334,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
                   ? 'bg-[#234978]/12 text-[#1b2a4a] font-bold ring-1 ring-[#234978]/20'
                   : 'text-[#2c3e50] hover:bg-[#efebe3]/80 font-semibold'
               }`}
+              title="Κλικ: άνοιγμα/κλείσιμο · Διπλό κλικ: προβολή Βιβλιοθήκης δεξιά"
             >
               <button
                 type="button"
