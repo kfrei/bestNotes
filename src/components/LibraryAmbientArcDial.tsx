@@ -138,51 +138,54 @@ export const LibraryAmbientArcDial: React.FC<LibraryAmbientArcDialProps> = React
 
     return (
       <div aria-hidden="true" className="bn-library-ambient-arcs-layer">
-        <div className="bn-library-ambient-arcs-dial">
-          <svg viewBox="0 0 400 400" className="w-full h-full overflow-visible">
-            <g className="bn-arc-ring-outer">
-              <path d={ARC_PATHS.outer1} fill={p.outerFill1} className="bn-arc-color-transition" />
-              <path d={ARC_PATHS.outer2} fill={p.outerFill2} className="bn-arc-color-transition" />
-              <path
-                d={ARC_PATHS.outer3}
-                fill="none"
-                stroke={p.innerStroke}
-                strokeWidth={1.2}
-                className="bn-arc-color-transition"
-              />
-            </g>
+        <div className="bn-library-ambient-topleft-glow" />
+        <div className="bn-library-ambient-arcs-mask">
+          <div className="bn-library-ambient-arcs-dial">
+            <svg viewBox="0 0 400 400" className="w-full h-full overflow-visible">
+              <g className="bn-arc-ring-outer">
+                <path d={ARC_PATHS.outer1} fill={p.outerFill1} className="bn-arc-color-transition" />
+                <path d={ARC_PATHS.outer2} fill={p.outerFill2} className="bn-arc-color-transition" />
+                <path
+                  d={ARC_PATHS.outer3}
+                  fill="none"
+                  stroke={p.innerStroke}
+                  strokeWidth={1.15}
+                  className="bn-arc-color-transition"
+                />
+              </g>
 
-            <g className="bn-arc-ring-mid">
-              <path d={ARC_PATHS.mid1} fill={p.midFill2} className="bn-arc-color-transition" />
-              <path d={ARC_PATHS.mid2} fill={p.midFill1} className="bn-arc-color-transition" />
-              <path
-                d={ARC_PATHS.mid3}
-                fill="none"
-                stroke={p.midStroke}
-                strokeWidth={1.35}
-                className="bn-arc-color-transition"
-              />
-              <path
-                d={ARC_PATHS.mid4}
-                fill="none"
-                stroke={p.midStroke}
-                strokeWidth={1.35}
-                className="bn-arc-color-transition"
-              />
-            </g>
+              <g className="bn-arc-ring-mid">
+                <path d={ARC_PATHS.mid1} fill={p.midFill2} className="bn-arc-color-transition" />
+                <path d={ARC_PATHS.mid2} fill={p.midFill1} className="bn-arc-color-transition" />
+                <path
+                  d={ARC_PATHS.mid3}
+                  fill="none"
+                  stroke={p.midStroke}
+                  strokeWidth={1.25}
+                  className="bn-arc-color-transition"
+                />
+                <path
+                  d={ARC_PATHS.mid4}
+                  fill="none"
+                  stroke={p.midStroke}
+                  strokeWidth={1.25}
+                  className="bn-arc-color-transition"
+                />
+              </g>
 
-            <g className="bn-arc-ring-inner">
-              <path d={ARC_PATHS.inner1} fill={p.innerFill} className="bn-arc-color-transition" />
-              <path
-                d={ARC_PATHS.inner2}
-                fill="none"
-                stroke={p.innerStroke}
-                strokeWidth={1.1}
-                className="bn-arc-color-transition"
-              />
-              <path d={ARC_PATHS.inner3} fill={p.outerFill2} className="bn-arc-color-transition" />
-            </g>
-          </svg>
+              <g className="bn-arc-ring-inner">
+                <path d={ARC_PATHS.inner1} fill={p.innerFill} className="bn-arc-color-transition" />
+                <path
+                  d={ARC_PATHS.inner2}
+                  fill="none"
+                  stroke={p.innerStroke}
+                  strokeWidth={1.05}
+                  className="bn-arc-color-transition"
+                />
+                <path d={ARC_PATHS.inner3} fill={p.outerFill2} className="bn-arc-color-transition" />
+              </g>
+            </svg>
+          </div>
         </div>
       </div>
     );

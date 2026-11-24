@@ -284,32 +284,59 @@ html[data-standalone-app='true'] .bn-safe-top-header {
   pointer-events: none;
   overflow: hidden;
   z-index: 0;
+}
+
+/* Soft warm beige-grey ambient glow emerging gently from the top-left corner */
+.bn-library-ambient-topleft-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 58% 46% at 6% 4%,
+      rgba(222, 206, 184, 0.42) 0%,
+      rgba(216, 204, 188, 0.24) 34%,
+      rgba(205, 200, 192, 0.10) 60%,
+      rgba(248, 247, 244, 0) 82%
+    ),
+    radial-gradient(
+      ellipse 40% 34% at 0% 18%,
+      rgba(198, 192, 184, 0.22) 0%,
+      rgba(248, 247, 244, 0) 74%
+    );
+}
+
+.bn-library-ambient-arcs-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.66;
   /* Softly fades out as the arcs rise toward the folders & notes */
   -webkit-mask-image: radial-gradient(
-    circle at 86% 88%,
+    circle at 88% 94%,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 0.88) 32%,
-    rgba(0, 0, 0, 0.42) 54%,
-    rgba(0, 0, 0, 0.10) 68%,
+    rgba(0, 0, 0, 0.86) 32%,
+    rgba(0, 0, 0, 0.40) 54%,
+    rgba(0, 0, 0, 0.08) 68%,
     rgba(0, 0, 0, 0) 78%
   );
   mask-image: radial-gradient(
-    circle at 86% 88%,
+    circle at 88% 94%,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 0.88) 32%,
-    rgba(0, 0, 0, 0.42) 54%,
-    rgba(0, 0, 0, 0.10) 68%,
+    rgba(0, 0, 0, 0.86) 32%,
+    rgba(0, 0, 0, 0.40) 54%,
+    rgba(0, 0, 0, 0.08) 68%,
     rgba(0, 0, 0, 0) 78%
   );
 }
 
 .bn-library-ambient-arcs-dial {
   position: absolute;
-  width: clamp(320px, 68vmin, 760px);
-  height: clamp(320px, 68vmin, 760px);
-  /* Rotation center pulled slightly inside the bottom-right corner so the concentric geometry breathes naturally */
-  right: clamp(-145px, -11vw, -36px);
-  bottom: clamp(-165px, -14vh, -48px);
+  width: clamp(340px, 70vmin, 780px);
+  height: clamp(340px, 70vmin, 780px);
+  /* Flush into the bottom-right corner so there is no gap along the bottom or right edge */
+  right: clamp(-155px, -12vw, -42px);
+  bottom: clamp(-275px, -25vmin, -125px);
   pointer-events: none;
 }
 
