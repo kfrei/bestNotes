@@ -25,6 +25,9 @@ import {
   Wand2,
   Ruler,
   Radio,
+  Play,
+  Pause,
+  Square,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -3965,6 +3968,7 @@ export default function App() {
     return DEFAULT_DRIVE_BASE_PATH;
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
+  const [liveTvJustSynced, setLiveTvJustSynced] = useState<boolean>(false);
   const [userAvatarFailed, setUserAvatarFailed] = useState<boolean>(false);
   const currentUserPhotoUrl =
     currentUser?.photoURL ||
@@ -59639,23 +59643,23 @@ export default function App() {
                   }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
                     !canUseLiveBroadcast
-                      ? 'bg-[#263961]/55 text-sky-200/60 hover:bg-[#31487a]/75'
+                      ? 'bg-[#263961]/55 text-slate-300/60 hover:bg-[#31487a]/75'
                       : isLiveTvBroadcasting
-                      ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
-                      : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
+                      ? 'bg-emerald-600/90 hover:bg-emerald-600 text-white ring-1 ring-emerald-400/70 shadow-xs'
+                      : 'bg-[#263961] hover:bg-[#31487a] text-slate-200 hover:text-white'
                   }`}
                   title="Έναρξη / Έλεγχος Live 16:9 Μετάδοσης από το iPad στον Διαδραστικό Πίνακα"
                 >
-                  <span className="flex items-center gap-1">
-                    {isLiveTvBroadcasting && (
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          liveTvStatus.connected
-                            ? 'bg-emerald-400 animate-pulse'
-                            : 'bg-amber-400 animate-ping'
-                        }`}
-                      />
-                    )}
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        !isLiveTvBroadcasting
+                          ? 'bg-slate-400'
+                          : liveTvStatus.connected
+                          ? 'bg-white animate-pulse'
+                          : 'bg-amber-300 animate-ping'
+                      }`}
+                    />
                     <span>
                       {!isLiveTvBroadcasting
                         ? 'Live TV'
@@ -59670,14 +59674,15 @@ export default function App() {
                   <div
                     data-ui-panel="true"
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="fixed top-12 right-28 z-[220] w-72 rounded-2xl bg-slate-900/95 text-white border border-slate-700/80 shadow-2xl p-3.5 text-xs backdrop-blur-md"
+                    style={{ zIndex: 100025 }}
+                    className="fixed top-[50px] right-3 sm:right-24 w-72 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/92 backdrop-blur-2xl text-[#1b2a4a] border border-white/85 ring-1 ring-black/5 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.18)] p-3.5 text-xs"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 font-bold text-[12px]">
+                      <div className="flex items-center gap-2 font-bold text-[12px] text-[#1b2a4a]">
                         <span
                           className={`w-2.5 h-2.5 rounded-full ${
                             liveTvStatus.connected
-                              ? 'bg-emerald-400 animate-pulse'
+                              ? 'bg-emerald-500 animate-pulse'
                               : 'bg-amber-400 animate-ping'
                           }`}
                         />
@@ -59694,17 +59699,17 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setShowLiveTvMenu(false)}
-                        className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                        className="text-slate-400 hover:text-[#1b2a4a] px-1.5 py-0.5 rounded-lg hover:bg-[#efebe3] transition cursor-pointer"
                       >
-                        ✕
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                    <p className="text-[11px] text-[#5c687a] leading-snug mb-3">
                       Στον Διαδραστικό Πίνακα ανοίξτε το{' '}
-                      <span className="font-bold text-sky-300">explainboards.web.app</span> και
-                      πατήστε <span className="font-bold text-emerald-300">«Live 16:9»</span>{' '}
-                      (χωρίς Login).
+                      <span className="font-bold text-[#234978]">explainboards.web.app</span> και
+                      πατήστε <span className="font-bold text-emerald-700">«Live (Προβολή 16:9)»</span>{' '}
+                      από το Προφίλ.
                     </p>
 
                     <div className="flex flex-col gap-1.5">
@@ -59736,13 +59741,18 @@ export default function App() {
                               pW: pageWidth,
                             });
                             liveTvSenderRef.current.forceHandshake();
+                            setLiveTvJustSynced(true);
                             showToast('🔄 Στάλθηκε άμεσος συγχρονισμός στον Διαδραστικό Πίνακα!');
                           }
-                          setShowLiveTvMenu(false);
                         }}
-                        className="w-full py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] transition cursor-pointer"
+                        className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border font-bold text-[11px] transition cursor-pointer ${
+                          liveTvJustSynced
+                            ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-xs'
+                            : 'bg-[#efebe3] hover:bg-[#e4ded2] border-[#dfd8cb] text-[#1b2a4a]'
+                        }`}
                       >
-                        🔄 Άμεσος Συγχρονισμός Τώρα
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>{liveTvJustSynced ? 'Συγχρονίστηκε Τώρα' : 'Άμεσος Συγχρονισμός Τώρα'}</span>
                       </button>
 
                       <button
@@ -59756,12 +59766,14 @@ export default function App() {
                           liveTvSenderRef.current?.stopBroadcast();
                           liveTvSenderRef.current = null;
                           setIsLiveTvBroadcasting(false);
+                          setLiveTvJustSynced(false);
                           setShowLiveTvMenu(false);
                           showToast('⏹ Η Live 16:9 Μετάδοση από το iPad σταμάτησε.');
                         }}
-                        className="w-full py-1.5 px-3 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-white font-bold text-[11px] transition cursor-pointer"
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-[#efebe3] hover:bg-[#fae8e8] border border-[#dfd8cb] hover:border-[#f3d4d4] text-[#475569] hover:text-[#b91c1c] font-bold text-[11px] transition cursor-pointer"
                       >
-                        ⏹ Διακοπή Μετάδοσης TV
+                        <Square className="w-3 h-3 fill-current" />
+                        <span>Διακοπή Μετάδοσης TV</span>
                       </button>
                     </div>
                   </div>
@@ -64126,76 +64138,94 @@ export default function App() {
           {/* =========================================================================
               2A. LIVE PDF INTERACTIVE PLAYER BAR (Appears ONLY when isLivePdfMode is ON)
              ========================================================================= */}
-          {isLivePdfMode && (
-            <div
-              data-sticky-app-nav="true"
-              style={{ touchAction: 'manipulation', zIndex: 100002 }}
-              className="sticky top-0 z-30 flex items-center justify-between px-4 py-2 bg-[#0f172a] text-white border-b border-slate-700 shadow-md shrink-0 gap-3 overflow-x-auto"
-            >
-              <div className="flex items-center gap-2 text-xs">
-                <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 text-[11px] font-extrabold tracking-wide">
-                  🎬 LIVE PDF
-                </span>
-                <span className="text-slate-300 font-medium hidden md:inline">
-                  Χωρίς εργαλεία σχεδίασης/επεξεργασίας — Κάντε κλικ στις προσομοιώσεις (Διακόπτης ON/OFF, Εκκρεμές, Ελατήριο, Διανύσματα, 3D Μόρια)
-                </span>
+          {isLivePdfMode && (() => {
+            const anyLivePdfSimPlaying =
+              isSimulating ||
+              (isSpringSimulating && !isSpringPaused) ||
+              (activePage.forceSims || []).some((s) => !s.isPaused) ||
+              (activePage.atomSims || []).some((s) => s.isRotating !== false);
+            return (
+              <div
+                data-sticky-app-nav="true"
+                style={{ touchAction: 'manipulation', zIndex: 100002 }}
+                className="sticky top-0 z-30 flex items-center justify-between px-4 py-1.5 bg-[#f7f5f0] text-[#1b2a4a] border-b border-[#dfd8cb] shadow-xs shrink-0 gap-3 overflow-x-auto"
+              >
+                <div className="flex items-center gap-2.5 text-xs">
+                  <span className="px-2.5 py-1 rounded-md bg-[#1b2a4a] text-white text-[11px] font-bold tracking-wide shrink-0 shadow-2xs">
+                    LIVE PDF
+                  </span>
+                  <span className="text-[#5c687a] font-medium hidden md:inline">
+                    Χωρίς εργαλεία σχεδίασης/επεξεργασίας — Κάντε κλικ στις προσομοιώσεις (Διακόπτης ON/OFF, Εκκρεμές, Ελατήριο, Διανύσματα, 3D Μόρια)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextPlay = !anyLivePdfSimPlaying;
+                      if ((activePage.circuitSims || []).length > 0) setIsSimulating(nextPlay);
+                      if ((activePage.springSims || []).length > 0) {
+                        setIsSpringSimulating(true);
+                        setIsSpringPaused(!nextPlay);
+                      }
+                      updateActivePage(
+                        (page) => ({
+                          ...page,
+                          forceSims: (page.forceSims || []).map((s) => ({ ...s, isPaused: !nextPlay })),
+                          atomSims: (page.atomSims || []).map((s) => ({ ...s, isRotating: nextPlay })),
+                        }),
+                        false
+                      );
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                      anyLivePdfSimPlaying
+                        ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-2xs'
+                        : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb] text-[#1b2a4a]'
+                    }`}
+                    title="Εκκίνηση / Παύση όλων των προσομοιώσεων της σελίδας"
+                  >
+                    {anyLivePdfSimPlaying ? (
+                      <Pause className="w-3.5 h-3.5" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5" />
+                    )}
+                    <span>Play / Stop Όλων</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadLivePdfHtml()}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#1b2a4a] text-xs font-semibold transition cursor-pointer"
+                    title="Λήψη αυτόνομου διαδραστικού αρχείου Live PDF (.live.html) που ανοίγει παντού χωρίς εργαλεία επεξεργασίας"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#234978]" />
+                    <span>Λήψη Live PDF (.html)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadActiveNotebookPdf()}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] border border-[#dfd8cb] text-[#1b2a4a] text-xs font-semibold transition cursor-pointer"
+                    title="Λήψη κλασικού στατικού αρχείου PDF (.pdf) με στιγμιότυπο όλων των προσομοιώσεων"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#234978]" />
+                    <span>Κλασικό PDF (.pdf)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsLivePdfMode(false)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#efebe3] hover:bg-[#fae8e8] border border-[#dfd8cb] hover:border-[#f3d4d4] text-[#475569] hover:text-[#b91c1c] text-xs font-semibold transition cursor-pointer"
+                    title="Επιστροφή στα εργαλεία σχεδίασης και επεξεργασίας"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Έξοδος</span>
+                  </button>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => {
-                    const anyPlaying =
-                      isSimulating ||
-                      (isSpringSimulating && !isSpringPaused) ||
-                      (activePage.forceSims || []).some((s) => !s.isPaused) ||
-                      (activePage.atomSims || []).some((s) => s.isRotating !== false);
-                    const nextPlay = !anyPlaying;
-                    if ((activePage.circuitSims || []).length > 0) setIsSimulating(nextPlay);
-                    if ((activePage.springSims || []).length > 0) {
-                      setIsSpringSimulating(true);
-                      setIsSpringPaused(!nextPlay);
-                    }
-                    updateActivePage(
-                      (page) => ({
-                        ...page,
-                        forceSims: (page.forceSims || []).map((s) => ({ ...s, isPaused: !nextPlay })),
-                        atomSims: (page.atomSims || []).map((s) => ({ ...s, isRotating: nextPlay })),
-                      }),
-                      false
-                    );
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
-                  title="Εκκίνηση / Παύση όλων των προσομοιώσεων της σελίδας"
-                >
-                  <span>⏯️ Play / Stop Όλων</span>
-                </button>
-
-                <button
-                  onClick={() => void handleDownloadLivePdfHtml()}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer"
-                  title="Λήψη αυτόνομου διαδραστικού αρχείου Live PDF (.live.html) που ανοίγει παντού χωρίς εργαλεία επεξεργασίας"
-                >
-                  <span>📥 Λήψη Αρχείου Live PDF (.html)</span>
-                </button>
-
-                <button
-                  onClick={() => void handleDownloadActiveNotebookPdf()}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-semibold transition cursor-pointer"
-                  title="Λήψη κλασικού στατικού αρχείου PDF (.pdf) με στιγμιότυπο όλων των προσομοιώσεων"
-                >
-                  <span>📄 Κλασικό PDF (.pdf)</span>
-                </button>
-
-                <button
-                  onClick={() => setIsLivePdfMode(false)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 border border-slate-600 text-slate-200 hover:text-white text-xs font-bold transition cursor-pointer"
-                  title="Επιστροφή στα εργαλεία σχεδίασης και επεξεργασίας"
-                >
-                  <span>✕ Έξοδος</span>
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* =========================================================================
               2. AUTHENTIC GOODNOTES 6 LIGHT TOOLBAR (#F4F5F7)
@@ -76317,7 +76347,7 @@ export default function App() {
                               WebkitUserSelect: 'none',
                               userSelect: 'none',
                             }}
-                            className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-20 outline-none"
+                            className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none"
                           >
                             {/* Far-End Interactive Resize Grip (Σύρετε με δάχτυλο ή ποντίκι στην άκρη του χάρακα για μείωση/αύξηση μεγέθους) */}
                             <div
@@ -76653,7 +76683,7 @@ export default function App() {
                                   animationDelay: info ? `${info.dashDelaySec}s` : '0s',
                                   animationDuration: info ? `${info.dashDurationSec}s` : '0.52s',
                                 }}
-                                className="absolute z-20 pointer-events-none select-none ruler-ptr-dash-anim"
+                                className="absolute z-[72] pointer-events-none select-none ruler-ptr-dash-anim"
                               >
                                 <svg
                                   width={dLen}
@@ -76697,7 +76727,7 @@ export default function App() {
                                   animationDelay: info ? `${info.readoutDelaySec}s` : '0s',
                                   animationDuration: '0.24s',
                                 }}
-                                className="absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border shadow-sm font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none ruler-ptr-badge-anim"
+                                className="absolute z-[73] pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border shadow-sm font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none ruler-ptr-badge-anim"
                               >
                                 <span
                                   data-ruler-ptr-arr="true"

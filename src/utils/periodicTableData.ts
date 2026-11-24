@@ -220,6 +220,22 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
     };
   }
   if (onlyHas('H', 'O') && !norm.includes('H2O2')) {
+    const isWaterDissociation =
+      (norm.includes('H2O->') || norm.includes('H2O→') || norm.includes('H2O⇌') || norm.includes('H2O=')) &&
+      (norm.includes('OH-') || norm.includes('OH⁻') || norm.includes('H+') || norm.includes('H⁺') || norm.includes('H3O'));
+    if (isWaterDissociation) {
+      const isAutoProtolysis = norm.includes('H3O');
+      return {
+        equationDisplay: isAutoProtolysis ? '2H₂O → H₃O⁺ + OH⁻' : 'H₂O → H⁺ + OH⁻',
+        bondType: 'covalent',
+        atomZList: [1, 8, 1],
+        transfers: [],
+        sharedPairs: [
+          { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
+          { atomAIdx: 1, atomBIdx: 2, pairsCount: 1 },
+        ],
+      };
+    }
     return {
       equationDisplay: '2H₂ + O₂ → 2H₂O',
       bondType: 'covalent',
@@ -1801,6 +1817,66 @@ export function validateAndCorrectChemicalEquation(
   userRawInput: string,
   savedOrAiCorrectedEq?: string
 ): ChemValidationResult {
+  // 0. Special handling for water self-ionization / dissociation (e.g. H2O -> H+ + OH-, H₂O ⇌ H⁺ + OH⁻, 2H2O -> H3O+ + OH-)
+  // so it is never misclassified as water electrolysis (2H2O -> 2H2 + O2) or broken by splitting on ionic '+' charges!
+  const compactIonCheck = userRawInput
+    .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (ch) => String(SUBSCRIPT_DIGITS.indexOf(ch)))
+    .replace(/[⁺]/g, '+')
+    .replace(/[⁻−–—]/g, '-')
+    .replace(/⇌|⇄|↔|-->|->|→|⇒|=/g, '->')
+    .replace(/\s+/g, '');
+  const arrowPartsIon = compactIonCheck.split('->');
+  if (arrowPartsIon.length === 2) {
+    const lhsCompact = arrowPartsIon[0].toUpperCase();
+    const rhsCompact = arrowPartsIon[1].toUpperCase();
+    const isSimpleWaterDissociation =
+      (lhsCompact === 'H2O' || lhsCompact === '1H2O') &&
+      (rhsCompact === 'H++OH-' ||
+        rhsCompact === 'OH-+H+' ||
+        rhsCompact === 'H++(OH)-' ||
+        rhsCompact === '(OH)-+H+' ||
+        rhsCompact === 'H+OH' ||
+        rhsCompact === 'OH+H');
+    if (isSimpleWaterDissociation) {
+      const displayEq = 'H₂O → H⁺ + OH⁻';
+      return {
+        hasCorrections: false,
+        userRawFormatted: displayEq,
+        correctedEquation: displayEq,
+        segments: [
+          { text: 'H₂O', isCorrection: false },
+          { text: ' → ', isCorrection: false },
+          { text: 'H⁺', isCorrection: false },
+          { text: ' + ', isCorrection: false },
+          { text: 'OH⁻', isCorrection: false },
+        ],
+        explanationNotes: [],
+      };
+    }
+    const isHydroniumWaterDissociation =
+      lhsCompact === '2H2O' &&
+      (rhsCompact === 'H3O++OH-' ||
+        rhsCompact === 'OH-+H3O+' ||
+        rhsCompact === 'H3O++(OH)-' ||
+        rhsCompact === '(OH)-+H3O+');
+    if (isHydroniumWaterDissociation) {
+      const displayEq = '2H₂O → H₃O⁺ + OH⁻';
+      return {
+        hasCorrections: false,
+        userRawFormatted: displayEq,
+        correctedEquation: displayEq,
+        segments: [
+          { text: '2H₂O', isCorrection: false },
+          { text: ' → ', isCorrection: false },
+          { text: 'H₃O⁺', isCorrection: false },
+          { text: ' + ', isCorrection: false },
+          { text: 'OH⁻', isCorrection: false },
+        ],
+        explanationNotes: [],
+      };
+    }
+  }
+
   const ascii = normalizeAsciiChem(userRawInput);
   const parts = ascii.split('->');
   const lhsRaw = (parts[0] || '').trim();
