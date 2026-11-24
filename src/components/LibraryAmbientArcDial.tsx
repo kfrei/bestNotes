@@ -160,12 +160,11 @@ interface PlexusNode {
   vx: number;
   vy: number;
   r: number;
-  glow: number;
 }
 
 /**
- * Lightweight 30fps-capped Constellation / Plexus canvas (44 nodes, <0.15ms/frame).
- * Pauses automatically on hidden tab & prefers-reduced-motion, and unmounts outside Library.
+ * Lightweight 30fps-capped Constellation / Plexus canvas (48 nodes, <0.15ms/frame).
+ * Pure ambient drift with zero pointer listeners; pauses on hidden tab & prefers-reduced-motion.
  */
 const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ folderColor }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -185,9 +184,8 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    const nodeCount = width < 768 ? 26 : 44;
+    const nodeCount = width < 768 ? 28 : 48;
     const nodes: PlexusNode[] = [];
-    const mouse = { x: -9999, y: -9999, active: false };
 
     const initNodes = () => {
       nodes.length = 0;
@@ -197,8 +195,7 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
           y: 56 + Math.random() * Math.max(200, height - 64),
           vx: (Math.random() - 0.5) * 0.28,
           vy: (Math.random() - 0.5) * 0.28,
-          r: 1.7 + Math.random() * 2.1,
-          glow: 0,
+          r: 1.9 + Math.random() * 2.2,
         });
       }
     };
@@ -214,19 +211,7 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
     };
 
     resize();
-
-    const onPointerMove = (e: PointerEvent) => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-      mouse.active = true;
-    };
-    const onPointerLeave = () => {
-      mouse.active = false;
-    };
-
     window.addEventListener('resize', resize, { passive: true });
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
     let rafId = 0;
     let lastTs = 0;
@@ -244,8 +229,7 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
 
       ctx.clearRect(0, 0, width, height);
       const tone = colorsRef.current;
-      const maxDist = Math.min(220, Math.min(width, height) * 0.26);
-      const hoverRadius = Math.min(240, Math.min(width, height) * 0.28);
+      const maxDist = Math.min(245, Math.min(width, height) * 0.28);
       const topBound = 52;
 
       for (let i = 0; i < nodes.length; i++) {
@@ -264,13 +248,6 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
             n.vy = -Math.abs(n.vy);
           }
         }
-
-        let targetGlow = 0;
-        if (mouse.active) {
-          const d = Math.hypot(n.x - mouse.x, n.y - mouse.y);
-          if (d < hoverRadius) targetGlow = 1 - d / hoverRadius;
-        }
-        n.glow += (targetGlow - n.glow) * 0.16;
       }
 
       // Edges
@@ -281,47 +258,30 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
           const d = Math.hypot(a.x - b.x, a.y - b.y);
           if (d < maxDist) {
             const prox = 1 - d / maxDist;
-            const boost = Math.max(a.glow, b.glow);
-            const alpha = Math.min(0.72, 0.21 * prox + 0.44 * prox * boost);
-            const rgb = boost > 0.12 ? tone.hotRgb : tone.edgeRgb;
+            const alpha = 0.36 * prox;
+            const rgb = tone.edgeRgb;
             ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
-            ctx.lineWidth = 0.85 + boost * 0.95;
+            ctx.lineWidth = 1.05;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
             ctx.stroke();
           }
         }
-
-        if (mouse.active && a.glow > 0.04) {
-          const alpha = Math.min(0.75, 0.45 * a.glow);
-          const rgb = tone.hotRgb;
-          ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
-          ctx.lineWidth = 0.95 * a.glow + 0.4;
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(mouse.x, mouse.y);
-          ctx.stroke();
-        }
       }
 
       // Nodes
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
-        const boost = n.glow;
-        const alpha = Math.min(0.85, 0.34 + 0.50 * boost);
-        const rgb = boost > 0.12 ? tone.hotRgb : tone.nodeRgb;
-
-        if (boost > 0.06) {
-          ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.20 * boost).toFixed(3)})`;
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, n.r + 3.8 + boost * 4.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(3)})`;
+        const rgb = tone.nodeRgb;
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.14)`;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + boost * 1.5, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, n.r + 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.52)`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -333,8 +293,6 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerleave', onPointerLeave);
     };
   }, []);
 
