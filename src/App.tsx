@@ -59125,6 +59125,7 @@ export default function App() {
         data-sticky-app-nav="true"
         style={{
           touchAction: 'manipulation',
+          zIndex: 100010,
           ...(typeof window !== 'undefined' &&
           ((window.navigator as any)?.standalone === true ||
             window.matchMedia?.('(display-mode: standalone)')?.matches ||
@@ -59674,8 +59675,7 @@ export default function App() {
                   <div
                     data-ui-panel="true"
                     onPointerDown={(e) => e.stopPropagation()}
-                    style={{ zIndex: 100025 }}
-                    className="fixed top-[50px] right-3 sm:right-24 w-72 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/92 backdrop-blur-2xl text-[#1b2a4a] border border-white/85 ring-1 ring-black/5 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.18)] p-3.5 text-xs"
+                    className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl ipados-liquid-glass bg-[#fdfbf7]/92 backdrop-blur-2xl text-[#1b2a4a] border border-white/85 ring-1 ring-black/5 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.18)] p-3.5 text-xs"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 font-bold text-[12px] text-[#1b2a4a]">
