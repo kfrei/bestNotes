@@ -18,6 +18,7 @@ export interface RecentlyOpenedStripProps {
     page: NotePage | undefined,
     mode?: 'full' | 'thumb'
   ) => string | undefined;
+  resolveNotebookSpineColor: (nb: Notebook) => string;
   getNotebookSizeBytes: (nb: Notebook) => number;
   formatNotebookSizeLabel: (bytes: number) => string;
   formatRecentRelativeLabel: (isoOrTs: string | number) => string;
@@ -32,6 +33,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
   recentlyOpenedNotebooks,
   recentOpenedAtMap,
   resolvePageBackgroundUrl,
+  resolveNotebookSpineColor,
   getNotebookSizeBytes,
   formatNotebookSizeLabel,
   formatRecentRelativeLabel,
@@ -106,6 +108,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       <div className="grid gap-5 sm:gap-6 lg:gap-7" style={gridStyle}>
         {recentlyOpenedNotebooks.slice(0, visibleCount).map((rNb) => {
           const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
+          const spineColor = resolveNotebookSpineColor(rNb);
           const rNbBytes = getNotebookSizeBytes(rNb);
           const rNbSizeLabel = formatNotebookSizeLabel(rNbBytes);
           const fullFolderPath = rNb.folder
@@ -134,7 +137,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
                 notebookId={rNb.id}
                 title={rNb.title}
                 updatedAt={rNb.updatedAt}
-                coverColor={rNb.coverColor}
+                coverColor={spineColor}
                 firstPage={rNb.pages[0]}
                 p0BgUrl={p0Url}
                 variant="recent"
@@ -152,7 +155,7 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
               <div className="absolute bottom-3 left-0 right-0 z-20 pl-3.5 pr-2.5 py-2 bg-slate-200/68 backdrop-blur-[3px] border-y border-slate-300/75 shadow-[0_2px_10px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.65)] flex items-center justify-between gap-1.5">
                 <span
                   className="inline-block max-w-[74%] truncate px-2 py-0.5 rounded-md text-white text-[9.5px] font-bold leading-tight shadow-2xs"
-                  style={{ backgroundColor: rNb.coverColor || '#234978' }}
+                  style={{ backgroundColor: spineColor }}
                 >
                   {fullFolderPath}
                 </span>

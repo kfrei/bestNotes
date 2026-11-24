@@ -61480,6 +61480,17 @@ export default function App() {
                 }
               }
 
+              // Resolve each notebook's left spine & folder pill color from its most immediate folder
+              // (matches the folder's exact displayed color, falling back to nb.coverColor at root).
+              const resolveNotebookSpineColor = (nb: Notebook): string => {
+                const fPath = normalizeFolderPath(nb.folder || '');
+                if (fPath) {
+                  const immediateEntry = folderMap.get(fPath);
+                  return immediateEntry?.color || '#f59e0b';
+                }
+                return nb.coverColor || '#234978';
+              };
+
               return (
                 <>
                   <LibraryAmbientArcDial
@@ -62125,6 +62136,7 @@ export default function App() {
                     recentlyOpenedNotebooks={recentlyOpenedNotebooks}
                     recentOpenedAtMap={recentOpenedAtMap}
                     resolvePageBackgroundUrl={resolvePageBackgroundUrl}
+                    resolveNotebookSpineColor={resolveNotebookSpineColor}
                     getNotebookSizeBytes={getNotebookSizeBytes}
                     formatNotebookSizeLabel={formatNotebookSizeLabel}
                     formatRecentRelativeLabel={formatRecentRelativeLabel}
@@ -62768,7 +62780,7 @@ export default function App() {
                                           {/* Colored Spine on Left of Landscape Notebook */}
                                           <div
                                             className="absolute left-0 top-0 bottom-0 w-2.5 z-20 shadow-xs"
-                                            style={{ backgroundColor: nb.coverColor }}
+                                            style={{ backgroundColor: resolveNotebookSpineColor(nb) }}
                                           />
                                           {renderNbDriveBadge('absolute top-1.5 right-1.5')}
                                           {renderPageSvgContent()}
@@ -62779,7 +62791,7 @@ export default function App() {
                                         {/* Colored Spine on Left of Portrait Notebook */}
                                         <div
                                           className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
-                                          style={{ backgroundColor: nb.coverColor }}
+                                          style={{ backgroundColor: resolveNotebookSpineColor(nb) }}
                                         />
                                         {renderNbDriveBadge('absolute top-2 right-2')}
                                         {renderPageSvgContent()}
@@ -62812,7 +62824,7 @@ export default function App() {
                                           );
                                         }}
                                         className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[92px] cursor-pointer hover:opacity-90"
-                                        style={{ backgroundColor: nb.coverColor }}
+                                        style={{ backgroundColor: resolveNotebookSpineColor(nb) }}
                                         title={
                                           isShowcaseNotebook(nb) && !isAdminUser
                                             ? 'Demo σημείωση (μόνο για δοκιμή — κάνε Αντίγραφο για δικό σου αρχείο)'
@@ -63510,7 +63522,7 @@ export default function App() {
                                   notebookId={nb.id}
                                   title={nb.title}
                                   updatedAt={nb.updatedAt}
-                                  coverColor={nb.coverColor}
+                                  coverColor={resolveNotebookSpineColor(nb)}
                                   firstPage={nb.pages[0]}
                                   p0BgUrl={p0BgUrl}
                                   variant="list"
@@ -63691,7 +63703,7 @@ export default function App() {
                             notebookId={previewNb.id}
                             title={previewNb.title}
                             updatedAt={previewNb.updatedAt}
-                            coverColor={previewNb.coverColor}
+                            coverColor={resolveNotebookSpineColor(previewNb)}
                             firstPage={p0}
                             p0BgUrl={p0PreviewUrl}
                             variant="preview"
