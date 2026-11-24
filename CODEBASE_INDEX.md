@@ -1,10 +1,14 @@
-# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`adminPanelRefresh v1.1.2`)
+# 🗺️ BestNotes Master Codebase Index & Domain Architecture Guide (`animatedBackground v1.1.3`)
 
 > **Σημείωση:** Το πλήρες ευρετήριο αρχείων και αρχιτεκτονικής βρίσκεται συγχρονισμένο και στο [docs/CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md).
 > **Κανόνας Απόδοσης (`Zero-Slowdown Charter`):** Κάθε προσομοίωση/διάγραμμα πρέπει να συμμορφώνεται με το [docs/SIMULATION_GUIDELINES.md](./docs/SIMULATION_GUIDELINES.md) (`0.00 ms / 0 RAF` σε παύση, `< 4.0 ms` ενεργό, lazy `simCanvas`, viewport culling, αυτόματο πάγωμα προσομοιώσεων όταν κλείνει το Sim ή αλλάζει σελίδα/σημείωση).
 > **Υποχρεωτικός Κανόνας Αναίρεσης (`Undo-First Guarantee`):** ΚΑΘΕ νέο feature που προσθέτει, τροποποιεί, συνδυάζει, ενώνει ή διαγράφει strokes, σχήματα, εικόνες, γωνίες ή κείμενα **ΠΡΕΠΕΙ** να υποστηρίζει 100% Αναίρεση (`Undo`) — πάντα `suppressNextUndoRecordRef.current = false` πριν το `updateActivePage(..., true)` (ή ρητό `pushUndoSnapshot`), και πάντα έλεγχος ότι το `Undo` επαναφέρει ακριβώς την προηγούμενη κατάσταση!
 
-## 🏛️ Δομή Domains (`adminPanelRefresh v1.1.2`)
+## 🏛️ Δομή Domains (`animatedBackground v1.1.3`)
+
+- **`src/components/LibraryAmbientArcDial.tsx` & `src/index.css` (Animated Library Backgrounds & Profile Polish — `animatedBackground v1.1.3`)**:
+  - `LibraryAmbientArcDial`: Υποστηρίζει 3 επιλογές από το User Profile dropdown (`localStorage`: `bestnotes_library_bg_effect_v1`): **`arcs` (Δακτύλιοι)** — Pure-CSS GPU-only (`0% JS / 0 RAF`, ~1,2 KB gzip) αντίρροπα περιστρεφόμενα τόξα με radial fade-out, πάνω-αριστερό μπεζ-γκρι glow (`bn-library-ambient-topleft-glow`) και δυναμική τρίχρωμη παλέτα ανά φάκελο; **`plexus` (Κόμβοι)** — 3D προοπτικό ελαστικό σεντόνι κόμβων & ακμών (`30×19` desktop / `18×14` mobile, 0 allocations/frame, 30fps cap, τυχαίες διαγώνιοι 2 κατευθύνσεων, μπροστινή ακμή κλειδωμένη κάτω από το viewport bottom); **`off`** — πλήρης απενεργοποίηση. Κάνει unmount εκτός Βιβλιοθήκης & σέβεται `prefers-reduced-motion`.
+  - **User Profile Dropdown (`src/App.tsx`)**: Google Login avatar (`photoURL` + `referrerPolicy="no-referrer"` + fallback) σε header & dropdown, `Αλλαγή Λογαριασμού` κάτω από το `Logout`, αφαίρεση UI πλαισίου `Αυτόματος Συγχρονισμός`, και επιλογέας `Κινούμενο Φόντο` (`Δακτύλιοι` | `Κόμβοι` | `OFF`).
 
 - **`src/features/plans/` (Subscription Plans, Quotas, Guest Mode & Liquid Upgrade Modal — `adminPanelRefresh v1.1.2`)**:
   - `types.ts`: `SubscriptionPlan` (`ULTRA`, `PLUS`, `FREE` + custom plans), `GUEST_LIMITS`, `UserAiUsage`, `LimitHitKind` (`files`, `pages`, `storage`, `ai_daily`, `ai_weekly`, `ai_guest`, `auto_tags`, `drive_sync`, `live_broadcast`, `live_sim_links`, `guest_save`, `view_plans`), `AI_TOKEN_FEATURES_CATALOG`.
