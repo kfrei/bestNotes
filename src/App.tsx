@@ -63788,125 +63788,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Desktop Hover First-Page Preview Popover for List & Recent Thumbnails */}
-                  {libraryThumbHoverPreview &&
-                    !draggingLibraryNbId &&
-                    (() => {
-                      const previewNb = notebooks.find(
-                        (n) => n.id === libraryThumbHoverPreview.nbId
-                      );
-                      if (!previewNb) return null;
-                      const p0 = previewNb.pages[0];
-                      const pW = getPageLogicalWidth(p0);
-                      const pH = getPageLogicalHeight(p0);
-                      const isLandscape = pW > pH;
-                      const winW = typeof window !== 'undefined' ? window.innerWidth : 1280;
-                      const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
-                      const maxPreviewH = Math.min(580, Math.max(380, winH - 120));
-                      const desiredW = isLandscape ? 540 : 410;
-                      const rawH = Math.round((desiredW * pH) / Math.max(1, pW));
-                      const pageH = Math.min(maxPreviewH, rawH);
-                      const cardW =
-                        rawH > maxPreviewH
-                          ? Math.round((pageH * pW) / Math.max(1, pH))
-                          : desiredW;
-                      const left = Math.max(
-                        16,
-                        Math.min(libraryThumbHoverPreview.anchorRight + 16, winW - cardW - 36)
-                      );
-                      const top = Math.max(
-                        52,
-                        Math.min(libraryThumbHoverPreview.anchorTop - 24, winH - pageH - 80)
-                      );
-                      const p0PreviewUrl = resolvePageBackgroundUrl(previewNb.id, p0, 'full');
-                      return (
-                        <div
-                          style={{ left, top }}
-                          className="fixed z-[180] pointer-events-none rounded-2xl bg-white/98 border border-slate-200/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] p-2.5 bn-fast-fade-in"
-                        >
-                          <LibraryNoteMiniThumb
-                            notebookId={previewNb.id}
-                            title={previewNb.title}
-                            updatedAt={previewNb.updatedAt}
-                            coverColor={resolveNotebookSpineColor(previewNb)}
-                            firstPage={p0}
-                            p0BgUrl={p0PreviewUrl}
-                            variant="preview"
-                            style={{ width: cardW, height: pageH }}
-                          />
-                          <div className="mt-2 px-0.5 flex items-center justify-between gap-2" style={{ maxWidth: cardW }}>
-                            <span className="text-xs font-bold text-[#0f172a] truncate">
-                              {previewNb.title}
-                            </span>
-                            <span className="text-[10.5px] font-semibold text-slate-400 shrink-0">
-                              {previewNb.pages.length} {previewNb.pages.length === 1 ? 'σελ.' : 'σελ.'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                  {/* Floating Ghost Card while Dragging a Notebook in Library (Mouse / Touch / Apple Pencil) */}
-                  {libraryTouchDrag && (() => {
-                    const resolvedDropDest =
-                      dragOverFolderName === '__ROOT__' ? '' : dragOverFolderName || '';
-                    const isMeaningfulDrop =
-                      dragOverFolderName !== null &&
-                      (libraryTouchDrag.isCopyMode ||
-                        resolvedDropDest !== libraryTouchDrag.sourceFolder);
-                    const destDisplayName =
-                      dragOverFolderName === '__ROOT__'
-                        ? 'Βιβλιοθήκη'
-                        : dragOverFolderName || '';
-                    return (
-                      <div
-                        style={{
-                          left: libraryTouchDrag.currX,
-                          top: libraryTouchDrag.currY,
-                          pointerEvents: 'none',
-                        }}
-                        className="fixed z-[200] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
-                      >
-                        <div
-                          className={`w-28 h-36 rounded-r-xl rounded-l-md bg-[#fffdf7] border-2 shadow-2xl relative overflow-hidden flex flex-col items-center justify-center px-2 text-center opacity-95 scale-105 ${
-                            libraryTouchDrag.isCopyMode ? 'border-sky-600' : 'border-[#234978]'
-                          }`}
-                        >
-                          <div
-                            className="absolute left-0 top-0 bottom-0 w-2.5"
-                            style={{ backgroundColor: libraryTouchDrag.coverColor }}
-                          />
-                          {libraryTouchDrag.isCopyMode && (
-                            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-sky-600 text-white text-xs font-extrabold flex items-center justify-center shadow-sm">
-                              +
-                            </span>
-                          )}
-                          <FileText className="w-7 h-7 text-[#234978] mb-1.5 ml-1" />
-                          <span className="text-[11px] font-bold text-[#1b2a4a] line-clamp-2 ml-1">
-                            {libraryTouchDrag.title}
-                          </span>
-                        </div>
-                        <div
-                          className={`mt-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap ${
-                            libraryTouchDrag.isCopyMode
-                              ? 'bg-sky-600 text-white ring-2 ring-white'
-                              : isMeaningfulDrop
-                              ? 'bg-emerald-600 text-white ring-2 ring-white'
-                              : 'bg-[#1b2a4a]/92 text-white'
-                          }`}
-                        >
-                          {libraryTouchDrag.isCopyMode
-                            ? dragOverFolderName
-                              ? `➕ Αντιγραφή σε «${destDisplayName}»`
-                              : '➕ Αντιγραφή (σύρε σε φάκελο)'
-                            : isMeaningfulDrop
-                            ? `↪ Μετακίνηση σε «${destDisplayName}»`
-                            : '↪ Μετακίνηση · +Shift Αντιγραφή'}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
                   {/* Library File Gear Liquid Glass Dropdown (Διαμοιρασμός, Λήψη PDF, Αγαπημένο, Αντίγραφο, Μετακίνηση με Δέντρο Φακέλων) */}
                   {shareMenuTarget &&
                     shareMenuTarget.mode === 'library-gear' &&
@@ -64248,6 +64129,128 @@ export default function App() {
                   </div>
                     </div>
                   </div>
+
+                  {/* Top-Level Library Overlays (above both Left Tree Sidebar and Right Main Pane) */}
+                  {libraryThumbHoverPreview &&
+                    !draggingLibraryNbId &&
+                    (() => {
+                      const previewNb = notebooks.find(
+                        (n) => n.id === libraryThumbHoverPreview.nbId
+                      );
+                      if (!previewNb) return null;
+                      const p0 = previewNb.pages[0];
+                      const pW = getPageLogicalWidth(p0);
+                      const pH = getPageLogicalHeight(p0);
+                      const isLandscape = pW > pH;
+                      const winW = typeof window !== 'undefined' ? window.innerWidth : 1280;
+                      const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+                      const maxPreviewH = Math.min(580, Math.max(380, winH - 120));
+                      const desiredW = isLandscape ? 540 : 410;
+                      const rawH = Math.round((desiredW * pH) / Math.max(1, pW));
+                      const pageH = Math.min(maxPreviewH, rawH);
+                      const cardW =
+                        rawH > maxPreviewH
+                          ? Math.round((pageH * pW) / Math.max(1, pH))
+                          : desiredW;
+                      const left = Math.max(
+                        16,
+                        Math.min(libraryThumbHoverPreview.anchorRight + 16, winW - cardW - 36)
+                      );
+                      const top = Math.max(
+                        52,
+                        Math.min(libraryThumbHoverPreview.anchorTop - 24, winH - pageH - 80)
+                      );
+                      const p0PreviewUrl = resolvePageBackgroundUrl(previewNb.id, p0, 'full');
+                      return (
+                        <div
+                          style={{ left, top }}
+                          className="fixed z-[9990] pointer-events-none rounded-2xl bg-white/98 border border-slate-200/95 shadow-[0_20px_50px_rgba(15,23,42,0.22)] p-2.5 bn-fast-fade-in"
+                        >
+                          <LibraryNoteMiniThumb
+                            notebookId={previewNb.id}
+                            title={previewNb.title}
+                            updatedAt={previewNb.updatedAt}
+                            coverColor={resolveNotebookSpineColor(previewNb)}
+                            firstPage={p0}
+                            p0BgUrl={p0PreviewUrl}
+                            variant="preview"
+                            style={{ width: cardW, height: pageH }}
+                          />
+                          <div className="mt-2 px-0.5 flex items-center justify-between gap-2" style={{ maxWidth: cardW }}>
+                            <span className="text-xs font-bold text-[#0f172a] truncate">
+                              {previewNb.title}
+                            </span>
+                            <span className="text-[10.5px] font-semibold text-slate-400 shrink-0">
+                              {previewNb.pages.length} {previewNb.pages.length === 1 ? 'σελ.' : 'σελ.'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                  {/* Floating Ghost Card while Dragging a Notebook in Library (always above Sidebar & Main Pane) */}
+                  {libraryTouchDrag && (() => {
+                    const resolvedDropDest =
+                      dragOverFolderName === '__ROOT__' ? '' : dragOverFolderName || '';
+                    const isMeaningfulDrop =
+                      dragOverFolderName !== null &&
+                      (libraryTouchDrag.isCopyMode ||
+                        resolvedDropDest !== libraryTouchDrag.sourceFolder);
+                    const destDisplayName =
+                      dragOverFolderName === '__ROOT__'
+                        ? 'Βιβλιοθήκη'
+                        : dragOverFolderName || '';
+                    const ghostSpineColor = libraryTouchDrag.sourceFolder
+                      ? folderMap.get(libraryTouchDrag.sourceFolder)?.color || '#f59e0b'
+                      : libraryTouchDrag.coverColor || '#234978';
+                    return (
+                      <div
+                        style={{
+                          left: libraryTouchDrag.currX,
+                          top: libraryTouchDrag.currY,
+                          pointerEvents: 'none',
+                        }}
+                        className="fixed z-[9999] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
+                      >
+                        <div
+                          className={`w-28 h-36 rounded-r-xl rounded-l-md bg-[#fffdf7] border-2 shadow-2xl relative overflow-hidden flex flex-col items-center justify-center px-2 text-center opacity-95 scale-105 ${
+                            libraryTouchDrag.isCopyMode ? 'border-sky-600' : 'border-[#234978]'
+                          }`}
+                        >
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-2.5"
+                            style={{ backgroundColor: ghostSpineColor }}
+                          />
+                          {libraryTouchDrag.isCopyMode && (
+                            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-sky-600 text-white text-xs font-extrabold flex items-center justify-center shadow-sm">
+                              +
+                            </span>
+                          )}
+                          <FileText className="w-7 h-7 text-[#234978] mb-1.5 ml-1" />
+                          <span className="text-[11px] font-bold text-[#1b2a4a] line-clamp-2 ml-1">
+                            {libraryTouchDrag.title}
+                          </span>
+                        </div>
+                        <div
+                          className={`mt-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap ${
+                            libraryTouchDrag.isCopyMode
+                              ? 'bg-sky-600 text-white ring-2 ring-white'
+                              : isMeaningfulDrop
+                              ? 'bg-emerald-600 text-white ring-2 ring-white'
+                              : 'bg-[#1b2a4a]/92 text-white'
+                          }`}
+                        >
+                          {libraryTouchDrag.isCopyMode
+                            ? dragOverFolderName
+                              ? `➕ Αντιγραφή σε «${destDisplayName}»`
+                              : '➕ Αντιγραφή (σύρε σε φάκελο)'
+                            : isMeaningfulDrop
+                            ? `↪ Μετακίνηση σε «${destDisplayName}»`
+                            : '↪ Μετακίνηση · +Shift Αντιγραφή'}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               );
             })()}
