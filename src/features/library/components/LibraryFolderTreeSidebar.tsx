@@ -163,8 +163,6 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
     }
   };
 
-  if (!isOpen) return null;
-
   const rootNotes = notesByFolder.get('') || [];
   const rootFolders = childrenByParent.get('') || [];
   const isRootExpanded = expandedPaths.has('__ROOT__');
@@ -298,17 +296,30 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
 
   return (
     <>
-      {/* Mobile backdrop overlay */}
+      {/* Mobile backdrop overlay (smooth fade in/out) */}
       <div
         onClick={onClose}
-        className="md:hidden fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[2px]"
+        aria-hidden={!isOpen}
+        className={`md:hidden fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[2px] transition-opacity duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
       />
 
-      {/* Full-Height Vertical Liquid Glass Tree Sidebar */}
+      {/* Full-Height Vertical Liquid Glass Tree Sidebar (silky slide open & close) */}
       <aside
         aria-label="Δέντρο Φακέλων & Αρχείων"
-        className="fixed md:relative inset-y-0 left-0 z-40 md:z-20 w-[292px] max-w-[85vw] md:w-[276px] lg:w-[292px] shrink-0 h-full flex flex-col ipados-liquid-glass bg-[#fdfbf7]/92 backdrop-blur-2xl border-r border-[#dfd8cb]/95 shadow-[6px_0_28px_rgba(15,23,42,0.08)] md:shadow-[2px_0_16px_rgba(15,23,42,0.04)]"
+        aria-hidden={!isOpen}
+        className={`fixed md:relative inset-y-0 left-0 z-40 md:z-20 shrink-0 h-full overflow-hidden transition-[width,transform,opacity,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          isOpen
+            ? 'w-[292px] max-w-[85vw] md:w-[280px] lg:w-[292px] translate-x-0 opacity-100 pointer-events-auto ipados-liquid-glass bg-[#fdfbf7]/92 backdrop-blur-2xl border-r border-[#dfd8cb]/95 shadow-[6px_0_28px_rgba(15,23,42,0.08)] md:shadow-[2px_0_16px_rgba(15,23,42,0.04)]'
+            : 'w-[292px] max-w-[85vw] md:w-0 -translate-x-full md:translate-x-0 opacity-0 pointer-events-none border-r-0 shadow-none'
+        }`}
       >
+        <div
+          className={`w-[292px] max-w-[85vw] md:w-[280px] lg:w-[292px] h-full flex flex-col transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isOpen ? 'translate-x-0 opacity-100' : '-translate-x-4 opacity-0'
+          }`}
+        >
         {/* Top Header */}
         <div className="flex items-center justify-between gap-2 px-3.5 py-3 border-b border-[#dfd8cb]/85 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -403,6 +414,7 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
               + Shift: Αντιγραφή
             </span>
           </div>
+        </div>
         </div>
       </aside>
     </>
