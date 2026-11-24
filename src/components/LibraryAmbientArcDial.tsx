@@ -184,35 +184,23 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
     let projY = new Float32Array(total);
     let projScale = new Float32Array(total);
     let projFade = new Float32Array(total);
-    let jitterX = new Float32Array(total);
-    let jitterZ = new Float32Array(total);
     let cellType = new Uint8Array(total);
 
-    // Deterministic organic hash in [0, 1) so the asymmetric polygon topology stays stable
-    const hash2d = (a: number, b: number, seed: number) => {
-      const h = Math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453123;
+    // Deterministic hash in [0, 1) so random diagonals stay stable across frames
+    const hash2d = (a: number, b: number) => {
+      const h = Math.sin(a * 127.1 + b * 311.7 + 19.3) * 43758.5453123;
       return h - Math.floor(h);
     };
 
-    const buildTopology = () => {
+    const buildBuffers = () => {
       projX = new Float32Array(total);
       projY = new Float32Array(total);
       projScale = new Float32Array(total);
       projFade = new Float32Array(total);
-      jitterX = new Float32Array(total);
-      jitterZ = new Float32Array(total);
       cellType = new Uint8Array(total);
-
-      const stepX = 3.8 / (cols - 1);
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const idx = r * cols + c;
-          // Organic jitter breaks straight grid lines into natural asymmetric polygons
-          jitterX[idx] = (hash2d(c, r, 1) - 0.5) * stepX * 0.72;
-          // Keep front row (r=0) anchored below viewport bottom; jitter inner rows gently in Z
-          jitterZ[idx] = r === 0 ? 0 : (hash2d(c, r, 2) - 0.5) * 0.14;
-          // 0..99 bucket controls asymmetric polygons (triangles, quads, pentagons, hexagons)
-          cellType[idx] = Math.floor(hash2d(c, r, 3) * 100);
+          cellType[r * cols + c] = Math.floor(hash2d(c, r) * 100);
         }
       }
     };
@@ -224,15 +212,15 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
       cols = width < 768 ? 18 : 30;
       rows = width < 768 ? 14 : 19;
       total = cols * rows;
-      if (jitterX.length !== total || jitterX[1] === 0) {
-        buildTopology();
+      if (projX.length !== total) {
+        buildBuffers();
       }
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    buildTopology();
+    buildBuffers();
     resize();
     window.addEventListener('resize', resize, { passive: true });
 
@@ -262,22 +250,21 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
       // High horizon so distant crests rise softly toward the folders
       const horizonY = height * 0.41;
 
-      // 1. Project 3D undulating organic-jittered carpet into screen space
+      // 1. Project clean elastic 3D undulating fabric grid into screen space
       for (let r = 0; r < rows; r++) {
         const depthT = r / (rows - 1); // 0 = nearest front row, 1 = farthest horizon row
         // Front row (z=0.28) mathematically guarantees projY > 1.20 * height even at peak wave crest
-        const baseZ = 0.28 + Math.pow(depthT, 1.15) * 3.85;
+        const z = 0.28 + Math.pow(depthT, 1.15) * 3.85;
         const horizonFade = Math.pow(1 - depthT, 1.38);
 
         for (let c = 0; c < cols; c++) {
           const idx = r * cols + c;
           const u = c / (cols - 1) - 0.5; // -0.5 .. +0.5
-          const worldX = u * 3.8 + jitterX[idx];
-          const z = Math.max(0.26, baseZ + jitterZ[idx]);
+          const worldX = u * 3.8;
           const waveY =
-            0.12 * Math.sin(worldX * 2.1 + phase) +
-            0.095 * Math.cos(z * 1.45 - phase * 0.74) +
-            0.05 * Math.sin((worldX + z) * 1.15 + phase * 0.50);
+            0.12 * Math.sin(c * 0.40 + phase) +
+            0.095 * Math.cos(r * 0.48 - phase * 0.74) +
+            0.05 * Math.sin((c + r) * 0.30 + phase * 0.50);
           // worldY >= 0.315 at all times -> front row (r=0) stays strictly below viewport bottom
           const worldY = 0.58 + waveY;
 
@@ -289,7 +276,7 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
         }
       }
 
-      // 2. Draw organic asymmetric polygon edges (triangles, quads, pentagons & hexagons seamlessly joined)
+      // 2. Draw clean rectangular fabric mesh + sparse random diagonals in BOTH directions
       const er = tone.edgeRgb[0];
       const eg = tone.edgeRgb[1];
       const eb = tone.edgeRgb[2];
@@ -306,30 +293,27 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
           const idx = r * cols + c;
           const x = projX[idx];
           const y = projY[idx];
-          const ct = cellType[idx];
 
-          // Horizontal edge (only allow isolated single-edge omission on alternating parity so no empty strip can ever form)
-          const omitHoriz = ct >= 88 && (r + c) % 2 === 0 && r > 0 && r < rows - 1;
-          if (c < cols - 1 && !omitHoriz) {
+          // Full horizontal & depth threads for smooth elastic cloth feel
+          if (c < cols - 1) {
             ctx.moveTo(x, y);
             ctx.lineTo(projX[idx + 1], projY[idx + 1]);
           }
-          // Depth edge to nearer row (isolated on opposite parity so pentagons/hexagons never merge into open strips)
-          const omitDepth = ct >= 76 && ct < 88 && (r + c) % 2 === 1 && c > 0 && c < cols - 1;
-          if (r > 0 && !omitDepth) {
+          if (r > 0) {
             const nearIdx = (r - 1) * cols + c;
             ctx.moveTo(x, y);
             ctx.lineTo(projX[nearIdx], projY[nearIdx]);
-          }
-          // Sparse, non-repeating random diagonals (~34% of cells, alternating direction organically)
-          if (r > 0 && c < cols - 1 && !omitHoriz && !omitDepth) {
-            const nearIdx = (r - 1) * cols + c;
-            if (ct < 18) {
-              ctx.moveTo(x, y);
-              ctx.lineTo(projX[nearIdx + 1], projY[nearIdx + 1]);
-            } else if (ct >= 18 && ct < 34) {
-              ctx.moveTo(projX[idx + 1], projY[idx + 1]);
-              ctx.lineTo(projX[nearIdx], projY[nearIdx]);
+
+            // Balanced random diagonals in both directions (~18% each way, ~64% pure quads)
+            if (c < cols - 1) {
+              const ct = cellType[idx];
+              if (ct < 18) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(projX[nearIdx + 1], projY[nearIdx + 1]);
+              } else if (ct >= 18 && ct < 36) {
+                ctx.moveTo(projX[idx + 1], projY[idx + 1]);
+                ctx.lineTo(projX[nearIdx], projY[nearIdx]);
+              }
             }
           }
         }
