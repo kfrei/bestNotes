@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import katex from 'katex';
+import { LibraryAmbientArcDial } from './components/LibraryAmbientArcDial';
 import {
   Pen,
   Highlighter,
@@ -60279,13 +60280,13 @@ export default function App() {
         <div
           data-library-scroll-container="true"
           onScroll={() => clearLibraryThumbHoverPreview()}
-          className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f8f7f4]"
+          className="relative flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f8f7f4]"
           style={{
             backgroundImage: 'radial-gradient(rgba(100, 116, 139, 0.16) 1px, transparent 1px)',
             backgroundSize: '20px 20px',
           }}
         >
-          <div className="w-full max-w-[1680px] mx-auto px-1 sm:px-2 lg:px-4 space-y-5">
+          <div className="relative z-10 w-full max-w-[1680px] mx-auto px-1 sm:px-2 lg:px-4 space-y-5">
             {(() => {
               const normalizeFolderPath = (rawPath: string) =>
                 rawPath
@@ -61420,8 +61421,26 @@ export default function App() {
 
               const activeBreadcrumbParts = currentFolderPath ? currentFolderPath.split('/') : [];
 
+              // Resolve active folder's color for the ambient bottom-right rotating arc dial:
+              // - Root Library → undefined (warm beige-grey palette)
+              // - Inside a folder → soft desaturated tint of the folder's own color (falling back to parent if unset)
+              let ambientFolderColor: string | undefined;
+              if (currentFolderPath) {
+                let probePath = currentFolderPath;
+                while (probePath) {
+                  const entry = folderMap.get(probePath);
+                  if (entry?.color) {
+                    ambientFolderColor = entry.color;
+                    break;
+                  }
+                  probePath = entry?.parentPath || '';
+                }
+              }
+
               return (
-                <div key={currentFolderPath || 'root'} className="space-y-5">
+                <>
+                  <LibraryAmbientArcDial folderColor={ambientFolderColor} />
+                  <div key={currentFolderPath || 'root'} className="relative z-10 space-y-5">
                   {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
                   <div className="flex items-center justify-between flex-wrap gap-3 bn-library-cascade-1">
                     <div>
@@ -64018,7 +64037,8 @@ export default function App() {
                     onCancel={() => setPendingDeleteNotebook(null)}
                     onConfirm={confirmDeleteNotebook}
                   />
-                </div>
+                  </div>
+                </>
               );
             })()}
           </div>

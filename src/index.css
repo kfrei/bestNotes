@@ -258,3 +258,87 @@ html[data-standalone-app='true'] .bn-safe-top-header {
   animation: bnCascadeFromTop 0.30s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: 140ms;
 }
+
+/* Pure-CSS (0% JS / 0 RAF) Ambient Rotating Concentric Arc Dial for Library View */
+@keyframes bnLibraryArcSpinCW {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bnLibraryArcSpinCCW {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.bn-library-ambient-arcs-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  /* Softly fades out as the arcs rise toward the folders & notes */
+  -webkit-mask-image: radial-gradient(
+    circle at 86% 88%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.88) 32%,
+    rgba(0, 0, 0, 0.42) 54%,
+    rgba(0, 0, 0, 0.10) 68%,
+    rgba(0, 0, 0, 0) 78%
+  );
+  mask-image: radial-gradient(
+    circle at 86% 88%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.88) 32%,
+    rgba(0, 0, 0, 0.42) 54%,
+    rgba(0, 0, 0, 0.10) 68%,
+    rgba(0, 0, 0, 0) 78%
+  );
+}
+
+.bn-library-ambient-arcs-dial {
+  position: absolute;
+  width: clamp(320px, 68vmin, 760px);
+  height: clamp(320px, 68vmin, 760px);
+  /* Rotation center pulled slightly inside the bottom-right corner so the concentric geometry breathes naturally */
+  right: clamp(-145px, -11vw, -36px);
+  bottom: clamp(-165px, -14vh, -48px);
+  pointer-events: none;
+}
+
+.bn-arc-ring-outer {
+  transform-origin: 200px 200px;
+  animation: bnLibraryArcSpinCW 68s linear infinite;
+  will-change: transform;
+}
+
+.bn-arc-ring-mid {
+  transform-origin: 200px 200px;
+  animation: bnLibraryArcSpinCCW 48s linear infinite;
+  will-change: transform;
+}
+
+.bn-arc-ring-inner {
+  transform-origin: 200px 200px;
+  animation: bnLibraryArcSpinCW 86s linear infinite;
+  will-change: transform;
+}
+
+.bn-arc-color-transition {
+  transition: fill 550ms ease, stroke 550ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bn-arc-ring-outer,
+  .bn-arc-ring-mid,
+  .bn-arc-ring-inner {
+    animation: none !important;
+  }
+}
