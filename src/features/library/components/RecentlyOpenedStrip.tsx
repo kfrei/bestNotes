@@ -24,6 +24,14 @@ function computeVisibleRecentCount(containerWidth: number): number {
   return 2;
 }
 
+function computeVisibleHorizontalRecentCount(containerWidth: number): number {
+  if (containerWidth >= 1340) return 5;
+  if (containerWidth >= 1040) return 4;
+  if (containerWidth >= 760) return 3;
+  if (containerWidth >= 500) return 2;
+  return 1;
+}
+
 export interface RecentlyOpenedStripProps {
   recentlyOpenedNotebooks: Notebook[];
   recentOpenedAtMap: Record<string, number>;
@@ -69,6 +77,11 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       ? computeVisibleRecentCount(Math.max(320, window.innerWidth - 64))
       : 6
   );
+  const [visibleHorizontalCount, setVisibleHorizontalCount] = useState<number>(() =>
+    typeof window !== 'undefined'
+      ? computeVisibleHorizontalRecentCount(Math.max(320, window.innerWidth - 64))
+      : 5
+  );
 
   const toggleRecentViewMode = () => {
     setRecentViewMode((prev) => {
@@ -88,8 +101,10 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
     const update = () => {
       const w = el.clientWidth;
       if (w > 0) {
-        const next = computeVisibleRecentCount(w);
-        setVisibleCount((prev) => (prev === next ? prev : next));
+        const nextCards = computeVisibleRecentCount(w);
+        const nextHoriz = computeVisibleHorizontalRecentCount(w);
+        setVisibleCount((prev) => (prev === nextCards ? prev : nextCards));
+        setVisibleHorizontalCount((prev) => (prev === nextHoriz ? prev : nextHoriz));
       }
     };
     update();
@@ -101,6 +116,9 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
 
   const gridStyle: React.CSSProperties = {
     gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))`,
+  };
+  const horizGridStyle: React.CSSProperties = {
+    gridTemplateColumns: `repeat(${visibleHorizontalCount}, minmax(0, 1fr))`,
   };
 
   // Skeleton shimmer placeholder while library data is loading (zero CLS, matches active viewMode)
@@ -114,8 +132,8 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />
         </div>
         {recentViewMode === 'horizontal' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[0, 1, 2, 3].map((idx) => (
+          <div className="grid gap-3.5" style={horizGridStyle}>
+            {Array.from({ length: visibleHorizontalCount }).map((_, idx) => (
               <div
                 key={`recent-skel-${idx}`}
                 className="bg-white/95 rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex items-center gap-4"
@@ -172,8 +190,8 @@ export const RecentlyOpenedStrip: React.FC<RecentlyOpenedStripProps> = ({
       </button>
 
       {recentViewMode === 'horizontal' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {recentlyOpenedNotebooks.slice(0, 4).map((rNb) => {
+        <div className="grid gap-3.5" style={horizGridStyle}>
+          {recentlyOpenedNotebooks.slice(0, visibleHorizontalCount).map((rNb) => {
             const p0Url = resolvePageBackgroundUrl(rNb.id, rNb.pages[0], 'thumb');
             const spineColor = resolveNotebookSpineColor(rNb);
             const rNbBytes = getNotebookSizeBytes(rNb);
