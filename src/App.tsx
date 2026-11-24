@@ -60280,13 +60280,13 @@ export default function App() {
         <div
           data-library-scroll-container="true"
           onScroll={() => clearLibraryThumbHoverPreview()}
-          className="relative flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f8f7f4]"
+          className="relative flex-1 overflow-y-auto overscroll-contain bg-[#f8f7f4]"
           style={{
             backgroundImage: 'radial-gradient(rgba(100, 116, 139, 0.16) 1px, transparent 1px)',
             backgroundSize: '20px 20px',
           }}
         >
-          <div className="relative z-10 w-full max-w-[1680px] mx-auto px-1 sm:px-2 lg:px-4 space-y-5">
+          <div className="relative z-10 w-full max-w-[1680px] mx-auto p-6 sm:px-8 lg:px-10 space-y-5">
             {(() => {
               const normalizeFolderPath = (rawPath: string) =>
                 rawPath
