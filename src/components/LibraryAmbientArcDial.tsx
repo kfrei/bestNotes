@@ -270,18 +270,18 @@ const LibraryPlexusCanvas: React.FC<{ folderColor?: string }> = React.memo(({ fo
         }
       }
 
-      // Nodes
+      // Nodes (soft & subtle so edges carry the geometry cleanly)
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
         const rgb = tone.nodeRgb;
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.14)`;
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.07)`;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + 3.2, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, n.r + 2.6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.52)`;
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.32)`;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, n.r * 0.9, 0, Math.PI * 2);
         ctx.fill();
       }
 
