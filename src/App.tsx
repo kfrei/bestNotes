@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import katex from 'katex';
 import { LibraryAmbientArcDial, type LibraryBgEffectMode } from './components/LibraryAmbientArcDial';
+import { LibraryFolderTreeSidebar } from './features/library/components/LibraryFolderTreeSidebar';
 import {
+  PanelLeft,
+  PanelLeftClose,
   Pen,
   Highlighter,
   Eraser,
@@ -4706,10 +4709,16 @@ export default function App() {
   const [deletedCloudNotebooks, setDeletedCloudNotebooks] = useState<Notebook[]>([]);
   const localDeletedNotebooksRef = useRef<Notebook[]>([]);
   const [showRecycleBinBar, setShowRecycleBinBar] = useState<boolean>(false);
+  const [showLibraryTreeSidebar, setShowLibraryTreeSidebar] = useState<boolean>(false);
+  const duplicateNotebookInLibraryRef = useRef<
+    ((nb: Notebook, targetFolderOverride?: string) => void) | null
+  >(null);
   const [libraryTouchDrag, setLibraryTouchDrag] = useState<{
     nbId: string;
     title: string;
     coverColor: string;
+    sourceFolder: string;
+    isCopyMode: boolean;
     currX: number;
     currY: number;
   } | null>(null);
@@ -4720,6 +4729,8 @@ export default function App() {
     nbId: string;
     title: string;
     coverColor: string;
+    sourceFolder: string;
+    isCopyMode: boolean;
     pointerId: number;
     pointerType: string;
     startX: number;
@@ -6319,10 +6330,17 @@ export default function App() {
       ) {
         return;
       }
+      const normSourceFolder = (nb.folder || '')
+        .split('/')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('/');
       libraryPointerDragRef.current = {
         nbId: nb.id,
         title: nb.title,
         coverColor: nb.coverColor,
+        sourceFolder: normSourceFolder,
+        isCopyMode: Boolean(e.shiftKey),
         pointerId: e.pointerId,
         pointerType: e.pointerType,
         startX: e.clientX,
@@ -6366,10 +6384,13 @@ export default function App() {
       ev.preventDefault();
       drag.currX = ev.clientX;
       drag.currY = ev.clientY;
+      drag.isCopyMode = Boolean(ev.shiftKey);
       setLibraryTouchDrag({
         nbId: drag.nbId,
         title: drag.title,
         coverColor: drag.coverColor,
+        sourceFolder: drag.sourceFolder,
+        isCopyMode: drag.isCopyMode,
         currX: ev.clientX,
         currY: ev.clientY,
       });
@@ -6394,6 +6415,17 @@ export default function App() {
       }
     };
 
+    const handleGlobalShiftToggle = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Shift') return;
+      const drag = libraryPointerDragRef.current;
+      if (!drag || !drag.active) return;
+      const nextCopy = ev.type === 'keydown' ? true : Boolean(ev.shiftKey);
+      if (drag.isCopyMode !== nextCopy) {
+        drag.isCopyMode = nextCopy;
+        setLibraryTouchDrag((prev) => (prev ? { ...prev, isCopyMode: nextCopy } : null));
+      }
+    };
+
     const finishGlobalPointerDrag = (ev: PointerEvent, cancelled: boolean) => {
       const drag = libraryPointerDragRef.current;
       if (!drag || ev.pointerId !== drag.pointerId) return;
@@ -6401,6 +6433,7 @@ export default function App() {
 
       if (drag.active) {
         lastLibraryDragEndAtRef.current = Date.now();
+        const isCopy = Boolean(ev.shiftKey || drag.isCopyMode);
         let targetFolder = dragOverFolderNameRef.current;
         if (!cancelled) {
           const hitEl = document.elementFromPoint(ev.clientX, ev.clientY);
@@ -6416,7 +6449,14 @@ export default function App() {
 
         if (!cancelled && targetFolder !== null) {
           const destFolder = targetFolder === '__ROOT__' ? '' : targetFolder;
-          changeNotebookFolder(drag.nbId, destFolder);
+          if (isCopy) {
+            const draggedNb = notebooksRef.current.find((n) => n.id === drag.nbId);
+            if (draggedNb) {
+              duplicateNotebookInLibraryRef.current?.(draggedNb, destFolder);
+            }
+          } else if (destFolder !== drag.sourceFolder) {
+            changeNotebookFolder(drag.nbId, destFolder);
+          }
         }
       }
     };
@@ -6427,10 +6467,14 @@ export default function App() {
     window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
     window.addEventListener('pointerup', handleGlobalPointerUp);
     window.addEventListener('pointercancel', handleGlobalPointerCancel);
+    window.addEventListener('keydown', handleGlobalShiftToggle);
+    window.addEventListener('keyup', handleGlobalShiftToggle);
     return () => {
       window.removeEventListener('pointermove', handleGlobalPointerMove);
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerCancel);
+      window.removeEventListener('keydown', handleGlobalShiftToggle);
+      window.removeEventListener('keyup', handleGlobalShiftToggle);
     };
   }, [viewMode, changeNotebookFolder]);
 
@@ -60306,15 +60350,12 @@ export default function App() {
       {/* IF IN LIBRARY VIEW (OR IF USER HAS 0 NOTEBOOKS YET IN GUEST / NON-EDITOR MODE) */}
       {(viewMode === 'library' || (viewMode !== 'editor' && notebooks.length === 0)) && !isCleanProjectorMode ? (
         <div
-          data-library-scroll-container="true"
-          onScroll={() => clearLibraryThumbHoverPreview()}
-          className="relative flex-1 overflow-y-auto overscroll-contain bg-[#f8f7f4]"
+          className="relative flex-1 flex min-h-0 overflow-hidden bg-[#f8f7f4]"
           style={{
             backgroundImage: 'radial-gradient(rgba(100, 116, 139, 0.16) 1px, transparent 1px)',
             backgroundSize: '20px 20px',
           }}
         >
-          <div className="relative z-10 w-full max-w-[1680px] mx-auto p-6 sm:px-8 lg:px-10 space-y-5">
             {(() => {
               const normalizeFolderPath = (rawPath: string) =>
                 rawPath
@@ -61491,17 +61532,95 @@ export default function App() {
                 return nb.coverColor || '#234978';
               };
 
+              // Keep ref up to date so global pointer-drag (+Shift Copy) can duplicate into any target folder
+              duplicateNotebookInLibraryRef.current = duplicateNotebookInLibrary;
+
+              const isRightPaneDropActive =
+                Boolean(libraryTouchDrag) &&
+                dragOverFolderName === (currentFolderPath || '__ROOT__') &&
+                (Boolean(libraryTouchDrag?.isCopyMode) ||
+                  libraryTouchDrag?.sourceFolder !== (currentFolderPath || ''));
+
               return (
                 <>
                   <LibraryAmbientArcDial
                     folderColor={ambientFolderColor}
                     effectMode={libraryBgEffect}
                   />
+
+                  {/* Full-Height Collapsible Vertical Folder & Files Tree Sidebar */}
+                  <LibraryFolderTreeSidebar
+                    isOpen={showLibraryTreeSidebar}
+                    onClose={() => setShowLibraryTreeSidebar(false)}
+                    folderMap={folderMap}
+                    notebooks={notebooks}
+                    currentFolderPath={currentFolderPath}
+                    draggingLibraryNbId={draggingLibraryNbId}
+                    dragOverFolderName={dragOverFolderName}
+                    isDragCopyMode={Boolean(libraryTouchDrag?.isCopyMode)}
+                    isAdminUser={isAdminUser}
+                    showcaseFolderName={showcaseFolderName}
+                    resolveNotebookSpineColor={resolveNotebookSpineColor}
+                    onSelectFolder={(path) => {
+                      navigateToLibraryFolder(path || null, true);
+                      setShowLibraryFavoritesOnly(false);
+                    }}
+                    onOpenNotebook={openNotebookDirectly}
+                    onNotebookPointerDrag={startLibraryNotebookPointerDrag}
+                    onThumbPointerEnter={handleLibraryThumbPointerEnter}
+                    onClearThumbHover={clearLibraryThumbHoverPreview}
+                  />
+
+                  {/* Right Main Library Scroll Container (also serves as Drop Zone for the open folder) */}
+                  <div
+                    data-library-scroll-container="true"
+                    data-library-folder-drop={
+                      currentFolderPath &&
+                      isShowcaseFolderPath(currentFolderPath, showcaseFolderName) &&
+                      !isAdminUser
+                        ? undefined
+                        : currentFolderPath || '__ROOT__'
+                    }
+                    onScroll={() => clearLibraryThumbHoverPreview()}
+                    className={`relative z-10 flex-1 min-w-0 h-full overflow-y-auto overscroll-contain transition-[box-shadow,background-color] duration-150 ${
+                      isRightPaneDropActive
+                        ? libraryTouchDrag?.isCopyMode
+                          ? 'ring-2 ring-inset ring-sky-500/80 bg-sky-50/20'
+                          : 'ring-2 ring-inset ring-emerald-500/80 bg-emerald-50/20'
+                        : ''
+                    }`}
+                  >
+                    <div className="relative z-10 w-full max-w-[1680px] mx-auto p-6 sm:px-8 lg:px-10 space-y-5">
                   <div key={currentFolderPath || 'root'} className="relative z-10 space-y-5">
                   {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
                   <div className="flex items-center justify-between flex-wrap gap-3 bn-library-cascade-1">
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setShowLibraryTreeSidebar((prev) => !prev)}
+                          className={`flex items-center justify-center p-2 rounded-xl border transition cursor-pointer shrink-0 mr-1 focus:outline-none ${
+                            showLibraryTreeSidebar
+                              ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
+                              : 'bg-[#fdfbf7]/90 hover:bg-[#efebe3] text-[#1b2a4a] border-[#dfd8cb] shadow-2xs'
+                          }`}
+                          title={
+                            showLibraryTreeSidebar
+                              ? 'Κλείσιμο Δέντρου Φακέλων'
+                              : 'Άνοιγμα Δέντρου Φακέλων & Αρχείων (Drag & Drop)'
+                          }
+                          aria-label={
+                            showLibraryTreeSidebar
+                              ? 'Κλείσιμο Δέντρου Φακέλων'
+                              : 'Άνοιγμα Δέντρου Φακέλων'
+                          }
+                        >
+                          {showLibraryTreeSidebar ? (
+                            <PanelLeftClose className="w-5 h-5" />
+                          ) : (
+                            <PanelLeft className="w-5 h-5" />
+                          )}
+                        </button>
                         <button
                           type="button"
                           data-library-folder-drop={activeLibraryFolder ? '__ROOT__' : undefined}
@@ -63728,40 +63847,65 @@ export default function App() {
                     })()}
 
                   {/* Floating Ghost Card while Dragging a Notebook in Library (Mouse / Touch / Apple Pencil) */}
-                  {libraryTouchDrag && (
-                    <div
-                      style={{
-                        left: libraryTouchDrag.currX,
-                        top: libraryTouchDrag.currY,
-                        pointerEvents: 'none',
-                      }}
-                      className="fixed z-[200] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
-                    >
-                      <div className="w-28 h-36 rounded-r-xl rounded-l-md bg-[#fffdf7] border-2 border-[#234978] shadow-2xl relative overflow-hidden flex flex-col items-center justify-center px-2 text-center opacity-95 scale-105">
-                        <div
-                          className="absolute left-0 top-0 bottom-0 w-2.5"
-                          style={{ backgroundColor: libraryTouchDrag.coverColor }}
-                        />
-                        <FileText className="w-7 h-7 text-[#234978] mb-1.5 ml-1" />
-                        <span className="text-[11px] font-bold text-[#1b2a4a] line-clamp-2 ml-1">
-                          {libraryTouchDrag.title}
-                        </span>
-                      </div>
+                  {libraryTouchDrag && (() => {
+                    const resolvedDropDest =
+                      dragOverFolderName === '__ROOT__' ? '' : dragOverFolderName || '';
+                    const isMeaningfulDrop =
+                      dragOverFolderName !== null &&
+                      (libraryTouchDrag.isCopyMode ||
+                        resolvedDropDest !== libraryTouchDrag.sourceFolder);
+                    const destDisplayName =
+                      dragOverFolderName === '__ROOT__'
+                        ? 'Βιβλιοθήκη'
+                        : dragOverFolderName || '';
+                    return (
                       <div
-                        className={`mt-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap ${
-                          dragOverFolderName
-                            ? 'bg-emerald-600 text-white ring-2 ring-white'
-                            : 'bg-[#1b2a4a]/90 text-white'
-                        }`}
+                        style={{
+                          left: libraryTouchDrag.currX,
+                          top: libraryTouchDrag.currY,
+                          pointerEvents: 'none',
+                        }}
+                        className="fixed z-[200] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
                       >
-                        {dragOverFolderName === '__ROOT__'
-                          ? '📤 Εξαγωγή στη Βιβλιοθήκη'
-                          : dragOverFolderName
-                          ? `📁 Μετακίνηση σε «${dragOverFolderName}»`
-                          : 'Σύρε πάνω σε φάκελο...'}
+                        <div
+                          className={`w-28 h-36 rounded-r-xl rounded-l-md bg-[#fffdf7] border-2 shadow-2xl relative overflow-hidden flex flex-col items-center justify-center px-2 text-center opacity-95 scale-105 ${
+                            libraryTouchDrag.isCopyMode ? 'border-sky-600' : 'border-[#234978]'
+                          }`}
+                        >
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-2.5"
+                            style={{ backgroundColor: libraryTouchDrag.coverColor }}
+                          />
+                          {libraryTouchDrag.isCopyMode && (
+                            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-sky-600 text-white text-xs font-extrabold flex items-center justify-center shadow-sm">
+                              +
+                            </span>
+                          )}
+                          <FileText className="w-7 h-7 text-[#234978] mb-1.5 ml-1" />
+                          <span className="text-[11px] font-bold text-[#1b2a4a] line-clamp-2 ml-1">
+                            {libraryTouchDrag.title}
+                          </span>
+                        </div>
+                        <div
+                          className={`mt-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap ${
+                            libraryTouchDrag.isCopyMode
+                              ? 'bg-sky-600 text-white ring-2 ring-white'
+                              : isMeaningfulDrop
+                              ? 'bg-emerald-600 text-white ring-2 ring-white'
+                              : 'bg-[#1b2a4a]/92 text-white'
+                          }`}
+                        >
+                          {libraryTouchDrag.isCopyMode
+                            ? dragOverFolderName
+                              ? `➕ Αντιγραφή σε «${destDisplayName}»`
+                              : '➕ Αντιγραφή (σύρε σε φάκελο)'
+                            : isMeaningfulDrop
+                            ? `↪ Μετακίνηση σε «${destDisplayName}»`
+                            : '↪ Μετακίνηση · +Shift Αντιγραφή'}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Library File Gear Liquid Glass Dropdown (Διαμοιρασμός, Λήψη PDF, Αγαπημένο, Αντίγραφο, Μετακίνηση με Δέντρο Φακέλων) */}
                   {shareMenuTarget &&
@@ -64102,10 +64246,11 @@ export default function App() {
                     onConfirm={confirmDeleteNotebook}
                   />
                   </div>
+                    </div>
+                  </div>
                 </>
               );
             })()}
-          </div>
         </div>
       ) : (
         <>
