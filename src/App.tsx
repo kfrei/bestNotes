@@ -3965,6 +3965,14 @@ export default function App() {
     return DEFAULT_DRIVE_BASE_PATH;
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
+  const [userAvatarFailed, setUserAvatarFailed] = useState<boolean>(false);
+  const currentUserPhotoUrl =
+    currentUser?.photoURL ||
+    currentUser?.providerData?.find((p) => Boolean(p?.photoURL))?.photoURL ||
+    null;
+  useEffect(() => {
+    setUserAvatarFailed(false);
+  }, [currentUserPhotoUrl]);
   const [libraryBgEffect, setLibraryBgEffect] = useState<LibraryBgEffectMode>(() => {
     try {
       const saved = localStorage.getItem('bestnotes_library_bg_effect_v1');
@@ -59841,7 +59849,17 @@ export default function App() {
                   : 'Λογαριασμός & Google Drive Sync (/BestNotes)'
               }
             >
-              <UserIcon className="w-4 h-4" />
+              {currentUserPhotoUrl && !userAvatarFailed ? (
+                <img
+                  src={currentUserPhotoUrl}
+                  alt={currentUser?.displayName || 'Προφίλ'}
+                  referrerPolicy="no-referrer"
+                  onError={() => setUserAvatarFailed(true)}
+                  className="w-5 h-5 rounded-full object-cover ring-1 ring-white/40"
+                />
+              ) : (
+                <UserIcon className="w-4 h-4" />
+              )}
               {(currentUser || driveAccessToken || driveEmail || isKnownAuthenticated) && (
                 <span
                   className={`absolute top-1 right-1 w-2 h-2 rounded-full border border-[#1b2a4a] ${
@@ -59859,8 +59877,18 @@ export default function App() {
                 {/* 1. User Account Info (Name + Email) & Logout */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center shrink-0">
-                      <UserIcon className="w-4 h-4" />
+                    <div className="w-9 h-9 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-[#1b2a4a]/15 shadow-2xs">
+                      {currentUserPhotoUrl && !userAvatarFailed ? (
+                        <img
+                          src={currentUserPhotoUrl}
+                          alt={currentUser?.displayName || 'Προφίλ'}
+                          referrerPolicy="no-referrer"
+                          onError={() => setUserAvatarFailed(true)}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <UserIcon className="w-4 h-4" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-[#1b2a4a] truncate">
