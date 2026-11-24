@@ -120,6 +120,29 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
     return { childrenByParent: childMap, notesByFolder: nMap, allFolderPaths: paths };
   }, [folderMap, notebooks]);
 
+  // Spring-loaded folders (macOS Finder style):
+  // When dragging a note and hovering over a collapsed folder that has subfolders,
+  // automatically expand it after 550ms so you can drill down into nested subfolders.
+  useEffect(() => {
+    if (!draggingLibraryNbId || !dragOverFolderName) return;
+    const isRootTarget = dragOverFolderName === '__ROOT__';
+    const hasSubfolders = isRootTarget
+      ? (childrenByParent.get('') || []).length > 0
+      : (childrenByParent.get(dragOverFolderName) || []).length > 0;
+    if (!hasSubfolders || expandedPaths.has(dragOverFolderName)) return;
+
+    const timer = window.setTimeout(() => {
+      setExpandedPaths((prev) => {
+        if (prev.has(dragOverFolderName)) return prev;
+        const next = new Set(prev);
+        next.add(dragOverFolderName);
+        return next;
+      });
+    }, 550);
+
+    return () => window.clearTimeout(timer);
+  }, [draggingLibraryNbId, dragOverFolderName, childrenByParent, expandedPaths]);
+
   const toggleExpand = (pathKey: string) => {
     setExpandedPaths((prev) => {
       const next = new Set(prev);
