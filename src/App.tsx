@@ -15412,85 +15412,8 @@ export default function App() {
             ctx.restore();
           }
 
-          // 4b. Floating On-Canvas "Group" / "Ungroup", "Κείμενο μόνο" & "Κέντραρε" Quick Action Pills right below the Selection Frame!
-          if (totalSelObjects >= 2) {
-            const firstGrpId =
-              selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
-            const allSameGroup =
-              Boolean(firstGrpId) &&
-              selStrokesList.every((st) => st.groupId === firstGrpId) &&
-              selImagesList.every((im) => im.groupId === firstGrpId) &&
-              selTextsList.every((t) => t.groupId === firstGrpId);
-            const isSimComponent =
-              isReadyMadeSimComponent(selStrokesList, pageObj);
-
-            if (!isSimComponent) {
-              const hasMixedTextAndShapes =
-                selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
-              const grpPillW = allSameGroup ? 80 : 68;
-              const txtOnlyPillW = 80;
-              const cntPillW = 64;
-              const pillGap = 5;
-              const pillH = 22;
-              const pillY = bcy + hh + 38 > getPageLogicalHeight(pageObj) ? -hh - 22 : hh + 22;
-              const totalRowW = hasMixedTextAndShapes
-                ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
-                : grpPillW + pillGap + cntPillW;
-              const rowStartX = -totalRowW / 2;
-              const grpCx = rowStartX + grpPillW / 2;
-              const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
-              const cntCx = hasMixedTextAndShapes
-                ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
-                : rowStartX + grpPillW + pillGap + cntPillW / 2;
-
-              ctx.save();
-              ctx.setLineDash([]);
-              // Left Pill: Group / Ungroup
-              ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-              ctx.shadowBlur = 7;
-              ctx.shadowOffsetY = 2;
-              ctx.fillStyle = allSameGroup ? '#475569' : '#234978';
-              ctx.beginPath();
-              ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 11);
-              ctx.fill();
-
-              // Middle Pill (when both Texts and Shapes/Images are selected): Κείμενο μόνο
-              if (hasMixedTextAndShapes) {
-                ctx.fillStyle = '#334155';
-                ctx.beginPath();
-                ctx.roundRect(
-                  txtOnlyCx - txtOnlyPillW / 2,
-                  pillY - pillH / 2,
-                  txtOnlyPillW,
-                  pillH,
-                  11
-                );
-                ctx.fill();
-              }
-
-              // Right Pill: Κέντραρε (Center X+Y)
-              ctx.fillStyle = '#334155';
-              ctx.beginPath();
-              ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 11);
-              ctx.fill();
-
-              ctx.shadowBlur = 0;
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 10px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(
-                allSameGroup ? `Ungroup (${totalSelObjects})` : `Group (${totalSelObjects})`,
-                grpCx,
-                pillY + 0.5
-              );
-              if (hasMixedTextAndShapes) {
-                ctx.fillText('Κείμενο μόνο', txtOnlyCx, pillY + 0.5);
-              }
-              ctx.fillText('Κέντραρε', cntCx, pillY + 0.5);
-              ctx.restore();
-            }
-          }
+          // 4b. Floating "Group" / "Ungroup", "Κείμενο μόνο" & "Κέντραρε" Quick Action Pills
+          // are rendered as a crisp z-[61] DOM overlay above all text layers so text never obscures them.
           }
 
           ctx.restore();
@@ -75649,6 +75572,138 @@ export default function App() {
                         className="absolute inset-0 pointer-events-none z-20"
                       />
                     )}
+
+                    {/* Floating Quick "Group / Ungroup", "Κείμενο μόνο" & "Κέντραρε" Action Pills above all text layers (z-[61]) */}
+                    {isCurrentActive &&
+                      !isLivePdfMode &&
+                      !isCleanProjectorMode &&
+                      (selectedStrokeIds.length > 0 ||
+                        selectedImageIds.length > 0 ||
+                        selectedLassoTextIds.length > 0) &&
+                      (() => {
+                        const selStrokesList = activePage.strokes.filter((s) =>
+                          selectedStrokeIds.includes(s.id)
+                        );
+                        const selImagesList = (activePage.images || []).filter((im) =>
+                          selectedImageIds.includes(im.id)
+                        );
+                        const activeUserGrpIds = new Set<string>();
+                        selStrokesList.forEach((s) => {
+                          if (s.groupId && !s.groupId.startsWith('math-graph-grp-')) {
+                            activeUserGrpIds.add(s.groupId);
+                          }
+                        });
+                        selImagesList.forEach((im) => {
+                          if (im.groupId && !im.groupId.startsWith('math-graph-grp-')) {
+                            activeUserGrpIds.add(im.groupId);
+                          }
+                        });
+                        const selTextsList = (activePage.texts || []).filter(
+                          (t) =>
+                            selectedLassoTextIds.includes(t.id) ||
+                            (t.groupId &&
+                              !t.groupId.startsWith('math-graph-grp-') &&
+                              activeUserGrpIds.has(t.groupId))
+                        );
+                        const totalSelObjects =
+                          selStrokesList.length + selImagesList.length + selTextsList.length;
+                        if (totalSelObjects < 2) return null;
+                        if (isReadyMadeSimComponent(selStrokesList, activePage)) return null;
+
+                        const selBox = getSelectionCombinedBox(
+                          selectedStrokeIds,
+                          selectedImageIds,
+                          0,
+                          0,
+                          selTextsList.map((t) => t.id)
+                        );
+                        if (!selBox) return null;
+
+                        const firstGrpId =
+                          selStrokesList[0]?.groupId ||
+                          selImagesList[0]?.groupId ||
+                          selTextsList[0]?.groupId;
+                        const allSameGroup =
+                          Boolean(firstGrpId) &&
+                          selStrokesList.every((st) => st.groupId === firstGrpId) &&
+                          selImagesList.every((im) => im.groupId === firstGrpId) &&
+                          selTextsList.every((t) => t.groupId === firstGrpId);
+                        const hasMixedTextAndShapes =
+                          selTextsList.length > 0 &&
+                          (selStrokesList.length > 0 || selImagesList.length > 0);
+                        const pillTop =
+                          selBox.maxY + 38 > pH
+                            ? Math.max(18, selBox.minY - 22)
+                            : Math.min(pH - 18, selBox.maxY + 22);
+                        const pillLeft = Math.max(95, Math.min(pW - 95, selBox.cx));
+
+                        return (
+                          <div
+                            data-ui-panel="true"
+                            onPointerDown={(ev) => ev.stopPropagation()}
+                            onMouseDown={(ev) => ev.stopPropagation()}
+                            style={{
+                              left: pillLeft,
+                              top: pillTop,
+                              touchAction: 'manipulation',
+                            }}
+                            className="absolute z-[61] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 select-none"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (allSameGroup) {
+                                  handleUngroupSelected();
+                                } else {
+                                  handleGroupSelected();
+                                }
+                              }}
+                              className={`h-[22px] px-2.5 rounded-full text-[10px] font-bold text-white shadow-md transition cursor-pointer whitespace-nowrap ${
+                                allSameGroup
+                                  ? 'bg-[#475569] hover:bg-[#334155]'
+                                  : 'bg-[#234978] hover:bg-[#1c3c63]'
+                              }`}
+                            >
+                              {allSameGroup
+                                ? `Ungroup (${totalSelObjects})`
+                                : `Group (${totalSelObjects})`}
+                            </button>
+                            {hasMixedTextAndShapes && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStrokeIds([]);
+                                  setSelectedImageIds([]);
+                                  setSelectedImageId(null);
+                                  setActiveNodeStrokeId(null);
+                                  setShowToolSubBar(true);
+                                  if (selTextsList.length === 1) {
+                                    setSelectedLassoTextIds([]);
+                                    const singleTxt = selTextsList[0];
+                                    const txtLen = (singleTxt.text || '').length;
+                                    focusAndPlaceCaretInTextBox(singleTxt.id, txtLen, txtLen);
+                                  } else {
+                                    setSelectedLassoTextIds(selTextsList.map((t) => t.id));
+                                    const firstTxt = selTextsList[0];
+                                    const txtLen = (firstTxt.text || '').length;
+                                    focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
+                                  }
+                                }}
+                                className="h-[22px] px-2.5 rounded-full bg-[#334155] hover:bg-[#1e293b] text-[10px] font-bold text-white shadow-md transition cursor-pointer whitespace-nowrap"
+                              >
+                                Κείμενο μόνο
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleAlignSelected('center-both')}
+                              className="h-[22px] px-2.5 rounded-full bg-[#334155] hover:bg-[#1e293b] text-[10px] font-bold text-white shadow-md transition cursor-pointer whitespace-nowrap"
+                            >
+                              Κέντραρε
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                     {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when 3-10 discrete straight lines/edges are selected */}
                     {isCurrentActive &&
