@@ -28,6 +28,7 @@ export interface LibraryTreeFolderEntry {
 
 export interface LibraryFolderTreeSidebarProps {
   isOpen: boolean;
+  asideRef?: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   folderMap: Map<string, LibraryTreeFolderEntry>;
   notebooks: Notebook[];
@@ -52,8 +53,9 @@ const normalizePath = (raw: string) =>
     .filter(Boolean)
     .join('/');
 
-export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> = ({
+export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> = React.memo(({
   isOpen,
+  asideRef,
   onClose,
   folderMap,
   notebooks,
@@ -305,14 +307,15 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
         }`}
       />
 
-      {/* Full-Height Vertical Tree Sidebar — true smooth left↔right push/pull slide */}
+      {/* Full-Height Vertical Tree Sidebar — 100% GPU-composited translate3d push/pull slide */}
       <aside
+        ref={asideRef}
         aria-label="Δέντρο Φακέλων & Αρχείων"
         aria-hidden={!isOpen}
-        className={`fixed md:relative inset-y-0 left-0 z-40 md:z-20 w-[288px] max-w-[85vw] md:w-[288px] shrink-0 h-full flex flex-col bg-[#fdfbf7]/96 backdrop-blur-md border-r border-[#dfd8cb] will-change-[margin,transform] transition-[margin-left,transform,box-shadow] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        className={`fixed md:absolute inset-y-0 left-0 z-40 md:z-20 w-[288px] max-w-[85vw] md:w-[288px] shrink-0 h-full flex flex-col bg-[#fdfbf7]/98 border-r border-[#dfd8cb] [contain:layout_style] ${
           isOpen
-            ? 'translate-x-0 md:ml-0 shadow-[6px_0_24px_rgba(15,23,42,0.08)] md:shadow-[2px_0_16px_rgba(15,23,42,0.05)] pointer-events-auto'
-            : '-translate-x-full md:translate-x-0 md:-ml-[288px] shadow-none pointer-events-none'
+            ? 'shadow-[6px_0_24px_rgba(15,23,42,0.08)] md:shadow-[2px_0_14px_rgba(15,23,42,0.05)] pointer-events-auto'
+            : 'shadow-none pointer-events-none'
         }`}
       >
         {/* Top Header */}
@@ -412,4 +415,5 @@ export const LibraryFolderTreeSidebar: React.FC<LibraryFolderTreeSidebarProps> =
       </aside>
     </>
   );
-};
+});
+LibraryFolderTreeSidebar.displayName = 'LibraryFolderTreeSidebar';

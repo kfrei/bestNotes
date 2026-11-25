@@ -4710,6 +4710,167 @@ export default function App() {
   const localDeletedNotebooksRef = useRef<Notebook[]>([]);
   const [showRecycleBinBar, setShowRecycleBinBar] = useState<boolean>(false);
   const [showLibraryTreeSidebar, setShowLibraryTreeSidebar] = useState<boolean>(false);
+  const libraryTreeAsideRef = useRef<HTMLElement | null>(null);
+  const libraryRightPaneRef = useRef<HTMLDivElement | null>(null);
+  const libraryTreeMountedElRef = useRef<HTMLElement | null>(null);
+  const libraryTreePrevOpenRef = useRef<boolean>(false);
+  const libraryTreeAnimTimerRef = useRef<number | null>(null);
+
+  // 100% GPU-composited translate3d push/pull animation for the Library Folder Tree Sidebar.
+  // Avoids per-frame layout reflow & SVG thumbnail re-rasterization on Mac Mini & iPad (120fps).
+  useLayoutEffect(() => {
+    const asideEl = libraryTreeAsideRef.current;
+    const paneEl = libraryRightPaneRef.current;
+    if (!asideEl || !paneEl) {
+      libraryTreeMountedElRef.current = null;
+      return;
+    }
+
+    if (libraryTreeAnimTimerRef.current !== null) {
+      window.clearTimeout(libraryTreeAnimTimerRef.current);
+      libraryTreeAnimTimerRef.current = null;
+    }
+
+    const SIDEBAR_W = 288;
+    const DURATION_MS = 340;
+    const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    const isDesktop = window.innerWidth >= 768;
+    const isFirstMount = libraryTreeMountedElRef.current !== asideEl;
+    const prevOpen = libraryTreePrevOpenRef.current;
+
+    libraryTreeMountedElRef.current = asideEl;
+    libraryTreePrevOpenRef.current = showLibraryTreeSidebar;
+
+    if (isFirstMount || prevOpen === showLibraryTreeSidebar) {
+      // Snap immediately without animating on initial mount / re-entering Library
+      asideEl.style.transition = 'none';
+      asideEl.style.willChange = 'auto';
+      paneEl.style.transition = 'none';
+      paneEl.style.willChange = 'auto';
+      paneEl.style.transform = '';
+      if (showLibraryTreeSidebar) {
+        asideEl.style.visibility = 'visible';
+        asideEl.style.transform = 'translate3d(0px, 0, 0)';
+        paneEl.style.marginLeft = isDesktop ? `${SIDEBAR_W}px` : '0px';
+      } else {
+        asideEl.style.visibility = 'hidden';
+        asideEl.style.transform = 'translate3d(-100%, 0, 0)';
+        paneEl.style.marginLeft = '0px';
+      }
+      return;
+    }
+
+    if (!isDesktop) {
+      // Mobile (< 768px): pure GPU overlay drawer slide
+      paneEl.style.transition = 'none';
+      paneEl.style.willChange = 'auto';
+      paneEl.style.marginLeft = '0px';
+      paneEl.style.transform = '';
+      if (showLibraryTreeSidebar) {
+        asideEl.style.visibility = 'visible';
+        asideEl.style.transition = 'none';
+        asideEl.style.willChange = 'transform';
+        asideEl.style.transform = 'translate3d(-100%, 0, 0)';
+        void asideEl.offsetWidth;
+        asideEl.style.transition = `transform ${DURATION_MS}ms ${EASING}`;
+        asideEl.style.transform = 'translate3d(0px, 0, 0)';
+        libraryTreeAnimTimerRef.current = window.setTimeout(() => {
+          asideEl.style.willChange = 'auto';
+          libraryTreeAnimTimerRef.current = null;
+        }, DURATION_MS + 20);
+      } else {
+        asideEl.style.willChange = 'transform';
+        asideEl.style.transition = `transform ${DURATION_MS}ms ${EASING}`;
+        asideEl.style.transform = 'translate3d(-100%, 0, 0)';
+        libraryTreeAnimTimerRef.current = window.setTimeout(() => {
+          asideEl.style.visibility = 'hidden';
+          asideEl.style.willChange = 'auto';
+          libraryTreeAnimTimerRef.current = null;
+        }, DURATION_MS + 20);
+      }
+      return;
+    }
+
+    // Desktop & iPad (>= 768px): Synchronized GPU translate3d push/pull (0 reflows during slide!)
+    if (showLibraryTreeSidebar) {
+      // OPENING: keep right pane full-width during the 340ms GPU slide, then settle marginLeft once at the end
+      asideEl.style.visibility = 'visible';
+      asideEl.style.transition = 'none';
+      asideEl.style.willChange = 'transform';
+      asideEl.style.transform = `translate3d(-${SIDEBAR_W}px, 0, 0)`;
+
+      paneEl.style.transition = 'none';
+      paneEl.style.willChange = 'transform';
+      paneEl.style.marginLeft = '0px';
+      paneEl.style.transform = 'translate3d(0px, 0, 0)';
+
+      void asideEl.offsetWidth;
+
+      const gpuTransition = `transform ${DURATION_MS}ms ${EASING}`;
+      asideEl.style.transition = gpuTransition;
+      paneEl.style.transition = gpuTransition;
+      asideEl.style.transform = 'translate3d(0px, 0, 0)';
+      paneEl.style.transform = `translate3d(${SIDEBAR_W}px, 0, 0)`;
+
+      libraryTreeAnimTimerRef.current = window.setTimeout(() => {
+        paneEl.style.transition = 'none';
+        paneEl.style.marginLeft = `${SIDEBAR_W}px`;
+        paneEl.style.transform = '';
+        paneEl.style.willChange = 'auto';
+        asideEl.style.transition = 'none';
+        asideEl.style.transform = 'translate3d(0px, 0, 0)';
+        asideEl.style.willChange = 'auto';
+        libraryTreeAnimTimerRef.current = null;
+      }, DURATION_MS + 16);
+    } else {
+      // CLOSING: release marginLeft once at frame 0 while holding visual offset at +288px,
+      // then glide both back to 0px / -288px on the GPU with zero reflows & zero right-edge gap!
+      paneEl.style.transition = 'none';
+      paneEl.style.willChange = 'transform';
+      paneEl.style.marginLeft = '0px';
+      paneEl.style.transform = `translate3d(${SIDEBAR_W}px, 0, 0)`;
+
+      asideEl.style.transition = 'none';
+      asideEl.style.willChange = 'transform';
+      asideEl.style.transform = 'translate3d(0px, 0, 0)';
+
+      void asideEl.offsetWidth;
+
+      const gpuTransition = `transform ${DURATION_MS}ms ${EASING}`;
+      asideEl.style.transition = gpuTransition;
+      paneEl.style.transition = gpuTransition;
+      asideEl.style.transform = `translate3d(-${SIDEBAR_W}px, 0, 0)`;
+      paneEl.style.transform = 'translate3d(0px, 0, 0)';
+
+      libraryTreeAnimTimerRef.current = window.setTimeout(() => {
+        paneEl.style.transition = 'none';
+        paneEl.style.transform = '';
+        paneEl.style.willChange = 'auto';
+        asideEl.style.transition = 'none';
+        asideEl.style.visibility = 'hidden';
+        asideEl.style.willChange = 'auto';
+        libraryTreeAnimTimerRef.current = null;
+      }, DURATION_MS + 16);
+    }
+
+    return () => {
+      if (libraryTreeAnimTimerRef.current !== null) {
+        window.clearTimeout(libraryTreeAnimTimerRef.current);
+        libraryTreeAnimTimerRef.current = null;
+      }
+    };
+  }, [showLibraryTreeSidebar, viewMode, isCleanProjectorMode]);
+
+  useEffect(() => {
+    if (!showLibraryTreeSidebar) return;
+    const handleResize = () => {
+      const paneEl = libraryRightPaneRef.current;
+      if (!paneEl || libraryTreeAnimTimerRef.current !== null) return;
+      paneEl.style.marginLeft = window.innerWidth >= 768 ? '288px' : '0px';
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showLibraryTreeSidebar]);
   const duplicateNotebookInLibraryRef = useRef<
     ((nb: Notebook, targetFolderOverride?: string) => void) | null
   >(null);
@@ -61551,7 +61712,11 @@ export default function App() {
                   {/* Full-Height Collapsible Vertical Folder & Files Tree Sidebar */}
                   <LibraryFolderTreeSidebar
                     isOpen={showLibraryTreeSidebar}
-                    onClose={() => setShowLibraryTreeSidebar(false)}
+                    asideRef={libraryTreeAsideRef}
+                    onClose={() => {
+                      clearLibraryThumbHoverPreview();
+                      setShowLibraryTreeSidebar(false);
+                    }}
                     folderMap={folderMap}
                     notebooks={notebooks}
                     currentFolderPath={currentFolderPath}
@@ -61573,6 +61738,7 @@ export default function App() {
 
                   {/* Right Main Library Scroll Container (also serves as Drop Zone for the open folder) */}
                   <div
+                    ref={libraryRightPaneRef}
                     data-library-scroll-container="true"
                     data-library-folder-drop={
                       currentFolderPath &&
@@ -61598,7 +61764,10 @@ export default function App() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
-                          onClick={() => setShowLibraryTreeSidebar((prev) => !prev)}
+                          onClick={() => {
+                            clearLibraryThumbHoverPreview();
+                            setShowLibraryTreeSidebar((prev) => !prev);
+                          }}
                           className={`flex items-center justify-center p-2 rounded-xl border transition cursor-pointer shrink-0 mr-1 focus:outline-none ${
                             showLibraryTreeSidebar
                               ? 'bg-[#234978] text-white border-[#234978] shadow-xs'
@@ -62822,7 +62991,7 @@ export default function App() {
                                 }`}
                               >
                                 <div
-                                  className={`w-full aspect-[3/4] ${
+                                  className={`w-full aspect-[3/4] [contain:layout_style] ${
                                     isLandscapeNb
                                       ? 'rounded-2xl bg-transparent border-transparent shadow-none'
                                       : 'rounded-r-2xl rounded-l-md shadow-md border border-slate-300/90 group-hover:shadow-xl'
