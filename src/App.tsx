@@ -62359,7 +62359,7 @@ export default function App() {
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                             Φάκελοι ({visibleFolders.length})
                           </h2>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
                             {visibleFolders.map((folder) => {
                               const isDropHover = dragOverFolderName === folder.path;
                               const folderColor = folder.color || '#f59e0b';
@@ -62393,7 +62393,7 @@ export default function App() {
                                   onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                                   onDrop={(e) => handleFolderDrop(e, folder.path)}
                                   onClick={() => navigateToLibraryFolder(folder.path)}
-                                  className={`group relative pt-9.5 pb-3.5 px-4 transition-all duration-200 cursor-pointer flex flex-col justify-between h-38 select-none ${
+                                  className={`group relative pt-9.5 pb-3.5 px-3.5 transition-all duration-200 cursor-pointer flex flex-col justify-between h-38 select-none ${
                                     isDropHover
                                       ? '-translate-y-1.5 scale-[1.03] drop-shadow-xl'
                                       : 'hover:-translate-y-1 drop-shadow-xs hover:drop-shadow-md'
