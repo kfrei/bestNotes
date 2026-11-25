@@ -75879,7 +75879,7 @@ export default function App() {
                         ) {
                           return null;
                         }
-                        let livePt: { x: number; y: number } | undefined;
+                        let livePt: BezierPoint | undefined;
                         if (!targetStroke.isShape) {
                           const kIndices =
                             targetStroke.keyNodeIndices && targetStroke.keyNodeIndices.length >= 2
@@ -75899,7 +75899,59 @@ export default function App() {
                         const isBezActive =
                           activeBezierNodeRef.current?.strokeId === targetStroke.id &&
                           activeBezierNodeRef.current?.nodeIdx === focusedNodeUi.nodeIdx;
-                        const invZ = 1 / Math.max(0.85, zoom);
+                        const effZ = Math.max(0.85, zoom);
+                        const invZ = 1 / effZ;
+
+                        // Smart collision-free capsule placement so it NEVER covers either purple Bézier handle!
+                        const handleScreenPts: { x: number; y: number }[] = [];
+                        if (isBezActive && targetStroke.isShape) {
+                          if (livePt.inDx !== undefined && livePt.inDy !== undefined) {
+                            handleScreenPts.push({ x: livePt.inDx * effZ, y: livePt.inDy * effZ });
+                          }
+                          if (livePt.outDx !== undefined && livePt.outDy !== undefined) {
+                            handleScreenPts.push({ x: livePt.outDx * effZ, y: livePt.outDy * effZ });
+                          }
+                        }
+                        const pillHalfW = isBezActive ? 56 : 40;
+                        const pillHalfH = 20;
+                        const pad = 16;
+                        // Candidate capsule centers (in screen px relative to node): Top, Right, Left, Bottom
+                        const candidates: { cx: number; cy: number }[] = [
+                          { cx: 0, cy: -(pillHalfH + 22) },
+                          { cx: pillHalfW + 24, cy: 0 },
+                          { cx: -(pillHalfW + 24), cy: 0 },
+                          { cx: 0, cy: pillHalfH + 22 },
+                        ];
+                        let chosen = candidates[0];
+                        if (handleScreenPts.length > 0) {
+                          const minClearance = (cand: { cx: number; cy: number }) => {
+                            let worst = Infinity;
+                            for (const hp of handleScreenPts) {
+                              const dx = Math.max(0, Math.abs(hp.x - cand.cx) - (pillHalfW + pad));
+                              const dy = Math.max(0, Math.abs(hp.y - cand.cy) - (pillHalfH + pad));
+                              const outsideDist = Math.hypot(dx, dy);
+                              if (outsideDist === 0) {
+                                // Inside expanded pill rect -> negative score proportional to penetration depth
+                                const penX = pillHalfW + pad - Math.abs(hp.x - cand.cx);
+                                const penY = pillHalfH + pad - Math.abs(hp.y - cand.cy);
+                                worst = Math.min(worst, -Math.min(penX, penY));
+                              } else {
+                                worst = Math.min(worst, outsideDist);
+                              }
+                            }
+                            return worst;
+                          };
+                          if (minClearance(candidates[0]) < 0) {
+                            let bestScore = -Infinity;
+                            for (const cand of candidates) {
+                              const sc = minClearance(cand);
+                              if (sc > bestScore) {
+                                bestScore = sc;
+                                chosen = cand;
+                              }
+                            }
+                          }
+                        }
 
                         return (
                           <div
@@ -75909,8 +75961,8 @@ export default function App() {
                             style={{
                               left: livePt.x,
                               top: livePt.y,
-                              transform: `translate(-50%, -100%) scale(${invZ}) translateY(-22px)`,
-                              transformOrigin: '50% 100%',
+                              transform: `translate(-50%, -50%) scale(${invZ}) translate(${chosen.cx}px, ${chosen.cy}px)`,
+                              transformOrigin: '50% 50%',
                               touchAction: 'manipulation',
                             }}
                             className="absolute z-[62] flex items-center gap-2 px-1.5 py-1 rounded-full bg-[#fdfbf7]/92 backdrop-blur-md border border-[#dfd8cb] shadow-[0_6px_18px_rgba(15,23,42,0.16)] select-none"
