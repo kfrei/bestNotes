@@ -4830,13 +4830,16 @@ export default function App() {
         libraryTreeAnimTimerRef.current = null;
       }, DURATION_MS + 16);
     } else {
-      // CLOSING: keep marginLeft during the GPU slide and smoothly expand scaleX(1 -> fullScaleX) from right edge
-      // in exact 1:1 lockstep with sidebar translate3d(0px -> -288px), then release marginLeft with zero jump!
+      // CLOSING: mirror of opening — settle marginLeft = 0 once at frame 0 while GPU scaleX(narrowedW/containerW)
+      // from right edge holds visual left at +288px, then smoothly expand scaleX -> 1 in 1:1 lockstep with sidebar.
+      // At 340ms the layout is ALREADY final -> ZERO end-snap jump!
+      const invScaleX = narrowedW / containerW;
+
       paneEl.style.transition = 'none';
       paneEl.style.willChange = 'transform';
-      paneEl.style.marginLeft = `${SIDEBAR_W}px`;
+      paneEl.style.marginLeft = '0px';
       paneEl.style.transformOrigin = '100% 0%';
-      paneEl.style.transform = 'scaleX(1) translateZ(0)';
+      paneEl.style.transform = `scaleX(${invScaleX}) translateZ(0)`;
 
       asideEl.style.transition = 'none';
       asideEl.style.willChange = 'transform';
@@ -4848,11 +4851,10 @@ export default function App() {
       asideEl.style.transition = gpuTransition;
       paneEl.style.transition = gpuTransition;
       asideEl.style.transform = `translate3d(-${SIDEBAR_W}px, 0, 0)`;
-      paneEl.style.transform = `scaleX(${fullScaleX}) translateZ(0)`;
+      paneEl.style.transform = 'scaleX(1) translateZ(0)';
 
       libraryTreeAnimTimerRef.current = window.setTimeout(() => {
         paneEl.style.transition = 'none';
-        paneEl.style.marginLeft = '0px';
         paneEl.style.transform = '';
         paneEl.style.transformOrigin = '';
         paneEl.style.willChange = 'auto';
