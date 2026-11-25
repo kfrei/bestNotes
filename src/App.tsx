@@ -3723,6 +3723,22 @@ export default function App() {
     bezierBtnX: number;
     bezierBtnY: number;
   } | null>(null);
+  const [focusedNodeUi, setFocusedNodeUi] = useState<{
+    strokeId: string;
+    nodeIdx: number;
+  } | null>(null);
+  const setFocusedNodeUiSynced = useCallback(
+    (next: { strokeId: string; nodeIdx: number } | null) => {
+      setFocusedNodeUi((prev) => {
+        if (!prev && !next) return prev;
+        if (prev && next && prev.strokeId === next.strokeId && prev.nodeIdx === next.nodeIdx) {
+          return prev;
+        }
+        return next;
+      });
+    },
+    []
+  );
   const activeBezierNodeRef = useRef<{
     strokeId: string;
     nodeIdx: number;
@@ -15834,7 +15850,8 @@ export default function App() {
         if (isDirectNodeTool && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target && !isShapeWithoutNodes(target)) {
-            const nodeUiScale = 1 / Math.max(0.85, zoomRef.current);
+            // Cap inverse scale at 2.4x so canvas node squares & Bézier handles stay crisp & legible even at 600%-1000% zoom!
+            const nodeUiScale = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
             const nodeHalf = 5 * nodeUiScale;
             const nodeSize = 10 * nodeUiScale;
             ctx.save();
@@ -16010,8 +16027,7 @@ export default function App() {
               }
             }
 
-            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the Purple Bézier button (left) & Red Trash Bin button (right)
-            // positioned generously clear above the node & horizontal Bézier handles, in crisp constant screen-space size!
+            // Focused node indicator ring (the Purple Bézier & Red Delete buttons are now rendered as crisp Retina DOM/SVG buttons at z-[62]!)
             const delNode = activeDeleteNodeRef.current;
             if (delNode && delNode.strokeId === target.id) {
               let liveNodePt: { x: number; y: number } | undefined;
@@ -16026,112 +16042,14 @@ export default function App() {
                 liveNodePt = target.points[delNode.nodeIdx];
               }
               if (liveNodePt && target.shapeType !== 'stickman' && target.shapeType !== 'stickman-3d') {
-                const btnOffsetX = 32 * nodeUiScale;
-                const btnOffsetY = 30 * nodeUiScale;
-                const bx = liveNodePt.x + btnOffsetX;
-                const by = liveNodePt.y - btnOffsetY;
-                const bzX = liveNodePt.x - btnOffsetX;
-                const bzY = liveNodePt.y - btnOffsetY;
                 delNode.x = liveNodePt.x;
                 delNode.y = liveNodePt.y;
-                delNode.btnX = bx;
-                delNode.btnY = by;
-                delNode.bezierBtnX = bzX;
-                delNode.bezierBtnY = bzY;
-
-                const isBezActive =
-                  activeBezierNodeRef.current?.strokeId === target.id &&
-                  activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
-                const allowBezierOnNode = !hasExtrude3D(target);
-
                 ctx.save();
-                // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
-                if (allowBezierOnNode) {
-                  ctx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
-                  ctx.lineWidth = 1.4 * nodeUiScale;
-                  ctx.beginPath();
-                  ctx.moveTo(liveNodePt.x - 6 * nodeUiScale, liveNodePt.y - 6 * nodeUiScale);
-                  ctx.lineTo(bzX + 8 * nodeUiScale, bzY + 8 * nodeUiScale);
-                  ctx.stroke();
-
-                  ctx.save();
-                  ctx.translate(bzX, bzY);
-                  ctx.scale(nodeUiScale, nodeUiScale);
-                  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-                  ctx.shadowBlur = 5;
-                  ctx.shadowOffsetY = 1.5;
-                  ctx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
-                  ctx.strokeStyle = '#ffffff';
-                  ctx.lineWidth = 2;
-                  ctx.beginPath();
-                  ctx.arc(0, 0, 11, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.stroke();
-
-                  ctx.shadowColor = 'transparent';
-                  ctx.strokeStyle = '#ffffff';
-                  ctx.lineWidth = 1.6;
-                  ctx.lineCap = 'round';
-                  ctx.beginPath();
-                  ctx.moveTo(-5.0, 2.6);
-                  ctx.quadraticCurveTo(0, -5.2, 5.0, 2.6);
-                  ctx.moveTo(-5.2, -2.1);
-                  ctx.lineTo(5.2, -2.1);
-                  ctx.stroke();
-                  ctx.fillStyle = '#ffffff';
-                  ctx.beginPath();
-                  ctx.arc(-5.2, -2.1, 1.45, 0, Math.PI * 2);
-                  ctx.arc(5.2, -2.1, 1.45, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.restore();
-                }
-
-                // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
-                if (canDeleteStrokeNode(target, delNode.nodeIdx)) {
-                  ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-                  ctx.lineWidth = 1.4 * nodeUiScale;
-                  ctx.beginPath();
-                  ctx.moveTo(liveNodePt.x + 6 * nodeUiScale, liveNodePt.y - 6 * nodeUiScale);
-                  ctx.lineTo(bx - 8 * nodeUiScale, by + 8 * nodeUiScale);
-                  ctx.stroke();
-
-                  ctx.save();
-                  ctx.translate(bx, by);
-                  ctx.scale(nodeUiScale, nodeUiScale);
-                  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-                  ctx.shadowBlur = 5;
-                  ctx.shadowOffsetY = 1.5;
-                  ctx.fillStyle = '#ef4444';
-                  ctx.strokeStyle = '#ffffff';
-                  ctx.lineWidth = 2;
-                  ctx.beginPath();
-                  ctx.arc(0, 0, 11, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.stroke();
-
-                  ctx.shadowColor = 'transparent';
-                  ctx.strokeStyle = '#ffffff';
-                  ctx.lineWidth = 1.5;
-                  ctx.lineCap = 'round';
-                  ctx.lineJoin = 'round';
-                  ctx.beginPath();
-                  ctx.moveTo(-4.6, -3.1);
-                  ctx.lineTo(4.6, -3.1);
-                  ctx.moveTo(-1.9, -3.1);
-                  ctx.lineTo(-1.9, -4.8);
-                  ctx.lineTo(1.9, -4.8);
-                  ctx.lineTo(1.9, -3.1);
-                  ctx.moveTo(-3.5, -3.1);
-                  ctx.lineTo(-2.9, 4.6);
-                  ctx.lineTo(2.9, 4.6);
-                  ctx.lineTo(3.5, -3.1);
-                  ctx.moveTo(-1.1, -0.8);
-                  ctx.lineTo(-1.1, 2.6);
-                  ctx.moveTo(1.1, -0.8);
-                  ctx.lineTo(1.1, 2.6);
-                  ctx.stroke();
-                  ctx.restore();
-                }
+                ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
+                ctx.lineWidth = 2.2 * nodeUiScale;
+                ctx.beginPath();
+                ctx.arc(liveNodePt.x, liveNodePt.y, 9.5 * nodeUiScale, 0, Math.PI * 2);
+                ctx.stroke();
                 ctx.restore();
               }
             }
@@ -16225,12 +16143,14 @@ export default function App() {
   }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, activeAngleEditor, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
 
-  // Keep screen-space Node Editor handles & action buttons crisp and properly scaled whenever zoom changes
+  // Keep screen-space Node Editor handles crisp and clear focusedNodeUi when leaving node mode
   useEffect(() => {
-    if (isDirectNodeTool && activeNodeStrokeId) {
-      renderStaticSceneRef.current?.();
+    if (!isDirectNodeTool || !activeNodeStrokeId) {
+      setFocusedNodeUiSynced(null);
+      return;
     }
-  }, [zoom, isDirectNodeTool, activeNodeStrokeId]);
+    renderStaticSceneRef.current?.();
+  }, [zoom, isDirectNodeTool, activeNodeStrokeId, setFocusedNodeUiSynced]);
 
   // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (Lasso-Scoped, 0 RAF when paused/closed) ──
   const buildGravityFromIds = useCallback(
@@ -39763,115 +39683,17 @@ export default function App() {
     clearActiveOverlay();
     const aCtx = activeCtxRef.current;
     if (!aCtx) return;
-    const s = 1 / Math.max(0.85, zoomRef.current);
-    const { x, y } = delNode;
-    const bx = x + 32 * s;
-    const by = y - 30 * s;
-    const bzX = x - 32 * s;
-    const bzY = y - 30 * s;
-    delNode.btnX = bx;
-    delNode.btnY = by;
-    delNode.bezierBtnX = bzX;
-    delNode.bezierBtnY = bzY;
-    const isBezActive =
-      Boolean(delNode.strokeId) &&
-      activeBezierNodeRef.current?.strokeId === delNode.strokeId &&
-      activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
-
-    const targetStroke = delNode.strokeId
-      ? activePage.strokes.find((st) => st.id === delNode.strokeId)
-      : undefined;
-    const allowBezierOnNode = !targetStroke || !hasExtrude3D(targetStroke);
-
+    const s = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
     aCtx.save();
-    // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
-    if (allowBezierOnNode) {
-      aCtx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
-      aCtx.lineWidth = 1.4 * s;
-      aCtx.beginPath();
-      aCtx.moveTo(x - 6 * s, y - 6 * s);
-      aCtx.lineTo(bzX + 8 * s, bzY + 8 * s);
-      aCtx.stroke();
-
-      aCtx.save();
-      aCtx.translate(bzX, bzY);
-      aCtx.scale(s, s);
-      aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-      aCtx.shadowBlur = 5;
-      aCtx.shadowOffsetY = 1.5;
-      aCtx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
-      aCtx.strokeStyle = '#ffffff';
-      aCtx.lineWidth = 2;
-      aCtx.beginPath();
-      aCtx.arc(0, 0, 11, 0, Math.PI * 2);
-      aCtx.fill();
-      aCtx.stroke();
-
-      aCtx.shadowColor = 'transparent';
-      aCtx.strokeStyle = '#ffffff';
-      aCtx.lineWidth = 1.6;
-      aCtx.lineCap = 'round';
-      aCtx.beginPath();
-      aCtx.moveTo(-5.0, 2.6);
-      aCtx.quadraticCurveTo(0, -5.2, 5.0, 2.6);
-      aCtx.moveTo(-5.2, -2.1);
-      aCtx.lineTo(5.2, -2.1);
-      aCtx.stroke();
-      aCtx.fillStyle = '#ffffff';
-      aCtx.beginPath();
-      aCtx.arc(-5.2, -2.1, 1.45, 0, Math.PI * 2);
-      aCtx.arc(5.2, -2.1, 1.45, 0, Math.PI * 2);
-      aCtx.fill();
-      aCtx.restore();
-    }
-
-    // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
-    if (canDeleteStrokeNode(targetStroke, delNode.nodeIdx)) {
-      aCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-      aCtx.lineWidth = 1.4 * s;
-      aCtx.beginPath();
-      aCtx.moveTo(x + 6 * s, y - 6 * s);
-      aCtx.lineTo(bx - 8 * s, by + 8 * s);
-      aCtx.stroke();
-
-      aCtx.save();
-      aCtx.translate(bx, by);
-      aCtx.scale(s, s);
-      aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-      aCtx.shadowBlur = 5;
-      aCtx.shadowOffsetY = 1.5;
-      aCtx.fillStyle = '#ef4444';
-      aCtx.strokeStyle = '#ffffff';
-      aCtx.lineWidth = 2;
-      aCtx.beginPath();
-      aCtx.arc(0, 0, 11, 0, Math.PI * 2);
-      aCtx.fill();
-      aCtx.stroke();
-
-      aCtx.shadowColor = 'transparent';
-      aCtx.strokeStyle = '#ffffff';
-      aCtx.lineWidth = 1.5;
-      aCtx.lineCap = 'round';
-      aCtx.lineJoin = 'round';
-      aCtx.beginPath();
-      aCtx.moveTo(-4.6, -3.1);
-      aCtx.lineTo(4.6, -3.1);
-      aCtx.moveTo(-1.9, -3.1);
-      aCtx.lineTo(-1.9, -4.8);
-      aCtx.lineTo(1.9, -4.8);
-      aCtx.lineTo(1.9, -3.1);
-      aCtx.moveTo(-3.5, -3.1);
-      aCtx.lineTo(-2.9, 4.6);
-      aCtx.lineTo(2.9, 4.6);
-      aCtx.lineTo(3.5, -3.1);
-      aCtx.moveTo(-1.1, -0.8);
-      aCtx.lineTo(-1.1, 2.6);
-      aCtx.moveTo(1.1, -0.8);
-      aCtx.lineTo(1.1, 2.6);
-      aCtx.stroke();
-      aCtx.restore();
-    }
+    aCtx.strokeStyle = 'rgba(37, 99, 235, 0.45)';
+    aCtx.lineWidth = 2.2 * s;
+    aCtx.beginPath();
+    aCtx.arc(delNode.x, delNode.y, 9.5 * s, 0, Math.PI * 2);
+    aCtx.stroke();
     aCtx.restore();
+    if (delNode.strokeId !== undefined && delNode.nodeIdx !== undefined) {
+      setFocusedNodeUiSynced({ strokeId: delNode.strokeId, nodeIdx: delNode.nodeIdx });
+    }
   };
 
   interface ParallelSnapGuide {
@@ -43430,16 +43252,15 @@ export default function App() {
     if (effectiveTool === 'direct-node') {
       cancelNodeMagnetTimer();
       cancelAddNodeLongPress();
-      const nodeUiScale = 1 / Math.max(0.85, zoomRef.current);
+      const nodeUiScale = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
       const nodeHitRadius = (e.pointerType === 'touch' ? 24 : 18) * nodeUiScale;
       const bezierGripHitRadius = (e.pointerType === 'touch' ? 20 : 16) * nodeUiScale;
-      const actionBtnHitRadius = (e.pointerType === 'touch' ? 16 : 13.5) * nodeUiScale;
       if (activeNodeStrokeId) {
         const activeTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         const target = activeTargetStroke;
 
         // 0a. HIGHEST PRIORITY: Check if user grabbed one of the two Circular Illustrator Bézier Tangent Grips (● in or ● out)
-        // BEFORE checking Delete/Toggle buttons so micro-adjusting tangent handles NEVER triggers accidental delete/toggle!
+        // (Purple Bézier Toggle & Red Delete are now crisp Retina DOM buttons at z-[62] with their own exact onPointerDown!)
         if (target && !isShapeWithoutNodes(target)) {
           const bezNode = activeBezierNodeRef.current;
           if (bezNode && bezNode.strokeId === target.id && target.isShape) {
@@ -43467,52 +43288,6 @@ export default function App() {
               }
             }
           }
-        }
-
-        // 0b. Only check Delete / Bézier action buttons if pointer is NOT directly on top of the active node itself
-        const isDirectlyOnFocusedNode =
-          activeDeleteNodeRef.current &&
-          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
-          Math.hypot(pt.x - activeDeleteNodeRef.current.x, pt.y - activeDeleteNodeRef.current.y) <=
-            11 * nodeUiScale;
-
-        // Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node
-        if (
-          !isDirectlyOnFocusedNode &&
-          activeDeleteNodeRef.current &&
-          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
-          canDeleteStrokeNode(activeTargetStroke, activeDeleteNodeRef.current.nodeIdx) &&
-          Math.hypot(pt.x - activeDeleteNodeRef.current.btnX, pt.y - activeDeleteNodeRef.current.btnY) <=
-            actionBtnHitRadius
-        ) {
-          const toDel = activeDeleteNodeRef.current;
-          activeDeleteNodeRef.current = null;
-          activeBezierNodeRef.current = null;
-          hoverAddNodePreviewRef.current = null;
-          clearActiveOverlay();
-          handleDeleteSingleNode(toDel.strokeId, toDel.nodeIdx);
-          renderStaticSceneRef.current();
-          return;
-        }
-
-        // Check if user clicked/tapped the Purple Bézier Tangent Handle button (〰️) next to the hovered/active node
-        const bezTargetStroke = activeTargetStroke;
-        if (
-          !isDirectlyOnFocusedNode &&
-          activeDeleteNodeRef.current &&
-          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
-          (!bezTargetStroke || !hasExtrude3D(bezTargetStroke)) &&
-          Math.hypot(
-            pt.x - (activeDeleteNodeRef.current.bezierBtnX ?? activeDeleteNodeRef.current.x - 32 * nodeUiScale),
-            pt.y - (activeDeleteNodeRef.current.bezierBtnY ?? activeDeleteNodeRef.current.y - 30 * nodeUiScale)
-          ) <= actionBtnHitRadius
-        ) {
-          const toBez = activeDeleteNodeRef.current;
-          hoverAddNodePreviewRef.current = null;
-          clearActiveOverlay();
-          handleToggleNodeBezier(toBez.strokeId, toBez.nodeIdx);
-          renderStaticSceneRef.current();
-          return;
         }
 
         if (target && !isShapeWithoutNodes(target)) {
@@ -43553,6 +43328,7 @@ export default function App() {
                   bezierBtnX: hitPt.x - 32 * nodeUiScale,
                   bezierBtnY: hitPt.y - 30 * nodeUiScale,
                 };
+                setFocusedNodeUiSynced({ strokeId: target.id, nodeIdx: bestK });
                 renderStaticSceneRef.current();
               }
               if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
@@ -43627,6 +43403,7 @@ export default function App() {
                   bezierBtnX: hitPt.x - 32 * nodeUiScale,
                   bezierBtnY: hitPt.y - 30 * nodeUiScale,
                 };
+                setFocusedNodeUiSynced({ strokeId: target.id, nodeIdx: bestIdx });
                 if (hitPt.smooth || hitPt.inDx !== undefined || hitPt.outDx !== undefined) {
                   activeBezierNodeRef.current = { strokeId: target.id, nodeIdx: bestIdx };
                 } else {
@@ -43635,6 +43412,7 @@ export default function App() {
                 renderStaticSceneRef.current();
               } else {
                 activeDeleteNodeRef.current = null;
+                setFocusedNodeUiSynced(null);
                 activeBezierNodeRef.current = null;
               }
               pushUndoSnapshot(targetPage);
@@ -45628,7 +45406,7 @@ export default function App() {
 
         // 1. Check if cursor is hovering over an existing node OR over its adjacent Purple Bézier / Red Trash Bin buttons
         if (target) {
-          const s = 1 / Math.max(0.85, zoomRef.current);
+          const s = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
           const bezNode = activeBezierNodeRef.current;
           if (bezNode && bezNode.strokeId === target.id && target.isShape) {
             const bp = target.points[bezNode.nodeIdx];
@@ -75909,6 +75687,138 @@ export default function App() {
                         className="absolute inset-0 pointer-events-none z-20"
                       />
                     )}
+
+                    {/* Crisp Retina Vector DOM Action Buttons (Purple Bézier Toggle + Red Delete) above the focused node — zero blur even at 1000% zoom! */}
+                    {isCurrentActive &&
+                      !isLivePdfMode &&
+                      !isCleanProjectorMode &&
+                      isDirectNodeTool &&
+                      activeNodeStrokeId &&
+                      !draggingNodeIdx &&
+                      focusedNodeUi &&
+                      focusedNodeUi.strokeId === activeNodeStrokeId &&
+                      (() => {
+                        const targetStroke = activePage.strokes.find(
+                          (s) => s.id === activeNodeStrokeId
+                        );
+                        if (
+                          !targetStroke ||
+                          isShapeWithoutNodes(targetStroke) ||
+                          targetStroke.shapeType === 'stickman' ||
+                          targetStroke.shapeType === 'stickman-3d'
+                        ) {
+                          return null;
+                        }
+                        let livePt: { x: number; y: number } | undefined;
+                        if (!targetStroke.isShape) {
+                          const kIndices =
+                            targetStroke.keyNodeIndices && targetStroke.keyNodeIndices.length >= 2
+                              ? targetStroke.keyNodeIndices
+                              : computeFreehandKeyNodeIndices(targetStroke.points);
+                          const ptIdx = kIndices[focusedNodeUi.nodeIdx];
+                          if (ptIdx !== undefined) livePt = targetStroke.points[ptIdx];
+                        } else {
+                          livePt = targetStroke.points[focusedNodeUi.nodeIdx];
+                        }
+                        if (!livePt) return null;
+
+                        const allowBezier = !hasExtrude3D(targetStroke);
+                        const canDel = canDeleteStrokeNode(targetStroke, focusedNodeUi.nodeIdx);
+                        if (!allowBezier && !canDel) return null;
+
+                        const isBezActive =
+                          activeBezierNodeRef.current?.strokeId === targetStroke.id &&
+                          activeBezierNodeRef.current?.nodeIdx === focusedNodeUi.nodeIdx;
+                        const invZ = 1 / Math.max(0.85, zoom);
+
+                        return (
+                          <div
+                            data-ui-panel="true"
+                            onPointerDown={(ev) => ev.stopPropagation()}
+                            onMouseDown={(ev) => ev.stopPropagation()}
+                            style={{
+                              left: livePt.x,
+                              top: livePt.y,
+                              transform: `translate(-50%, -100%) scale(${invZ}) translateY(-22px)`,
+                              transformOrigin: '50% 100%',
+                              touchAction: 'manipulation',
+                            }}
+                            className="absolute z-[62] flex items-center gap-2 px-1.5 py-1 rounded-full bg-[#fdfbf7]/92 backdrop-blur-md border border-[#dfd8cb] shadow-[0_6px_18px_rgba(15,23,42,0.16)] select-none"
+                          >
+                            {allowBezier && (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  hoverAddNodePreviewRef.current = null;
+                                  clearActiveOverlay();
+                                  handleToggleNodeBezier(
+                                    focusedNodeUi.strokeId,
+                                    focusedNodeUi.nodeIdx
+                                  );
+                                  renderStaticSceneRef.current();
+                                }}
+                                className={`w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-xs transition hover:scale-110 active:scale-95 cursor-pointer ${
+                                  isBezActive
+                                    ? 'bg-[#4f46e5] ring-2 ring-[#4f46e5]/30'
+                                    : 'bg-[#7c3aed] hover:bg-[#6d28d9]'
+                                }`}
+                                title={
+                                  isBezActive
+                                    ? 'Απόκρυψη / μετατροπή Bézier σε γωνία'
+                                    : 'Εμφάνιση λαβών καμπύλης Bézier'
+                                }
+                              >
+                                <svg
+                                  width="15"
+                                  height="15"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  className="pointer-events-none"
+                                >
+                                  <path
+                                    d="M2.5 11.5 Q8 2.5 13.5 11.5"
+                                    stroke="#ffffff"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                  />
+                                  <line
+                                    x1="2.2"
+                                    y1="5.8"
+                                    x2="13.8"
+                                    y2="5.8"
+                                    stroke="#ffffff"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                  <circle cx="2.2" cy="5.8" r="1.7" fill="#ffffff" />
+                                  <circle cx="13.8" cy="5.8" r="1.7" fill="#ffffff" />
+                                </svg>
+                              </button>
+                            )}
+                            {canDel && (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  const toDel = focusedNodeUi;
+                                  activeDeleteNodeRef.current = null;
+                                  activeBezierNodeRef.current = null;
+                                  hoverAddNodePreviewRef.current = null;
+                                  setFocusedNodeUiSynced(null);
+                                  clearActiveOverlay();
+                                  handleDeleteSingleNode(toDel.strokeId, toDel.nodeIdx);
+                                  renderStaticSceneRef.current();
+                                }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center bg-[#ef4444] hover:bg-[#dc2626] border-2 border-white shadow-xs transition hover:scale-110 active:scale-95 cursor-pointer"
+                                title="Διαγραφή κόμβου"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-white pointer-events-none" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                     {/* Floating Quick "Group / Ungroup", "Κείμενο μόνο" & "Κέντραρε" Action Pills above all text layers (z-[61]) */}
                     {isCurrentActive &&
