@@ -3536,6 +3536,7 @@ export default function App() {
     y: number;
     segIdx?: number;
     segT?: number;
+    isMidpointSnap?: boolean;
     freehandIdx?: number;
     c1x?: number;
     c1y?: number;
@@ -3545,6 +3546,13 @@ export default function App() {
     sampledCurvePoints?: BezierPoint[];
     sampledBaseKeyIndices?: number[];
   } | null>(null);
+  const midpointAddNodePulseRafRef = useRef<number | null>(null);
+  const stopMidpointAddNodePulse = useCallback(() => {
+    if (midpointAddNodePulseRafRef.current !== null) {
+      window.cancelAnimationFrame(midpointAddNodePulseRafRef.current);
+      midpointAddNodePulseRafRef.current = null;
+    }
+  }, []);
   const endpointSnapHoverRef = useRef<{
     key: string;
     x: number;
@@ -39090,6 +39098,7 @@ export default function App() {
     y: number;
     segIdx?: number;
     segT?: number;
+    isMidpointSnap?: boolean;
     freehandIdx?: number;
     c1x?: number;
     c1y?: number;
@@ -39373,12 +39382,44 @@ export default function App() {
       }
     }
     if (bestSeg >= 0) {
+      const pA = target.points[bestSeg];
+      const pB = target.points[bestSeg + 1];
+      const isStraightSegment =
+        target.shapeType !== 'sine' &&
+        target.shapeType !== 'cosine' &&
+        bestC1x === undefined &&
+        bestC2x === undefined &&
+        pA?.outDx === undefined &&
+        pA?.outDy === undefined &&
+        pB?.inDx === undefined &&
+        pB?.inDy === undefined;
+
+      let isMidpointSnap = false;
+      if (isStraightSegment && pA && pB) {
+        const segLen = Math.hypot(pB.x - pA.x, pB.y - pA.y);
+        const midX = (pA.x + pB.x) / 2;
+        const midY = (pA.y + pB.y) / 2;
+        const s = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
+        const snapDist = Math.min(11 * s, segLen * 0.14);
+        if (
+          segLen >= 28 &&
+          (Math.hypot(bestProjX - midX, bestProjY - midY) <= snapDist ||
+            Math.abs(bestT - 0.5) <= 0.045)
+        ) {
+          bestProjX = midX;
+          bestProjY = midY;
+          bestT = 0.5;
+          isMidpointSnap = true;
+        }
+      }
+
       return {
         strokeId: target.id,
         x: bestProjX,
         y: bestProjY,
         segIdx: bestSeg,
         segT: bestT,
+        isMidpointSnap,
         c1x: bestC1x,
         c1y: bestC1y,
         c2x: bestC2x,
@@ -45456,46 +45497,104 @@ export default function App() {
         if (preview) {
           hoverAddNodePreviewRef.current = preview;
           e.currentTarget.style.cursor = 'pointer';
-          clearActiveOverlay();
-          const aCtx = activeCtxRef.current;
-          if (aCtx) {
-            const boxSize = 12;
+
+          const drawHoverAddNodeBox = (pulsePhase = 1) => {
+            const curPrev = hoverAddNodePreviewRef.current;
+            if (!curPrev) return;
+            clearActiveOverlay();
+            const aCtx = activeCtxRef.current;
+            if (!aCtx) return;
+            const uiS = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
+            const boxSize = (curPrev.isMidpointSnap ? 14 : 12) * uiS;
             const half = boxSize / 2;
             aCtx.save();
-            aCtx.shadowColor = 'rgba(15, 23, 42, 0.14)';
-            aCtx.shadowBlur = 4;
-            aCtx.shadowOffsetY = 1;
-            aCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-            aCtx.strokeStyle = '#94a3b8';
-            aCtx.lineWidth = 1.5;
-            aCtx.beginPath();
-            aCtx.rect(preview.x - half, preview.y - half, boxSize, boxSize);
-            aCtx.fill();
-            aCtx.stroke();
 
-            // Draw the "+" sign inside the faint white box
-            aCtx.shadowColor = 'transparent';
-            aCtx.strokeStyle = '#475569';
-            aCtx.lineWidth = 1.5;
-            aCtx.lineCap = 'round';
-            const arm = 2.9;
-            aCtx.beginPath();
-            aCtx.moveTo(preview.x - arm, preview.y);
-            aCtx.lineTo(preview.x + arm, preview.y);
-            aCtx.moveTo(preview.x, preview.y - arm);
-            aCtx.lineTo(preview.x, preview.y + arm);
-            aCtx.stroke();
+            if (curPrev.isMidpointSnap) {
+              // Pulsing red midpoint beacon ring + crisp red "+" button
+              const ringR = (9 + pulsePhase * 5.5) * uiS;
+              aCtx.strokeStyle = `rgba(239, 68, 68, ${(0.72 - pulsePhase * 0.45).toFixed(2)})`;
+              aCtx.lineWidth = 2 * uiS;
+              aCtx.beginPath();
+              aCtx.arc(curPrev.x, curPrev.y, ringR, 0, Math.PI * 2);
+              aCtx.stroke();
+
+              aCtx.shadowColor = `rgba(239, 68, 68, ${(0.35 + pulsePhase * 0.35).toFixed(2)})`;
+              aCtx.shadowBlur = (6 + pulsePhase * 5) * uiS;
+              aCtx.fillStyle = pulsePhase > 0.5 ? '#ef4444' : '#dc2626';
+              aCtx.strokeStyle = '#ffffff';
+              aCtx.lineWidth = 1.8 * uiS;
+              aCtx.beginPath();
+              aCtx.rect(curPrev.x - half, curPrev.y - half, boxSize, boxSize);
+              aCtx.fill();
+              aCtx.stroke();
+
+              aCtx.shadowColor = 'transparent';
+              aCtx.strokeStyle = '#ffffff';
+              aCtx.lineWidth = 1.8 * uiS;
+              aCtx.lineCap = 'round';
+              const arm = 3.2 * uiS;
+              aCtx.beginPath();
+              aCtx.moveTo(curPrev.x - arm, curPrev.y);
+              aCtx.lineTo(curPrev.x + arm, curPrev.y);
+              aCtx.moveTo(curPrev.x, curPrev.y - arm);
+              aCtx.lineTo(curPrev.x, curPrev.y + arm);
+              aCtx.stroke();
+            } else {
+              aCtx.shadowColor = 'rgba(15, 23, 42, 0.14)';
+              aCtx.shadowBlur = 4 * uiS;
+              aCtx.shadowOffsetY = 1 * uiS;
+              aCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+              aCtx.strokeStyle = '#94a3b8';
+              aCtx.lineWidth = 1.5 * uiS;
+              aCtx.beginPath();
+              aCtx.rect(curPrev.x - half, curPrev.y - half, boxSize, boxSize);
+              aCtx.fill();
+              aCtx.stroke();
+
+              aCtx.shadowColor = 'transparent';
+              aCtx.strokeStyle = '#475569';
+              aCtx.lineWidth = 1.5 * uiS;
+              aCtx.lineCap = 'round';
+              const arm = 2.9 * uiS;
+              aCtx.beginPath();
+              aCtx.moveTo(curPrev.x - arm, curPrev.y);
+              aCtx.lineTo(curPrev.x + arm, curPrev.y);
+              aCtx.moveTo(curPrev.x, curPrev.y - arm);
+              aCtx.lineTo(curPrev.x, curPrev.y + arm);
+              aCtx.stroke();
+            }
             aCtx.restore();
+          };
+
+          if (preview.isMidpointSnap) {
+            if (midpointAddNodePulseRafRef.current === null) {
+              const stepPulse = (nowTs: number) => {
+                if (!hoverAddNodePreviewRef.current?.isMidpointSnap) {
+                  midpointAddNodePulseRafRef.current = null;
+                  return;
+                }
+                const phase = 0.5 + 0.5 * Math.sin(nowTs / 145);
+                drawHoverAddNodeBox(phase);
+                midpointAddNodePulseRafRef.current = window.requestAnimationFrame(stepPulse);
+              };
+              midpointAddNodePulseRafRef.current = window.requestAnimationFrame(stepPulse);
+            }
+          } else {
+            stopMidpointAddNodePulse();
+            drawHoverAddNodeBox(0);
           }
         } else if (hoverAddNodePreviewRef.current) {
+          stopMidpointAddNodePulse();
           hoverAddNodePreviewRef.current = null;
           e.currentTarget.style.cursor = '';
           clearActiveOverlay();
         } else {
+          stopMidpointAddNodePulse();
           e.currentTarget.style.cursor = '';
           clearActiveOverlay();
         }
       } else if (hoverAddNodePreviewRef.current) {
+        stopMidpointAddNodePulse();
         hoverAddNodePreviewRef.current = null;
         e.currentTarget.style.cursor = '';
         clearActiveOverlay();
