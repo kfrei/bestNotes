@@ -3751,6 +3751,9 @@ export default function App() {
     strokeId: string;
     nodeIdx: number;
   } | null>(null);
+  const [symmetricBezierHandles, setSymmetricBezierHandles] = useState<boolean>(false);
+  const symmetricBezierHandlesRef = useRef<boolean>(false);
+  symmetricBezierHandlesRef.current = symmetricBezierHandles;
   const [textFontSize, setTextFontSize] = useState<number>(() =>
     typeof initialSession?.textFontSize === 'number' ? initialSession.textFontSize : 22
   );
@@ -47831,6 +47834,73 @@ export default function App() {
               parallelSnapGuides = snapRes.guides;
             }
           }
+
+          // Perpendicular Bisector (Midpoint Symmetry Axis) Snap between immediate prev & next neighbor nodes!
+          // Works automatically on Mac Mini & iPad (within 10px of center axis), or hard-locks when Shift is held!
+          if (!snapTargetPt && activeTargetStroke.points.length >= 3) {
+            const isClosedLoopAny =
+              (st === 'line' &&
+                activeTargetStroke.points.length >= 3 &&
+                activeTargetStroke.points[0]?.twist === 999) ||
+              st === 'rectangle' ||
+              st === 'parallelogram' ||
+              st === 'trapezoid' ||
+              st === 'triangle' ||
+              st === 'cuboid' ||
+              st === 'cylinder' ||
+              st === 'sphere' ||
+              st === 'pyramid' ||
+              st === 'resistor' ||
+              st === 'spring';
+            const uPts = isClosedLoopAny
+              ? activeTargetStroke.points.slice(0, Math.max(1, activeTargetStroke.points.length - 1))
+              : activeTargetStroke.points;
+            const nU = uPts.length;
+            const idx = draggingNodeIdx.index;
+            if (nU >= 3 && idx >= 0 && idx < nU) {
+              const hasPrev = isClosedLoopAny || idx > 0;
+              const hasNext = isClosedLoopAny || idx < nU - 1;
+              if (hasPrev && hasNext) {
+                const prevPt = uPts[(idx - 1 + nU) % nU];
+                const nextPt = uPts[(idx + 1) % nU];
+                const edgeDx = nextPt.x - prevPt.x;
+                const edgeDy = nextPt.y - prevPt.y;
+                const edgeLen = Math.hypot(edgeDx, edgeDy);
+                if (edgeLen > 16) {
+                  const ux = edgeDx / edgeLen;
+                  const uy = edgeDy / edgeLen;
+                  const nx = -uy;
+                  const ny = ux;
+                  const midX = (prevPt.x + nextPt.x) / 2;
+                  const midY = (prevPt.y + nextPt.y) / 2;
+                  const relX = latestPt.x - midX;
+                  const relY = latestPt.y - midY;
+                  const alongEdgeDist = Math.abs(relX * ux + relY * uy);
+                  const perpCoord = relX * nx + relY * ny;
+                  const uiS = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
+                  const shiftLocked = Boolean(e.shiftKey || shiftKeyPressedRef.current);
+                  const snapTol = shiftLocked ? 9999 : 10 * uiS;
+                  if (alongEdgeDist <= snapTol) {
+                    const snappedMidAxisPt = {
+                      x: midX + perpCoord * nx,
+                      y: midY + perpCoord * ny,
+                    };
+                    snapTargetPt = snappedMidAxisPt;
+                    parallelSnapGuides = [
+                      {
+                        anchor: { x: midX, y: midY },
+                        snapped: snappedMidAxisPt,
+                        refEdge: [prevPt, nextPt],
+                        kind: 'symmetry',
+                        symmetryAxis: [{ x: midX, y: midY }, snappedMidAxisPt],
+                        badgeLabel: '⏊ Μέσο',
+                      },
+                    ];
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
@@ -47866,21 +47936,34 @@ export default function App() {
                 const hDist = Math.hypot(hdx, hdy);
                 targetPt.smooth = targetPt.twist === 999 ? false : true;
                 targetPt.twist = targetPt.twist === 999 ? 999 : 777; // Mark manual user-adjusted Bézier handle while preserving welded seam flag!
+                const isSymmetricDrag = Boolean(
+                  e.shiftKey || shiftKeyPressedRef.current || symmetricBezierHandlesRef.current
+                );
                 if (draggingNodeIdx.handleSide === 'out') {
                   targetPt.outDx = hdx;
                   targetPt.outDy = hdy;
                   if (targetPt.inDx !== undefined && targetPt.inDy !== undefined && hDist > 1) {
-                    const inLen = Math.hypot(targetPt.inDx, targetPt.inDy);
-                    targetPt.inDx = -(hdx / hDist) * inLen;
-                    targetPt.inDy = -(hdy / hDist) * inLen;
+                    if (isSymmetricDrag) {
+                      targetPt.inDx = -hdx;
+                      targetPt.inDy = -hdy;
+                    } else {
+                      const inLen = Math.hypot(targetPt.inDx, targetPt.inDy);
+                      targetPt.inDx = -(hdx / hDist) * inLen;
+                      targetPt.inDy = -(hdy / hDist) * inLen;
+                    }
                   }
                 } else {
                   targetPt.inDx = hdx;
                   targetPt.inDy = hdy;
                   if (targetPt.outDx !== undefined && targetPt.outDy !== undefined && hDist > 1) {
-                    const outLen = Math.hypot(targetPt.outDx, targetPt.outDy);
-                    targetPt.outDx = -(hdx / hDist) * outLen;
-                    targetPt.outDy = -(hdy / hDist) * outLen;
+                    if (isSymmetricDrag) {
+                      targetPt.outDx = -hdx;
+                      targetPt.outDy = -hdy;
+                    } else {
+                      const outLen = Math.hypot(targetPt.outDx, targetPt.outDy);
+                      targetPt.outDx = -(hdx / hDist) * outLen;
+                      targetPt.outDy = -(hdy / hDist) * outLen;
+                    }
                   }
                 }
               } else {
@@ -75892,6 +75975,49 @@ export default function App() {
                                   />
                                   <circle cx="2.2" cy="5.8" r="1.7" fill="#ffffff" />
                                   <circle cx="13.8" cy="5.8" r="1.7" fill="#ffffff" />
+                                </svg>
+                              </button>
+                            )}
+                            {allowBezier && isBezActive && (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setSymmetricBezierHandles((prev) => {
+                                    const next = !prev;
+                                    showToast(
+                                      next
+                                        ? '⇄ Συμμετρικές λαβές Bézier: ΕΝΕΡΓΟ (κινούνται μαζί)'
+                                        : '⇄ Συμμετρικές λαβές Bézier: ΑΝΕΝΕΡΓΟ'
+                                    );
+                                    return next;
+                                  });
+                                }}
+                                className={`w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-xs transition hover:scale-110 active:scale-95 cursor-pointer ${
+                                  symmetricBezierHandles
+                                    ? 'bg-[#0284c7] ring-2 ring-[#0284c7]/35 text-white'
+                                    : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                                }`}
+                                title={
+                                  symmetricBezierHandles
+                                    ? 'Συμμετρικές λαβές Bézier: ΕΝΕΡΓΟ (ή κράτα Shift)'
+                                    : 'Ενεργοποίηση συμμετρικής κίνησης των 2 μωβ λαβών (ή κράτα Shift)'
+                                }
+                              >
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  className="pointer-events-none"
+                                >
+                                  <path
+                                    d="M4.5 5.2L1.8 8l2.7 2.8M11.5 5.2L14.2 8l-2.7 2.8M2.5 8h11"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
                                 </svg>
                               </button>
                             )}
