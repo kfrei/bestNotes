@@ -2100,7 +2100,7 @@ export default function App() {
                 restoredPageIdx = Math.max(0, sess.activePageIndex);
               }
               if (sess && typeof sess.zoom === 'number' && Number.isFinite(sess.zoom)) {
-                const z = Math.min(3.5, Math.max(0.2, sess.zoom));
+                const z = Math.min(10, Math.max(0.2, sess.zoom));
                 zoomRef.current = z;
                 setZoom(z);
               }
@@ -9978,7 +9978,7 @@ export default function App() {
           return;
         }
         e.preventDefault();
-        const nextZoom = Math.min(3.5, Math.max(0.15, zoomRef.current - e.deltaY * 0.008));
+        const nextZoom = Math.min(10, Math.max(0.15, zoomRef.current - e.deltaY * 0.008));
         zoomRef.current = nextZoom;
         if (paperTransformElRef.current) {
           paperTransformElRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
@@ -15834,6 +15834,9 @@ export default function App() {
         if (isDirectNodeTool && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target && !isShapeWithoutNodes(target)) {
+            const nodeUiScale = 1 / Math.max(0.85, zoomRef.current);
+            const nodeHalf = 5 * nodeUiScale;
+            const nodeSize = 10 * nodeUiScale;
             ctx.save();
             // Highlight open endpoints of OTHER open strokes on the same page so the user can easily see where to drag & magnetically weld!
             const targetIsOpen =
@@ -15871,10 +15874,10 @@ export default function App() {
                   ctx.save();
                   ctx.fillStyle = 'rgba(209, 250, 229, 0.85)';
                   ctx.strokeStyle = '#10b981';
-                  ctx.lineWidth = 2;
-                  ctx.setLineDash([3, 2]);
+                  ctx.lineWidth = 2 * nodeUiScale;
+                  ctx.setLineDash([3 * nodeUiScale, 2 * nodeUiScale]);
                   ctx.beginPath();
-                  ctx.arc(ep.x, ep.y, 7.5, 0, Math.PI * 2);
+                  ctx.arc(ep.x, ep.y, 7.5 * nodeUiScale, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
                   ctx.restore();
@@ -15897,9 +15900,9 @@ export default function App() {
                 const isEndpoint = k === 0 || k === keyIndices.length - 1;
                 ctx.fillStyle = isWeldedClosed && k === 0 ? '#d1fae5' : isEndpoint ? '#ffffff' : '#fef08a';
                 ctx.strokeStyle = isWeldedClosed && k === 0 ? '#059669' : '#2563eb';
-                ctx.lineWidth = 1.9;
-                ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
-                ctx.strokeRect(p.x - 5, p.y - 5, 10, 10);
+                ctx.lineWidth = 1.9 * nodeUiScale;
+                ctx.fillRect(p.x - nodeHalf, p.y - nodeHalf, nodeSize, nodeSize);
+                ctx.strokeRect(p.x - nodeHalf, p.y - nodeHalf, nodeSize, nodeSize);
               }
             } else {
               const isThreePtCurve =
@@ -15939,9 +15942,9 @@ export default function App() {
                     ? '#fef08a'
                     : '#ffffff';
                 ctx.strokeStyle = isWeldedSplineClosed && i === 0 ? '#059669' : '#2563eb';
-                ctx.lineWidth = 1.9;
-                ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
-                ctx.strokeRect(p.x - 5, p.y - 5, 10, 10);
+                ctx.lineWidth = 1.9 * nodeUiScale;
+                ctx.fillRect(p.x - nodeHalf, p.y - nodeHalf, nodeSize, nodeSize);
+                ctx.strokeRect(p.x - nodeHalf, p.y - nodeHalf, nodeSize, nodeSize);
               }
             }
 
@@ -15966,8 +15969,8 @@ export default function App() {
 
                 ctx.save();
                 ctx.strokeStyle = '#7c3aed';
-                ctx.lineWidth = 1.9;
-                ctx.setLineDash([5, 4]);
+                ctx.lineWidth = 1.8 * nodeUiScale;
+                ctx.setLineDash([5 * nodeUiScale, 4 * nodeUiScale]);
                 ctx.beginPath();
                 if (showIn) {
                   ctx.moveTo(bp.x, bp.y);
@@ -15982,18 +15985,18 @@ export default function App() {
 
                 const drawBezierGrip = (hx: number, hy: number) => {
                   ctx.shadowColor = 'rgba(124, 58, 237, 0.28)';
-                  ctx.shadowBlur = 4;
+                  ctx.shadowBlur = 4 * nodeUiScale;
                   ctx.fillStyle = '#ffffff';
                   ctx.strokeStyle = '#7c3aed';
-                  ctx.lineWidth = 2.4;
+                  ctx.lineWidth = 2.2 * nodeUiScale;
                   ctx.beginPath();
-                  ctx.arc(hx, hy, 6.8, 0, Math.PI * 2);
+                  ctx.arc(hx, hy, 6.2 * nodeUiScale, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
                   ctx.shadowColor = 'transparent';
                   ctx.fillStyle = '#7c3aed';
                   ctx.beginPath();
-                  ctx.arc(hx, hy, 2.4, 0, Math.PI * 2);
+                  ctx.arc(hx, hy, 2.2 * nodeUiScale, 0, Math.PI * 2);
                   ctx.fill();
                 };
 
@@ -16007,7 +16010,8 @@ export default function App() {
               }
             }
 
-            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the Purple Bézier button (left) & Red Trash Bin button (right)!
+            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the Purple Bézier button (left) & Red Trash Bin button (right)
+            // positioned generously clear above the node & horizontal Bézier handles, in crisp constant screen-space size!
             const delNode = activeDeleteNodeRef.current;
             if (delNode && delNode.strokeId === target.id) {
               let liveNodePt: { x: number; y: number } | undefined;
@@ -16022,10 +16026,12 @@ export default function App() {
                 liveNodePt = target.points[delNode.nodeIdx];
               }
               if (liveNodePt && target.shapeType !== 'stickman' && target.shapeType !== 'stickman-3d') {
-                const bx = liveNodePt.x + 26;
-                const by = liveNodePt.y - 18;
-                const bzX = liveNodePt.x - 26;
-                const bzY = liveNodePt.y - 18;
+                const btnOffsetX = 32 * nodeUiScale;
+                const btnOffsetY = 30 * nodeUiScale;
+                const bx = liveNodePt.x + btnOffsetX;
+                const by = liveNodePt.y - btnOffsetY;
+                const bzX = liveNodePt.x - btnOffsetX;
+                const bzY = liveNodePt.y - btnOffsetY;
                 delNode.x = liveNodePt.x;
                 delNode.y = liveNodePt.y;
                 delNode.btnX = bx;
@@ -16041,13 +16047,16 @@ export default function App() {
                 ctx.save();
                 // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
                 if (allowBezierOnNode) {
-                  ctx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
-                  ctx.lineWidth = 1.4;
+                  ctx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
+                  ctx.lineWidth = 1.4 * nodeUiScale;
                   ctx.beginPath();
-                  ctx.moveTo(liveNodePt.x - 7, liveNodePt.y - 5);
-                  ctx.lineTo(bzX + 9, bzY + 5);
+                  ctx.moveTo(liveNodePt.x - 6 * nodeUiScale, liveNodePt.y - 6 * nodeUiScale);
+                  ctx.lineTo(bzX + 8 * nodeUiScale, bzY + 8 * nodeUiScale);
                   ctx.stroke();
 
+                  ctx.save();
+                  ctx.translate(bzX, bzY);
+                  ctx.scale(nodeUiScale, nodeUiScale);
                   ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
                   ctx.shadowBlur = 5;
                   ctx.shadowOffsetY = 1.5;
@@ -16055,37 +16064,40 @@ export default function App() {
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 2;
                   ctx.beginPath();
-                  ctx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+                  ctx.arc(0, 0, 11, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
 
-                  // White Bézier curve + tangent icon inside purple circle
                   ctx.shadowColor = 'transparent';
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 1.6;
                   ctx.lineCap = 'round';
                   ctx.beginPath();
-                  ctx.moveTo(bzX - 5.2, bzY + 2.8);
-                  ctx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
-                  ctx.moveTo(bzX - 5.5, bzY - 2.2);
-                  ctx.lineTo(bzX + 5.5, bzY - 2.2);
+                  ctx.moveTo(-5.0, 2.6);
+                  ctx.quadraticCurveTo(0, -5.2, 5.0, 2.6);
+                  ctx.moveTo(-5.2, -2.1);
+                  ctx.lineTo(5.2, -2.1);
                   ctx.stroke();
                   ctx.fillStyle = '#ffffff';
                   ctx.beginPath();
-                  ctx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-                  ctx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+                  ctx.arc(-5.2, -2.1, 1.45, 0, Math.PI * 2);
+                  ctx.arc(5.2, -2.1, 1.45, 0, Math.PI * 2);
                   ctx.fill();
+                  ctx.restore();
                 }
 
                 // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
                 if (canDeleteStrokeNode(target, delNode.nodeIdx)) {
-                  ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
-                  ctx.lineWidth = 1.4;
+                  ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+                  ctx.lineWidth = 1.4 * nodeUiScale;
                   ctx.beginPath();
-                  ctx.moveTo(liveNodePt.x + 7, liveNodePt.y - 5);
-                  ctx.lineTo(bx - 9, by + 5);
+                  ctx.moveTo(liveNodePt.x + 6 * nodeUiScale, liveNodePt.y - 6 * nodeUiScale);
+                  ctx.lineTo(bx - 8 * nodeUiScale, by + 8 * nodeUiScale);
                   ctx.stroke();
 
+                  ctx.save();
+                  ctx.translate(bx, by);
+                  ctx.scale(nodeUiScale, nodeUiScale);
                   ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
                   ctx.shadowBlur = 5;
                   ctx.shadowOffsetY = 1.5;
@@ -16093,32 +16105,32 @@ export default function App() {
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 2;
                   ctx.beginPath();
-                  ctx.arc(bx, by, 11.5, 0, Math.PI * 2);
+                  ctx.arc(0, 0, 11, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
 
-                  // White Trash Can icon inside red circle
                   ctx.shadowColor = 'transparent';
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 1.5;
                   ctx.lineCap = 'round';
                   ctx.lineJoin = 'round';
                   ctx.beginPath();
-                  ctx.moveTo(bx - 4.8, by - 3.2);
-                  ctx.lineTo(bx + 4.8, by - 3.2);
-                  ctx.moveTo(bx - 2, by - 3.2);
-                  ctx.lineTo(bx - 2, by - 5);
-                  ctx.lineTo(bx + 2, by - 5);
-                  ctx.lineTo(bx + 2, by - 3.2);
-                  ctx.moveTo(bx - 3.6, by - 3.2);
-                  ctx.lineTo(bx - 3, by + 4.8);
-                  ctx.lineTo(bx + 3, by + 4.8);
-                  ctx.lineTo(bx + 3.6, by - 3.2);
-                  ctx.moveTo(bx - 1.2, by - 0.8);
-                  ctx.lineTo(bx - 1.2, by + 2.8);
-                  ctx.moveTo(bx + 1.2, by - 0.8);
-                  ctx.lineTo(bx + 1.2, by + 2.8);
+                  ctx.moveTo(-4.6, -3.1);
+                  ctx.lineTo(4.6, -3.1);
+                  ctx.moveTo(-1.9, -3.1);
+                  ctx.lineTo(-1.9, -4.8);
+                  ctx.lineTo(1.9, -4.8);
+                  ctx.lineTo(1.9, -3.1);
+                  ctx.moveTo(-3.5, -3.1);
+                  ctx.lineTo(-2.9, 4.6);
+                  ctx.lineTo(2.9, 4.6);
+                  ctx.lineTo(3.5, -3.1);
+                  ctx.moveTo(-1.1, -0.8);
+                  ctx.lineTo(-1.1, 2.6);
+                  ctx.moveTo(1.1, -0.8);
+                  ctx.lineTo(1.1, 2.6);
                   ctx.stroke();
+                  ctx.restore();
                 }
                 ctx.restore();
               }
@@ -16212,6 +16224,13 @@ export default function App() {
     });
   }, [activeNotebook.pages, activePageIndex, isDirectNodeTool, isShapeTool, isLassoTool, isHeatSelectTool, activeNodeStrokeId, activeAngleEditor, selectedStrokeIds, selectedImageId, selectedImageIds, selectedLassoTextIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm, showSimulationPanel, simActiveCategory]);
   renderStaticSceneRef.current = renderStaticScene;
+
+  // Keep screen-space Node Editor handles & action buttons crisp and properly scaled whenever zoom changes
+  useEffect(() => {
+    if (isDirectNodeTool && activeNodeStrokeId) {
+      renderStaticSceneRef.current?.();
+    }
+  }, [zoom, isDirectNodeTool, activeNodeStrokeId]);
 
   // ── Unified Gravity Lab Controller & Strictly-Gated RAF Loop (Lasso-Scoped, 0 RAF when paused/closed) ──
   const buildGravityFromIds = useCallback(
@@ -16719,7 +16738,7 @@ export default function App() {
       keepActivePage = false
     ) => {
       const minZoomAllowed = isMultiPageSpreadEnabledRef.current ? 0.12 : 0.2;
-      const clampedZoom = Math.min(3.5, Math.max(minZoomAllowed, nextZoom));
+      const clampedZoom = Math.min(10, Math.max(minZoomAllowed, nextZoom));
       const wsWidth = workspaceRef.current?.clientWidth || window.innerWidth || 980;
       const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
       const cols = getMultiPageSpreadCols(
@@ -16979,7 +16998,7 @@ export default function App() {
   const zoomAroundViewportCenter = useCallback(
     (targetZoom: number) => {
       const minZ = isMultiPageSpreadEnabledRef.current ? 0.12 : 0.2;
-      const clampedNext = Math.min(3.5, Math.max(minZ, targetZoom));
+      const clampedNext = Math.min(10, Math.max(minZ, targetZoom));
       const oldZoom = zoomRef.current;
       const oldCols = getMultiPageSpreadCols(
         oldZoom,
@@ -21586,7 +21605,7 @@ export default function App() {
         st.lastMidY = currMidY;
 
         const minZ = isMultiPageSpreadEnabledRef.current ? 0.15 : 0.2;
-        const newZoom = Math.min(3.5, Math.max(minZ, st.initialZoom * (currDist / st.initialDist)));
+        const newZoom = Math.min(10, Math.max(minZ, st.initialZoom * (currDist / st.initialDist)));
         const nextPanX =
           st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
         const nextPanY =
@@ -21867,7 +21886,7 @@ export default function App() {
         const oldZoom = zoomRef.current;
         const factor = Math.exp(-e.deltaY * 0.0045);
         const minZ = isMultiPageSpreadEnabledRef.current ? 0.15 : 0.2;
-        const newZoom = Math.min(3.5, Math.max(minZ, oldZoom * factor));
+        const newZoom = Math.min(10, Math.max(minZ, oldZoom * factor));
         const originScreenX = paperRect
           ? paperRect.left + paperRect.width / 2
           : (workspaceRef.current?.clientWidth || window.innerWidth) / 2;
@@ -39661,15 +39680,16 @@ export default function App() {
       }
       if (bestK >= 0) {
         const p = target.points[keyIndices[bestK]];
+        const s = 1 / Math.max(0.85, zoomRef.current);
         return {
           strokeId: target.id,
           nodeIdx: bestK,
           x: p.x,
           y: p.y,
-          btnX: p.x + 26,
-          btnY: p.y - 18,
-          bezierBtnX: p.x - 26,
-          bezierBtnY: p.y - 18,
+          btnX: p.x + 32 * s,
+          btnY: p.y - 30 * s,
+          bezierBtnX: p.x - 32 * s,
+          bezierBtnY: p.y - 30 * s,
         };
       }
       return null;
@@ -39715,15 +39735,16 @@ export default function App() {
     }
     if (bestIdx >= 0) {
       const p = target.points[bestIdx];
+      const s = 1 / Math.max(0.85, zoomRef.current);
       return {
         strokeId: target.id,
         nodeIdx: bestIdx,
         x: p.x,
         y: p.y,
-        btnX: p.x + 26,
-        btnY: p.y - 18,
-        bezierBtnX: p.x - 26,
-        bezierBtnY: p.y - 18,
+        btnX: p.x + 32 * s,
+        btnY: p.y - 30 * s,
+        bezierBtnX: p.x - 32 * s,
+        bezierBtnY: p.y - 30 * s,
       };
     }
     return null;
@@ -39742,29 +39763,39 @@ export default function App() {
     clearActiveOverlay();
     const aCtx = activeCtxRef.current;
     if (!aCtx) return;
-    const { x, y, btnX: bx, btnY: by } = delNode;
-    const bzX = delNode.bezierBtnX ?? x - 26;
-    const bzY = delNode.bezierBtnY ?? y - 18;
+    const s = 1 / Math.max(0.85, zoomRef.current);
+    const { x, y } = delNode;
+    const bx = x + 32 * s;
+    const by = y - 30 * s;
+    const bzX = x - 32 * s;
+    const bzY = y - 30 * s;
+    delNode.btnX = bx;
+    delNode.btnY = by;
+    delNode.bezierBtnX = bzX;
+    delNode.bezierBtnY = bzY;
     const isBezActive =
       Boolean(delNode.strokeId) &&
       activeBezierNodeRef.current?.strokeId === delNode.strokeId &&
       activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
 
     const targetStroke = delNode.strokeId
-      ? activePage.strokes.find((s) => s.id === delNode.strokeId)
+      ? activePage.strokes.find((st) => st.id === delNode.strokeId)
       : undefined;
     const allowBezierOnNode = !targetStroke || !hasExtrude3D(targetStroke);
 
     aCtx.save();
     // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️) — hidden on 3D extruded shapes
     if (allowBezierOnNode) {
-      aCtx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
-      aCtx.lineWidth = 1.4;
+      aCtx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
+      aCtx.lineWidth = 1.4 * s;
       aCtx.beginPath();
-      aCtx.moveTo(x - 7, y - 5);
-      aCtx.lineTo(bzX + 9, bzY + 5);
+      aCtx.moveTo(x - 6 * s, y - 6 * s);
+      aCtx.lineTo(bzX + 8 * s, bzY + 8 * s);
       aCtx.stroke();
 
+      aCtx.save();
+      aCtx.translate(bzX, bzY);
+      aCtx.scale(s, s);
       aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
       aCtx.shadowBlur = 5;
       aCtx.shadowOffsetY = 1.5;
@@ -39772,7 +39803,7 @@ export default function App() {
       aCtx.strokeStyle = '#ffffff';
       aCtx.lineWidth = 2;
       aCtx.beginPath();
-      aCtx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+      aCtx.arc(0, 0, 11, 0, Math.PI * 2);
       aCtx.fill();
       aCtx.stroke();
 
@@ -39781,27 +39812,31 @@ export default function App() {
       aCtx.lineWidth = 1.6;
       aCtx.lineCap = 'round';
       aCtx.beginPath();
-      aCtx.moveTo(bzX - 5.2, bzY + 2.8);
-      aCtx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
-      aCtx.moveTo(bzX - 5.5, bzY - 2.2);
-      aCtx.lineTo(bzX + 5.5, bzY - 2.2);
+      aCtx.moveTo(-5.0, 2.6);
+      aCtx.quadraticCurveTo(0, -5.2, 5.0, 2.6);
+      aCtx.moveTo(-5.2, -2.1);
+      aCtx.lineTo(5.2, -2.1);
       aCtx.stroke();
       aCtx.fillStyle = '#ffffff';
       aCtx.beginPath();
-      aCtx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
-      aCtx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+      aCtx.arc(-5.2, -2.1, 1.45, 0, Math.PI * 2);
+      aCtx.arc(5.2, -2.1, 1.45, 0, Math.PI * 2);
       aCtx.fill();
+      aCtx.restore();
     }
 
     // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
     if (canDeleteStrokeNode(targetStroke, delNode.nodeIdx)) {
-      aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
-      aCtx.lineWidth = 1.4;
+      aCtx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+      aCtx.lineWidth = 1.4 * s;
       aCtx.beginPath();
-      aCtx.moveTo(x + 7, y - 5);
-      aCtx.lineTo(bx - 9, by + 5);
+      aCtx.moveTo(x + 6 * s, y - 6 * s);
+      aCtx.lineTo(bx - 8 * s, by + 8 * s);
       aCtx.stroke();
 
+      aCtx.save();
+      aCtx.translate(bx, by);
+      aCtx.scale(s, s);
       aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
       aCtx.shadowBlur = 5;
       aCtx.shadowOffsetY = 1.5;
@@ -39809,7 +39844,7 @@ export default function App() {
       aCtx.strokeStyle = '#ffffff';
       aCtx.lineWidth = 2;
       aCtx.beginPath();
-      aCtx.arc(bx, by, 11.5, 0, Math.PI * 2);
+      aCtx.arc(0, 0, 11, 0, Math.PI * 2);
       aCtx.fill();
       aCtx.stroke();
 
@@ -39819,21 +39854,22 @@ export default function App() {
       aCtx.lineCap = 'round';
       aCtx.lineJoin = 'round';
       aCtx.beginPath();
-      aCtx.moveTo(bx - 4.8, by - 3.2);
-      aCtx.lineTo(bx + 4.8, by - 3.2);
-      aCtx.moveTo(bx - 2, by - 3.2);
-      aCtx.lineTo(bx - 2, by - 5);
-      aCtx.lineTo(bx + 2, by - 5);
-      aCtx.lineTo(bx + 2, by - 3.2);
-      aCtx.moveTo(bx - 3.6, by - 3.2);
-      aCtx.lineTo(bx - 3, by + 4.8);
-      aCtx.lineTo(bx + 3, by + 4.8);
-      aCtx.lineTo(bx + 3.6, by - 3.2);
-      aCtx.moveTo(bx - 1.2, by - 0.8);
-      aCtx.lineTo(bx - 1.2, by + 2.8);
-      aCtx.moveTo(bx + 1.2, by - 0.8);
-      aCtx.lineTo(bx + 1.2, by + 2.8);
+      aCtx.moveTo(-4.6, -3.1);
+      aCtx.lineTo(4.6, -3.1);
+      aCtx.moveTo(-1.9, -3.1);
+      aCtx.lineTo(-1.9, -4.8);
+      aCtx.lineTo(1.9, -4.8);
+      aCtx.lineTo(1.9, -3.1);
+      aCtx.moveTo(-3.5, -3.1);
+      aCtx.lineTo(-2.9, 4.6);
+      aCtx.lineTo(2.9, 4.6);
+      aCtx.lineTo(3.5, -3.1);
+      aCtx.moveTo(-1.1, -0.8);
+      aCtx.lineTo(-1.1, 2.6);
+      aCtx.moveTo(1.1, -0.8);
+      aCtx.lineTo(1.1, 2.6);
       aCtx.stroke();
+      aCtx.restore();
     }
     aCtx.restore();
   };
@@ -43394,15 +43430,60 @@ export default function App() {
     if (effectiveTool === 'direct-node') {
       cancelNodeMagnetTimer();
       cancelAddNodeLongPress();
-      const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
+      const nodeUiScale = 1 / Math.max(0.85, zoomRef.current);
+      const nodeHitRadius = (e.pointerType === 'touch' ? 24 : 18) * nodeUiScale;
+      const bezierGripHitRadius = (e.pointerType === 'touch' ? 20 : 16) * nodeUiScale;
+      const actionBtnHitRadius = (e.pointerType === 'touch' ? 16 : 13.5) * nodeUiScale;
       if (activeNodeStrokeId) {
         const activeTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
-        // 0a. Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node!
+        const target = activeTargetStroke;
+
+        // 0a. HIGHEST PRIORITY: Check if user grabbed one of the two Circular Illustrator Bézier Tangent Grips (● in or ● out)
+        // BEFORE checking Delete/Toggle buttons so micro-adjusting tangent handles NEVER triggers accidental delete/toggle!
+        if (target && !isShapeWithoutNodes(target)) {
+          const bezNode = activeBezierNodeRef.current;
+          if (bezNode && bezNode.strokeId === target.id && target.isShape) {
+            const bp = target.points[bezNode.nodeIdx];
+            if (bp) {
+              if (
+                bp.outDx !== undefined &&
+                bp.outDy !== undefined &&
+                Math.hypot(pt.x - (bp.x + bp.outDx), pt.y - (bp.y + bp.outDy)) <= bezierGripHitRadius
+              ) {
+                pushUndoSnapshot(targetPage);
+                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'out' });
+                isDrawingRef.current = true;
+                return;
+              }
+              if (
+                bp.inDx !== undefined &&
+                bp.inDy !== undefined &&
+                Math.hypot(pt.x - (bp.x + bp.inDx), pt.y - (bp.y + bp.inDy)) <= bezierGripHitRadius
+              ) {
+                pushUndoSnapshot(targetPage);
+                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'in' });
+                isDrawingRef.current = true;
+                return;
+              }
+            }
+          }
+        }
+
+        // 0b. Only check Delete / Bézier action buttons if pointer is NOT directly on top of the active node itself
+        const isDirectlyOnFocusedNode =
+          activeDeleteNodeRef.current &&
+          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
+          Math.hypot(pt.x - activeDeleteNodeRef.current.x, pt.y - activeDeleteNodeRef.current.y) <=
+            11 * nodeUiScale;
+
+        // Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node
         if (
+          !isDirectlyOnFocusedNode &&
           activeDeleteNodeRef.current &&
           activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
           canDeleteStrokeNode(activeTargetStroke, activeDeleteNodeRef.current.nodeIdx) &&
-          Math.hypot(pt.x - activeDeleteNodeRef.current.btnX, pt.y - activeDeleteNodeRef.current.btnY) <= 20
+          Math.hypot(pt.x - activeDeleteNodeRef.current.btnX, pt.y - activeDeleteNodeRef.current.btnY) <=
+            actionBtnHitRadius
         ) {
           const toDel = activeDeleteNodeRef.current;
           activeDeleteNodeRef.current = null;
@@ -43414,16 +43495,17 @@ export default function App() {
           return;
         }
 
-        // 0b. Check if user clicked/tapped the Purple Bézier Tangent Handle button (〰️) next to the hovered/active node!
-        const bezTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
+        // Check if user clicked/tapped the Purple Bézier Tangent Handle button (〰️) next to the hovered/active node
+        const bezTargetStroke = activeTargetStroke;
         if (
+          !isDirectlyOnFocusedNode &&
           activeDeleteNodeRef.current &&
           activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
           (!bezTargetStroke || !hasExtrude3D(bezTargetStroke)) &&
           Math.hypot(
-            pt.x - (activeDeleteNodeRef.current.bezierBtnX ?? activeDeleteNodeRef.current.x - 26),
-            pt.y - (activeDeleteNodeRef.current.bezierBtnY ?? activeDeleteNodeRef.current.y - 18)
-          ) <= 20
+            pt.x - (activeDeleteNodeRef.current.bezierBtnX ?? activeDeleteNodeRef.current.x - 32 * nodeUiScale),
+            pt.y - (activeDeleteNodeRef.current.bezierBtnY ?? activeDeleteNodeRef.current.y - 30 * nodeUiScale)
+          ) <= actionBtnHitRadius
         ) {
           const toBez = activeDeleteNodeRef.current;
           hoverAddNodePreviewRef.current = null;
@@ -43433,35 +43515,7 @@ export default function App() {
           return;
         }
 
-        const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target && !isShapeWithoutNodes(target)) {
-          // 0c. Check if user grabbed one of the two Circular Illustrator Bézier Tangent Grips (● in or ● out) on the active Bézier node!
-          const bezNode = activeBezierNodeRef.current;
-          if (bezNode && bezNode.strokeId === target.id && target.isShape) {
-            const bp = target.points[bezNode.nodeIdx];
-            if (bp) {
-              if (
-                bp.outDx !== undefined &&
-                bp.outDy !== undefined &&
-                Math.hypot(pt.x - (bp.x + bp.outDx), pt.y - (bp.y + bp.outDy)) <= 20
-              ) {
-                pushUndoSnapshot(targetPage);
-                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'out' });
-                isDrawingRef.current = true;
-                return;
-              }
-              if (
-                bp.inDx !== undefined &&
-                bp.inDy !== undefined &&
-                Math.hypot(pt.x - (bp.x + bp.inDx), pt.y - (bp.y + bp.inDy)) <= 20
-              ) {
-                pushUndoSnapshot(targetPage);
-                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'in' });
-                isDrawingRef.current = true;
-                return;
-              }
-            }
-          }
 
           if (!target.isShape) {
             const keyIndices = getValidFreehandKeyNodeIndices(target);
@@ -43494,10 +43548,10 @@ export default function App() {
                   nodeIdx: bestK,
                   x: hitPt.x,
                   y: hitPt.y,
-                  btnX: hitPt.x + 26,
-                  btnY: hitPt.y - 18,
-                  bezierBtnX: hitPt.x - 26,
-                  bezierBtnY: hitPt.y - 18,
+                  btnX: hitPt.x + 32 * nodeUiScale,
+                  btnY: hitPt.y - 30 * nodeUiScale,
+                  bezierBtnX: hitPt.x - 32 * nodeUiScale,
+                  bezierBtnY: hitPt.y - 30 * nodeUiScale,
                 };
                 renderStaticSceneRef.current();
               }
@@ -43568,10 +43622,10 @@ export default function App() {
                   nodeIdx: bestIdx,
                   x: hitPt.x,
                   y: hitPt.y,
-                  btnX: hitPt.x + 26,
-                  btnY: hitPt.y - 18,
-                  bezierBtnX: hitPt.x - 26,
-                  bezierBtnY: hitPt.y - 18,
+                  btnX: hitPt.x + 32 * nodeUiScale,
+                  btnY: hitPt.y - 30 * nodeUiScale,
+                  bezierBtnX: hitPt.x - 32 * nodeUiScale,
+                  bezierBtnY: hitPt.y - 30 * nodeUiScale,
                 };
                 if (hitPt.smooth || hitPt.inDx !== undefined || hitPt.outDx !== undefined) {
                   activeBezierNodeRef.current = { strokeId: target.id, nodeIdx: bestIdx };
@@ -45574,6 +45628,7 @@ export default function App() {
 
         // 1. Check if cursor is hovering over an existing node OR over its adjacent Purple Bézier / Red Trash Bin buttons
         if (target) {
+          const s = 1 / Math.max(0.85, zoomRef.current);
           const bezNode = activeBezierNodeRef.current;
           if (bezNode && bezNode.strokeId === target.id && target.isShape) {
             const bp = target.points[bezNode.nodeIdx];
@@ -45581,10 +45636,10 @@ export default function App() {
               bp &&
               ((bp.outDx !== undefined &&
                 bp.outDy !== undefined &&
-                Math.hypot(hoverPt.x - (bp.x + bp.outDx), hoverPt.y - (bp.y + bp.outDy)) <= 18) ||
+                Math.hypot(hoverPt.x - (bp.x + bp.outDx), hoverPt.y - (bp.y + bp.outDy)) <= 16 * s) ||
                 (bp.inDx !== undefined &&
                   bp.inDy !== undefined &&
-                  Math.hypot(hoverPt.x - (bp.x + bp.inDx), hoverPt.y - (bp.y + bp.inDy)) <= 18))
+                  Math.hypot(hoverPt.x - (bp.x + bp.inDx), hoverPt.y - (bp.y + bp.inDy)) <= 16 * s))
             ) {
               hoverAddNodePreviewRef.current = null;
               e.currentTarget.style.cursor = 'grab';
@@ -45598,18 +45653,18 @@ export default function App() {
           const isNearExistingDelBtn =
             curDel &&
             curDel.strokeId === target.id &&
-            ((curCanDel && Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 22) ||
-              Math.hypot(hoverPt.x - (curDel.bezierBtnX ?? curDel.x - 26), hoverPt.y - (curDel.bezierBtnY ?? curDel.y - 18)) <= 22 ||
-              Math.hypot(hoverPt.x - curDel.x, hoverPt.y - curDel.y) <= 22 ||
-              (curCanDel && isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16)) ||
+            ((curCanDel && Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 16 * s) ||
+              Math.hypot(hoverPt.x - (curDel.bezierBtnX ?? curDel.x - 32 * s), hoverPt.y - (curDel.bezierBtnY ?? curDel.y - 30 * s)) <= 16 * s ||
+              Math.hypot(hoverPt.x - curDel.x, hoverPt.y - curDel.y) <= 16 * s ||
+              (curCanDel && isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 12 * s)) ||
               isPointNearSegment(
                 hoverPt,
                 { x: curDel.x, y: curDel.y },
-                { x: curDel.bezierBtnX ?? curDel.x - 26, y: curDel.bezierBtnY ?? curDel.y - 18 },
-                16
+                { x: curDel.bezierBtnX ?? curDel.x - 32 * s, y: curDel.bezierBtnY ?? curDel.y - 30 * s },
+                12 * s
               ));
 
-          const hoveredNode = isNearExistingDelBtn ? curDel : findHoveredNodeOnStroke(hoverPt, target, 20);
+          const hoveredNode = isNearExistingDelBtn ? curDel : findHoveredNodeOnStroke(hoverPt, target, 18 * s);
           if (hoveredNode) {
             hoverAddNodePreviewRef.current = null;
             activeDeleteNodeRef.current = hoveredNode;
@@ -54728,12 +54783,16 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.key === '-' || e.key === '_') {
           e.preventDefault();
-          zoomAroundViewportCenter(zoomRef.current - 0.15);
+          const zNow = zoomRef.current;
+          const step = zNow > 4 ? 0.6 : zNow > 2 ? 0.3 : 0.15;
+          zoomAroundViewportCenter(zNow - step);
           return;
         }
         if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.key === '=' || e.key === '+') {
           e.preventDefault();
-          zoomAroundViewportCenter(zoomRef.current + 0.15);
+          const zNow = zoomRef.current;
+          const step = zNow >= 4 ? 0.6 : zNow >= 2 ? 0.3 : 0.15;
+          zoomAroundViewportCenter(zNow + step);
           return;
         }
         if (e.code === 'Digit0' || e.code === 'Numpad0' || e.key === '0') {
@@ -59517,7 +59576,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     const zNow = zoomRef.current;
-                    const step = zNow <= 0.45 ? 0.05 : zNow <= 1.25 ? 0.1 : 0.15;
+                    const step = zNow <= 0.45 ? 0.05 : zNow <= 1.25 ? 0.1 : zNow <= 2.5 ? 0.2 : zNow <= 5 ? 0.5 : 1.0;
                     zoomAroundViewportCenter(zNow - step);
                   }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
@@ -59541,7 +59600,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     const zNow = zoomRef.current;
-                    const step = zNow < 0.45 ? 0.05 : zNow < 1.2 ? 0.1 : 0.15;
+                    const step = zNow < 0.45 ? 0.05 : zNow < 1.2 ? 0.1 : zNow < 2.5 ? 0.2 : zNow < 5 ? 0.5 : 1.0;
                     zoomAroundViewportCenter(zNow + step);
                   }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
