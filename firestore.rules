@@ -120,6 +120,9 @@ rules_version = '2';
 //   - ocrOtherUsersCount: number (optional, >= 0) - AI requests initiated by other registered users
 //   - ocrGuestCount: number (optional, >= 0) - AI requests initiated by guest visitors
 //   - ocrTotalCount: number (optional, >= 0) - total AI OCR calls count
+//   - ocrApi1Count: number (optional, >= 0) - AI requests routed through Gemini API key slot 1
+//   - ocrApi2Count: number (optional, >= 0) - AI requests routed through Gemini API key slot 2
+//   - ocrCustomKeyCount: number (optional, >= 0) - AI requests routed through a user-configured custom Gemini API key
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of metric update
 //
 // Collection: public_showcase_meta
@@ -444,6 +447,9 @@ service cloud.firestore {
           'ocrOtherUsersCount',
           'ocrGuestCount',
           'ocrTotalCount',
+          'ocrApi1Count',
+          'ocrApi2Count',
+          'ocrCustomKeyCount',
           'updatedAt'
         ]) &&
         hasRequiredFields(['date', 'updatedAt']) &&
@@ -465,7 +471,10 @@ service cloud.firestore {
         isValidOptionalNumber('ocrAdminCount') &&
         isValidOptionalNumber('ocrOtherUsersCount') &&
         isValidOptionalNumber('ocrGuestCount') &&
-        isValidOptionalNumber('ocrTotalCount');
+        isValidOptionalNumber('ocrTotalCount') &&
+        isValidOptionalNumber('ocrApi1Count') &&
+        isValidOptionalNumber('ocrApi2Count') &&
+        isValidOptionalNumber('ocrCustomKeyCount');
     }
 
     function isValidPublicShowcaseMeta(data, docId) {
