@@ -10118,256 +10118,96 @@ export default function App() {
 
   const MAX_UNDO_STACK_SIZE = 80;
   const suppressNextUndoRecordRef = useRef<boolean>(false);
+  const withSuppressedUndo = useCallback(<T,>(fn: () => T): T => {
+    const prev = suppressNextUndoRecordRef.current;
+    suppressNextUndoRecordRef.current = true;
+    try {
+      return fn();
+    } finally {
+      suppressNextUndoRecordRef.current = prev;
+    }
+  }, []);
   const textEditUndoRecordedForIdRef = useRef<string | null>(null);
   const undoStackRef = useRef<NotePage[]>(undoStack);
   const redoStackRef = useRef<NotePage[]>(redoStack);
 
   const isSamePageStateForUndo = useCallback((a: NotePage, b: NotePage): boolean => {
     if (a === b) return true;
+
+    const eqVal = (x: unknown, y: unknown, depth = 0): boolean => {
+      if (x === y) return true;
+      if (x == null || y == null) return x == null && y == null;
+      if (typeof x === 'number' && typeof y === 'number') {
+        if (Number.isNaN(x) && Number.isNaN(y)) return true;
+        return Math.abs(x - y) <= 0.05;
+      }
+      if (typeof x !== typeof y || typeof x !== 'object') return false;
+      if (depth > 8) return false;
+      if (Array.isArray(x)) {
+        if (!Array.isArray(y) || x.length !== y.length) return false;
+        for (let i = 0; i < x.length; i++) {
+          if (!eqVal(x[i], y[i], depth + 1)) return false;
+        }
+        return true;
+      }
+      if (Array.isArray(y)) return false;
+      const ox = x as Record<string, unknown>;
+      const oy = y as Record<string, unknown>;
+      const kx = Object.keys(ox);
+      const ky = Object.keys(oy);
+      let nonUndefX = 0;
+      for (let i = 0; i < kx.length; i++) {
+        const k = kx[i];
+        const vx = ox[k];
+        if (vx === undefined) continue;
+        nonUndefX++;
+        if (!eqVal(vx, oy[k], depth + 1)) return false;
+      }
+      let nonUndefY = 0;
+      for (let i = 0; i < ky.length; i++) {
+        if (oy[ky[i]] !== undefined) nonUndefY++;
+      }
+      return nonUndefX === nonUndefY;
+    };
+
     if (
       a.id !== b.id ||
       a.template !== b.template ||
       (a.paperColor || '') !== (b.paperColor || '') ||
-      a.orientation !== b.orientation
+      a.orientation !== b.orientation ||
+      (a.backgroundDataUrl || '') !== (b.backgroundDataUrl || '') ||
+      a.strokes.length !== b.strokes.length ||
+      (a.texts?.length || 0) !== (b.texts?.length || 0) ||
+      (a.images?.length || 0) !== (b.images?.length || 0) ||
+      (a.tapes?.length || 0) !== (b.tapes?.length || 0) ||
+      (a.layers?.length || 0) !== (b.layers?.length || 0) ||
+      (a.angleMarks?.length || 0) !== (b.angleMarks?.length || 0) ||
+      (a.springSims?.length || 0) !== (b.springSims?.length || 0) ||
+      (a.forceSims?.length || 0) !== (b.forceSims?.length || 0) ||
+      (a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0) ||
+      (a.atomSims?.length || 0) !== (b.atomSims?.length || 0) ||
+      (a.heatSims?.length || 0) !== (b.heatSims?.length || 0) ||
+      a.activeHeatSimId !== b.activeHeatSimId ||
+      a.activeCircuitSimId !== b.activeCircuitSimId ||
+      a.activeSpringSimId !== b.activeSpringSimId ||
+      a.activeForceSimId !== b.activeForceSimId ||
+      a.activeAtomSimId !== b.activeAtomSimId
     ) {
       return false;
     }
-    if (a.strokes.length !== b.strokes.length) return false;
-    if ((a.texts?.length || 0) !== (b.texts?.length || 0)) return false;
-    if ((a.images?.length || 0) !== (b.images?.length || 0)) return false;
-    if ((a.tapes?.length || 0) !== (b.tapes?.length || 0)) return false;
-    if ((a.layers?.length || 0) !== (b.layers?.length || 0)) return false;
-    if (Boolean(a.ruler?.visible) !== Boolean(b.ruler?.visible)) return false;
-    if ((a.springSims?.length || 0) !== (b.springSims?.length || 0)) return false;
-    if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
-    if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
-    if ((a.atomSims?.length || 0) !== (b.atomSims?.length || 0)) return false;
-    if ((a.heatSims?.length || 0) !== (b.heatSims?.length || 0)) return false;
-    if (a.activeHeatSimId !== b.activeHeatSimId) return false;
-    if (a.activeCircuitSimId !== b.activeCircuitSimId) return false;
-    if (a.activeSpringSimId !== b.activeSpringSimId) return false;
-    if (a.activeForceSimId !== b.activeForceSimId) return false;
-    if (a.activeAtomSimId !== b.activeAtomSimId) return false;
-    if (
-      a.springSims !== b.springSims &&
-      JSON.stringify(a.springSims || []) !== JSON.stringify(b.springSims || [])
-    ) {
-      return false;
-    }
-    if (
-      a.forceSims !== b.forceSims &&
-      JSON.stringify(a.forceSims || []) !== JSON.stringify(b.forceSims || [])
-    ) {
-      return false;
-    }
-    if (a.circuitSims !== b.circuitSims) {
-      const ca = a.circuitSims || [];
-      const cb = b.circuitSims || [];
-      for (let i = 0; i < ca.length; i++) {
-        if (ca[i] === cb[i]) continue;
-        if (
-          ca[i].id !== cb[i].id ||
-          ca[i].name !== cb[i].name ||
-          Boolean(ca[i].switchClosed) !== Boolean(cb[i].switchClosed) ||
-          (ca[i].flowDirection || 'electrons') !== (cb[i].flowDirection || 'electrons') ||
-          Boolean(ca[i].showElectrons ?? true) !== Boolean(cb[i].showElectrons ?? true) ||
-          (ca[i].speedMultiplier ?? 1) !== (cb[i].speedMultiplier ?? 1) ||
-          Boolean(ca[i].showDarkWireTrack) !== Boolean(cb[i].showDarkWireTrack) ||
-          (ca[i].componentMode || 'pictorial') !== (cb[i].componentMode || 'pictorial') ||
-          ca[i].strokeIds.length !== cb[i].strokeIds.length ||
-          ca[i].strokeIds.some((id, idx) => id !== cb[i].strokeIds[idx])
-        ) {
-          return false;
-        }
-      }
-    }
-    if (
-      a.atomSims !== b.atomSims &&
-      JSON.stringify(a.atomSims || []) !== JSON.stringify(b.atomSims || [])
-    ) {
-      return false;
-    }
-    if (a.heatSims !== b.heatSims) {
-      const ha = a.heatSims || [];
-      const hb = b.heatSims || [];
-      for (let i = 0; i < ha.length; i++) {
-        if (ha[i] === hb[i]) continue;
-        if (
-          ha[i].id !== hb[i].id ||
-          ha[i].name !== hb[i].name ||
-          (ha[i].ambientTemperature ?? 20) !== (hb[i].ambientTemperature ?? 20) ||
-          ha[i].objects.length !== hb[i].objects.length ||
-          JSON.stringify(ha[i].objects) !== JSON.stringify(hb[i].objects) ||
-          JSON.stringify(ha[i].graphs || [ha[i].graph]) !==
-            JSON.stringify(hb[i].graphs || [hb[i].graph])
-        ) {
-          return false;
-        }
-      }
-    }
 
-    if (a.strokes !== b.strokes) {
-      for (let i = 0; i < a.strokes.length; i++) {
-        const sa = a.strokes[i];
-        const sb = b.strokes[i];
-        if (sa === sb) continue;
-        if (
-          sa.id !== sb.id ||
-          sa.color !== sb.color ||
-          sa.width !== sb.width ||
-          (sa.opacity ?? 1) !== (sb.opacity ?? 1) ||
-          (sa.lineStyle || 'solid') !== (sb.lineStyle || 'solid') ||
-          (sa.fillColor || '') !== (sb.fillColor || '') ||
-          (sa.fillStyle || 'none') !== (sb.fillStyle || 'none') ||
-          (sa.fillTransparency ?? 0) !== (sb.fillTransparency ?? 0) ||
-          Boolean(sa.isShape) !== Boolean(sb.isShape) ||
-          sa.shapeType !== sb.shapeType ||
-          Boolean(sa.arrowStart) !== Boolean(sb.arrowStart) ||
-          Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
-          (sa.extrudeDx ?? null) !== (sb.extrudeDx ?? null) ||
-          (sa.extrudeDy ?? null) !== (sb.extrudeDy ?? null) ||
-          (sa.extrudeShape3D || '') !== (sb.extrudeShape3D || '') ||
-          (sa.shadingStyle3D || '') !== (sb.shadingStyle3D || '') ||
-          (sa.lightAngle3D ?? null) !== (sb.lightAngle3D ?? null) ||
-          sa.groupId !== sb.groupId ||
-          sa.layerId !== sb.layerId ||
-          sa.zOrder !== sb.zOrder ||
-          sa.switchClosed !== sb.switchClosed ||
-          sa.attachedToSpringId !== sb.attachedToSpringId ||
-          sa.attachedToWeightId !== sb.attachedToWeightId ||
-          sa.springSupport?.supportStrokeId !== sb.springSupport?.supportStrokeId ||
-          sa.springSupport?.fixedEnd !== sb.springSupport?.fixedEnd ||
-          sa.rodSupport?.supportStrokeId !== sb.rodSupport?.supportStrokeId ||
-          sa.rodSupport?.fixedEnd !== sb.rodSupport?.fixedEnd ||
-          sa.points.length !== sb.points.length
-        ) {
-          return false;
-        }
-        if (sa.points !== sb.points) {
-          for (let j = 0; j < sa.points.length; j++) {
-            const pa = sa.points[j];
-            const pb = sb.points[j];
-            if (pa === pb) continue;
-            if (
-              Math.abs(pa.x - pb.x) > 0.05 ||
-              Math.abs(pa.y - pb.y) > 0.05 ||
-              Math.abs((pa.cx ?? pa.x) - (pb.cx ?? pb.x)) > 0.05 ||
-              Math.abs((pa.cy ?? pa.y) - (pb.cy ?? pb.y)) > 0.05 ||
-              Math.abs((pa.inDx ?? 0) - (pb.inDx ?? 0)) > 0.05 ||
-              Math.abs((pa.inDy ?? 0) - (pb.inDy ?? 0)) > 0.05 ||
-              Math.abs((pa.outDx ?? 0) - (pb.outDx ?? 0)) > 0.05 ||
-              Math.abs((pa.outDy ?? 0) - (pb.outDy ?? 0)) > 0.05 ||
-              Boolean(pa.smooth) !== Boolean(pb.smooth) ||
-              pa.twist !== pb.twist
-            ) {
-              return false;
-            }
-          }
-        }
-      }
-    }
-
-    const ta = a.texts || [];
-    const tb = b.texts || [];
-    if (ta !== tb) {
-      for (let i = 0; i < ta.length; i++) {
-        if (ta[i] === tb[i]) continue;
-        if (
-          ta[i].id !== tb[i].id ||
-          ta[i].text !== tb[i].text ||
-          (ta[i].latex || '') !== (tb[i].latex || '') ||
-          Boolean(ta[i].isMath) !== Boolean(tb[i].isMath) ||
-          Math.abs(ta[i].x - tb[i].x) > 0.05 ||
-          Math.abs(ta[i].y - tb[i].y) > 0.05 ||
-          Math.abs((ta[i].boxWidth ?? 0) - (tb[i].boxWidth ?? 0)) > 0.05 ||
-          Math.abs((ta[i].boxHeight ?? 0) - (tb[i].boxHeight ?? 0)) > 0.05 ||
-          Math.abs((ta[i].lineHeight ?? 0) - (tb[i].lineHeight ?? 0)) > 0.005 ||
-          ta[i].fontSize !== tb[i].fontSize ||
-          ta[i].color !== tb[i].color ||
-          Boolean(ta[i].bold) !== Boolean(tb[i].bold) ||
-          Boolean(ta[i].shadow) !== Boolean(tb[i].shadow) ||
-          (ta[i].fontFamily || 'sans') !== (tb[i].fontFamily || 'sans') ||
-          (ta[i].textAlign || 'left') !== (tb[i].textAlign || 'left') ||
-          ta[i].groupId !== tb[i].groupId ||
-          ta[i].layerId !== tb[i].layerId ||
-          (ta[i].spans !== tb[i].spans &&
-            JSON.stringify(ta[i].spans || []) !== JSON.stringify(tb[i].spans || []))
-        ) {
-          return false;
-        }
-      }
-    }
-
-    const ia = a.images || [];
-    const ib = b.images || [];
-    if (ia !== ib) {
-      for (let i = 0; i < ia.length; i++) {
-        if (ia[i] === ib[i]) continue;
-        if (
-          ia[i].id !== ib[i].id ||
-          ia[i].dataUrl !== ib[i].dataUrl ||
-          Math.abs(ia[i].x - ib[i].x) > 0.05 ||
-          Math.abs(ia[i].y - ib[i].y) > 0.05 ||
-          Math.abs(ia[i].width - ib[i].width) > 0.05 ||
-          Math.abs(ia[i].height - ib[i].height) > 0.05 ||
-          (ia[i].rotation ?? 0) !== (ib[i].rotation ?? 0) ||
-          ia[i].groupId !== ib[i].groupId ||
-          ia[i].layerId !== ib[i].layerId ||
-          ia[i].zOrder !== ib[i].zOrder ||
-          (ia[i].clipPolygon !== ib[i].clipPolygon &&
-            JSON.stringify(ia[i].clipPolygon || []) !== JSON.stringify(ib[i].clipPolygon || []))
-        ) {
-          return false;
-        }
-      }
-    }
-
-    const tpa = a.tapes || [];
-    const tpb = b.tapes || [];
-    if (tpa !== tpb) {
-      for (let i = 0; i < tpa.length; i++) {
-        if (tpa[i] === tpb[i]) continue;
-        if (
-          tpa[i].id !== tpb[i].id ||
-          Math.abs(tpa[i].x1 - tpb[i].x1) > 0.05 ||
-          Math.abs(tpa[i].y1 - tpb[i].y1) > 0.05 ||
-          Math.abs(tpa[i].x2 - tpb[i].x2) > 0.05 ||
-          Math.abs(tpa[i].y2 - tpb[i].y2) > 0.05 ||
-          Boolean(tpa[i].revealed) !== Boolean(tpb[i].revealed) ||
-          tpa[i].color !== tpb[i].color ||
-          tpa[i].width !== tpb[i].width ||
-          tpa[i].layerId !== tpb[i].layerId
-        ) {
-          return false;
-        }
-      }
-    }
-
-    const la = a.layers || [];
-    const lb = b.layers || [];
-    if (la !== lb) {
-      for (let i = 0; i < la.length; i++) {
-        if (la[i] === lb[i]) continue;
-        if (
-          la[i].id !== lb[i].id ||
-          la[i].name !== lb[i].name ||
-          Boolean(la[i].visible) !== Boolean(lb[i].visible) ||
-          Boolean(la[i].locked) !== Boolean(lb[i].locked) ||
-          (la[i].opacity ?? 1) !== (lb[i].opacity ?? 1)
-        ) {
-          return false;
-        }
-      }
-    }
-
-    const ama = a.angleMarks || [];
-    const amb = b.angleMarks || [];
-    if (ama.length !== amb.length) return false;
-    if (ama !== amb) {
-      for (let i = 0; i < ama.length; i++) {
-        if (ama[i].id !== amb[i].id) return false;
-      }
-    }
+    if (!eqVal(a.ruler, b.ruler)) return false;
+    if (!eqVal(a.strokes, b.strokes)) return false;
+    if (!eqVal(a.texts || [], b.texts || [])) return false;
+    if (!eqVal(a.images || [], b.images || [])) return false;
+    if (!eqVal(a.tapes || [], b.tapes || [])) return false;
+    if (!eqVal(a.layers || [], b.layers || [])) return false;
+    if (!eqVal(a.angleMarks || [], b.angleMarks || [])) return false;
+    if (!eqVal(a.springSims || [], b.springSims || [])) return false;
+    if (!eqVal(a.forceSims || [], b.forceSims || [])) return false;
+    if (!eqVal(a.circuitSims || [], b.circuitSims || [])) return false;
+    if (!eqVal(a.atomSims || [], b.atomSims || [])) return false;
+    if (!eqVal(a.heatSims || [], b.heatSims || [])) return false;
 
     return true;
   }, []);
@@ -11145,6 +10985,7 @@ export default function App() {
       return;
     }
 
+    flushPendingSimDragCommit();
     textEditUndoRecordedForIdRef.current = null;
     suppressNextUndoRecordRef.current = false;
     const liveNbId = activeNotebookLiveRef.current.id || activeNotebook.id;
@@ -11152,7 +10993,9 @@ export default function App() {
       notebooksRef.current.find((n) => n.id === liveNbId) || activeNotebook;
     let prevPage: NotePage | null = null;
     let targetIdx = Math.min(
-      activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
+      (isDrawingRef.current ? activeDrawingPageIndexRef.current : null) ??
+        activePageIndexLiveRef.current ??
+        activePageIndex,
       curNb.pages.length - 1
     );
     let currentTargetPage = curNb.pages[targetIdx] || activePage;
@@ -11235,7 +11078,13 @@ export default function App() {
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
-    setEditingTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setEditingTextId(null);
+    if (
+      document.activeElement instanceof HTMLTextAreaElement &&
+      document.activeElement.closest('[data-text-id]')
+    ) {
+      document.activeElement.blur();
+    }
     setSelectedLassoTextIds((prev) => prev.filter((id) => validTxtIds.has(id)));
     setImageCropMode('none');
     showToast('↩️ Αναίρεση (Undo)!');
@@ -11245,6 +11094,7 @@ export default function App() {
     activePage,
     circuitProposal,
     clonePageFast,
+    flushPendingSimDragCommit,
     isSamePageStateForUndo,
     showToast,
     syncRuntimeSimStateToRestoredPage,
@@ -11257,6 +11107,7 @@ export default function App() {
       showToast('ℹ️ Δεν υπάρχει ενέργεια για Επανάληψη (Redo)!');
       return;
     }
+    flushPendingSimDragCommit();
     textEditUndoRecordedForIdRef.current = null;
     suppressNextUndoRecordRef.current = false;
     const liveNbId = activeNotebookLiveRef.current.id || activeNotebook.id;
@@ -11265,7 +11116,9 @@ export default function App() {
 
     let nextPage: NotePage | null = null;
     let targetIdx = Math.min(
-      activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current ?? activePageIndex,
+      (isDrawingRef.current ? activeDrawingPageIndexRef.current : null) ??
+        activePageIndexLiveRef.current ??
+        activePageIndex,
       curNb.pages.length - 1
     );
     let currentTargetPage = curNb.pages[targetIdx] || activePage;
@@ -11341,7 +11194,13 @@ export default function App() {
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
-    setEditingTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setEditingTextId(null);
+    if (
+      document.activeElement instanceof HTMLTextAreaElement &&
+      document.activeElement.closest('[data-text-id]')
+    ) {
+      document.activeElement.blur();
+    }
     setSelectedLassoTextIds((prev) => prev.filter((id) => validTxtIds.has(id)));
     setImageCropMode('none');
     showToast('↪️ Επανάληψη (Redo)!');
@@ -11350,10 +11209,75 @@ export default function App() {
     activePageIndex,
     activePage,
     clonePageFast,
+    flushPendingSimDragCommit,
     isSamePageStateForUndo,
     showToast,
     syncRuntimeSimStateToRestoredPage,
   ]);
+
+  // Always-fresh refs for Undo/Redo so the global capture-phase Cmd/Ctrl+Z listener never detaches or stales
+  const handleUndoRef = useRef(handleUndo);
+  handleUndoRef.current = handleUndo;
+  const handleRedoRef = useRef(handleRedo);
+  handleRedoRef.current = handleRedo;
+
+  useEffect(() => {
+    if (viewMode !== 'editor') return;
+
+    const isDedicatedTextEntryInput = (el: HTMLElement | null): boolean => {
+      if (!el) return false;
+      if (el.isContentEditable || el.closest('[contenteditable="true"]')) return true;
+      if (el.tagName === 'TEXTAREA') {
+        // Canvas text boxes are controlled React textareas where native browser undo breaks;
+        // let our own Undo/Redo stack handle Cmd+Z inside canvas text boxes!
+        if (el.closest('[data-text-id]')) return false;
+        return true;
+      }
+      if (el.tagName === 'INPUT') {
+        const type = ((el as HTMLInputElement).type || 'text').toLowerCase();
+        // Only actual text-typing inputs have native undo; range/color/checkbox/radio/button must NEVER block Cmd+Z!
+        return (
+          type === 'text' ||
+          type === 'search' ||
+          type === 'email' ||
+          type === 'password' ||
+          type === 'number' ||
+          type === 'url' ||
+          type === 'tel'
+        );
+      }
+      return false;
+    };
+
+    const onCaptureUndoRedoKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (showMathModal) return;
+
+      const code = e.code || '';
+      const key = (e.key || '').toLowerCase();
+      const keyCode = e.keyCode || e.which || 0;
+
+      const isUndoKey = code === 'KeyZ' || key === 'z' || key === 'ζ' || keyCode === 90;
+      const isRedoYKey = code === 'KeyY' || key === 'y' || key === 'υ' || keyCode === 89;
+      if (!isUndoKey && !isRedoYKey) return;
+
+      const activeEl = (document.activeElement as HTMLElement | null) || (e.target as HTMLElement | null);
+      if (isDedicatedTextEntryInput(activeEl)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (isRedoYKey || e.shiftKey) {
+        handleRedoRef.current();
+      } else {
+        handleUndoRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', onCaptureUndoRedoKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', onCaptureUndoRedoKeyDown, { capture: true });
+    };
+  }, [viewMode, showMathModal]);
 
   const getNextPageZOrder = (page: NotePage): number => {
     const imgCount = (page.images || []).length;
@@ -28024,11 +27948,9 @@ export default function App() {
 
     if (mass) {
       pushUndoSnapshot(activePage);
-      suppressNextUndoRecordRef.current = true;
-      attachMassToSpringAndCreateEquilibriumClone(sp.id, mass.id);
+      withSuppressedUndo(() => attachMassToSpringAndCreateEquilibriumClone(sp.id, mass.id));
       if (pointerInSel) {
-        suppressNextUndoRecordRef.current = true;
-        attachPointerToSpring(sp.id, pointerInSel.id);
+        withSuppressedUndo(() => attachPointerToSpring(sp.id, pointerInSel.id));
       }
       return true;
     }
@@ -28068,11 +27990,9 @@ export default function App() {
       ],
     };
     updateActivePage((page) => ({ ...page, strokes: [...page.strokes, newMassStroke] }), false);
-    suppressNextUndoRecordRef.current = true;
-    attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId);
+    withSuppressedUndo(() => attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId));
     if (pointerInSel) {
-      suppressNextUndoRecordRef.current = true;
-      attachPointerToSpring(sp.id, pointerInSel.id);
+      withSuppressedUndo(() => attachPointerToSpring(sp.id, pointerInSel.id));
     }
     return true;
   };
@@ -49765,37 +49685,37 @@ export default function App() {
                 isDraggingSelectionRef.current = null;
                 isDrawingRef.current = false;
                 clearActiveOverlay();
-                suppressNextUndoRecordRef.current = true;
-
-                if (
-                  physObj.kind === 'weight-to-weight' &&
-                  physObj.parentWeightId &&
-                  physObj.childWeightId
-                ) {
-                  attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
-                } else if (
-                  physObj.kind === 'mass-to-spring' &&
-                  physObj.massStrokeId
-                ) {
-                  attachMassToSpringAndCreateEquilibriumClone(
-                    physObj.springStrokeId,
-                    physObj.massStrokeId,
+                withSuppressedUndo(() => {
+                  if (
+                    physObj.kind === 'weight-to-weight' &&
+                    physObj.parentWeightId &&
+                    physObj.childWeightId
+                  ) {
+                    attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
+                  } else if (
+                    physObj.kind === 'mass-to-spring' &&
+                    physObj.massStrokeId
+                  ) {
+                    attachMassToSpringAndCreateEquilibriumClone(
+                      physObj.springStrokeId,
+                      physObj.massStrokeId,
+                      physObj.fixedEnd
+                    );
+                  } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
+                    attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
+                  } else if (
+                    physObj.kind === 'spring-to-support' &&
+                    physObj.supportStrokeId &&
                     physObj.fixedEnd
-                  );
-                } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
-                  attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
-                } else if (
-                  physObj.kind === 'spring-to-support' &&
-                  physObj.supportStrokeId &&
-                  physObj.fixedEnd
-                ) {
-                  snapAndAttachSpringToSupport(
-                    physObj.springStrokeId,
-                    physObj.supportStrokeId,
-                    physObj.fixedEnd,
-                    { x: physObj.targetX, y: physObj.targetY }
-                  );
-                }
+                  ) {
+                    snapAndAttachSpringToSupport(
+                      physObj.springStrokeId,
+                      physObj.supportStrokeId,
+                      physObj.fixedEnd,
+                      { x: physObj.targetX, y: physObj.targetY }
+                    );
+                  }
+                });
                 return;
               }
               timerObj.rafId = window.requestAnimationFrame(stepPhysicsMagnet);
@@ -51563,8 +51483,7 @@ export default function App() {
         const targetSim =
           (activePage.atomSims || []).find((s) => s.id === finishedAtomDrag.simId) ||
           getActiveAtomSim(activePage);
-        suppressNextUndoRecordRef.current = true;
-        handleAtomSimAction(targetSim, finishedAtomDrag.pendingButtonAction);
+        withSuppressedUndo(() => handleAtomSimAction(targetSim, finishedAtomDrag.pendingButtonAction!));
         return;
       }
       if (finishedAtomDrag.kind === 'valence-electron') {
@@ -51628,19 +51547,19 @@ export default function App() {
           targetStroke?.shapeType === 'spring' &&
           existingSimOnTargetSp
         ) {
-          suppressNextUndoRecordRef.current = true;
-          if (fSim) {
-            updateActivePage(
-              (p) => ({
-                ...p,
-                forceSims: (p.forceSims || []).filter((f) => f.id !== fSim.id),
-                activeForceSimId: p.activeForceSimId === fSim.id ? undefined : p.activeForceSimId,
-              }),
-              false
-            );
-          }
-          suppressNextUndoRecordRef.current = true;
-          attachPointerToSpring(targetStroke.id, draggedVecId);
+          withSuppressedUndo(() => {
+            if (fSim) {
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).filter((f) => f.id !== fSim.id),
+                  activeForceSimId: p.activeForceSimId === fSim.id ? undefined : p.activeForceSimId,
+                }),
+                false
+              );
+            }
+            attachPointerToSpring(targetStroke.id, draggedVecId);
+          });
           renderStaticSceneRef.current();
           return;
         }
@@ -51913,28 +51832,29 @@ export default function App() {
       if (pendingPhys) {
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
-        suppressNextUndoRecordRef.current = true;
-        if (
-          pendingPhys.kind === 'weight-to-weight' &&
-          pendingPhys.parentWeightId &&
-          pendingPhys.childWeightId
-        ) {
-          attachWeightToWeightChain(pendingPhys.parentWeightId, pendingPhys.childWeightId);
-        } else if (
-          pendingPhys.kind === 'mass-to-spring' &&
-          pendingPhys.massStrokeId
-        ) {
-          attachMassToSpringAndCreateEquilibriumClone(
-            pendingPhys.springStrokeId,
-            pendingPhys.massStrokeId,
-            pendingPhys.fixedEnd
-          );
-        } else if (
-          pendingPhys.kind === 'pointer-to-spring' &&
-          pendingPhys.pointerStrokeId
-        ) {
-          attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
-        }
+        withSuppressedUndo(() => {
+          if (
+            pendingPhys.kind === 'weight-to-weight' &&
+            pendingPhys.parentWeightId &&
+            pendingPhys.childWeightId
+          ) {
+            attachWeightToWeightChain(pendingPhys.parentWeightId, pendingPhys.childWeightId);
+          } else if (
+            pendingPhys.kind === 'mass-to-spring' &&
+            pendingPhys.massStrokeId
+          ) {
+            attachMassToSpringAndCreateEquilibriumClone(
+              pendingPhys.springStrokeId,
+              pendingPhys.massStrokeId,
+              pendingPhys.fixedEnd
+            );
+          } else if (
+            pendingPhys.kind === 'pointer-to-spring' &&
+            pendingPhys.pointerStrokeId
+          ) {
+            attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
+          }
+        });
         return;
       }
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
@@ -53283,15 +53203,13 @@ export default function App() {
       if (matchedParentWeightId) {
         const pid = matchedParentWeightId;
         window.setTimeout(() => {
-          suppressNextUndoRecordRef.current = true;
-          attachWeightToWeightChain(pid, newStroke.id);
+          withSuppressedUndo(() => attachWeightToWeightChain(pid, newStroke.id));
         }, 10);
       } else if (matchedUnloadedSpringId) {
         const sid = matchedUnloadedSpringId;
         const fe = matchedUnloadedSpringFixedEnd;
         window.setTimeout(() => {
-          suppressNextUndoRecordRef.current = true;
-          attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id, fe);
+          withSuppressedUndo(() => attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id, fe));
         }, 10);
       }
     } else if (
@@ -53328,8 +53246,7 @@ export default function App() {
       if (matchedSpringId) {
         const sid = matchedSpringId;
         window.setTimeout(() => {
-          suppressNextUndoRecordRef.current = true;
-          attachPointerToSpring(sid, newStroke.id);
+          withSuppressedUndo(() => attachPointerToSpring(sid, newStroke.id));
         }, 10);
       }
     }
@@ -54845,28 +54762,9 @@ export default function App() {
       const code = e.code;
       const key = e.key.toLowerCase();
 
-      // Support Ctrl+Z / Cmd+Z (Undo), Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z (Redo),
-      // Ctrl+C / Cmd+C (Copy), Ctrl+X / Cmd+X (Cut), Ctrl+V / Cmd+V (Paste), Ctrl+D / Cmd+D (Duplicate)
-      // Works with BOTH Control and Command keys on Mac Mini / Windows / iPad, in Greek & English layouts!
+      // Support Ctrl+C / Cmd+C (Copy), Ctrl+X / Cmd+X (Cut), Ctrl+V / Cmd+V (Paste), Ctrl+D / Cmd+D (Duplicate)
+      // (Note: Cmd/Ctrl+Z Undo and Cmd/Ctrl+Shift+Z / Ctrl+Y Redo are handled globally in capture phase above!)
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        // Ctrl+Z / Cmd+Z -> Undo (or Redo if Shift is held)
-        if (code === 'KeyZ' || key === 'z' || key === 'ζ') {
-          e.preventDefault();
-          if (e.shiftKey) {
-            handleRedo();
-          } else {
-            handleUndo();
-          }
-          return;
-        }
-
-        // Ctrl+Y / Cmd+Y -> Redo
-        if (code === 'KeyY' || key === 'y' || key === 'υ') {
-          e.preventDefault();
-          handleRedo();
-          return;
-        }
-
         // Ctrl+C / Cmd+C -> Copy selected shape/stroke/group, image, text box, or heat object
         if (code === 'KeyC' || key === 'c' || key === 'ψ') {
           const nativeSel = window.getSelection?.()?.toString().trim();
