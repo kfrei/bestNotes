@@ -4791,9 +4791,15 @@ export default function App() {
       return;
     }
 
-    // Desktop & iPad (>= 768px): Synchronized GPU translate3d push/pull (0 reflows during slide!)
+    // Desktop & iPad (>= 768px): Synchronized GPU FLIP scaleX + translate3d push/pull
+    // Right edge stays pinned to viewport right (zero clipping, zero end-snap jump, 0 reflows during slide!)
+    const containerW = paneEl.parentElement?.clientWidth || window.innerWidth;
+    const narrowedW = Math.max(320, containerW - SIDEBAR_W);
+    const fullScaleX = containerW / narrowedW;
+
     if (showLibraryTreeSidebar) {
-      // OPENING: keep right pane full-width during the 340ms GPU slide, then settle marginLeft once at the end
+      // OPENING: settle marginLeft once at frame 0 while GPU scaleX from right-edge keeps visual left at 0px,
+      // then smoothly compress scaleX -> 1 in exact 1:1 lockstep with sidebar translate3d(-288px -> 0px).
       asideEl.style.visibility = 'visible';
       asideEl.style.transition = 'none';
       asideEl.style.willChange = 'transform';
@@ -4801,8 +4807,9 @@ export default function App() {
 
       paneEl.style.transition = 'none';
       paneEl.style.willChange = 'transform';
-      paneEl.style.marginLeft = '0px';
-      paneEl.style.transform = 'translate3d(0px, 0, 0)';
+      paneEl.style.marginLeft = `${SIDEBAR_W}px`;
+      paneEl.style.transformOrigin = '100% 0%';
+      paneEl.style.transform = `scaleX(${fullScaleX}) translateZ(0)`;
 
       void asideEl.offsetWidth;
 
@@ -4810,12 +4817,12 @@ export default function App() {
       asideEl.style.transition = gpuTransition;
       paneEl.style.transition = gpuTransition;
       asideEl.style.transform = 'translate3d(0px, 0, 0)';
-      paneEl.style.transform = `translate3d(${SIDEBAR_W}px, 0, 0)`;
+      paneEl.style.transform = 'scaleX(1) translateZ(0)';
 
       libraryTreeAnimTimerRef.current = window.setTimeout(() => {
         paneEl.style.transition = 'none';
-        paneEl.style.marginLeft = `${SIDEBAR_W}px`;
         paneEl.style.transform = '';
+        paneEl.style.transformOrigin = '';
         paneEl.style.willChange = 'auto';
         asideEl.style.transition = 'none';
         asideEl.style.transform = 'translate3d(0px, 0, 0)';
@@ -4823,12 +4830,13 @@ export default function App() {
         libraryTreeAnimTimerRef.current = null;
       }, DURATION_MS + 16);
     } else {
-      // CLOSING: release marginLeft once at frame 0 while holding visual offset at +288px,
-      // then glide both back to 0px / -288px on the GPU with zero reflows & zero right-edge gap!
+      // CLOSING: keep marginLeft during the GPU slide and smoothly expand scaleX(1 -> fullScaleX) from right edge
+      // in exact 1:1 lockstep with sidebar translate3d(0px -> -288px), then release marginLeft with zero jump!
       paneEl.style.transition = 'none';
       paneEl.style.willChange = 'transform';
-      paneEl.style.marginLeft = '0px';
-      paneEl.style.transform = `translate3d(${SIDEBAR_W}px, 0, 0)`;
+      paneEl.style.marginLeft = `${SIDEBAR_W}px`;
+      paneEl.style.transformOrigin = '100% 0%';
+      paneEl.style.transform = 'scaleX(1) translateZ(0)';
 
       asideEl.style.transition = 'none';
       asideEl.style.willChange = 'transform';
@@ -4840,11 +4848,13 @@ export default function App() {
       asideEl.style.transition = gpuTransition;
       paneEl.style.transition = gpuTransition;
       asideEl.style.transform = `translate3d(-${SIDEBAR_W}px, 0, 0)`;
-      paneEl.style.transform = 'translate3d(0px, 0, 0)';
+      paneEl.style.transform = `scaleX(${fullScaleX}) translateZ(0)`;
 
       libraryTreeAnimTimerRef.current = window.setTimeout(() => {
         paneEl.style.transition = 'none';
+        paneEl.style.marginLeft = '0px';
         paneEl.style.transform = '';
+        paneEl.style.transformOrigin = '';
         paneEl.style.willChange = 'auto';
         asideEl.style.transition = 'none';
         asideEl.style.visibility = 'hidden';
