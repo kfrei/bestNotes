@@ -62347,7 +62347,7 @@ export default function App() {
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                             Φάκελοι ({visibleFolders.length})
                           </h2>
-                          <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4 sm:gap-5">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5">
                             {visibleFolders.map((folder) => {
                               const isDropHover = dragOverFolderName === folder.path;
                               const folderColor = folder.color || '#f59e0b';
@@ -62655,7 +62655,7 @@ export default function App() {
                               : `Σύνολο: ${formatNotebookSizeLabel(totalVisibleBytes)}`}
                           </span>
                         </div>
-                        <div className="grid grid-cols-[repeat(auto-fill,minmax(195px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(215px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(225px,1fr))] gap-4 sm:gap-5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-5">
                           {/* Symmetrical Faint-Gray Drag & Drop New Document Card right before the first Note! */}
                           <div
                             onClick={() => {
