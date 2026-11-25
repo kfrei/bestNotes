@@ -47878,7 +47878,7 @@ export default function App() {
                   const alongEdgeDist = Math.abs(relX * ux + relY * uy);
                   const perpCoord = relX * nx + relY * ny;
                   const uiS = 1 / Math.min(2.4, Math.max(0.85, zoomRef.current));
-                  const shiftLocked = Boolean(e.shiftKey || shiftKeyPressedRef.current);
+                  const shiftLocked = Boolean(e.shiftKey);
                   const snapTol = shiftLocked ? 9999 : 10 * uiS;
                   if (alongEdgeDist <= snapTol) {
                     const snappedMidAxisPt = {
@@ -47937,33 +47937,21 @@ export default function App() {
                 targetPt.smooth = targetPt.twist === 999 ? false : true;
                 targetPt.twist = targetPt.twist === 999 ? 999 : 777; // Mark manual user-adjusted Bézier handle while preserving welded seam flag!
                 const isSymmetricDrag = Boolean(
-                  e.shiftKey || shiftKeyPressedRef.current || symmetricBezierHandlesRef.current
+                  e.shiftKey || symmetricBezierHandlesRef.current
                 );
                 if (draggingNodeIdx.handleSide === 'out') {
                   targetPt.outDx = hdx;
                   targetPt.outDy = hdy;
-                  if (targetPt.inDx !== undefined && targetPt.inDy !== undefined && hDist > 1) {
-                    if (isSymmetricDrag) {
-                      targetPt.inDx = -hdx;
-                      targetPt.inDy = -hdy;
-                    } else {
-                      const inLen = Math.hypot(targetPt.inDx, targetPt.inDy);
-                      targetPt.inDx = -(hdx / hDist) * inLen;
-                      targetPt.inDy = -(hdy / hDist) * inLen;
-                    }
+                  if (isSymmetricDrag && targetPt.inDx !== undefined && targetPt.inDy !== undefined && hDist > 1) {
+                    targetPt.inDx = -hdx;
+                    targetPt.inDy = -hdy;
                   }
                 } else {
                   targetPt.inDx = hdx;
                   targetPt.inDy = hdy;
-                  if (targetPt.outDx !== undefined && targetPt.outDy !== undefined && hDist > 1) {
-                    if (isSymmetricDrag) {
-                      targetPt.outDx = -hdx;
-                      targetPt.outDy = -hdy;
-                    } else {
-                      const outLen = Math.hypot(targetPt.outDx, targetPt.outDy);
-                      targetPt.outDx = -(hdx / hDist) * outLen;
-                      targetPt.outDy = -(hdy / hDist) * outLen;
-                    }
+                  if (isSymmetricDrag && targetPt.outDx !== undefined && targetPt.outDy !== undefined && hDist > 1) {
+                    targetPt.outDx = -hdx;
+                    targetPt.outDy = -hdy;
                   }
                 }
               } else {
