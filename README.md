@@ -116,10 +116,27 @@
 
 ## 📚 Αρχεία Τεκμηρίωσης (Documentation)
 
-* 🗺️ **[`docs/CODEBASE_INDEX.md`](./docs/CODEBASE_INDEX.md):** **Master Code Index & Χάρτης Αρχιτεκτονικής** των 4 αυτοτελών πυλώνων (`simulations/`, `stem-engines/`, `canvas-tools/`, `features/library/`) και πλοήγησης στο `src/App.tsx`.
-* 📘 **[`ARCHITECTURE_AND_ROADMAP.md`](./ARCHITECTURE_AND_ROADMAP.md):** Πλήρης τεχνική αρχιτεκτονική, Κανόνας Σχεδίασης **Premium Minimalist Monochrome UI**, Reverse Engineering του `.goodnotes`, μαθηματικοί/διανυσματικοί αλγόριθμοι, αναλυτικός απολογισμός **`v0.99`**, τι εκκρεμεί από τα αρχικά ζητούμενα και το **Roadmap `v0.99–v1.0`**.
-* 🕰️ **[`docs/SIMULATIONS_GUIDE.md`](./docs/SIMULATIONS_GUIDE.md):** Οδηγός προδιαγραφών και ελέγχου των ζωντανών προσομοιώσεων Φυσικής (Εκκρεμές, Ελατήριο, Κυκλώματα, Χρονόμετρο).
-* ⌨️ **[`SHORTCUTS.md`](./SHORTCUTS.md):** Πλήρης οδηγός συντομεύσεων πληκτρολογίου που λειτουργούν ταυτόχρονα σε **Ελληνικά (GR)** και **Αγγλικά (EN)** (συμπεριλαμβανομένου του διπλού `S` για εναλλαγή Rectangular Selection ↔ Freehand Lasso και των βελών `↑ ↓ ← →` για μικρο-κινήσεις ακριβείας).
+* 🗺️ **[`CODEBASE_INDEX.md`](./CODEBASE_INDEX.md)** & **[`docs/CODEBASE_INDEX.md`](./docs/CODEBASE_INDEX.md):** **Master Code Index, Πίνακας Πλοήγησης & Χάρτης Ενοτήτων (`v1.1.5`)** για όλα τα domains (`simulations/`, `features/admin/`, `features/plans/`, `features/library/`, `services/storage/`, `stem-engines/`, `canvas-tools/`, `components/`, `utils/`, `data/`, `functions/`) και ακριβή line ranges στο `src/App.tsx`.
+* 📘 **[`ARCHITECTURE_AND_ROADMAP.md`](./ARCHITECTURE_AND_ROADMAP.md):** Πλήρης τεχνική αρχιτεκτονική, Κανόνας Σχεδίασης **Warm Studio & Liquid Glass**, Reverse Engineering του `.goodnotes`, μαθηματικοί/διανυσματικοί αλγόριθμοι, κατάσταση **`v1.1.5`**, και το **Roadmap `v1.2+`** (Internal Split-View, Global Search, Αριθμητικά Κυκλώματα $V,I,R$, Capacitor Native).
+* 🕰️ **[`docs/SIMULATIONS_GUIDE.md`](./docs/SIMULATIONS_GUIDE.md):** Οδηγός προδιαγραφών και ελέγχου των ζωντανών προσομοιώσεων Φυσικής & Χημείας (Κυκλώματα, Ελατήρια, Δυνάμεις/Εκκρεμές/Κεκλιμένο, Άτομο, Θερμότητα, Χρονόμετρο & Laser).
+* ⚡ **[`docs/SIMULATION_GUIDELINES.md`](./docs/SIMULATION_GUIDELINES.md):** Υποχρεωτικός Κανόνας Απόδοσης **Zero-Slowdown Charter** (`0.00 ms / 0 RAF` σε παύση) & αρχή *"Pencil & Shapes First"*.
+* ⌨️ **[`SHORTCUTS.md`](./SHORTCUTS.md):** Πλήρης οδηγός συντομεύσεων πληκτρολογίου **Ελληνικά (GR) & Αγγλικά (EN)** + αλληλεπιδράσεις καμβά `v1.1.5` (Κόμβοι `1000%`, `⇄`/`Shift` Bézier, Γωνίες, Χάρακας).
+
+### 🧭 Πίνακας Πλοήγησης & Χάρτης Ενοτήτων (`v1.1.5`)
+
+| Domain / Ενότητα | Διαδρομή | Ρόλος & Βασικά Σύμβολα |
+| :--- | :--- | :--- |
+| **Κύριος Editor & Canvas** | [`src/App.tsx`](./src/App.tsx) | State & Plans (`L1465`), Sync & Showcase (`L5857`), Static Renderer (`L14354`), Force/Incline Helpers (`L22976`), Sim Overlays (`L30907`), Live TV (`L38445`), Pointer & Precision Nodes 1000% (`L41387`), Shortcuts (`L54958`), Library GPU FLIP (`L59414`), Toolbars & Workspace (`L64687`). |
+| **Προσομοιώσεις (`feature-simulations`)** | [`src/simulations/`](./src/simulations/) | `core/`, `registry/`, `ui/` (`StopwatchWidget`, `FullscreenLaserCanvas`) + Modules: `circuits/`, `gravity/`, `heat/`, `mechanics/pendulum/`. |
+| **Admin Panel (`feature-admin`, lazy)** | [`src/features/admin/`](./src/features/admin/) | `AdminPortal`, `AdminDashboard`, `AdminPlansView`, `AdminUsersTable`, `AdminFirebaseBillingView`, `AdminUsageCharts`, `AdminOcrAnalyticsView`, `AdminPerformanceView`. |
+| **Πλάνα & Όρια (`ULTRA`/`PLUS`/`FREE`)** | [`src/features/plans/`](./src/features/plans/) | `types.ts`, `quotaLogic.ts`, `plansService.ts`, `LiquidUpgradeModal.tsx`, Guest Mode. |
+| **Βιβλιοθήκη & Φάκελοι** | [`src/features/library/`](./src/features/library/) | `RecentlyOpenedStrip`, `LibraryDeleteModal`, `FolderEditModal`, `folderPresets.tsx`. |
+| **Storage, Sync & Showcase** | [`src/services/storage/`](./src/services/storage/) | `indexedDb.ts`, `firestoreSync.ts`, `storageCleaners.ts`, `publicShowcaseLogic.ts`, `publicShowcaseSync.ts`. |
+| **STEM & Vision OCR** | [`src/stem-engines/`](./src/stem-engines/) | `OcrPrompts.ts`, `periodicTableData.ts`, `physicsEquationsLibrary.ts`, `LassoOcrButtons.tsx`, `OcrHoverPreviewCard.tsx`. |
+| **UI Components & Modals** | [`src/components/`](./src/components/) | `LandingPage`, `LibraryAmbientArcDial`, `RichHoverTooltip`, `ShapeBooleanDropdown`, `ShapeSliceDropdown`, `WarmStudioToggle`, `AdminPerfPill`, `modals/`. |
+| **Core Utilities** | [`src/utils/`](./src/utils/) | `geometryAndAlgorithms.ts` (7-model Gemini chain), `googleDrivePdfSync.ts`, `liveTvSync.ts`, `extrude3DRenderer.ts`, `goodnotesParser.ts`, `pdfAndImageImporter.ts`, `interactiveAngleTool.ts`, `shapeBooleanOps.ts`, `shapeSliceOps.ts`. |
+| **Data, Vectors & Lazy Seeds** | [`src/data/`](./src/data/) | `seedIds.ts` + lazy `seeds/` (`-888.7 KB` gzip), `vectors/` (5 SVG κατάλογοι), `mindMapsCatalog.ts`, `stickersCatalog.ts`, `stickFiguresSvg.ts`. |
+| **Cloud Functions & Rules** | [`functions/src/index.ts`](./functions/src/index.ts) & [`firestore.rules`](./firestore.rules) | Drive OAuth refresh, Cloud Monitoring Firebase/Gemini stats & Firestore security rules. |
 
 ---
 

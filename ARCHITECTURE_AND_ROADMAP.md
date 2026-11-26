@@ -580,14 +580,29 @@ sequenceDiagram
 
 ---
 
-## 12. 🏛️ Αρχιτεκτονική Αποσύνθεσης & Ευρετήριο Κώδικα (Modular Architecture & Code Index)
+## 12. 🏛️ Αρχιτεκτονική Αποσύνθεσης, Πίνακας Πλοήγησης & Χάρτης Ενοτήτων (`v1.1.5`)
 
 > [!NOTE]
-> Για τον πλήρη πίνακα συμβόλων και αρχείων, βλέπε το αναλυτικό έγγραφο **[CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md)** (και το [./CODEBASE_INDEX.md](./CODEBASE_INDEX.md)).
+> Για τον πλήρη αναλυτικό χάρτη γραμμών του `src/App.tsx` και όλων των αρχείων, βλέπε το **[CODEBASE_INDEX.md](./CODEBASE_INDEX.md)** (συγχρονισμένο 100% με το **[docs/CODEBASE_INDEX.md](./docs/CODEBASE_INDEX.md)**).
 
-Με την εξέλιξη του BestNotes, ο μονολιθικός κώδικας του `src/App.tsx` διασπάστηκε σε **4 αυτοτελείς πυλώνες (Domain Folders)**, καθένας με το δικό του **Master Facade (`index.ts`)**:
+Με την εξέλιξη του BestNotes στην **`v1.1.5`**, ο κώδικας είναι οργανωμένος σε **10+ αυτοτελείς πυλώνες (Domains)** με code-splitting (`feature-simulations`, lazy `feature-admin`, lazy `data-seeds`) και ακριβή χάρτη ενοτήτων μέσα στο `src/App.tsx`:
 
-### 12.1 Οι 4 Αυτοτελείς Πυλώνες (Domains)
+### 12.0 Χάρτης Ενοτήτων `src/App.tsx` (`v1.1.5`)
+
+| Ενότητα | Γραμμές | Περιγραφή |
+| :--- | :---: | :--- |
+| **App State, Plans & Quotas** | `L1465 – L5856` | Editor/Library/Sim state, `ULTRA`/`PLUS`/`FREE`/Guest quotas (`L1651`), Undo/Redo. |
+| **Cloud Sync & Public Showcase** | `L5857 – L14226` | `pushNotebookToCloudTracked` (`L5857`), `10s` idle debounce, instant flush, Public Showcase `Σημειώσεις` (`L7622`). |
+| **Static Canvas 2D Renderer** | `L14227 – L22087` | `renderStaticScene` (`L14354`), `twist === 888` subpath breaks (`L13982`), `angleMarks`, 3D shapes, `KaTeX`. |
+| **Sim Helpers & Overlays** | `L22088 – L38443` | Circuits (`L22089`), Springs (`L22359`), Forces/Incline ανοιχτό `∠` + με/χωρίς σώμα (`L22976`, `L23171`), Overlays (`L30907`). |
+| **Live 16:9 TV Engine** | `L38444 – L41386` | WebRTC-first P2P (`0` Firestore writes) + Firestore fallback, πάντα OFF στην εκκίνηση. |
+| **Pointer Events & Precision Nodes** | `L41387 – L54957` | `handlePointerDown/Move/Up`, Precision Nodes `1000%`, magnetic `+`, symmetric Bézier (`⇄`/`Shift`), `incline-peak` drag (`L46665`). |
+| **Shortcuts, Library GPU FLIP & UI** | `L54958 – EOF` | EN/GR Shortcuts (`L54958`), Top Bar & Library GPU FLIP (`L59414`, `L62604`), Toolbars (`L64687`), Workspace & Sim Panel (`L67922`), Multi-Page Grid (`L77644`). |
+
+### 12.1 Οι Αυτοτελείς Πυλώνες (Domains)
+
+0. **`src/features/plans/` (Συνδρομητικά Πλάνα, Όρια & Guest Mode — `v1.1.2+`):**
+   - `types.ts`, `quotaLogic.ts`, `plansService.ts` (`app_plans/{planId}`, `user_profiles/{uid}`), `components/LiquidUpgradeModal.tsx`.
 
 1. **`src/simulations/` (Προσομοιώσεις & Physics):**
    - **Core Engine:** `PhysicsMath.ts` (καθαρή διανυσματική άλγεβρα 2D), `UniversalStopwatchBridge.ts` (Pub/Sub για χρονόμετρο & προσομοιώσεις), `VirtualPencilAnimator.ts` (αυτόματο μολύβι).
