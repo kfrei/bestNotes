@@ -298,7 +298,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const metrics = computeAdminMetrics(users);
 
   return (
-    <div className="h-screen max-h-screen w-full bg-[#f7f5f0] flex text-[#2c3e50] antialiased overflow-hidden select-auto touch-pan-y">
+    <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#f7f5f0] flex text-[#2c3e50] antialiased overflow-hidden select-auto touch-pan-y">
       {/* Left Vertical Sidebar */}
       <AdminSidebar
         currentTab={currentTab}
@@ -308,7 +308,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 h-full min-w-0 p-6 md:p-8 space-y-6 overflow-y-auto overscroll-contain touch-pan-y pb-36">
+      <main className="flex-1 h-full min-w-0 min-h-0 p-6 md:p-8 space-y-6 overflow-y-auto overscroll-contain touch-pan-y pb-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))]">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-[#dfd8cb]">
           <div>

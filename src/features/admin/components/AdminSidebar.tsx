@@ -76,14 +76,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 h-full shrink-0 bg-[#1b2a4a] text-white flex flex-col justify-between p-4 shadow-2xl select-none overflow-y-auto overscroll-contain">
-      {/* Top Branding */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 px-2 pt-2">
+    <aside className="w-60 lg:w-64 h-full min-h-0 shrink-0 bg-[#1b2a4a] text-white flex flex-col justify-between px-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl select-none overflow-hidden">
+      {/* Top Branding + Scrollable Nav */}
+      <div className="flex flex-col min-h-0 flex-1 gap-3.5">
+        <div className="flex items-center gap-3 px-2 pt-1 shrink-0">
           <img
             src="/explainboards-icon.png"
             alt="ExplainBoards"
-            className="w-10 h-10 rounded-2xl shadow-md shrink-0 object-contain"
+            className="w-9 h-9 rounded-2xl shadow-md shrink-0 object-contain"
           />
           <div className="min-w-0">
             <h1 className="text-base font-extrabold tracking-tight truncate leading-tight">
@@ -97,7 +97,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </div>
 
         {/* Navigation Items (Monochrome Minimal Navy & Warm Beige) */}
-        <nav className="space-y-1.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1 pr-0.5">
           {navItems.map((item) => {
             const isActive = currentTab === item.id;
             return (
@@ -105,24 +105,24 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-left ${
                   isActive
-                    ? 'bg-[#fdfbf7] text-[#1b2a4a] shadow-md shadow-black/20 scale-[1.02]'
+                    ? 'bg-[#fdfbf7] text-[#1b2a4a] shadow-md shadow-black/20'
                     : 'text-white/80 hover:text-white hover:bg-white/10'
                 }`}
               >
-                <span className={isActive ? 'text-[#1b2a4a]' : 'text-white/70'}>
+                <span className={`shrink-0 ${isActive ? 'text-[#1b2a4a]' : 'text-white/70'}`}>
                   {item.icon}
                 </span>
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Bottom Profile & Back Action */}
-      <div className="space-y-3 pt-4 border-t border-white/15">
+      {/* Bottom Profile & Back Action (Always visible, never clipped on iPad) */}
+      <div className="space-y-2.5 pt-3 mt-2 border-t border-white/15 shrink-0">
         <div className="px-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Συνδεδεμένος Admin
@@ -135,10 +135,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         <button
           type="button"
           onClick={onBackToNotes}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Επιστροφή στις Σημειώσεις</span>
+          <ArrowLeft className="w-4 h-4 shrink-0" />
+          <span className="truncate">Επιστροφή στις Σημειώσεις</span>
         </button>
       </div>
     </aside>
