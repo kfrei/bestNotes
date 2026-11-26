@@ -1,7 +1,7 @@
 # 📘 BestNotes — Πλήρης Τεχνική Τεκμηρίωση, Αρχιτεκτονική & Roadmap Υλοποίησης
 
 > [!IMPORTANT]
-> **Κεντρική Φιλοσοφία του BestNotes (`v1.1 — simPDFFixes`):**
+> **Κεντρική Φιλοσοφία του BestNotes (`v1.1.5 — precisionNodes & inclineFlex`):**
 > Δημιουργούμε το απόλυτο εργαλείο χειρόγραφων σημειώσεων για **iPad (με Apple Pencil Pro)**, **Android Tablets** και **Web**, κρατώντας **100% το οικείο, γρήγορο UI και την αίσθηση γραφής του Goodnotes 6**, αφαιρώντας τα περιττά (ήχος/βίντεο) και ενσωματώνοντας **εγγενή γραφιστικά εργαλεία από τα Adobe Illustrator & Photoshop**, **ζωντανές προσομοιώσεις STEM** με **αυστηρό Κανόνα Μηδενικής Επιβράδυνσης (Zero-Slowdown Charter: `0.00 ms` / `0 RAF/sec` σε παύση, `< 4.0 ms` ενεργό, lazy VRAM, live telemetry)** καθώς και **αθόρυβο προγραμματισμένο συγχρονισμό στο Google Drive** (`08:00–14:00` κάθε 1ω, `14:00–20:00` κάθε 2ω).
 
 ---
@@ -286,12 +286,12 @@ sequenceDiagram
 
 ---
 
-## 9. Κατάσταση Έργου — Έκδοση `v1.1 (simPDFFixes)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
+## 9. Κατάσταση Έργου — Έκδοση `v1.1.5 (precisionNodes & inclineFlex)`: Τι Κάναμε (`✅`) & Τι Χρωστάμε (`⏳`)
 
 > [!NOTE]
-> **Τρέχουσα Έκδοση:** **`v1.1 — simPDFFixes`** (20 Νοεμβρίου 2026) — για τις νεότερες αναβαθμίσεις `v1.05`–`v1.1`, βλέπε επίσης την Ενότητα 12.1 (#10).
-> **Live Web App (Primary):** [https://explainboards.web.app](https://explainboards.web.app) & [https://mybestnotes.web.app](https://mybestnotes.web.app) (και [https://bestnotes-2026.web.app](https://bestnotes-2026.web.app))
-> **GitHub Repository:** [https://github.com/kfrei/bestNotes](https://github.com/kfrei/bestNotes)
+> **Τρέχουσα Έκδοση:** **`v1.1.5 — precisionNodes & inclineFlex`** (26 Νοεμβρίου 2026) — για το αναλυτικό changelog `v1.1.2`–`v1.1.5` βλέπε [`README.md`](./README.md) και τον χάρτη ενοτήτων στο [`CODEBASE_INDEX.md`](./CODEBASE_INDEX.md).
+> **Live Web App (Μοναδικό Hosting Site):** [https://explainboards.web.app](https://explainboards.web.app)
+> **GitHub Remotes:** `origin` ([kfrei/bestNotes](https://github.com/kfrei/bestNotes)) & `explainboards` ([freiderikosk/explainboards](https://github.com/freiderikosk/explainboards))
 
 > [!IMPORTANT]
 > **🎨 Κανόνας Σχεδίασης UI & Εικονιδίων (Premium Minimalist Monochrome UI & Unified Top Bar Standard):**
@@ -502,7 +502,7 @@ sequenceDiagram
 | Προτεραιότητα | Εκκρεμότητα από τα Αρχικά Ζητούμενα | Τι Έχει Γίνει & Τι Απομένει |
 | :---: | :--- | :--- |
 | **1** | **🔗 Κοινή Χρήση με Ζωντανό Link (`Viewers` & `Collaborators`)** | Το Firestore Sync και η εξαγωγή PDF είναι έτοιμα. Απομένει το κουμπί **«Share Link (`?doc=...`)»** για Read-Only (`Viewer`) προβολή από μαθητές ή ταυτόχρονη συνεργατική γραφή (`Collaborator`). |
-| **2** | **🧩 Boolean Shape Builder (`Unite` / `Subtract` / `Intersect`)** | Έχουμε ήδη τη συγκόλληση ανοιχτών γραμμών (`1s Weld`) και το κουμπί `Πολύγωνο`. Απομένει η πράξη **Ένωσης (`Unite`)** και **Αφαίρεσης (`Subtract`)** μεταξύ δύο επικαλυπτόμενων κλειστών σχημάτων (π.χ. κύκλος μείον ορθογώνιο = φακός). |
+| **2** | **✅ Boolean Shape Builder (`Συνδυασμός ▾` & `✂️ Κόψιμο ▾`)** | **ΟΛΟΚΛΗΡΩΘΗΚΕ (`v1.1.2`):** Ένωση, Τομή, Αφαίρεση, Εκτός Τομής, Τεμαχισμός (`twist: 888` οπές) & Μαχαίρι / Ίσα Κομμάτια (`shapeBooleanOps.ts`, `shapeSliceOps.ts`) με 100% Undo. |
 | **3** | **✨ Προαιρετικό Κουμπί «Στρώσιμο Χειρογράφου» (`Tidy Greek Handwriting`) στο Λάσο** | Επαναφορά του `beautifyHandwritingStrokes` αποκλειστικά ως προαιρετικό κουμπί στο Λάσο για ευθυγράμμιση της νοητής γραμμής (baseline) επιλεγμένων προτάσεων χωρίς καμία αλλοίωση κατά τη γραφή. |
 | **4** | **📱 Πλήρες Offline PWA Service Worker & Native iPadOS Wrapper (Capacitor)** | Προσθήκη Service Worker για 100% offline άνοιγμα χωρίς Wi-Fi και Capacitor native bridge για το **Apple Pencil Pro Squeeze gesture**. |
 
@@ -542,7 +542,7 @@ sequenceDiagram
 | **Μπάρες Εργαλείων (Toolbars)** | `#f7f5f0` | `bg-[#f7f5f0]/95 backdrop-blur-md border-[#dfd8cb]` |
 | **Υποδοχές & Κάρτες (Cards / Tracks)** | `#efebe3` | `bg-[#efebe3] border-[#dfd8cb]` (ανενεργές καταστάσεις, φόντο input/pills) |
 | **Περιγράμματα (Borders / Dividers)** | `#dfd8cb` | `border-[#dfd8cb]` (διακριτικά, κομψά hairlines 1px) |
-| **Κύριο Ενεργό Χρώμα (Primary Navy)** | `#0066ff` | `bg-[#0066ff] text-white hover:bg-[#0055d4]` (βαθύ navy studio) |
+| **Κύριο Ενεργό Χρώμα (Primary Navy)** | `#1b2a4a` / `#234978` | `bg-[#1b2a4a] text-white hover:bg-[#234978]` (βαθύ navy studio) |
 | **Κύριο Κείμενο (Body Text)** | `#2c3e50` | `text-[#2c3e50]` (ευανάγνωστο ανθρακί-μπλε) |
 | **Δευτερεύον / Υποστηρικτικό Κείμενο** | `#64748b` | `text-[#64748b]` (ήπιο slate για επεξηγήσεις και labels) |
 | **Επικίνδυνες Ενέργειες (Danger / Delete)** | `#fdf6f6` / `#b91c1c` | `bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#b91c1c] hover:text-white` |

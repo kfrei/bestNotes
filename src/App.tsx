@@ -22973,19 +22973,38 @@ export default function App() {
     );
   };
 
-  const attachBlockToInclineForSim = (inclineStrokeId: string, blockStrokeId: string) => {
+  const attachBlockToInclineForSim = (
+    inclineStrokeId: string,
+    blockStrokeId?: string | null,
+    openInclineOverride?: {
+      pStart: { x: number; y: number };
+      pBaseCorner: { x: number; y: number };
+      pPeak: { x: number; y: number };
+      isOpenAngle: boolean;
+      extraStrokeIdsToRemove?: string[];
+    }
+  ) => {
     setSelectedStrokeIds([]);
     setActiveNodeStrokeId(null);
     setForceSimSubTab('incline');
+    suppressNextUndoRecordRef.current = false;
+    let createdBlockAutomatically = false;
     updateActivePage((page) => {
       const incSt = page.strokes.find((s) => s.id === inclineStrokeId);
-      const blkSt = page.strokes.find((s) => s.id === blockStrokeId);
-      if (!incSt || !blkSt || incSt.points.length < 3) return page;
+      const blkSt = blockStrokeId
+        ? page.strokes.find((s) => s.id === blockStrokeId)
+        : undefined;
+      if (!incSt) return page;
+      if (!openInclineOverride && incSt.points.length < 3) return page;
 
-      let pStart = incSt.points[0];
-      let pBaseCorner = incSt.points[1];
-      let pPeak = incSt.points[2];
-      if (incSt.shapeType !== 'incline-wedge') {
+      let pStart = openInclineOverride ? openInclineOverride.pStart : incSt.points[0];
+      let pBaseCorner = openInclineOverride ? openInclineOverride.pBaseCorner : incSt.points[1];
+      let pPeak = openInclineOverride ? openInclineOverride.pPeak : incSt.points[2];
+      const isOpenAngle = openInclineOverride
+        ? openInclineOverride.isOpenAngle
+        : incSt.points[2]?.twist === 888;
+
+      if (!openInclineOverride && incSt.shapeType !== 'incline-wedge') {
         // Normalize any triangle / inclined-plane vertices into (pStart = bottom-left/right, pBaseCorner, pPeak = highest vertex)
         const verts = incSt.points.slice(0, 3);
         const sortedByY = [...verts].sort((a, b) => a.y - b.y);
@@ -23004,14 +23023,30 @@ export default function App() {
 
       const lenPx = Math.max(140, Math.hypot(pPeak.x - pStart.x, pPeak.y - pStart.y));
       const angDeg = Math.max(
-        15,
+        5,
         Math.min(
-          60,
+          80,
           Math.round((Math.atan2(Math.abs(pStart.y - pPeak.y), Math.abs(pPeak.x - pStart.x)) * 180) / Math.PI)
         )
       );
       const groupId = incSt.groupId || `grp-incline-${Date.now()}`;
-      const blockPts = computeInclinedPlaneBlockPoints(pStart, pBaseCorner, pPeak);
+
+      // If user already drew a block on the slope, preserve its approximate position along the slope
+      let tCenter = 0.52;
+      if (blkSt && blkSt.points.length >= 2) {
+        const bb = getStrokeBounds(blkSt);
+        const bcx = (bb.minX + bb.maxX) / 2;
+        const bcy = (bb.minY + bb.maxY) / 2;
+        const sdx = pPeak.x - pStart.x;
+        const sdy = pPeak.y - pStart.y;
+        const sLenSq = sdx * sdx + sdy * sdy;
+        if (sLenSq > 100) {
+          const projT = ((bcx - pStart.x) * sdx + (bcy - pStart.y) * sdy) / sLenSq;
+          tCenter = Math.max(0.24, Math.min(0.76, projT));
+        }
+      }
+
+      const blockPts = computeInclinedPlaneBlockPoints(pStart, pBaseCorner, pPeak, tCenter);
       const wedgePts: BezierPoint[] = [
         { x: pStart.x, y: pStart.y, pressure: 0.7 },
         {
@@ -23027,6 +23062,7 @@ export default function App() {
           cx: (pBaseCorner.x + pPeak.x) / 2,
           cy: (pBaseCorner.y + pPeak.y) / 2,
           pressure: 0.7,
+          ...(isOpenAngle ? { twist: 888 } : {}),
         },
         {
           x: pStart.x,
@@ -23037,11 +23073,22 @@ export default function App() {
         },
       ];
 
+      const removeIdSet = new Set(openInclineOverride?.extraStrokeIdsToRemove || []);
+      removeIdSet.delete(incSt.id);
+      if (blkSt) removeIdSet.delete(blkSt.id);
+
+      const finalBlockId =
+        blkSt?.id || `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-inc-block`;
+      if (!blkSt) {
+        createdBlockAutomatically = true;
+      }
+
       const curValid = getValidForceSims(page);
       const existingSim = curValid.find(
         (sm) =>
           sm.mode === 'incline' &&
-          (sm.primaryStrokeId === incSt.id || sm.secondaryStrokeId === blkSt.id)
+          (sm.primaryStrokeId === incSt.id ||
+            (blkSt && sm.secondaryStrokeId === blkSt.id))
       );
       const targetSimId =
         existingSim?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -23054,7 +23101,7 @@ export default function App() {
         originX: pStart.x,
         originY: pStart.y,
         primaryStrokeId: incSt.id,
-        secondaryStrokeId: blkSt.id,
+        secondaryStrokeId: finalBlockId,
         inclineAngleDeg: angDeg,
         inclineLenPx: lenPx,
         showForces: true,
@@ -23064,27 +23111,47 @@ export default function App() {
         showCalc: false,
       };
 
-      const nextStrokes = page.strokes.map((st) => {
-        if (st.id === incSt.id) {
-          return {
-            ...st,
-            isShape: true,
-            shapeType: 'incline-wedge' as const,
-            groupId,
-            points: wedgePts,
-          };
-        }
-        if (st.id === blkSt.id) {
-          return {
-            ...st,
-            isShape: true,
-            shapeType: 'incline-block' as const,
-            groupId,
-            points: blockPts,
-          };
-        }
-        return st;
-      });
+      const nextStrokes: StrokeObject[] = page.strokes
+        .filter((st) => !removeIdSet.has(st.id))
+        .map((st) => {
+          if (st.id === incSt.id) {
+            return {
+              ...st,
+              isShape: true,
+              shapeType: 'incline-wedge' as const,
+              groupId,
+              points: wedgePts,
+              ...(isOpenAngle ? { fillStyle: 'none' as const } : {}),
+            };
+          }
+          if (blkSt && st.id === blkSt.id) {
+            return {
+              ...st,
+              isShape: true,
+              shapeType: 'incline-block' as const,
+              groupId,
+              points: blockPts,
+            };
+          }
+          return st;
+        });
+
+      if (!blkSt) {
+        nextStrokes.push({
+          id: finalBlockId,
+          tool: 'pen',
+          color: '#1d4ed8',
+          fillColor: 'rgba(59, 130, 246, 0.22)',
+          fillStyle: 'solid',
+          width: 2.0,
+          opacity: 1,
+          points: blockPts,
+          layerId: incSt.layerId || activeLayerId,
+          groupId,
+          isShape: true,
+          shapeType: 'incline-block',
+        });
+      }
 
       const filteredSims = curValid.filter((sm) => sm.id !== existingSim?.id);
       return {
@@ -23094,7 +23161,11 @@ export default function App() {
         activeForceSimId: targetSimId,
       };
     }, true);
-    showToast('⛰️ Το σώμα τοποθετήθηκε στο κεκλιμένο επίπεδο — Πατήστε «Ανάλυση B» για τις συνιστώσες!');
+    showToast(
+      createdBlockAutomatically
+        ? '⛰️ Δημιουργήθηκε προσομοίωση κεκλιμένου επιπέδου με σώμα — Πατήστε «Ανάλυση B» για τις συνιστώσες!'
+        : '⛰️ Το σώμα τοποθετήθηκε στο κεκλιμένο επίπεδο — Πατήστε «Ανάλυση B» για τις συνιστώσες!'
+    );
   };
 
   const registerOrActivateForceSimFromLasso = (preferredMode?: ForceSimMode): boolean => {
@@ -23102,7 +23173,7 @@ export default function App() {
       if (mode === 'pendulum') {
         showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το ταβάνι, το νήμα και το σφαιρίδιο και πατήστε «+ Νέο Εκκρεμές»!');
       } else if (mode === 'incline') {
-        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο και το σώμα και πατήστε «+ Νέο Κεκλιμένο»!');
+        showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο (με ή χωρίς σώμα) και πατήστε «+ Νέο Κεκλιμένο»!');
       } else if (mode === 'synthesis') {
         showToast('🎯 Επιλέξτε με το Λάσο στο χαρτί τα 2 διανύσματα δυνάμεων και πατήστε «+ Νέες Δυνάμεις»!');
       } else if (mode === 'analysis') {
@@ -23205,18 +23276,193 @@ export default function App() {
       }
     }
 
-    // 2. Check for Inclined Plane (Wedge/Triangle + Block)
+    // 2. Check for Inclined Plane (Closed Wedge/Triangle OR Open 2-Line/Polyline Angle ∠, with OR without Block)
     if (!preferredMode || preferredMode === 'incline') {
+      const isClosedQuadBlockCandidate = (s: StrokeObject): boolean => {
+        if (blockShapes.includes(s.shapeType || '')) return true;
+        if (inclineShapes.includes(s.shapeType || '')) return false;
+        if (s.points.length < 4 || s.arrowStart || s.arrowEnd) return false;
+        const b = getStrokeBounds(s);
+        const w = b.maxX - b.minX;
+        const h = b.maxY - b.minY;
+        if (w < 14 || h < 12) return false;
+        const pFirst = s.points[0];
+        const pLast = s.points[s.points.length - 1];
+        const isClosed =
+          Math.hypot(pLast.x - pFirst.x, pLast.y - pFirst.y) <= Math.max(w, h) * 0.35 ||
+          s.fillStyle === 'solid';
+        if (!isClosed) return false;
+        // Distinguish 4+ corner closed polygon/quad from a 3-vertex triangle
+        const uniquePts = s.points.filter((pt, idx) => {
+          if (idx === s.points.length - 1 && Math.hypot(pt.x - pFirst.x, pt.y - pFirst.y) < 8) {
+            return false;
+          }
+          return true;
+        });
+        return uniquePts.length >= 4 && (s.shapeType === 'polygon' || !s.isShape);
+      };
+
       const wedges = candidateStrokes.filter(
         (s) => inclineShapes.includes(s.shapeType || '') && s.points.length >= 3
       );
-      const blocks = candidateStrokes.filter((s) => blockShapes.includes(s.shapeType || ''));
-      if (wedges.length > 0 && blocks.length > 0) {
-        attachBlockToInclineForSim(wedges[0].id, blocks[0].id);
+      const blocks = candidateStrokes.filter(isClosedQuadBlockCandidate);
+      const blockIdSet = new Set(blocks.map((b) => b.id));
+
+      // 2a. Explicit wedge/triangle (with optional block)
+      if (wedges.length > 0 && (blocks.length > 0 || preferredMode === 'incline')) {
+        attachBlockToInclineForSim(wedges[0].id, blocks[0]?.id ?? null);
         setSimActiveCategory('forces');
         setShowSimulationPanel(true);
         return true;
       }
+
+      // 2b. Open inclined plane ∠ formed by 2 straight lines (horizontal base + sloped line meeting at a corner)
+      const isStraightLineCandidate = (s: StrokeObject): boolean => {
+        if (blockIdSet.has(s.id)) return false;
+        if (s.arrowStart || s.arrowEnd) return false;
+        if (s.points.length < 2) return false;
+        if (s.shapeType && s.shapeType !== 'line' && s.shapeType !== 'polygon') return false;
+        const p0 = s.points[0];
+        const p1 = s.points[s.points.length - 1];
+        const chord = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        if (chord < 40) return false;
+        if (!s.isShape && s.points.length > 2) {
+          let pathLen = 0;
+          for (let i = 1; i < s.points.length; i++) {
+            pathLen += Math.hypot(
+              s.points[i].x - s.points[i - 1].x,
+              s.points[i].y - s.points[i - 1].y
+            );
+          }
+          if (pathLen > 0 && chord / pathLen < 0.85) return false;
+        }
+        return true;
+      };
+
+      const classifyTwoArmsAsIncline = (
+        pCorner: { x: number; y: number },
+        endA: { x: number; y: number },
+        endB: { x: number; y: number }
+      ): {
+        pStart: { x: number; y: number };
+        pBaseCorner: { x: number; y: number };
+        pPeak: { x: number; y: number };
+      } | null => {
+        const lenA = Math.hypot(endA.x - pCorner.x, endA.y - pCorner.y);
+        const lenB = Math.hypot(endB.x - pCorner.x, endB.y - pCorner.y);
+        if (lenA < 40 || lenB < 40) return null;
+        const horizRatioA = Math.abs(endA.y - pCorner.y) / lenA;
+        const horizRatioB = Math.abs(endB.y - pCorner.y) / lenB;
+        let baseEnd: { x: number; y: number } | null = null;
+        let slopeEnd: { x: number; y: number } | null = null;
+        if (horizRatioA <= 0.22 && horizRatioB > 0.12) {
+          baseEnd = endA;
+          slopeEnd = endB;
+        } else if (horizRatioB <= 0.22 && horizRatioA > 0.12) {
+          baseEnd = endB;
+          slopeEnd = endA;
+        } else {
+          return null;
+        }
+        // Slope must rise upwards from pCorner and extend to the same horizontal side as baseEnd
+        if (slopeEnd.y >= pCorner.y - 16) return null;
+        const baseDx = baseEnd.x - pCorner.x;
+        const slopeDx = slopeEnd.x - pCorner.x;
+        if (baseDx * slopeDx <= 0) return null;
+        const angDeg = (Math.atan2(pCorner.y - slopeEnd.y, Math.abs(slopeDx)) * 180) / Math.PI;
+        if (angDeg < 8 || angDeg > 82) return null;
+        return {
+          pStart: { x: pCorner.x, y: pCorner.y },
+          pBaseCorner: { x: slopeEnd.x, y: pCorner.y },
+          pPeak: { x: slopeEnd.x, y: slopeEnd.y },
+        };
+      };
+
+      const lineCandidates = candidateStrokes.filter(isStraightLineCandidate);
+      for (let i = 0; i < lineCandidates.length; i++) {
+        for (let j = i + 1; j < lineCandidates.length; j++) {
+          const lnA = lineCandidates[i];
+          const lnB = lineCandidates[j];
+          const a0 = lnA.points[0];
+          const a1 = lnA.points[lnA.points.length - 1];
+          const b0 = lnB.points[0];
+          const b1 = lnB.points[lnB.points.length - 1];
+          const lenA = Math.hypot(a1.x - a0.x, a1.y - a0.y);
+          const lenB = Math.hypot(b1.x - b0.x, b1.y - b0.y);
+          const cornerTol = Math.max(42, Math.min(lenA, lenB) * 0.22);
+          const pairs: Array<[typeof a0, typeof a0, typeof a0, typeof a0]> = [
+            [a0, a1, b0, b1],
+            [a0, a1, b1, b0],
+            [a1, a0, b0, b1],
+            [a1, a0, b1, b0],
+          ];
+          let bestMatch: {
+            dist: number;
+            geom: {
+              pStart: { x: number; y: number };
+              pBaseCorner: { x: number; y: number };
+              pPeak: { x: number; y: number };
+            };
+          } | null = null;
+          for (const [ca, fa, cb, fb] of pairs) {
+            const d = Math.hypot(ca.x - cb.x, ca.y - cb.y);
+            if (d > cornerTol) continue;
+            const corner = { x: (ca.x + cb.x) / 2, y: (ca.y + cb.y) / 2 };
+            const geom = classifyTwoArmsAsIncline(corner, fa, fb);
+            if (geom && (!bestMatch || d < bestMatch.dist)) {
+              bestMatch = { dist: d, geom };
+            }
+          }
+          if (bestMatch) {
+            attachBlockToInclineForSim(lnA.id, blocks[0]?.id ?? null, {
+              ...bestMatch.geom,
+              isOpenAngle: true,
+              extraStrokeIdsToRemove: [lnB.id],
+            });
+            setSimActiveCategory('forces');
+            setShowSimulationPanel(true);
+            return true;
+          }
+        }
+      }
+
+      // 2c. Single open polyline stroke shaped like ∠ (e.g. welded 2 lines or freehand V/angle)
+      for (const st of candidateStrokes) {
+        if (blockIdSet.has(st.id) || st.arrowStart || st.arrowEnd || st.points.length < 3) {
+          continue;
+        }
+        const pFirst = st.points[0];
+        const pLast = st.points[st.points.length - 1];
+        const closeGap = Math.hypot(pLast.x - pFirst.x, pLast.y - pFirst.y);
+        if (closeGap < 25) continue; // closed loop handled elsewhere
+        // Find apex vertex farthest from chord (pFirst -> pLast)
+        const cdx = pLast.x - pFirst.x;
+        const cdy = pLast.y - pFirst.y;
+        const cLen = Math.max(1, Math.hypot(cdx, cdy));
+        let maxDist = 0;
+        let apexIdx = -1;
+        for (let k = 1; k < st.points.length - 1; k++) {
+          const pt = st.points[k];
+          const perp = Math.abs((pt.x - pFirst.x) * cdy - (pt.y - pFirst.y) * cdx) / cLen;
+          if (perp > maxDist) {
+            maxDist = perp;
+            apexIdx = k;
+          }
+        }
+        if (apexIdx > 0 && maxDist >= 22) {
+          const geom = classifyTwoArmsAsIncline(st.points[apexIdx], pFirst, pLast);
+          if (geom) {
+            attachBlockToInclineForSim(st.id, blocks[0]?.id ?? null, {
+              ...geom,
+              isOpenAngle: true,
+            });
+            setSimActiveCategory('forces');
+            setShowSimulationPanel(true);
+            return true;
+          }
+        }
+      }
+
       if (preferredMode === 'incline') {
         showMissingSelectionHint('incline');
         return false;
@@ -46424,6 +46670,7 @@ export default function App() {
           const pSlopeStart = { x: pStart.x, y: pStart.y };
           const pBaseCorner = { x: topX, y: pStart.y };
           const pSlopePeak = { x: topX, y: topY };
+          const isOpenAngle = wedge.points[2]?.twist === 888;
           const nextWedgePts = [
             { x: pSlopeStart.x, y: pSlopeStart.y, pressure: 0.7 },
             {
@@ -46439,6 +46686,7 @@ export default function App() {
               cx: (pBaseCorner.x + pSlopePeak.x) / 2,
               cy: (pBaseCorner.y + pSlopePeak.y) / 2,
               pressure: 0.7,
+              ...(isOpenAngle ? { twist: 888 } : {}),
             },
             {
               x: pSlopeStart.x,
@@ -70794,7 +71042,7 @@ export default function App() {
                       curMode === 'pendulum'
                         ? 'Επιλέξτε με το Λάσο στο χαρτί το ταβάνι, το νήμα και το σφαιρίδιο και πατήστε «+ Νέο Εκκρεμές».'
                         : curMode === 'incline'
-                        ? 'Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο και το σώμα και πατήστε «+ Νέο Κεκλιμένο».'
+                        ? 'Επιλέξτε με το Λάσο στο χαρτί το κεκλιμένο επίπεδο (με ή χωρίς σώμα) και πατήστε «+ Νέο Κεκλιμένο».'
                         : curMode === 'synthesis'
                         ? 'Επιλέξτε με το Λάσο στο χαρτί τα 2 διανύσματα δυνάμεων και πατήστε «+ Νέες Δυνάμεις».'
                         : 'Επιλέξτε με το Λάσο στο χαρτί το διάνυσμα δύναμης και πατήστε «+ Νέα Δύναμη».';
