@@ -10,8 +10,7 @@ description: Permanent project rules, deploy workflow, architecture invariants, 
 
 ## 2. Build, Dual-Remote Git Push & Single-Site Hosting Deploy
 - Always verify with `npm run build` (`tsc -b && vite build`) — and `npm --prefix functions run build` whenever `functions/` changes — before committing.
-- Always stage files **explicitly** (`git add <files>`); never run blind `git add -A`.
-- **ALWAYS push to BOTH GitHub remotes**:
+- **Auto Commit & Dual-Remote Push (No Asking):** Whenever completing any code change, feature addition, fix, or improvement, **automatically** run build verification, stage the modified files explicitly (`git add <files>`; never blind `git add -A`), commit, and push to **BOTH** GitHub remotes without asking the user at the end:
   - `git push origin main` (`https://github.com/kfrei/bestNotes.git`)
   - `git push explainboards main` (`git@github-freiderikosk:freiderikosk/explainboards.git`)
 - **Deploy Firebase Hosting ONLY to `explainboards`** (`https://explainboards.web.app`):
