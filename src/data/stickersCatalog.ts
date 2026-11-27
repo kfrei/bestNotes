@@ -1,9 +1,11 @@
 import { scoreSingleGreekTokenMatch } from '../utils/geometryAndAlgorithms';
 import { buildStickFigureSvgMarkup, STICK_FIGURES_STICKERS } from './stickFiguresSvg';
 import { buildStickman3DSvgMarkup, STICK_FIGURES_3D_STICKERS } from './stickFigures3D';
+import { buildBannerFrameSvgMarkup, BANNER_FRAMES_STICKERS } from './bannerFramesCatalog';
 
 export type StickerCategory =
   | 'Όλα'
+  | 'Πλαίσια & Κορδέλες'
   | 'Μονόχρωμα Σκίτσα'
   | 'Βελάκια'
   | 'Κεραυνοί & Εφέ'
@@ -26,6 +28,7 @@ export interface StickerCatalogItem {
 
 export const STICKER_CATEGORIES: { id: StickerCategory; label: string }[] = [
   { id: 'Όλα', label: 'Όλα' },
+  { id: 'Πλαίσια & Κορδέλες', label: 'Πλαίσια & Κορδέλες' },
   { id: 'Μονόχρωμα Σκίτσα', label: 'Μονόχρωμα Σκίτσα' },
   { id: 'Βελάκια', label: 'Βελάκια' },
   { id: 'Κεραυνοί & Εφέ', label: 'Κεραυνοί, ! & Πυροτεχνήματα' },
@@ -44,6 +47,7 @@ export const STICKER_COLOR_STYLES: { id: StickerColorStyle; label: string }[] = 
 ];
 
 export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
+  ...BANNER_FRAMES_STICKERS,
   ...STICK_FIGURES_3D_STICKERS,
   ...STICK_FIGURES_STICKERS,
   // =========================================================================
@@ -4503,6 +4507,12 @@ export function buildCustomStickerSvgDataUrl(
   const stick3dSvg = buildStickman3DSvgMarkup(shapeKind, colorHex);
   if (stick3dSvg) {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(stick3dSvg)}`;
+  }
+  if (shapeKind.startsWith('banner-')) {
+    const bannerSvg = buildBannerFrameSvgMarkup(shapeKind.slice('banner-'.length), colorHex || '#1e293b');
+    if (bannerSvg) {
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(bannerSvg)}`;
+    }
   }
   const c = colorHex || '#dc2626';
   const w = Math.max(3, Math.min(26, strokeWidthNum || 12));

@@ -456,6 +456,7 @@ import {
 } from './data/mindMapsCatalog';
 import { STEM_VECTORS_CATALOG } from './data/vectors';
 import { createStickmanStrokePoints, drawStickmanStroke } from './data/stickFiguresSvg';
+import { createBannerFrameStrokes } from './data/bannerFramesCatalog';
 import { drawStickman3DStroke } from './data/stickFigures3D';
 import {
   DEFAULT_GRAVITY_CONFIG,
@@ -1506,6 +1507,7 @@ export default function App() {
           fillColor?: string;
           fillStyle?: FillStyleType;
           fillTransparency?: number;
+          fillGradient?: number;
           strokeWidth?: number;
           widthSlots?: number[];
           activeWidthSlotIdx?: number;
@@ -2484,8 +2486,13 @@ export default function App() {
   const [fillStyle, setFillStyle] = useState<FillStyleType>(() => initialSession?.fillStyle || 'none');
   const [fillTransparency, setFillTransparency] = useState<number>(() =>
     typeof initialSession?.fillTransparency === 'number'
-      ? Math.max(5, Math.min(95, Math.round(initialSession.fillTransparency / 5) * 5))
+      ? Math.max(0, Math.min(95, Math.round(initialSession.fillTransparency / 5) * 5))
       : 90
+  );
+  const [fillGradient, setFillGradient] = useState<number>(() =>
+    typeof initialSession?.fillGradient === 'number'
+      ? Math.max(0, Math.min(100, Math.round(initialSession.fillGradient / 5) * 5))
+      : 0
   );
   const [strokeWidth, setStrokeWidth] = useState<number>(() =>
     typeof initialSession?.strokeWidth === 'number' ? initialSession.strokeWidth : 2.0
@@ -5054,6 +5061,7 @@ export default function App() {
       fillColor,
       fillStyle,
       fillTransparency,
+      fillGradient,
       strokeWidth,
       widthSlots,
       activeWidthSlotIdx,
@@ -5113,6 +5121,7 @@ export default function App() {
       fillColor,
       fillStyle,
       fillTransparency,
+      fillGradient,
       strokeWidth,
       widthSlots,
       activeWidthSlotIdx,
@@ -13882,13 +13891,60 @@ export default function App() {
         }
         ctx.restore();
 
+    // Helper: vertical dark-to-light fill gradient (0% = flat baseColor, 100% = strong dark-top -> pale-bottom)
+    const resolveStrokeFillStyle = (
+      pts: Array<{ x: number; y: number }>,
+      baseHex: string,
+      gradPct?: number
+    ): string | CanvasGradient => {
+      const gPct = typeof gradPct === 'number' ? Math.max(0, Math.min(100, gradPct)) : 0;
+      if (gPct <= 0 || pts.length === 0) return baseHex;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const py = pts[i].y;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+      }
+      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY - minY < 1) return baseHex;
+      const hex = (baseHex || '#2563eb').trim().replace('#', '');
+      let r = 37, g = 99, b = 235;
+      if (hex.length === 3) {
+        r = parseInt(hex[0] + hex[0], 16) || 0;
+        g = parseInt(hex[1] + hex[1], 16) || 0;
+        b = parseInt(hex[2] + hex[2], 16) || 0;
+      } else if (hex.length >= 6) {
+        r = parseInt(hex.slice(0, 2), 16) || 0;
+        g = parseInt(hex.slice(2, 4), 16) || 0;
+        b = parseInt(hex.slice(4, 6), 16) || 0;
+      }
+      const k = gPct / 100;
+      const darkMul = 1 - 0.58 * k;
+      const lightMix = 0.84 * k;
+      const topR = Math.round(r * darkMul);
+      const topG = Math.round(g * darkMul);
+      const topB = Math.round(b * darkMul);
+      const botR = Math.round(r + (255 - r) * lightMix);
+      const botG = Math.round(g + (255 - g) * lightMix);
+      const botB = Math.round(b + (255 - b) * lightMix);
+      const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+      grad.addColorStop(0, `rgb(${topR}, ${topG}, ${topB})`);
+      grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
+      grad.addColorStop(1, `rgb(${botR}, ${botG}, ${botB})`);
+      return grad;
+    };
+
         // 2. Optional interior fill (transparent by default; fills cleanly if user toggles 'Γεμάτο' F/Φ)
         ctx.beginPath();
         traceRoundedQuad(q0, q1, q2, q3, rCorner);
         if (s.fillStyle && s.fillStyle !== 'none') {
           const fillTrans = s.fillTransparency ?? 90;
           ctx.save();
-          ctx.fillStyle = s.fillColor || s.color || '#2563eb';
+          ctx.fillStyle = resolveStrokeFillStyle(
+            [q0, q1, q2, q3],
+            s.fillColor || s.color || '#2563eb',
+            s.fillGradient
+          );
           ctx.globalAlpha =
             (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
             baseAlpha;
@@ -14106,11 +14162,46 @@ export default function App() {
           s.shapeType === 'fan-blade' ||
           s.shapeType === 'fan-hub' ||
           s.shapeType === 'ammeter-needle' ||
-          s.shapeType === 'voltmeter-needle'
+          s.shapeType === 'voltmeter-needle' ||
+          s.shapeType === 'banner-accent-solid'
             ? 0
             : s.fillTransparency ?? 90;
         ctx.save();
-        ctx.fillStyle = shadeColor;
+        const gradPct = s.shapeType === 'banner-accent-solid' ? 0 : s.fillGradient ?? 0;
+        if (gradPct > 0 && s.points.length > 0) {
+          let minY = Infinity;
+          let maxY = -Infinity;
+          for (let pi = 0; pi < s.points.length; pi++) {
+            const py = s.points[pi].y;
+            if (py < minY) minY = py;
+            if (py > maxY) maxY = py;
+          }
+          if (Number.isFinite(minY) && Number.isFinite(maxY) && maxY - minY >= 1) {
+            const hex = (shadeColor || '#2563eb').trim().replace('#', '');
+            let r = 37, g = 99, b = 235;
+            if (hex.length === 3) {
+              r = parseInt(hex[0] + hex[0], 16) || 0;
+              g = parseInt(hex[1] + hex[1], 16) || 0;
+              b = parseInt(hex[2] + hex[2], 16) || 0;
+            } else if (hex.length >= 6) {
+              r = parseInt(hex.slice(0, 2), 16) || 0;
+              g = parseInt(hex.slice(2, 4), 16) || 0;
+              b = parseInt(hex.slice(4, 6), 16) || 0;
+            }
+            const k = Math.max(0, Math.min(1, gradPct / 100));
+            const darkMul = 1 - 0.58 * k;
+            const lightMix = 0.84 * k;
+            const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+            grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
+            grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
+            grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+            ctx.fillStyle = grad;
+          } else {
+            ctx.fillStyle = shadeColor;
+          }
+        } else {
+          ctx.fillStyle = shadeColor;
+        }
         const baseFillAlpha =
           fillTrans === 0
             ? 1
@@ -53419,6 +53510,7 @@ export default function App() {
           : undefined,
       fillStyle: commitFillStyle,
       fillTransparency: isShaded3DShape ? 0 : shapeType === 'title-box' ? 90 : fillTransparency,
+      fillGradient: isShaded3DShape ? 0 : fillGradient,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -54822,12 +54914,25 @@ export default function App() {
               }
               return s;
             }
+            if (s.shapeType === 'banner-accent-solid') {
+              return {
+                ...s,
+                fillStyle: 'solid',
+                fillColor: s.color,
+                fillTransparency: 0,
+                fillGradient: 0,
+              };
+            }
+            if (s.shapeType === 'banner-detail') {
+              return s;
+            }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
                 ...s,
                 fillStyle: nextFill,
                 fillColor: nextFill !== 'none' ? s.color : undefined,
                 fillTransparency: s.fillTransparency ?? fillTransparency,
+                fillGradient: s.fillGradient ?? fillGradient,
               };
             }
             return s;
@@ -54853,6 +54958,7 @@ export default function App() {
       editingTextId,
       fillStyle,
       fillTransparency,
+      fillGradient,
       updateActivePage,
       showToast,
     ]
@@ -54931,6 +55037,12 @@ export default function App() {
               }
               return s;
             }
+            if (s.shapeType === 'banner-accent-solid') {
+              return { ...s, fillStyle: 'solid', fillColor: s.color, fillTransparency: 0, fillGradient: 0 };
+            }
+            if (s.shapeType === 'banner-detail') {
+              return s;
+            }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
                 ...s,
@@ -54949,6 +55061,74 @@ export default function App() {
       selectedStrokeIds,
       activeNodeStrokeId,
       activePage.strokes,
+      updateActivePage,
+    ]
+  );
+
+  // Apply fill gradient intensity (0% = flat, 100% = strong top-dark -> bottom-light) to selected shapes/groups
+  const applyFillGradientToSelection = useCallback(
+    (rawGrad: number) => {
+      const nextGrad = Math.max(0, Math.min(100, Math.round(rawGrad / 5) * 5));
+      setFillGradient(nextGrad);
+
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeTool === 'direct-node' && activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
+          : [];
+      const baseSet = new Set(baseIds);
+      const groupIds = new Set(
+        activePage.strokes
+          .filter((s) => baseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId as string)
+      );
+      const targetStrokes = activePage.strokes.filter(
+        (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+      );
+
+      if (targetStrokes.length > 0) {
+        suppressNextUndoRecordRef.current = false;
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => {
+              if (!(baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))) return s;
+              if (
+                s.shapeType === 'fan' ||
+                s.shapeType === 'fan-blade' ||
+                s.shapeType === 'fan-hub' ||
+                s.shapeType === 'ammeter-needle' ||
+                s.shapeType === 'voltmeter-needle' ||
+                s.shapeType === 'banner-accent-solid' ||
+                s.shapeType === 'banner-detail'
+              ) {
+                return s;
+              }
+              if (s.isShape || isFreehandLoopClosed(s.points, true)) {
+                return {
+                  ...s,
+                  fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
+                  fillColor: s.fillColor || s.color,
+                  fillTransparency: s.fillTransparency ?? fillTransparency,
+                  fillGradient: nextGrad,
+                };
+              }
+              return s;
+            }),
+          }),
+          true
+        );
+      }
+    },
+    [
+      activeTool,
+      selectedStrokeIds,
+      activeNodeStrokeId,
+      activePage.strokes,
+      fillTransparency,
       updateActivePage,
     ]
   );
@@ -65708,9 +65888,13 @@ export default function App() {
                 (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
               );
               const rawTrans =
-                targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0)
+                targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0 && s.shapeType !== 'banner-accent-solid')
                   ?.fillTransparency ?? fillTransparency;
               const currentTrans = Math.max(0, Math.min(95, Math.round(rawTrans / 5) * 5));
+              const rawGrad =
+                targetStrokes.find((s) => typeof s.fillGradient === 'number' && s.fillGradient >= 0 && s.shapeType !== 'banner-accent-solid')
+                  ?.fillGradient ?? fillGradient;
+              const currentGrad = Math.max(0, Math.min(100, Math.round(rawGrad / 5) * 5));
               const previewColor = targetStrokes[0]?.color || strokeColor || '#234978';
               return (
                 <div
@@ -65721,53 +65905,108 @@ export default function App() {
                     top: fillTransPopoverPos.top,
                     left: fillTransPopoverPos.left,
                   }}
-                  className="fixed z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 px-3.5 py-3 flex flex-col gap-2 w-[252px]"
+                  className="fixed z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 px-3.5 py-3 flex flex-col gap-2.5 w-[258px]"
                 >
-                  <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
+                  {/* 1. Διαφάνεια Γεμίσματος (0% - 95%) */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-[#dfd8cb] shadow-2xs shrink-0"
+                          style={{
+                            backgroundColor: previewColor,
+                            opacity: Math.max(0.05, Math.min(1, (100 - currentTrans) / 100)),
+                          }}
+                        />
+                        <span>Διαφάνεια Γεμίσματος</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-lg bg-[#efebe3] border border-[#dfd8cb] text-[#234978] font-extrabold text-[11px]">
+                        {currentTrans}%
+                      </span>
+                    </div>
+
                     <div className="flex items-center gap-1.5">
-                      <span
-                        className="w-3.5 h-3.5 rounded-full border border-[#dfd8cb] shadow-2xs shrink-0"
+                      <button
+                        onClick={() => applyFillTransparencyToSelection(Math.max(0, currentTrans - 5))}
+                        disabled={currentTrans <= 0}
+                        className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                        title="Μείωση διαφάνειας (-5%)"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={95}
+                        step={5}
+                        value={currentTrans}
+                        onChange={(e) => applyFillTransparencyToSelection(parseInt(e.target.value, 10))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#234978]"
                         style={{
-                          backgroundColor: previewColor,
-                          opacity: Math.max(0.05, Math.min(1, (100 - currentTrans) / 100)),
+                          background: `linear-gradient(to right, ${previewColor} 0%, rgba(226,232,240,0.45) 100%)`,
                         }}
                       />
-                      <span>Διαφάνεια Γεμίσματος</span>
+                      <button
+                        onClick={() => applyFillTransparencyToSelection(Math.min(95, currentTrans + 5))}
+                        disabled={currentTrans >= 95}
+                        className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                        title="Αύξηση διαφάνειας (+5%)"
+                      >
+                        +
+                      </button>
                     </div>
-                    <span className="px-2 py-0.5 rounded-lg bg-[#efebe3] border border-[#dfd8cb] text-[#234978] font-extrabold text-[11px]">
-                      {currentTrans}%
-                    </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => applyFillTransparencyToSelection(Math.max(0, currentTrans - 5))}
-                      disabled={currentTrans <= 0}
-                      className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
-                      title="Μείωση διαφάνειας (-5%)"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={95}
-                      step={5}
-                      value={currentTrans}
-                      onChange={(e) => applyFillTransparencyToSelection(parseInt(e.target.value, 10))}
-                      className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#234978]"
-                      style={{
-                        background: `linear-gradient(to right, ${previewColor} 0%, rgba(226,232,240,0.45) 100%)`,
-                      }}
-                    />
-                    <button
-                      onClick={() => applyFillTransparencyToSelection(Math.min(95, currentTrans + 5))}
-                      disabled={currentTrans >= 95}
-                      className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
-                      title="Αύξηση διαφάνειας (+5%)"
-                    >
-                      +
-                    </button>
+                  {/* 2. Διαβάθμιση Γεμίσματος (0% επίπεδο → 100% έντονη σκούρο-πάνω προς αχνό-κάτω) */}
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-[#dfd8cb]/75">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-[#dfd8cb] shadow-2xs shrink-0"
+                          style={{
+                            background:
+                              currentGrad > 0
+                                ? `linear-gradient(180deg, #0f172a 0%, ${previewColor} 48%, rgba(255,255,255,0.92) 100%)`
+                                : previewColor,
+                          }}
+                        />
+                        <span>Διαβάθμιση</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-lg bg-[#efebe3] border border-[#dfd8cb] text-[#234978] font-extrabold text-[11px]">
+                        {currentGrad}%
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => applyFillGradientToSelection(Math.max(0, currentGrad - 5))}
+                        disabled={currentGrad <= 0}
+                        className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                        title="Μείωση διαβάθμισης (-5%)"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={currentGrad}
+                        onChange={(e) => applyFillGradientToSelection(parseInt(e.target.value, 10))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#234978]"
+                        style={{
+                          background: `linear-gradient(to right, ${previewColor} 0%, #1e293b 55%, rgba(255,255,255,0.85) 100%)`,
+                        }}
+                      />
+                      <button
+                        onClick={() => applyFillGradientToSelection(Math.min(100, currentGrad + 5))}
+                        disabled={currentGrad >= 100}
+                        className="w-6 h-6 shrink-0 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] disabled:opacity-40 border border-[#dfd8cb] text-[#2c3e50] hover:text-[#234978] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                        title="Αύξηση διαβάθμισης (+5%)"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -69241,7 +69480,9 @@ export default function App() {
                         }
                       } else {
                         if (item.category === 'Μονόχρωμα Σκίτσα') return false;
-                        if (stickerCategoryFilter === 'Σχολικά & Εργαστήριο') {
+                        if (stickerCategoryFilter === 'Πλαίσια & Κορδέλες') {
+                          if (item.category !== 'Πλαίσια & Κορδέλες') return false;
+                        } else if (stickerCategoryFilter === 'Σχολικά & Εργαστήριο') {
                           if (item.category !== 'Σχολικά & Εργαστήριο') return false;
                         } else if (stickerCategoryFilter === 'Βελάκια') {
                           if (item.category !== 'Βελάκια' && item.category !== 'Κεραυνοί & Εφέ') return false;
@@ -69281,6 +69522,46 @@ export default function App() {
                     };
 
                     const handleInsertStickerItem = async (stItem: StickerCatalogItem) => {
+                      if (stItem.iconifyId.startsWith('custom-svg:banner-')) {
+                        const parts = stItem.iconifyId.split(':');
+                        const bannerKey = (parts[1] || 'banner-ribbon-classic').slice('banner-'.length);
+                        const effectiveColor = stickerCustomColor || strokeColor || '#1e293b';
+                        const tapPt = lastLassoEmptyTapPtRef.current;
+                        const cx = tapPt ? tapPt.x : 380;
+                        const cy = tapPt ? tapPt.y : 260;
+                        if (tapPt) {
+                          lastLassoEmptyTapPtRef.current = { x: tapPt.x + 24, y: tapPt.y + 24 };
+                        }
+                        const baseZ = getNextPageZOrder(activePage);
+                        const bannerStrokes = createBannerFrameStrokes(
+                          bannerKey,
+                          cx,
+                          cy,
+                          effectiveColor,
+                          strokeWidth || 2.4,
+                          activeLayerId,
+                          baseZ,
+                          fillStyle,
+                          fillTransparency,
+                          fillGradient
+                        );
+                        if (bannerStrokes.length > 0) {
+                          suppressNextUndoRecordRef.current = false;
+                          updateActivePage(
+                            (page) => ({
+                              ...page,
+                              strokes: [...page.strokes, ...bannerStrokes],
+                            }),
+                            true
+                          );
+                          setSelectedImageId(null);
+                          setSelectedTextId(null);
+                          setSelectedStrokeIds(bannerStrokes.map((s) => s.id));
+                          setActiveTool('lasso');
+                          showToast(`🎀 Προστέθηκε «${stItem.title}» — γράψε μέσα ή βάλε Γέμισμα & Διαβάθμιση!`);
+                        }
+                        return;
+                      }
                       if (
                         stItem.iconifyId.startsWith('custom-svg:stickman-') ||
                         stItem.iconifyId.startsWith('custom-svg:stick3d-')
@@ -69403,6 +69684,7 @@ export default function App() {
 
                     const compactIconCategories: { id: StickerCategory; label: string }[] = [
                       { id: 'Όλα', label: 'Όλα' },
+                      { id: 'Πλαίσια & Κορδέλες', label: 'Πλαίσια & Κορδέλες' },
                       { id: 'Σχολικά & Εργαστήριο', label: 'Σχολικά & Εργαστήριο' },
                       { id: 'Βελάκια', label: 'Βελάκια & Εφέ' },
                       { id: 'Μηχανική & Οχήματα', label: 'Οχήματα & Επαγγέλματα' },

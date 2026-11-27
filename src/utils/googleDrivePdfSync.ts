@@ -567,8 +567,31 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
       traceRoundedQuad(q0, q1, q2, q3, rCorner);
       if (s.fillStyle && s.fillStyle !== 'none') {
         const fillTrans = s.fillTransparency ?? 90;
+        const baseCol = s.fillColor || s.color || '#2563eb';
+        const gPct = typeof s.fillGradient === 'number' ? Math.max(0, Math.min(100, s.fillGradient)) : 0;
         ctx.save();
-        ctx.fillStyle = s.fillColor || s.color || '#2563eb';
+        if (gPct > 0) {
+          const minY = Math.min(q0.y, q1.y, q2.y, q3.y);
+          const maxY = Math.max(q0.y, q1.y, q2.y, q3.y);
+          if (maxY - minY >= 1) {
+            const hex = baseCol.trim().replace('#', '');
+            const r = hex.length === 3 ? parseInt(hex[0] + hex[0], 16) || 0 : parseInt(hex.slice(0, 2), 16) || 0;
+            const g = hex.length === 3 ? parseInt(hex[1] + hex[1], 16) || 0 : parseInt(hex.slice(2, 4), 16) || 0;
+            const b = hex.length === 3 ? parseInt(hex[2] + hex[2], 16) || 0 : parseInt(hex.slice(4, 6), 16) || 0;
+            const k = gPct / 100;
+            const darkMul = 1 - 0.58 * k;
+            const lightMix = 0.84 * k;
+            const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+            grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
+            grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
+            grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+            ctx.fillStyle = grad;
+          } else {
+            ctx.fillStyle = baseCol;
+          }
+        } else {
+          ctx.fillStyle = baseCol;
+        }
         ctx.globalAlpha =
           (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
           baseAlpha;
@@ -733,11 +756,39 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         s.shapeType === 'fan-blade' ||
         s.shapeType === 'fan-hub' ||
         s.shapeType === 'ammeter-needle' ||
-        s.shapeType === 'voltmeter-needle'
+        s.shapeType === 'voltmeter-needle' ||
+        s.shapeType === 'banner-accent-solid'
           ? 0
           : s.fillTransparency ?? 90;
       ctx.save();
-      ctx.fillStyle = shadeColor;
+      const gradPct = s.shapeType === 'banner-accent-solid' ? 0 : s.fillGradient ?? 0;
+      if (gradPct > 0 && s.points.length > 0) {
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (let pi = 0; pi < s.points.length; pi++) {
+          const py = s.points[pi].y;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+        if (Number.isFinite(minY) && Number.isFinite(maxY) && maxY - minY >= 1) {
+          const hex = (shadeColor || '#2563eb').trim().replace('#', '');
+          const r = hex.length === 3 ? parseInt(hex[0] + hex[0], 16) || 0 : parseInt(hex.slice(0, 2), 16) || 0;
+          const g = hex.length === 3 ? parseInt(hex[1] + hex[1], 16) || 0 : parseInt(hex.slice(2, 4), 16) || 0;
+          const b = hex.length === 3 ? parseInt(hex[2] + hex[2], 16) || 0 : parseInt(hex.slice(4, 6), 16) || 0;
+          const k = Math.max(0, Math.min(1, gradPct / 100));
+          const darkMul = 1 - 0.58 * k;
+          const lightMix = 0.84 * k;
+          const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+          grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
+          grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
+          grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+          ctx.fillStyle = grad;
+        } else {
+          ctx.fillStyle = shadeColor;
+        }
+      } else {
+        ctx.fillStyle = shadeColor;
+      }
       ctx.globalAlpha =
         fillTrans === 0
           ? 0.94
