@@ -271,42 +271,81 @@ function perpendicularDistance(
 }
 
 /**
- * Detects if a stroke is a quick "Scribble-to-Erase" gesture.
+ * Detects if a stroke is a deliberate "Scribble-to-Erase" gesture.
+ * Sample-rate independent (works equally on 60Hz mouse and 240Hz Apple Pencil Pro)
+ * and omnidirectional (horizontal, vertical, or diagonal zig-zag scribbles).
  */
 export function isScribbleEraseGesture(pts: BezierPoint[]): { isScribble: boolean; bounds?: { minX: number; minY: number; maxX: number; maxY: number } } {
-  if (pts.length < 28) return { isScribble: false };
+  if (pts.length < 14) return { isScribble: false };
   let pathLen = 0;
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  let xReversals = 0;
-  let lastDxSign = 0;
+  let minX = pts[0].x,
+    minY = pts[0].y,
+    maxX = pts[0].x,
+    maxY = pts[0].y;
+
+  // Resample into directional steps >= 7px so 120Hz/240Hz micro-steps never miss reversals
+  const stepVecs: Array<{ dx: number; dy: number; len: number }> = [];
+  let anchorX = pts[0].x;
+  let anchorY = pts[0].y;
 
   for (let i = 1; i < pts.length; i++) {
-    const dx = pts[i].x - pts[i - 1].x;
-    const dy = pts[i].y - pts[i - 1].y;
-    pathLen += Math.hypot(dx, dy);
-    minX = Math.min(minX, pts[i].x);
-    minY = Math.min(minY, pts[i].y);
-    maxX = Math.max(maxX, pts[i].x);
-    maxY = Math.max(maxY, pts[i].y);
+    const p = pts[i];
+    const prev = pts[i - 1];
+    pathLen += Math.hypot(p.x - prev.x, p.y - prev.y);
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
 
-    if (Math.abs(dx) > 4.5) {
-      const sign = dx > 0 ? 1 : -1;
-      if (lastDxSign !== 0 && sign !== lastDxSign) {
-        xReversals++;
-      }
-      lastDxSign = sign;
+    const sdx = p.x - anchorX;
+    const sdy = p.y - anchorY;
+    const sLen = Math.hypot(sdx, sdy);
+    if (sLen >= 7) {
+      stepVecs.push({ dx: sdx / sLen, dy: sdy / sLen, len: sLen });
+      anchorX = p.x;
+      anchorY = p.y;
     }
   }
 
   const diag = Math.hypot(maxX - minX, maxY - minY);
-  // Require deliberate dense scribble (at least 6 wide horizontal reversals) so Greek curvy letters (ξ, ζ, Σ) are never erased
-  if (xReversals >= 6 && diag > 24 && pathLen / Math.max(1, diag) > 4.2) {
+  if (diag < 22 || stepVecs.length < 6) return { isScribble: false };
+
+  let xReversals = 0;
+  let yReversals = 0;
+  let sharpReversals = 0;
+  let lastXSign = 0;
+  let lastYSign = 0;
+  let prevDir: { dx: number; dy: number } | null = null;
+
+  for (const v of stepVecs) {
+    if (Math.abs(v.dx) >= 0.42) {
+      const sx = v.dx > 0 ? 1 : -1;
+      if (lastXSign !== 0 && sx !== lastXSign) xReversals++;
+      lastXSign = sx;
+    }
+    if (Math.abs(v.dy) >= 0.42) {
+      const sy = v.dy > 0 ? 1 : -1;
+      if (lastYSign !== 0 && sy !== lastYSign) yReversals++;
+      lastYSign = sy;
+    }
+    if (prevDir) {
+      const dot = v.dx * prevDir.dx + v.dy * prevDir.dy;
+      if (dot < -0.25) {
+        sharpReversals++;
+      }
+    }
+    prevDir = v;
+  }
+
+  const axisReversals = Math.max(xReversals, yReversals);
+  const density = pathLen / Math.max(1, diag);
+
+  // Deliberate back-and-forth scribble in any direction (horizontal, vertical, or diagonal):
+  // - At least 4 reversals on the main axis OR 3 sharp >105° turnbacks, AND dense path (>= 3.1x diagonal)
+  if ((axisReversals >= 4 || sharpReversals >= 3) && density >= 3.1) {
     return {
       isScribble: true,
-      bounds: { minX: minX - 8, minY: minY - 8, maxX: maxX + 8, maxY: maxY + 8 },
+      bounds: { minX: minX - 10, minY: minY - 10, maxX: maxX + 10, maxY: maxY + 10 },
     };
   }
   return { isScribble: false };

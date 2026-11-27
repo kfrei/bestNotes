@@ -51432,6 +51432,10 @@ export default function App() {
               if (p.y > maxY) maxY = p.y;
             }
             if (Math.hypot(maxX - minX, maxY - minY) < 18) return;
+            // Never let Hold-to-Snap turn a Scribble-to-Erase zig-zag into a geometric shape!
+            if (scribbleToEraseEnabled && isScribbleEraseGesture(ptsForSnap).isScribble) {
+              return;
+            }
           }
           const rawSnapped = recognizeAndSnapShape(
             ptsForSnap,
@@ -52588,22 +52592,35 @@ export default function App() {
       }
     }
 
-    // 3. Check Scribble-to-Erase Gesture
-    if (scribbleToEraseEnabled && activeTool === 'pen' && !snappedCurrentStrokeRef.current) {
+    // 3. Check Scribble-to-Erase Gesture (works in Pen & Pencil; only erases when touching at least 1 unlocked stroke)
+    if (
+      scribbleToEraseEnabled &&
+      (activeTool === 'pen' || activeTool === 'pencil') &&
+      !snappedCurrentStrokeRef.current
+    ) {
       const scribble = isScribbleEraseGesture(rawPts);
       if (scribble.isScribble && scribble.bounds) {
-        clearActiveOverlay();
-        const b = scribble.bounds;
         const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
-        updateActivePage((page) => ({
-          ...page,
-          strokes: page.strokes.filter((s) => {
-            if (lockedLayers.has(s.layerId)) return true;
-            return !rawPts.some((pt) => isPointNearStroke(pt, s, 14, false));
-          }),
-        }));
-        showToast('🧹 Scribble-to-Erase!');
-        return;
+        const hitStrokeIds = new Set<string>();
+        for (const s of activePage.strokes) {
+          if (lockedLayers.has(s.layerId)) continue;
+          if (rawPts.some((pt) => isPointNearStroke(pt, s, 16, false))) {
+            hitStrokeIds.add(s.id);
+          }
+        }
+        if (hitStrokeIds.size > 0) {
+          clearActiveOverlay();
+          suppressNextUndoRecordRef.current = false;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.filter((s) => !hitStrokeIds.has(s.id)),
+            }),
+            true
+          );
+          showToast('🧹 Scribble-to-Erase!');
+          return;
+        }
       }
     }
 
