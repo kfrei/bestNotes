@@ -19531,6 +19531,76 @@ export default function App() {
   const getDefaultTextLineHeight = (fontFamily?: TextFontStyle): number =>
     fontFamily === 'marker' ? 1.44 : 1.18;
 
+  const renderPopStyledWords = (
+    rawText: string,
+    colorHex: string,
+    fontSizePx: number,
+    hasShadow?: boolean,
+    txFillStyle?: FillStyleType,
+    txFillTransparency?: number
+  ) => {
+    const popFilled = txFillStyle !== 'none';
+    const popFillAlpha = Math.max(
+      0.05,
+      Math.min(1, (100 - (typeof txFillTransparency === 'number' ? txFillTransparency : 0)) / 100)
+    );
+    const [r, g, b] = parseHexColor(colorHex || '#2563eb');
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const popGrad =
+      lum < 0.16
+        ? 'linear-gradient(180deg, #1e293b 0%, #475569 52%, #94a3b8 100%)'
+        : `linear-gradient(180deg, rgb(${Math.max(0, Math.round(r * 0.72))},${Math.max(0, Math.round(g * 0.72))},${Math.max(0, Math.round(b * 0.72))}) 0%, rgb(${r},${g},${b}) 50%, rgb(${Math.min(255, Math.round(r + (255 - r) * 0.42))},${Math.min(255, Math.round(g + (255 - g) * 0.42))},${Math.min(255, Math.round(b + (255 - b) * 0.42))}) 100%)`;
+    const popStrokeW = Math.max(1.2, Math.min(3.2, fontSizePx * 0.042));
+    const dropShadowFilter = hasShadow
+      ? `drop-shadow(${Math.max(0.8, fontSizePx * 0.03).toFixed(1)}px ${Math.max(1.2, fontSizePx * 0.045).toFixed(1)}px ${Math.max(1.8, fontSizePx * 0.055).toFixed(1)}px rgba(15, 23, 42, 0.28))`
+      : undefined;
+
+    return rawText.split(/(\s+)/).map((tok, tIdx) => {
+      if (!tok) return null;
+      if (/^\s+$/.test(tok)) {
+        return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
+      }
+      return (
+        <span
+          key={tIdx}
+          style={{
+            position: 'relative',
+            display: 'inline-block',
+            padding: '0.2em 0.08em',
+            margin: '-0.2em -0.08em',
+            color: 'transparent',
+            WebkitTextFillColor: 'transparent',
+            WebkitTextStroke: `${popStrokeW.toFixed(1)}px #111827`,
+            paintOrder: 'stroke fill',
+            filter: dropShadowFilter,
+          }}
+        >
+          {tok}
+          {popFilled && (
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                padding: '0.2em 0.08em',
+                backgroundImage: popGrad,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                color: 'transparent',
+                WebkitTextStroke: '0px transparent',
+                opacity: popFillAlpha,
+                pointerEvents: 'none',
+              }}
+            >
+              {tok}
+            </span>
+          )}
+        </span>
+      );
+    });
+  };
+
   const getTextShadowCss = (hasShadow?: boolean, fontSize: number = 20): string | undefined => {
     if (!hasShadow) return undefined;
     const x = Math.max(1.1, Number((fontSize * 0.045).toFixed(1)));
@@ -19579,9 +19649,11 @@ export default function App() {
         };
       case 'pop':
         return {
-          fontFamily: "'ExplainBoardsFunBold', 'ExplainBoardsFun', 'ExplainBoardsHand', cursive",
+          fontFamily: boldActive
+            ? "'ExplainBoardsFunBold', 'ExplainBoardsFun', 'ExplainBoardsHand', cursive"
+            : "'ExplainBoardsFun', 'ExplainBoardsHand', cursive",
           fontStyle: 'normal',
-          fontWeight: 700,
+          fontWeight: boldActive ? 700 : 400,
           fontSynthesis: 'none',
           lineHeight: 1.42,
           letterSpacing: '0.02em',
@@ -75604,35 +75676,12 @@ export default function App() {
                                               bEnd <= e &&
                                               segText !== '\n';
                                             const isPopFont = segStyle.fontFamily === 'pop';
-                                            const popFilled = txt.fillStyle !== 'none';
-                                            const popFillOpacity = Math.max(
-                                              0.05,
-                                              Math.min(1, (100 - (txt.fillTransparency ?? 0)) / 100)
-                                            );
-                                            const popGradientCss = isPopFont
-                                              ? (() => {
-                                                  const [r, g, b] = parseHexColor(segStyle.color || '#2563eb');
-                                                  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                                                  if (lum < 0.16) {
-                                                    return 'linear-gradient(180deg, #1e293b 0%, #475569 52%, #94a3b8 100%)';
-                                                  }
-                                                  // Darker rich tone at top -> authentic color mid -> slightly lighter bottom
-                                                  const topR = Math.max(0, Math.round(r * 0.72));
-                                                  const topG = Math.max(0, Math.round(g * 0.72));
-                                                  const topB = Math.max(0, Math.round(b * 0.72));
-                                                  const botR = Math.min(255, Math.round(r + (255 - r) * 0.42));
-                                                  const botG = Math.min(255, Math.round(g + (255 - g) * 0.42));
-                                                  const botB = Math.min(255, Math.round(b + (255 - b) * 0.42));
-                                                  return `linear-gradient(180deg, rgb(${topR},${topG},${topB}) 0%, rgb(${r},${g},${b}) 50%, rgb(${botR},${botG},${botB}) 100%)`;
-                                                })()
-                                              : undefined;
-                                            const popStrokeW = Math.max(1.2, Math.min(3.4, segStyle.fontSize * 0.045));
                                             return (
                                               <React.Fragment key={bStart}>
                                                 {isPopFont && segText !== '\n' ? (
                                                   <span
                                                     style={{
-                                                      fontWeight: 700,
+                                                      fontWeight: segStyle.bold ? 700 : 400,
                                                       ...segCss,
                                                       fontSize: `${segStyle.fontSize}px`,
                                                       backgroundColor: isSelectedSeg
@@ -75644,50 +75693,14 @@ export default function App() {
                                                       borderRadius: isSelectedSeg ? '3px' : undefined,
                                                     }}
                                                   >
-                                                    {segText.split(/(\s+)/).map((tok, tIdx) => {
-                                                      if (!tok) return null;
-                                                      if (/^\s+$/.test(tok)) {
-                                                        return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
-                                                      }
-                                                      return (
-                                                        <span
-                                                          key={tIdx}
-                                                          style={{
-                                                            position: 'relative',
-                                                            display: 'inline-block',
-                                                            color: 'transparent',
-                                                            WebkitTextFillColor: 'transparent',
-                                                            WebkitTextStroke: `${popStrokeW.toFixed(1)}px #111827`,
-                                                            paintOrder: 'stroke fill',
-                                                            textShadow:
-                                                              getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
-                                                              'none',
-                                                          }}
-                                                        >
-                                                          {tok}
-                                                          {popFilled && (
-                                                            <span
-                                                              aria-hidden="true"
-                                                              style={{
-                                                                position: 'absolute',
-                                                                inset: 0,
-                                                                backgroundImage: popGradientCss,
-                                                                WebkitBackgroundClip: 'text',
-                                                                backgroundClip: 'text',
-                                                                WebkitTextFillColor: 'transparent',
-                                                                color: 'transparent',
-                                                                WebkitTextStroke: '0px transparent',
-                                                                opacity: popFillOpacity,
-                                                                textShadow: 'none',
-                                                                pointerEvents: 'none',
-                                                              }}
-                                                            >
-                                                              {tok}
-                                                            </span>
-                                                          )}
-                                                        </span>
-                                                      );
-                                                    })}
+                                                    {renderPopStyledWords(
+                                                      segText,
+                                                      segStyle.color,
+                                                      segStyle.fontSize,
+                                                      segStyle.shadow,
+                                                      txt.fillStyle,
+                                                      txt.fillTransparency
+                                                    )}
                                                   </span>
                                                 ) : (
                                                   <span
@@ -76332,35 +76345,12 @@ export default function App() {
                                               bEnd <= activeSub.end &&
                                               segText !== '\n'
                                           );
-                                          const isPopSeg = segStyle.fontFamily === 'pop' && segText !== '\n';
-                                          const popFilledSeg = txt.fillStyle !== 'none';
-                                          const popFillAlphaSeg = Math.max(
-                                            0.05,
-                                            Math.min(1, (100 - (txt.fillTransparency ?? 0)) / 100)
-                                          );
-                                          const popGradSeg = isPopSeg
-                                            ? (() => {
-                                                const [r, g, b] = parseHexColor(segStyle.color || '#2563eb');
-                                                const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                                                if (lum < 0.16) {
-                                                  return 'linear-gradient(180deg, #1e293b 0%, #475569 52%, #94a3b8 100%)';
-                                                }
-                                                const topR = Math.max(0, Math.round(r * 0.72));
-                                                const topG = Math.max(0, Math.round(g * 0.72));
-                                                const topB = Math.max(0, Math.round(b * 0.72));
-                                                const botR = Math.min(255, Math.round(r + (255 - r) * 0.42));
-                                                const botG = Math.min(255, Math.round(g + (255 - g) * 0.42));
-                                                const botB = Math.min(255, Math.round(b + (255 - b) * 0.42));
-                                                return `linear-gradient(180deg, rgb(${topR},${topG},${topB}) 0%, rgb(${r},${g},${b}) 50%, rgb(${botR},${botG},${botB}) 100%)`;
-                                              })()
-                                            : undefined;
-                                          const popStrokeWSeg = Math.max(1.2, Math.min(3.4, segStyle.fontSize * 0.045));
-                                          if (isPopSeg) {
+                                          if (segStyle.fontFamily === 'pop' && segText !== '\n') {
                                             return (
                                               <span
                                                 key={bStart}
                                                 style={{
-                                                  fontWeight: 700,
+                                                  fontWeight: segStyle.bold ? 700 : 400,
                                                   ...segCss,
                                                   fontSize: `${segStyle.fontSize}px`,
                                                   backgroundColor: isSubHighlighted
@@ -76372,50 +76362,14 @@ export default function App() {
                                                   borderRadius: isSubHighlighted ? '3px' : undefined,
                                                 }}
                                               >
-                                                {segText.split(/(\s+)/).map((tok, tIdx) => {
-                                                  if (!tok) return null;
-                                                  if (/^\s+$/.test(tok)) {
-                                                    return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
-                                                  }
-                                                  return (
-                                                    <span
-                                                      key={tIdx}
-                                                      style={{
-                                                        position: 'relative',
-                                                        display: 'inline-block',
-                                                        color: 'transparent',
-                                                        WebkitTextFillColor: 'transparent',
-                                                        WebkitTextStroke: `${popStrokeWSeg.toFixed(1)}px #111827`,
-                                                        paintOrder: 'stroke fill',
-                                                        textShadow:
-                                                          getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
-                                                          'none',
-                                                      }}
-                                                    >
-                                                      {tok}
-                                                      {popFilledSeg && (
-                                                        <span
-                                                          aria-hidden="true"
-                                                          style={{
-                                                            position: 'absolute',
-                                                            inset: 0,
-                                                            backgroundImage: popGradSeg,
-                                                            WebkitBackgroundClip: 'text',
-                                                            backgroundClip: 'text',
-                                                            WebkitTextFillColor: 'transparent',
-                                                            color: 'transparent',
-                                                            WebkitTextStroke: '0px transparent',
-                                                            opacity: popFillAlphaSeg,
-                                                            textShadow: 'none',
-                                                            pointerEvents: 'none',
-                                                          }}
-                                                        >
-                                                          {tok}
-                                                        </span>
-                                                      )}
-                                                    </span>
-                                                  );
-                                                })}
+                                                {renderPopStyledWords(
+                                                  segText,
+                                                  segStyle.color,
+                                                  segStyle.fontSize,
+                                                  segStyle.shadow,
+                                                  txt.fillStyle,
+                                                  txt.fillTransparency
+                                                )}
                                               </span>
                                             );
                                           }
@@ -76449,63 +76403,16 @@ export default function App() {
                                     );
                                   }
                                   if (txt.fontFamily === 'pop') {
-                                    const popFilled = txt.fillStyle !== 'none';
-                                    const popFillAlpha = Math.max(
-                                      0.05,
-                                      Math.min(1, (100 - (txt.fillTransparency ?? 0)) / 100)
-                                    );
-                                    const [r, g, b] = parseHexColor(txt.color || '#2563eb');
-                                    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                                    const popGrad =
-                                      lum < 0.16
-                                        ? 'linear-gradient(180deg, #1e293b 0%, #475569 52%, #94a3b8 100%)'
-                                        : `linear-gradient(180deg, rgb(${Math.max(0, Math.round(r * 0.72))},${Math.max(0, Math.round(g * 0.72))},${Math.max(0, Math.round(b * 0.72))}) 0%, rgb(${r},${g},${b}) 50%, rgb(${Math.min(255, Math.round(r + (255 - r) * 0.42))},${Math.min(255, Math.round(g + (255 - g) * 0.42))},${Math.min(255, Math.round(b + (255 - b) * 0.42))}) 100%)`;
-                                    const popStrokeW = Math.max(1.2, Math.min(3.4, txt.fontSize * 0.045));
                                     return (
                                       <span>
-                                        {(txt.text || '').split(/(\s+)/).map((tok, tIdx) => {
-                                          if (!tok) return null;
-                                          if (/^\s+$/.test(tok)) {
-                                            return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
-                                          }
-                                          return (
-                                            <span
-                                              key={tIdx}
-                                              style={{
-                                                position: 'relative',
-                                                display: 'inline-block',
-                                                color: 'transparent',
-                                                WebkitTextFillColor: 'transparent',
-                                                WebkitTextStroke: `${popStrokeW.toFixed(1)}px #111827`,
-                                                paintOrder: 'stroke fill',
-                                                textShadow:
-                                                  getTextShadowCss(txt.shadow, txt.fontSize) || 'none',
-                                              }}
-                                            >
-                                              {tok}
-                                              {popFilled && (
-                                                <span
-                                                  aria-hidden="true"
-                                                  style={{
-                                                    position: 'absolute',
-                                                    inset: 0,
-                                                    backgroundImage: popGrad,
-                                                    WebkitBackgroundClip: 'text',
-                                                    backgroundClip: 'text',
-                                                    WebkitTextFillColor: 'transparent',
-                                                    color: 'transparent',
-                                                    WebkitTextStroke: '0px transparent',
-                                                    opacity: popFillAlpha,
-                                                    textShadow: 'none',
-                                                    pointerEvents: 'none',
-                                                  }}
-                                                >
-                                                  {tok}
-                                                </span>
-                                              )}
-                                            </span>
-                                          );
-                                        })}
+                                        {renderPopStyledWords(
+                                          txt.text || '',
+                                          txt.color,
+                                          txt.fontSize,
+                                          txt.shadow,
+                                          txt.fillStyle,
+                                          txt.fillTransparency
+                                        )}
                                       </span>
                                     );
                                   }
@@ -76520,6 +76427,17 @@ export default function App() {
                                     </span>
                                   );
                                 })()
+                              ) : txt.fontFamily === 'pop' ? (
+                                <span>
+                                  {renderPopStyledWords(
+                                    txt.text || '',
+                                    txt.color,
+                                    txt.fontSize,
+                                    txt.shadow,
+                                    txt.fillStyle,
+                                    txt.fillTransparency
+                                  )}
+                                </span>
                               ) : (
                                 <span
                                   style={{

@@ -3144,12 +3144,19 @@ function getPdfTextFontSpec(
             primaryFamily: '"ExplainBoardsFun"',
           };
     case 'pop':
-      return {
-        style: '',
-        weight: '700',
-        stack: '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
-        primaryFamily: '"ExplainBoardsFunBold"',
-      };
+      return boldActive
+        ? {
+            style: '',
+            weight: '700',
+            stack: '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsFunBold"',
+          }
+        : {
+            style: '',
+            weight: '400',
+            stack: '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
+            primaryFamily: '"ExplainBoardsFun"',
+          };
     case 'diary':
       return boldActive
         ? {
