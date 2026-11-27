@@ -364,14 +364,13 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'body',
           pts: [rightAttach, ...rightTailTop, ...rightTailNotch1, ...rightTailNotch2, ...rightTailBot, ...rightSharedEdgeUp],
         },
-        // Left & right fold triangles (tucked cleanly under the bottom corners)
+        // Left & right fold triangles (hugging exact centerBot curve points — zero protrusion)
         {
           role: 'accent-solid',
           pts: [
-            [17, 66],
-            [24, 62.5],
+            ...centerBot.slice(11),
             [24, 70],
-            [17, 66],
+            centerBot[11],
           ],
           widthScale: 0.65,
         },
@@ -379,7 +378,7 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'accent-solid',
           pts: [
             [83, 66],
-            [76, 62.5],
+            ...centerBot.slice(0, 3),
             [76, 70],
             [83, 66],
           ],
@@ -424,23 +423,22 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [76.1, 42],
           ],
         },
-        // Left deep shadow fold
+        // Left deep shadow fold (hugs exact botArch curve — zero upward protrusion)
         {
           role: 'accent-solid',
           pts: [
-            [22, 66],
-            [31, 70],
+            ...botArch.slice(11),
             [28, 84],
-            [22, 66],
+            botArch[11],
           ],
           widthScale: 0.65,
         },
-        // Right deep shadow fold
+        // Right deep shadow fold (hugs exact botArch curve — zero upward protrusion)
         {
           role: 'accent-solid',
           pts: [
             [78, 66],
-            [69, 70],
+            ...botArch.slice(0, 3),
             [72, 84],
             [78, 66],
           ],
