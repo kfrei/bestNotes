@@ -13891,14 +13891,16 @@ export default function App() {
         }
         ctx.restore();
 
-    // Helper: vertical dark-to-light fill gradient (0% = flat baseColor, 100% = strong dark-top -> pale-bottom)
+    // Helper: vertical dark-to-light fill gradient with alpha modulation
+    // (0% = flat baseColor, 100% = rich deep-dark opaque top -> crystal-clear pale/transparent bottom)
     const resolveStrokeFillStyle = (
       pts: Array<{ x: number; y: number }>,
       baseHex: string,
-      gradPct?: number
-    ): string | CanvasGradient => {
+      gradPct: number | undefined,
+      baseAlpha: number
+    ): { fill: string | CanvasGradient; useStopAlpha: boolean } => {
       const gPct = typeof gradPct === 'number' ? Math.max(0, Math.min(100, gradPct)) : 0;
-      if (gPct <= 0 || pts.length === 0) return baseHex;
+      if (gPct <= 0 || pts.length === 0) return { fill: baseHex, useStopAlpha: false };
       let minY = Infinity;
       let maxY = -Infinity;
       for (let i = 0; i < pts.length; i++) {
@@ -13906,7 +13908,9 @@ export default function App() {
         if (py < minY) minY = py;
         if (py > maxY) maxY = py;
       }
-      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY - minY < 1) return baseHex;
+      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY - minY < 1) {
+        return { fill: baseHex, useStopAlpha: false };
+      }
       const hex = (baseHex || '#2563eb').trim().replace('#', '');
       let r = 37, g = 99, b = 235;
       if (hex.length === 3) {
@@ -13919,19 +13923,22 @@ export default function App() {
         b = parseInt(hex.slice(4, 6), 16) || 0;
       }
       const k = gPct / 100;
-      const darkMul = 1 - 0.58 * k;
-      const lightMix = 0.84 * k;
+      const darkMul = 1 - 0.65 * k;
+      const lightMix = 0.92 * k;
       const topR = Math.round(r * darkMul);
       const topG = Math.round(g * darkMul);
       const topB = Math.round(b * darkMul);
       const botR = Math.round(r + (255 - r) * lightMix);
       const botG = Math.round(g + (255 - g) * lightMix);
       const botB = Math.round(b + (255 - b) * lightMix);
+      const topAlpha = Math.min(0.98, baseAlpha + (1 - baseAlpha) * 0.62 * k);
+      const midAlpha = Math.min(0.98, baseAlpha * (1 + 0.12 * k));
+      const botAlpha = Math.max(0.01, baseAlpha * (1 - 0.94 * k));
       const grad = ctx.createLinearGradient(0, minY, 0, maxY);
-      grad.addColorStop(0, `rgb(${topR}, ${topG}, ${topB})`);
-      grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
-      grad.addColorStop(1, `rgb(${botR}, ${botG}, ${botB})`);
-      return grad;
+      grad.addColorStop(0, `rgba(${topR}, ${topG}, ${topB}, ${topAlpha.toFixed(3)})`);
+      grad.addColorStop(0.45, `rgba(${r}, ${g}, ${b}, ${midAlpha.toFixed(3)})`);
+      grad.addColorStop(1, `rgba(${botR}, ${botG}, ${botB}, ${botAlpha.toFixed(3)})`);
+      return { fill: grad, useStopAlpha: true };
     };
 
         // 2. Optional interior fill (transparent by default; fills cleanly if user toggles 'Γεμάτο' F/Φ)
@@ -13939,15 +13946,17 @@ export default function App() {
         traceRoundedQuad(q0, q1, q2, q3, rCorner);
         if (s.fillStyle && s.fillStyle !== 'none') {
           const fillTrans = s.fillTransparency ?? 90;
-          ctx.save();
-          ctx.fillStyle = resolveStrokeFillStyle(
+          const baseFillA =
+            fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
+          const resolved = resolveStrokeFillStyle(
             [q0, q1, q2, q3],
             s.fillColor || s.color || '#2563eb',
-            s.fillGradient
+            s.fillGradient,
+            baseFillA
           );
-          ctx.globalAlpha =
-            (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
-            baseAlpha;
+          ctx.save();
+          ctx.fillStyle = resolved.fill;
+          ctx.globalAlpha = resolved.useStopAlpha ? baseAlpha : baseFillA * baseAlpha;
           ctx.fill();
           ctx.restore();
         }
@@ -14166,8 +14175,15 @@ export default function App() {
           s.shapeType === 'banner-accent-solid'
             ? 0
             : s.fillTransparency ?? 90;
+        const baseFillAlpha =
+          fillTrans === 0
+            ? 1
+            : isStencilCustomFill && s.fillTransparency === undefined
+            ? 0.85
+            : Math.max(0.05, Math.min(1, (100 - fillTrans) / 100));
         ctx.save();
         const gradPct = s.shapeType === 'banner-accent-solid' ? 0 : s.fillGradient ?? 0;
+        let usedGradientStopAlpha = false;
         if (gradPct > 0 && s.points.length > 0) {
           let minY = Infinity;
           let maxY = -Infinity;
@@ -14189,26 +14205,24 @@ export default function App() {
               b = parseInt(hex.slice(4, 6), 16) || 0;
             }
             const k = Math.max(0, Math.min(1, gradPct / 100));
-            const darkMul = 1 - 0.58 * k;
-            const lightMix = 0.84 * k;
+            const darkMul = 1 - 0.65 * k;
+            const lightMix = 0.92 * k;
+            const topAlpha = Math.min(0.98, baseFillAlpha + (1 - baseFillAlpha) * 0.62 * k);
+            const midAlpha = Math.min(0.98, baseFillAlpha * (1 + 0.12 * k));
+            const botAlpha = Math.max(0.01, baseFillAlpha * (1 - 0.94 * k));
             const grad = ctx.createLinearGradient(0, minY, 0, maxY);
-            grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
-            grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
-            grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+            grad.addColorStop(0, `rgba(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)}, ${topAlpha.toFixed(3)})`);
+            grad.addColorStop(0.45, `rgba(${r}, ${g}, ${b}, ${midAlpha.toFixed(3)})`);
+            grad.addColorStop(1, `rgba(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)}, ${botAlpha.toFixed(3)})`);
             ctx.fillStyle = grad;
+            usedGradientStopAlpha = true;
           } else {
             ctx.fillStyle = shadeColor;
           }
         } else {
           ctx.fillStyle = shadeColor;
         }
-        const baseFillAlpha =
-          fillTrans === 0
-            ? 1
-            : isStencilCustomFill && s.fillTransparency === undefined
-            ? 0.85
-            : Math.max(0.05, Math.min(1, (100 - fillTrans) / 100));
-        ctx.globalAlpha = baseFillAlpha * (s.opacity ?? 1);
+        ctx.globalAlpha = usedGradientStopAlpha ? (s.opacity ?? 1) : baseFillAlpha * (s.opacity ?? 1);
         const hasSubpathHoles = s.points.some((p) => p.twist === 888);
         if (hasSubpathHoles) {
           ctx.closePath();

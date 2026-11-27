@@ -567,8 +567,11 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
       traceRoundedQuad(q0, q1, q2, q3, rCorner);
       if (s.fillStyle && s.fillStyle !== 'none') {
         const fillTrans = s.fillTransparency ?? 90;
+        const baseFillA =
+          fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
         const baseCol = s.fillColor || s.color || '#2563eb';
         const gPct = typeof s.fillGradient === 'number' ? Math.max(0, Math.min(100, s.fillGradient)) : 0;
+        let usedGradAlpha = false;
         ctx.save();
         if (gPct > 0) {
           const minY = Math.min(q0.y, q1.y, q2.y, q3.y);
@@ -579,22 +582,24 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
             const g = hex.length === 3 ? parseInt(hex[1] + hex[1], 16) || 0 : parseInt(hex.slice(2, 4), 16) || 0;
             const b = hex.length === 3 ? parseInt(hex[2] + hex[2], 16) || 0 : parseInt(hex.slice(4, 6), 16) || 0;
             const k = gPct / 100;
-            const darkMul = 1 - 0.58 * k;
-            const lightMix = 0.84 * k;
+            const darkMul = 1 - 0.65 * k;
+            const lightMix = 0.92 * k;
+            const topAlpha = Math.min(0.98, baseFillA + (1 - baseFillA) * 0.62 * k);
+            const midAlpha = Math.min(0.98, baseFillA * (1 + 0.12 * k));
+            const botAlpha = Math.max(0.01, baseFillA * (1 - 0.94 * k));
             const grad = ctx.createLinearGradient(0, minY, 0, maxY);
-            grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
-            grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
-            grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+            grad.addColorStop(0, `rgba(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)}, ${topAlpha.toFixed(3)})`);
+            grad.addColorStop(0.45, `rgba(${r}, ${g}, ${b}, ${midAlpha.toFixed(3)})`);
+            grad.addColorStop(1, `rgba(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)}, ${botAlpha.toFixed(3)})`);
             ctx.fillStyle = grad;
+            usedGradAlpha = true;
           } else {
             ctx.fillStyle = baseCol;
           }
         } else {
           ctx.fillStyle = baseCol;
         }
-        ctx.globalAlpha =
-          (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
-          baseAlpha;
+        ctx.globalAlpha = usedGradAlpha ? baseAlpha : baseFillA * baseAlpha;
         ctx.fill();
         ctx.restore();
       }
@@ -760,8 +765,15 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         s.shapeType === 'banner-accent-solid'
           ? 0
           : s.fillTransparency ?? 90;
+      const basePdfFillAlpha =
+        fillTrans === 0
+          ? 0.94
+          : isStencilCustomFill && s.fillTransparency === undefined
+          ? 0.85
+          : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
       ctx.save();
       const gradPct = s.shapeType === 'banner-accent-solid' ? 0 : s.fillGradient ?? 0;
+      let usedGradAlpha = false;
       if (gradPct > 0 && s.points.length > 0) {
         let minY = Infinity;
         let maxY = -Infinity;
@@ -776,25 +788,24 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
           const g = hex.length === 3 ? parseInt(hex[1] + hex[1], 16) || 0 : parseInt(hex.slice(2, 4), 16) || 0;
           const b = hex.length === 3 ? parseInt(hex[2] + hex[2], 16) || 0 : parseInt(hex.slice(4, 6), 16) || 0;
           const k = Math.max(0, Math.min(1, gradPct / 100));
-          const darkMul = 1 - 0.58 * k;
-          const lightMix = 0.84 * k;
+          const darkMul = 1 - 0.65 * k;
+          const lightMix = 0.92 * k;
+          const topAlpha = Math.min(0.98, basePdfFillAlpha + (1 - basePdfFillAlpha) * 0.62 * k);
+          const midAlpha = Math.min(0.98, basePdfFillAlpha * (1 + 0.12 * k));
+          const botAlpha = Math.max(0.01, basePdfFillAlpha * (1 - 0.94 * k));
           const grad = ctx.createLinearGradient(0, minY, 0, maxY);
-          grad.addColorStop(0, `rgb(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)})`);
-          grad.addColorStop(0.48, `rgb(${r}, ${g}, ${b})`);
-          grad.addColorStop(1, `rgb(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)})`);
+          grad.addColorStop(0, `rgba(${Math.round(r * darkMul)}, ${Math.round(g * darkMul)}, ${Math.round(b * darkMul)}, ${topAlpha.toFixed(3)})`);
+          grad.addColorStop(0.45, `rgba(${r}, ${g}, ${b}, ${midAlpha.toFixed(3)})`);
+          grad.addColorStop(1, `rgba(${Math.round(r + (255 - r) * lightMix)}, ${Math.round(g + (255 - g) * lightMix)}, ${Math.round(b + (255 - b) * lightMix)}, ${botAlpha.toFixed(3)})`);
           ctx.fillStyle = grad;
+          usedGradAlpha = true;
         } else {
           ctx.fillStyle = shadeColor;
         }
       } else {
         ctx.fillStyle = shadeColor;
       }
-      ctx.globalAlpha =
-        fillTrans === 0
-          ? 0.94
-          : isStencilCustomFill && s.fillTransparency === undefined
-          ? 0.85
-          : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
+      ctx.globalAlpha = usedGradAlpha ? 1 : basePdfFillAlpha;
       ctx.fill();
       ctx.restore();
     }
