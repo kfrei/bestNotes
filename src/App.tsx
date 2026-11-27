@@ -2375,7 +2375,7 @@ export default function App() {
   const [penSubType, setPenSubType] = useState<PenSubType>(() => initialSession?.penSubType || 'fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>(() => initialSession?.eraserSubType || 'stroke');
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>(() => initialSession?.eraserSize || 'small');
-  const [shapePreset, setShapePreset] = useState<ShapePresetType>(() => initialSession?.shapePreset || 'sine');
+  const [shapePreset, setShapePreset] = useState<ShapePresetType>(() => initialSession?.shapePreset || 'title-box');
   const [waveGuideColor, setWaveGuideColor] = useState<string>(() => initialSession?.waveGuideColor || '#2563eb');
   const [strokeColor, setStrokeColor] = useState<string>(() => initialSession?.strokeColor || '#111827');
   const lastPenColorRef = useRef<string>(initialSession?.strokeColor || '#111827');
@@ -55785,9 +55785,11 @@ export default function App() {
         return;
       }
 
-      // O / Ο -> Objects (Σχήματα)
+      // O / Ο -> Objects (Σχήματα — προεπιλογή Πλαίσιο με Σκιά)
       if (code === 'KeyO' || key === 'o' || key === 'ο') {
-        switchToTool('shape', '📐 Objects (Σχήματα) — O / Ο');
+        setShapePreset('title-box');
+        lastCreatedShapeIdsRef.current = [];
+        switchToTool('shape', '📐 Σχήματα (Πλαίσιο με Σκιά) — O / Ο');
         return;
       }
 
