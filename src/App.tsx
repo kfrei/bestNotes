@@ -44193,11 +44193,13 @@ export default function App() {
 
           if (!isInsideInnerMoveCore) {
           // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #234978 dots)
+          const trueHw = selBounds.hw;
+          const trueHh = selBounds.hh;
           const localCorners = [
-            { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh, sx: -1, sy: -1 },
-            { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh, sx: 1, sy: -1 },
-            { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh, sx: 1, sy: 1 },
-            { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh, sx: -1, sy: 1 },
+            { lx: -hw, ly: -hh, oppLx: trueHw, oppLy: trueHh, sx: -1, sy: -1 },
+            { lx: hw, ly: -hh, oppLx: -trueHw, oppLy: trueHh, sx: 1, sy: -1 },
+            { lx: hw, ly: hh, oppLx: -trueHw, oppLy: -trueHh, sx: 1, sy: 1 },
+            { lx: -hw, ly: hh, oppLx: trueHw, oppLy: -trueHh, sx: -1, sy: 1 },
           ];
           for (const c of localCorners) {
             if (Math.hypot(localX - c.lx, localY - c.ly) < adaptiveCornerHitR) {
@@ -48504,7 +48506,8 @@ export default function App() {
             selStrokesList.length === 0 &&
             selectedLassoTextIds.length === 0;
 
-          let currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
+          const rawCurrDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
+          let currDist = rawCurrDist;
           let scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
           let cornerSnapOverride: { x: number; y: number; w: number; h: number } | null = null;
 
@@ -48513,11 +48516,9 @@ export default function App() {
             const candMaxX = tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor;
             const candMinY = tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor;
             const candMaxY = tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor;
-            const candCx = (candMinX + candMaxX) / 2;
-            const candCy = (candMinY + candMaxY) / 2;
 
-            const CORNER_SNAP_T = isSingleImgResize ? 26 : 18;
-            const EDGE_SNAP_T = isSingleImgResize ? 20 : 12;
+            const CORNER_SNAP_T = isSingleImgResize ? 18 : 14;
+            const EDGE_SNAP_T = isSingleImgResize ? 12 : 9;
 
             const sx = tf.sideSignX || 1;
             const sy = tf.sideSignY || 1;
@@ -48529,7 +48530,7 @@ export default function App() {
             const curCornerY = sy === -1 ? curBox.minY : curBox.maxY;
 
             let bestScaleSnap: number | null = null;
-            let bestDiff = 2.4;
+            let bestDiff = Infinity;
             const tryScaleCandidate = (
               candVal: number,
               curVal: number,
@@ -48539,7 +48540,7 @@ export default function App() {
             ) => {
               const diff = Math.abs(candVal - targetVal);
               const denom = curVal - anchorVal;
-              if (diff <= maxAllowedDiff && Math.abs(denom) > 8) {
+              if (diff <= maxAllowedDiff && diff < bestDiff && Math.abs(denom) > 8) {
                 const reqScale = (targetVal - anchorVal) / denom;
                 if (reqScale >= 0.70 && reqScale <= 1.35) {
                   bestDiff = diff;
@@ -48582,27 +48583,15 @@ export default function App() {
               if (!snappedEdge && Math.abs(draggedCornerY - targetCornerY) <= EDGE_SNAP_T) {
                 tryScaleCandidate(draggedCornerY, curCornerY, tf.anchorY, targetCornerY, EDGE_SNAP_T);
               }
-
-              // 3. Snap against other objects (refBoxes)
-              if (bestScaleSnap === null && refBoxes.length > 0) {
-                for (const ref of refBoxes) {
-                  for (const rx of [ref.minX, ref.maxX]) {
-                    tryScaleCandidate(candMinX, curBox.minX, tf.anchorX, rx);
-                    tryScaleCandidate(candMaxX, curBox.maxX, tf.anchorX, rx);
-                  }
-                  tryScaleCandidate(candCx, curBox.cx, tf.anchorX, ref.cx);
-                  for (const ry of [ref.minY, ref.maxY]) {
-                    tryScaleCandidate(candMinY, curBox.minY, tf.anchorY, ry);
-                    tryScaleCandidate(candMaxY, curBox.maxY, tf.anchorY, ry);
-                  }
-                  tryScaleCandidate(candCy, curBox.cy, tf.anchorY, ref.cy);
-                }
-              }
             }
 
             if (bestScaleSnap !== null) {
               scaleFactor = bestScaleSnap;
               currDist = tf.initialDist * scaleFactor;
+            }
+
+            if (!cornerSnapOverride && bestScaleSnap === null && Math.abs(rawCurrDist - tf.initialDist) < 0.25) {
+              return;
             }
 
             const finalMinX = cornerSnapOverride
