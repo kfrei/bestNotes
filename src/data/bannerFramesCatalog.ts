@@ -332,38 +332,45 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         },
       ];
 
-    // 4. Wavy Flowing Ribbon Banner
+    // 4. Wavy Flowing Ribbon Banner (tails flush along outer center edges — zero inner lines)
     case 'ribbon-wave': {
       const centerTop = sampleQuad([18, 22], [50, 8], [82, 22], 14);
-      const centerRight = sampleQuad([82, 22], [79, 44], [83, 66], 6);
+      const centerRight = sampleQuad([82, 22], [79, 44], [83, 66], 8);
       const centerBot = sampleQuad([83, 66], [50, 52], [17, 66], 14);
-      const centerLeft = sampleQuad([17, 66], [21, 44], [18, 22], 6);
-      const leftTailTop = sampleQuad([19, 34], [12, 42], [5, 36], 8);
+      const centerLeft = sampleQuad([17, 66], [21, 44], [18, 22], 8);
+      // Exact shared edge segments where tails meet the center ribbon (indices 0..5 of centerLeft/Right)
+      const leftSharedEdgeUp: Array<[number, number]> = [[17, 66], ...centerLeft.slice(0, 6)];
+      const leftAttach = leftSharedEdgeUp[leftSharedEdgeUp.length - 1];
+      const rightSharedEdgeDown: Array<[number, number]> = centerRight.slice(2);
+      const rightAttach = rightSharedEdgeDown[0];
+      const rightSharedEdgeUp: Array<[number, number]> = [...rightSharedEdgeDown].reverse();
+
+      const leftTailTop = sampleQuad(leftAttach, [12, 42], [5, 36], 8);
       const leftTailNotch1 = sampleQuad([5, 36], [11, 47], [14, 58], 6);
       const leftTailNotch2 = sampleQuad([14, 58], [8, 68], [5, 84], 6);
-      const leftTailBot = sampleQuad([5, 84], [16, 78], [24, 68], 8);
-      const rightTailTop = sampleQuad([81, 34], [88, 42], [95, 36], 8);
+      const leftTailBot = sampleQuad([5, 84], [16, 78], [24, 70], 8);
+      const rightTailTop = sampleQuad(rightAttach, [88, 42], [95, 36], 8);
       const rightTailNotch1 = sampleQuad([95, 36], [89, 47], [86, 58], 6);
       const rightTailNotch2 = sampleQuad([86, 58], [92, 68], [95, 84], 6);
-      const rightTailBot = sampleQuad([95, 84], [84, 78], [76, 68], 8);
+      const rightTailBot = sampleQuad([95, 84], [84, 78], [76, 70], 8);
       return [
-        // Left wavy tail
+        // Left wavy tail (closes along shared outer edge — zero inner line)
         {
           role: 'body',
-          pts: [[19, 34], ...leftTailTop, ...leftTailNotch1, ...leftTailNotch2, ...leftTailBot, [19, 34]],
+          pts: [leftAttach, ...leftTailTop, ...leftTailNotch1, ...leftTailNotch2, ...leftTailBot, ...leftSharedEdgeUp],
         },
-        // Right wavy tail
+        // Right wavy tail (closes along shared outer edge — zero inner line)
         {
           role: 'body',
-          pts: [[81, 34], ...rightTailTop, ...rightTailNotch1, ...rightTailNotch2, ...rightTailBot, [81, 34]],
+          pts: [rightAttach, ...rightTailTop, ...rightTailNotch1, ...rightTailNotch2, ...rightTailBot, ...rightSharedEdgeUp],
         },
-        // Left & right fold triangles
+        // Left & right fold triangles (tucked cleanly under the bottom corners)
         {
           role: 'accent-solid',
           pts: [
             [17, 66],
-            [24, 61],
-            [24, 71],
+            [24, 62.5],
+            [24, 70],
             [17, 66],
           ],
           widthScale: 0.65,
@@ -372,8 +379,8 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'accent-solid',
           pts: [
             [83, 66],
-            [76, 61],
-            [76, 71],
+            [76, 62.5],
+            [76, 70],
             [83, 66],
           ],
           widthScale: 0.65,
@@ -386,35 +393,35 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 5. Bold Curved Arch Scroll Banner
+    // 5. Bold Curved Arch Scroll Banner (wings flush along center edges — zero inner lines)
     case 'ribbon-arch': {
       const topArch = sampleCubic([26, 16], [42, 26], [58, 26], [74, 16], 14);
       const botArch = sampleCubic([78, 66], [58, 82], [42, 82], [22, 66], 14);
       const leftTailBot = sampleQuad([14, 82], [22, 88], [28, 84], 6);
       const rightTailBot = sampleQuad([86, 82], [78, 88], [72, 84], 6);
       return [
-        // Left wing
+        // Left wing (closes along exact center left edge [22,66] -> [23.9,42])
         {
           role: 'body',
           pts: [
-            [24, 42],
+            [23.9, 42],
             [18, 42],
             [14, 82],
             ...leftTailBot,
-            [31, 68],
-            [24, 42],
+            [22, 66],
+            [23.9, 42],
           ],
         },
-        // Right wing
+        // Right wing (closes along exact center right edge [78,66] -> [76.1,42])
         {
           role: 'body',
           pts: [
-            [76, 42],
+            [76.1, 42],
             [82, 42],
             [86, 82],
             ...rightTailBot,
-            [69, 68],
-            [76, 42],
+            [78, 66],
+            [76.1, 42],
           ],
         },
         // Left deep shadow fold
@@ -422,7 +429,7 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'accent-solid',
           pts: [
             [22, 66],
-            [31, 69],
+            [31, 70],
             [28, 84],
             [22, 66],
           ],
@@ -433,7 +440,7 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'accent-solid',
           pts: [
             [78, 66],
-            [69, 69],
+            [69, 70],
             [72, 84],
             [78, 66],
           ],
