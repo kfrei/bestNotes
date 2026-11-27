@@ -4898,7 +4898,7 @@ export default function App() {
         libraryTreeAnimTimerRef.current = null;
       }
     };
-  }, [showLibraryTreeSidebar, viewMode, isCleanProjectorMode]);
+  }, [showLibraryTreeSidebar, viewMode, isCleanProjectorMode, isAdminOpen, isTvReceiverMode]);
 
   useEffect(() => {
     if (!showLibraryTreeSidebar) return;
@@ -59371,6 +59371,8 @@ export default function App() {
         initialTab={adminInitialTab}
         onClose={() => {
           setAdminInitialTab(undefined);
+          setShowLibraryTreeSidebar(false);
+          setViewMode('library');
           closeAdmin();
         }}
       />
