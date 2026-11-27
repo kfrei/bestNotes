@@ -147,22 +147,22 @@ interface RawVectorPart {
 
 function getBannerNormalizedParts(key: string): RawVectorPart[] {
   switch (key) {
-    // 1. Horizontal Flag / Pennant Banner with bold lower shadow & dashed underline
+    // 1. Horizontal Flag / Pennant Banner with bold lower shadow
     case 'flag-shadow':
       return [
         // Solid lower + notch drop shadow
         {
           role: 'accent-solid',
           pts: [
-            [4, 77],
-            [95, 77],
+            [4, 79],
+            [95, 79],
             [83, 49],
             [95, 22],
             [97, 26],
             [86, 51],
-            [97, 84],
-            [4, 84],
-            [4, 77],
+            [97, 87],
+            [4, 87],
+            [4, 79],
           ],
           widthScale: 0.7,
         },
@@ -173,38 +173,29 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [4, 16],
             [95, 16],
             [81, 47],
-            [95, 77],
-            [4, 77],
+            [95, 79],
+            [4, 79],
             [4, 16],
           ],
         },
-        // Dashed underline
-        {
-          role: 'detail-dashed',
-          pts: [
-            [4, 92],
-            [96, 92],
-          ],
-          widthScale: 0.9,
-        },
       ];
 
-    // 2. Classic 3D Ribbon Banner with notched ends, bold shadows & dashed bottom stitching
+    // 2. Classic 3D Ribbon Banner with notched ends & bold folded shadows (clean center, no dashed lines)
     case 'ribbon-3d':
       return [
         // Left tail shadow
         {
           role: 'accent-solid',
           pts: [
-            [4, 80],
-            [27, 80],
-            [27, 87],
-            [4, 87],
-            [14, 58],
-            [4, 34],
-            [7, 34],
-            [17, 58],
-            [4, 80],
+            [5, 81],
+            [27, 81],
+            [27, 88],
+            [5, 88],
+            [15, 57],
+            [5, 34],
+            [8, 34],
+            [18, 57],
+            [5, 81],
           ],
           widthScale: 0.6,
         },
@@ -212,122 +203,98 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         {
           role: 'accent-solid',
           pts: [
-            [73, 80],
-            [96, 80],
-            [86, 58],
-            [96, 34],
-            [93, 34],
-            [83, 58],
-            [96, 87],
-            [73, 87],
-            [73, 80],
+            [73, 81],
+            [95, 81],
+            [85, 57],
+            [95, 34],
+            [92, 34],
+            [82, 57],
+            [95, 88],
+            [73, 88],
+            [73, 81],
           ],
           widthScale: 0.6,
         },
-        // Left & right tail bodies (fillable)
+        // Left tail body (flush with center box left edge x=19 — zero inner line)
         {
           role: 'body',
           pts: [
-            [5, 31],
-            [22, 31],
-            [22, 66],
-            [27, 80],
-            [5, 80],
+            [5, 32],
+            [19, 32],
+            [19, 65],
+            [27, 81],
+            [5, 81],
             [15, 56],
-            [5, 31],
+            [5, 32],
           ],
         },
+        // Right tail body (flush with center box right edge x=81 — zero inner line)
         {
           role: 'body',
           pts: [
-            [78, 31],
-            [95, 31],
+            [81, 32],
+            [95, 32],
             [85, 56],
-            [95, 80],
-            [73, 80],
-            [78, 66],
-            [78, 31],
+            [95, 81],
+            [73, 81],
+            [81, 65],
+            [81, 32],
           ],
         },
         // Dark folded under-ribbon shadow bar
         {
           role: 'accent-solid',
           pts: [
-            [19, 64],
-            [81, 64],
-            [73, 80],
-            [73, 72],
-            [27, 72],
-            [27, 80],
-            [19, 64],
+            [19, 65],
+            [81, 65],
+            [73, 81],
+            [73, 73],
+            [27, 73],
+            [27, 81],
+            [19, 65],
           ],
           widthScale: 0.6,
         },
-        // Main center ribbon box (fillable)
+        // Main center ribbon box (fillable, completely clean interior)
         {
           role: 'body',
           pts: [
-            [19, 10],
-            [81, 10],
-            [81, 64],
-            [19, 64],
-            [19, 10],
+            [19, 11],
+            [81, 11],
+            [81, 65],
+            [19, 65],
+            [19, 11],
           ],
-        },
-        // Dashed accents
-        {
-          role: 'detail-dashed',
-          pts: [
-            [4, 93],
-            [27, 93],
-          ],
-          widthScale: 0.85,
-        },
-        {
-          role: 'detail-dashed',
-          pts: [
-            [27, 77],
-            [73, 77],
-          ],
-          widthScale: 0.85,
-        },
-        {
-          role: 'detail-dashed',
-          pts: [
-            [73, 93],
-            [96, 93],
-          ],
-          widthScale: 0.85,
         },
       ];
 
     // 3. Clean Notebook Classic Folded Ribbon Banner
     case 'ribbon-classic':
       return [
-        // Left tail
+        // Left tail (flush with center box left edge x=21)
         {
           role: 'body',
           pts: [
             [5, 34],
-            [22, 34],
-            [22, 64],
+            [21, 34],
+            [21, 63],
             [29, 84],
             [5, 84],
             [14, 59],
             [5, 34],
           ],
         },
-        // Right tail
+        // Right tail (flush with center box right edge x=79)
         {
           role: 'body',
           pts: [
-            [78, 34],
+            [79, 34],
             [95, 34],
             [86, 59],
             [95, 84],
             [71, 84],
-            [78, 64],
-            [78, 34],
+            [79, 63],
+            [79, 34],
           ],
         },
         // Left fold triangle
