@@ -175,6 +175,8 @@ export interface TextObject {
   bold?: boolean;
   shadow?: boolean; // Discreet, light, soft gray graded text shadow
   fontFamily?: TextFontStyle;
+  fillStyle?: FillStyleType;
+  fillTransparency?: number;
   textAlign?: 'left' | 'center' | 'right';
   spans?: TextStyleSpan[];
   chemRawInput?: string; // Original user input for ChemOCR / Chemistry check so missing/wrong subscripts & coefficients are highlighted in red

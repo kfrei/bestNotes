@@ -3589,33 +3589,36 @@ async function drawTextObjectForPdf(
           ctx.lineJoin = 'round';
           ctx.miterLimit = 2;
           ctx.strokeStyle = '#111827';
-          ctx.lineWidth = Math.max(1.8, seg.sz * 0.14);
+          ctx.lineWidth = Math.max(1.2, Math.min(3.4, seg.sz * 0.045));
           ctx.strokeText(seg.text, curX, baseY);
-          ctx.shadowColor = 'transparent';
-          const hex = (seg.color || '#eab308').replace(/^#/, '');
-          const n = parseInt(hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex, 16);
-          const r = Number.isNaN(n) ? 234 : (n >> 16) & 255;
-          const g = Number.isNaN(n) ? 179 : (n >> 8) & 255;
-          const b = Number.isNaN(n) ? 8 : n & 255;
-          const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-          const grad = ctx.createLinearGradient(curX, baseY - seg.sz * 0.85, curX, baseY + seg.sz * 0.15);
-          if (lum < 0.18) {
-            grad.addColorStop(0, '#e2e8f0');
-            grad.addColorStop(0.55, '#94a3b8');
-            grad.addColorStop(1, '#475569');
-          } else {
-            const topR = Math.min(255, Math.round(r + (255 - r) * 0.5));
-            const topG = Math.min(255, Math.round(g + (255 - g) * 0.5));
-            const topB = Math.min(255, Math.round(b + (255 - b) * 0.5));
-            const botR = Math.max(0, Math.round(r * 0.8));
-            const botG = Math.max(0, Math.round(g * 0.8));
-            const botB = Math.max(0, Math.round(b * 0.8));
-            grad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
-            grad.addColorStop(0.54, `rgb(${r},${g},${b})`);
-            grad.addColorStop(1, `rgb(${botR},${botG},${botB})`);
+          if (tx.fillStyle !== 'none') {
+            ctx.shadowColor = 'transparent';
+            ctx.globalAlpha = Math.max(0.05, Math.min(1, (100 - (tx.fillTransparency ?? 0)) / 100));
+            const hex = (seg.color || '#2563eb').replace(/^#/, '');
+            const n = parseInt(hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex, 16);
+            const r = Number.isNaN(n) ? 37 : (n >> 16) & 255;
+            const g = Number.isNaN(n) ? 99 : (n >> 8) & 255;
+            const b = Number.isNaN(n) ? 235 : n & 255;
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            const grad = ctx.createLinearGradient(curX, baseY - seg.sz * 0.85, curX, baseY + seg.sz * 0.15);
+            if (lum < 0.16) {
+              grad.addColorStop(0, '#1e293b');
+              grad.addColorStop(0.52, '#475569');
+              grad.addColorStop(1, '#94a3b8');
+            } else {
+              const topR = Math.max(0, Math.round(r * 0.72));
+              const topG = Math.max(0, Math.round(g * 0.72));
+              const topB = Math.max(0, Math.round(b * 0.72));
+              const botR = Math.min(255, Math.round(r + (255 - r) * 0.42));
+              const botG = Math.min(255, Math.round(g + (255 - g) * 0.42));
+              const botB = Math.min(255, Math.round(b + (255 - b) * 0.42));
+              grad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
+              grad.addColorStop(0.5, `rgb(${r},${g},${b})`);
+              grad.addColorStop(1, `rgb(${botR},${botG},${botB})`);
+            }
+            ctx.fillStyle = grad;
+            ctx.fillText(seg.text, curX, baseY);
           }
-          ctx.fillStyle = grad;
-          ctx.fillText(seg.text, curX, baseY);
           ctx.restore();
         } else {
           ctx.fillStyle = seg.color;
