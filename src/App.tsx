@@ -5926,10 +5926,11 @@ export default function App() {
         })
         .catch((err) => {
           console.error('Firestore notebook sync error:', err);
-          // CRITICAL: Roll back optimistic synced state so failed writes are NEVER silently dropped
+          // CRITICAL: Roll back optimistic synced state & chunk diff cache so failed writes are NEVER silently dropped
           if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) {
             lastSyncedJsonMapRef.current.delete(nb.id);
           }
+          clearNotebookWrittenChunksCache(uid, nb.id);
           setIsDirty(true);
           setSyncStatus('dirty');
           if (retryAttempt < 3 && typeof navigator !== 'undefined' && navigator.onLine !== false) {
@@ -7903,11 +7904,8 @@ export default function App() {
         if (!userEditedInSessionRef.current.has(nb.id)) {
           continue;
         }
-        // 2) Only push a notebook if its local updatedAt is strictly newer than the Cloud version!
-        const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-        if (remoteTime && (nb.updatedAt || '') <= remoteTime) {
-          continue;
-        }
+        // 2) Do NOT drop edited notebooks due to cross-device clock skew (updatedAt <= remoteTime):
+        //    pushNotebookToCloudTracked automatically bumps updatedAt monotonically above remoteTime!
         const dataJson = serializeNotebookForFirestore(nb);
         if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
         pushNotebookToCloudTracked(uid, nb, dataJson);
@@ -7964,8 +7962,6 @@ export default function App() {
           if (!userEditedInSessionRef.current.has(nb.id)) {
             continue;
           }
-          const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-          if (remoteTime && (nb.updatedAt || '') <= remoteTime) continue;
           const dataJson = serializeNotebookForFirestore(nb);
           if (lastSyncedJsonMapRef.current.get(nb.id) !== dataJson) {
             anyUnsynced = true;
@@ -8004,7 +8000,7 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const flushOnHide = () => {
+    const flushOnVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
         performCloudFirestoreSyncNow();
@@ -8017,6 +8013,16 @@ export default function App() {
         ) {
           commitUserFoldersChange(customFoldersRef.current);
         }
+      } else if (document.visibilityState === 'visible') {
+        // iPadOS / Safari wake-from-sleep guard: flush any edits that failed while locked/offline!
+        if (userEditedInSessionRef.current.size > 0) {
+          performCloudFirestoreSyncNow();
+        }
+      }
+    };
+    const flushOnWakeFocus = () => {
+      if (userEditedInSessionRef.current.size > 0 && inFlightSavesMapRef.current.size === 0) {
+        performCloudFirestoreSyncNow();
       }
     };
     const flushOnPageHide = () => {
@@ -8035,17 +8041,41 @@ export default function App() {
     const flushOnOnline = () => {
       performCloudFirestoreSyncNow();
     };
-    document.addEventListener('visibilitychange', flushOnHide);
+    document.addEventListener('visibilitychange', flushOnVisibilityChange);
+    window.addEventListener('focus', flushOnWakeFocus);
+    window.addEventListener('pageshow', flushOnWakeFocus);
     window.addEventListener('pagehide', flushOnPageHide);
     window.addEventListener('beforeunload', flushOnPageHide);
     window.addEventListener('online', flushOnOnline);
     return () => {
-      document.removeEventListener('visibilitychange', flushOnHide);
+      document.removeEventListener('visibilitychange', flushOnVisibilityChange);
+      window.removeEventListener('focus', flushOnWakeFocus);
+      window.removeEventListener('pageshow', flushOnWakeFocus);
       window.removeEventListener('pagehide', flushOnPageHide);
       window.removeEventListener('beforeunload', flushOnPageHide);
       window.removeEventListener('online', flushOnOnline);
     };
   }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange, pushDriveSyncMetaToCloud]);
+
+  // Zero-cost Dirty Sync Watchdog: runs ONLY while isDirty === true (0% CPU & 0 Firestore ops when synced)
+  // Guarantees that edits surviving an iPad sleep or transient Wi-Fi drop NEVER stay stuck unsynced!
+  useEffect(() => {
+    if (!currentUser || !isDirty) return;
+    const watchdog = window.setInterval(() => {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine === false
+      ) {
+        return;
+      }
+      if (inFlightSavesMapRef.current.size === 0) {
+        performCloudFirestoreSyncNow();
+      }
+    }, 30000);
+    return () => {
+      window.clearInterval(watchdog);
+    };
+  }, [currentUser, isDirty, performCloudFirestoreSyncNow]);
 
   // 3. Persist customFolders & shapeLibrary to LocalStorage + IndexedDB + Cloud Firestore
   useEffect(() => {
@@ -59890,14 +59920,42 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 20s Cloud Sync & 2min Google Drive PDF Sync Pill */}
+              {/* Cloud Firestore & Google Drive PDF Sync Pill */}
               <button
-                onClick={() => void performDrivePdfSync(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
-                title="Αυτόματος Συγχρονισμός Cloud κάθε 20s & PDF στο Google Drive (/BestNotes) κάθε 2 λεπτά (Πάτησε για άμεσο συγχρονισμό)"
+                onClick={() => {
+                  const pushed = performCloudFirestoreSyncNow();
+                  if (pushed) {
+                    showToast('☁️ Αποθήκευση αλλαγών στο Cloud…');
+                  }
+                  void performDrivePdfSync(true);
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition cursor-pointer ${
+                  isDirty || syncStatus === 'dirty'
+                    ? 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40'
+                    : 'bg-[#263961] hover:bg-[#31487a] text-sky-200'
+                }`}
+                title={
+                  isDirty || syncStatus === 'dirty'
+                    ? 'Υπάρχουν μη συγχρονισμένες αλλαγές — Πάτησε για άμεσο συγχρονισμό στο Cloud'
+                    : 'Συγχρονισμένο με το Cloud (Πάτησε για άμεσο συγχρονισμό & PDF στο Google Drive)'
+                }
               >
-                <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
-                <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
+                <Cloud
+                  className={`w-3.5 h-3.5 ${
+                    syncStatus === 'syncing'
+                      ? 'text-amber-300 animate-pulse'
+                      : isDirty || syncStatus === 'dirty'
+                      ? 'text-amber-400'
+                      : 'text-emerald-400'
+                  }`}
+                />
+                <span className="hidden md:inline">
+                  {syncStatus === 'syncing'
+                    ? 'Sync…'
+                    : isDirty || syncStatus === 'dirty'
+                    ? 'Εκκρεμεί'
+                    : 'Synced'}
+                </span>
               </button>
 
               {/* Download Arrow Button (opens PDF & .bestnotes Download Menu) */}
