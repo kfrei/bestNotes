@@ -339,6 +339,7 @@ import {
 import {
   PRESET_COLORS,
   DEFAULT_COLOR_SLOTS,
+  HIGHLIGHTER_COLOR_SLOTS,
   THICKNESS_PRESETS,
   APP_NAVY,
   APP_NAVY_HOVER,
@@ -2377,6 +2378,27 @@ export default function App() {
   const [shapePreset, setShapePreset] = useState<ShapePresetType>(() => initialSession?.shapePreset || 'sine');
   const [waveGuideColor, setWaveGuideColor] = useState<string>(() => initialSession?.waveGuideColor || '#2563eb');
   const [strokeColor, setStrokeColor] = useState<string>(() => initialSession?.strokeColor || '#111827');
+  const lastPenColorRef = useRef<string>(initialSession?.strokeColor || '#111827');
+  const lastHighlighterColorRef = useRef<string>(HIGHLIGHTER_COLOR_SLOTS[0]);
+  const prevColorToolRef = useRef<ToolType>(activeTool);
+  useEffect(() => {
+    const prevTool = prevColorToolRef.current;
+    prevColorToolRef.current = activeTool;
+    if (prevTool !== 'highlighter' && activeTool === 'highlighter') {
+      lastPenColorRef.current = strokeColor;
+      setStrokeColor(lastHighlighterColorRef.current || HIGHLIGHTER_COLOR_SLOTS[0]);
+    } else if (prevTool === 'highlighter' && activeTool !== 'highlighter') {
+      lastHighlighterColorRef.current = strokeColor;
+      setStrokeColor(lastPenColorRef.current || '#111827');
+    }
+  }, [activeTool]);
+  useEffect(() => {
+    if (activeTool === 'highlighter') {
+      lastHighlighterColorRef.current = strokeColor;
+    } else {
+      lastPenColorRef.current = strokeColor;
+    }
+  }, [strokeColor, activeTool]);
   const [colorSlots, setColorSlots] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(COLOR_SLOTS_STORAGE_KEY);
@@ -2425,6 +2447,8 @@ export default function App() {
   }, [colorSlots]);
   const recordRecentColor = useCallback((c: string) => {
     if (!c || typeof c !== 'string' || !c.startsWith('#')) return;
+    // Keep pastel highlighter colors out of the pen's primary/recent slots
+    if (HIGHLIGHTER_COLOR_SLOTS.some((hc) => hc.toLowerCase() === c.toLowerCase())) return;
     setColorSlots((prev) => {
       const primary5 = prev.slice(0, 5);
       const recent5 = prev.slice(5, 10);
@@ -65348,37 +65372,49 @@ export default function App() {
                             : '5 Πρόσφατα Χρώματα — Σύρετε για τα 5 Βασικά'
                         }
                       >
-                        {/* Page 1: 5 Primary Color Memories */}
+                        {/* Page 1: 5 Primary Color Memories (Pastel Highlighter Palette when Highlighter is active) */}
                         <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
-                          {colorSlots.slice(0, 5).map((c, idx) => (
+                          {(activeTool === 'highlighter' ? HIGHLIGHTER_COLOR_SLOTS : colorSlots).slice(0, 5).map((c, idx) => (
                             <button
-                              key={`mem-${idx}`}
+                              key={`mem-${activeTool === 'highlighter' ? 'hl' : 'pen'}-${idx}`}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
                                   ? 'ring-2 ring-offset-1 ring-[#234978] scale-110'
+                                  : activeTool === 'highlighter'
+                                  ? 'ring-1 ring-black/15 opacity-90 hover:opacity-100'
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Βασικό Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Πρόσφατα`}
+                              title={
+                                activeTool === 'highlighter'
+                                  ? `Χρώμα Υπογραμμιστή #${idx + 1} (${c}) — Σύρετε για περισσότερα`
+                                  : `Βασικό Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Πρόσφατα`
+                              }
                             />
                           ))}
                         </div>
-                        {/* Page 2: 5 Most Recent Colors */}
+                        {/* Page 2: 5 Most Recent Colors (or 5 Extra Pastel Highlighter Colors) */}
                         <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
-                          {colorSlots.slice(5, 10).map((c, idx) => (
+                          {(activeTool === 'highlighter' ? HIGHLIGHTER_COLOR_SLOTS : colorSlots).slice(5, 10).map((c, idx) => (
                             <button
-                              key={`rec-${idx}`}
+                              key={`rec-${activeTool === 'highlighter' ? 'hl' : 'pen'}-${idx}`}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
                                   ? 'ring-2 ring-offset-1 ring-[#234978] scale-110'
+                                  : activeTool === 'highlighter'
+                                  ? 'ring-1 ring-black/15 opacity-90 hover:opacity-100'
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Βασικά`}
+                              title={
+                                activeTool === 'highlighter'
+                                  ? `Χρώμα Υπογραμμιστή #${idx + 6} (${c}) — Σύρετε για τα Βασικά`
+                                  : `Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρετε για τα Βασικά`
+                              }
                             />
                           ))}
                         </div>
@@ -76989,7 +77025,7 @@ export default function App() {
                           </button>
                         </div>
                         <div className="flex items-center gap-2 pt-1 border-t border-slate-700/80 w-full justify-center">
-                          {colorSlots.slice(0, 6).map((c) => (
+                          {(activeTool === 'highlighter' ? HIGHLIGHTER_COLOR_SLOTS : colorSlots).slice(0, 6).map((c) => (
                             <button
                               key={c}
                               type="button"

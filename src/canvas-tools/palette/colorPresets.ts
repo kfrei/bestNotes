@@ -32,6 +32,22 @@ export const DEFAULT_COLOR_SLOTS: string[] = [
   '#0d9488',
 ];
 
+// Dedicated soft translucent-style pastel palette for the Highlighter tool:
+// Page 1 (indices 0..4): Classic Yellow, Soft Green, Soft Sky Blue, Soft Pink, Soft Peach
+// Page 2 (indices 5..9): Soft Lilac, Soft Mint/Teal, Soft Coral, Soft Lime, Soft Cool Gray
+export const HIGHLIGHTER_COLOR_SLOTS: string[] = [
+  '#fde047', // Κλασικό Κίτρινο
+  '#86efac', // Απαλό Πράσινο
+  '#7dd3fc', // Απαλό Σιέλ
+  '#f9a8d4', // Απαλό Ροζ
+  '#fdba74', // Απαλό Πορτοκαλί
+  '#d8b4fe', // Απαλό Λιλά
+  '#5eead4', // Απαλό Τυρκουάζ
+  '#fda4af', // Απαλό Κοραλί
+  '#bef264', // Απαλό Λεμονί
+  '#cbd5e1', // Απαλό Γκρι
+];
+
 export const THICKNESS_PRESETS: number[] = [
   1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0,
 ];
