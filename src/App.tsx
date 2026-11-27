@@ -79211,7 +79211,7 @@ export default function App() {
                   : undefined,
                 width: 224,
               }}
-              className="ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[9999] space-y-1 text-left"
+              className="ipados-liquid-glass bg-[#fdfbf7]/95 backdrop-blur-2xl backdrop-saturate-200 border border-white/85 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.18),0_4px_16px_-2px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[100010] space-y-1 text-left"
             >
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b] truncate">
                 Λήψη «{targetNb.title}»
