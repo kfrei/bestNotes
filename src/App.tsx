@@ -65363,8 +65363,8 @@ export default function App() {
                             className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
                               isLightInkPreview
                                 ? isMatched
-                                  ? 'bg-[#7d705e]'
-                                  : 'bg-[#968976]/85 hover:bg-[#7d705e]'
+                                  ? 'bg-[#b0a48f]'
+                                  : 'bg-[#c4baaa]/85 hover:bg-[#b0a48f]'
                                 : isMatched
                                 ? 'bg-[#efebe3]'
                                 : 'hover:bg-[#ece7dc]'
@@ -65373,7 +65373,7 @@ export default function App() {
                               isMatched
                                 ? {
                                     boxShadow: isLightInkPreview
-                                      ? `0 0 0 2px #6b5f4f, inset 0 0 0 1.5px ${effectiveInkPreviewColor}`
+                                      ? `0 0 0 2px #9c907b, inset 0 0 0 1.5px ${effectiveInkPreviewColor}`
                                       : `0 0 0 2px ${effectiveInkPreviewColor}`,
                                   }
                                 : undefined
@@ -65400,10 +65400,13 @@ export default function App() {
                         }}
                         className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                           isLightInkPreview
-                            ? 'bg-[#7d705e] hover:bg-[#6e6252] shadow-2xs'
+                            ? 'bg-[#b0a48f] hover:bg-[#a39782] shadow-2xs'
                             : 'bg-[#efebe3] hover:bg-[#e4ded2]'
                         }`}
-                        style={{ color: effectiveInkPreviewColor }}
+                        style={{
+                          color: effectiveInkPreviewColor,
+                          textShadow: isLightInkPreview ? '0 0.5px 1.5px rgba(0,0,0,0.28)' : undefined,
+                        }}
                         title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
                       >
                         {strokeWidth.toFixed(1)}px
@@ -65416,8 +65419,8 @@ export default function App() {
                         className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-lg border transition cursor-pointer ${
                           isLightInkPreview
                             ? effectiveDashed
-                              ? 'bg-[#6b5f4f] border-[#5e5345] shadow-xs'
-                              : 'bg-[#7d705e] border-[#6b5f4f] hover:bg-[#6e6252]'
+                              ? 'bg-[#9e927d] border-[#8c806c] shadow-xs'
+                              : 'bg-[#b0a48f] border-[#9e927d] hover:bg-[#a39782]'
                             : effectiveDashed
                             ? 'bg-[#d6cbb8] border-[#c2b59f] shadow-xs'
                             : 'bg-[#efebe3] border-[#dfd8cb] hover:bg-[#e4ded2]'
@@ -65546,11 +65549,13 @@ export default function App() {
                             textShadow:
                               effectiveFilled && fillAlpha >= 0.55 && !isLightInkPreview
                                 ? '0 1px 2px rgba(0,0,0,0.45)'
+                                : isLightInkPreview && !(effectiveFilled && fillAlpha >= 0.55)
+                                ? '0 0.5px 1.5px rgba(0,0,0,0.28)'
                                 : undefined,
                           }}
                           className={`relative overflow-hidden px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border-[1.5px] transition cursor-pointer ${
                             isLightInkPreview && !(effectiveFilled && fillAlpha >= 0.55)
-                              ? 'bg-[#7d705e] hover:bg-[#6e6252]'
+                              ? 'bg-[#b0a48f] hover:bg-[#a39782]'
                               : 'bg-[#fdfbf7]'
                           }`}
                           title="Εναλλαγή Γεμάτο / Διάφανο (Συντόμευση: F / Φ)"
