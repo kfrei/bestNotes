@@ -55801,6 +55801,14 @@ export default function App() {
         return;
       }
 
+      // B / Β -> Battery (Μπαταρία)
+      if (code === 'KeyB' || key === 'b' || key === 'β') {
+        setShapePreset('battery');
+        lastCreatedShapeIdsRef.current = [];
+        switchToTool('shape', '🔋 Battery (Μπαταρία) — B / Β');
+        return;
+      }
+
       // N / Ν -> Nodes (Κόμβοι)
       if (code === 'KeyN' || key === 'n' || key === 'ν') {
         e.preventDefault();
