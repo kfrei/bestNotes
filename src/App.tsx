@@ -19548,8 +19548,8 @@ export default function App() {
     const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     const popGrad =
       lum < 0.16
-        ? 'linear-gradient(180deg, #1e293b 0%, #475569 52%, #94a3b8 100%)'
-        : `linear-gradient(180deg, rgb(${Math.max(0, Math.round(r * 0.72))},${Math.max(0, Math.round(g * 0.72))},${Math.max(0, Math.round(b * 0.72))}) 0%, rgb(${r},${g},${b}) 50%, rgb(${Math.min(255, Math.round(r + (255 - r) * 0.42))},${Math.min(255, Math.round(g + (255 - g) * 0.42))},${Math.min(255, Math.round(b + (255 - b) * 0.42))}) 100%)`;
+        ? 'linear-gradient(180deg, #0f172a 24%, #475569 52%, #cbd5e1 80%)'
+        : `linear-gradient(180deg, rgb(${Math.max(0, Math.round(r * 0.52))},${Math.max(0, Math.round(g * 0.52))},${Math.max(0, Math.round(b * 0.52))}) 24%, rgb(${r},${g},${b}) 52%, rgb(${Math.min(255, Math.round(r + (255 - r) * 0.68))},${Math.min(255, Math.round(g + (255 - g) * 0.68))},${Math.min(255, Math.round(b + (255 - b) * 0.68))}) 78%)`;
     const popStrokeW = Math.max(1.2, Math.min(3.2, fontSizePx * 0.042));
     const dropShadowFilter = hasShadow
       ? `drop-shadow(${Math.max(0.8, fontSizePx * 0.03).toFixed(1)}px ${Math.max(1.2, fontSizePx * 0.045).toFixed(1)}px ${Math.max(1.8, fontSizePx * 0.055).toFixed(1)}px rgba(15, 23, 42, 0.28))`

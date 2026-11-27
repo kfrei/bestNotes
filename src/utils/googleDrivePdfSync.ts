@@ -3607,18 +3607,18 @@ async function drawTextObjectForPdf(
             const g = Number.isNaN(n) ? 99 : (n >> 8) & 255;
             const b = Number.isNaN(n) ? 235 : n & 255;
             const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-            const grad = ctx.createLinearGradient(curX, baseY - seg.sz * 0.85, curX, baseY + seg.sz * 0.15);
+            const grad = ctx.createLinearGradient(curX, baseY - seg.sz * 0.76, curX, baseY + seg.sz * 0.08);
             if (lum < 0.16) {
-              grad.addColorStop(0, '#1e293b');
-              grad.addColorStop(0.52, '#475569');
-              grad.addColorStop(1, '#94a3b8');
+              grad.addColorStop(0, '#0f172a');
+              grad.addColorStop(0.5, '#475569');
+              grad.addColorStop(1, '#cbd5e1');
             } else {
-              const topR = Math.max(0, Math.round(r * 0.72));
-              const topG = Math.max(0, Math.round(g * 0.72));
-              const topB = Math.max(0, Math.round(b * 0.72));
-              const botR = Math.min(255, Math.round(r + (255 - r) * 0.42));
-              const botG = Math.min(255, Math.round(g + (255 - g) * 0.42));
-              const botB = Math.min(255, Math.round(b + (255 - b) * 0.42));
+              const topR = Math.max(0, Math.round(r * 0.52));
+              const topG = Math.max(0, Math.round(g * 0.52));
+              const topB = Math.max(0, Math.round(b * 0.52));
+              const botR = Math.min(255, Math.round(r + (255 - r) * 0.68));
+              const botG = Math.min(255, Math.round(g + (255 - g) * 0.68));
+              const botB = Math.min(255, Math.round(b + (255 - b) * 0.68));
               grad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
               grad.addColorStop(0.5, `rgb(${r},${g},${b})`);
               grad.addColorStop(1, `rgb(${botR},${botG},${botB})`);
