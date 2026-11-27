@@ -55945,6 +55945,14 @@ export default function App() {
         return;
       }
 
+      // G / Γ -> Spring (Ελατήριο) όταν δεν υπάρχουν 2+ επιλεγμένα αντικείμενα (με 2+ κάνει Group/Ungroup παραπάνω)
+      if (code === 'KeyG' || key === 'g' || key === 'γ') {
+        setShapePreset('spring');
+        lastCreatedShapeIdsRef.current = [];
+        switchToTool('shape', '🌀 Spring (Ελατήριο) — G / Γ');
+        return;
+      }
+
       // N / Ν -> Nodes (Κόμβοι)
       if (code === 'KeyN' || key === 'n' || key === 'ν') {
         e.preventDefault();
@@ -79042,6 +79050,27 @@ export default function App() {
                       </svg>
                     ),
                   },
+                  {
+                    keys: 'B / Β',
+                    label: 'Battery (Μπαταρία)',
+                    icon: (
+                      <svg className="w-3.5 h-3.5 text-[#64748b] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4.5" width="10.5" height="7" rx="1.4" />
+                        <line x1="14" y1="6.5" x2="14" y2="9.5" strokeWidth="2" />
+                        <line x1="4.8" y1="8" x2="7.2" y2="8" strokeWidth="1.3" />
+                        <line x1="6" y1="6.8" x2="6" y2="9.2" strokeWidth="1.3" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    keys: 'G / Γ',
+                    label: 'Spring (Ελατήριο)',
+                    icon: (
+                      <svg className="w-3.5 h-3.5 text-[#64748b] shrink-0" viewBox="0 0 18 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M 1.5 8 L 3.5 8 C 4 3.5, 6.8 3.5, 6.5 8 C 6.2 12.5, 5 12.5, 5.4 8 C 5.8 3.5, 9.8 3.5, 9.5 8 C 9.2 12.5, 8 12.5, 8.4 8 C 8.8 3.5, 12.8 3.5, 12.5 8 C 12.2 12.5, 11 12.5, 11.4 8 C 11.8 3.5, 14.5 3.5, 14.5 8 L 16.5 8" />
+                      </svg>
+                    ),
+                  },
                   { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
@@ -79051,11 +79080,11 @@ export default function App() {
                   { keys: 'R / Ρ', label: 'Ruler (Χάρακας)', icon: <Ruler className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
-                  { keys: 'G / Γ', label: 'Group (Ομαδοποίηση)', icon: <Layers className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'G / Γ', label: 'Group (2+ Επιλ.)', icon: <Layers className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                 ].map((sc) => (
                   <div
-                    key={sc.keys}
+                    key={`${sc.keys}-${sc.label}`}
                     className="flex items-center justify-between gap-1.5 bg-[#efebe3]/50 border border-[#dfd8cb] rounded-lg px-2 py-1"
                   >
                     <span className="flex items-center gap-1.5 text-[#2c3e50] font-medium truncate">

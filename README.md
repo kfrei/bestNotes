@@ -120,7 +120,7 @@
 * 📘 **[`ARCHITECTURE_AND_ROADMAP.md`](./ARCHITECTURE_AND_ROADMAP.md):** Πλήρης τεχνική αρχιτεκτονική, Κανόνας Σχεδίασης **Warm Studio & Liquid Glass**, Reverse Engineering του `.goodnotes`, μαθηματικοί/διανυσματικοί αλγόριθμοι, κατάσταση **`v1.1.5`**, και το **Roadmap `v1.2+`** (Internal Split-View, Global Search, Αριθμητικά Κυκλώματα $V,I,R$, Capacitor Native).
 * 🕰️ **[`docs/SIMULATIONS_GUIDE.md`](./docs/SIMULATIONS_GUIDE.md):** Οδηγός προδιαγραφών και ελέγχου των ζωντανών προσομοιώσεων Φυσικής & Χημείας (Κυκλώματα, Ελατήρια, Δυνάμεις/Εκκρεμές/Κεκλιμένο, Άτομο, Θερμότητα, Χρονόμετρο & Laser).
 * ⚡ **[`docs/SIMULATION_GUIDELINES.md`](./docs/SIMULATION_GUIDELINES.md):** Υποχρεωτικός Κανόνας Απόδοσης **Zero-Slowdown Charter** (`0.00 ms / 0 RAF` σε παύση) & αρχή *"Pencil & Shapes First"*.
-* ⌨️ **[`SHORTCUTS.md`](./SHORTCUTS.md):** Πλήρης οδηγός συντομεύσεων πληκτρολογίου **Ελληνικά (GR) & Αγγλικά (EN)** + αλληλεπιδράσεις καμβά `v1.1.5` (Κόμβοι `1000%`, `⇄`/`Shift` Bézier, Γωνίες, Χάρακας).
+* ⌨️ **[`SHORTCUTS.md`](./SHORTCUTS.md):** Πλήρης οδηγός συντομεύσεων πληκτρολογίου **Ελληνικά (GR) & Αγγλικά (EN)** (συμπεριλαμβανομένων **`O / Ο`** Πλαίσιο με Σκιά, **`A / Α`** Βελάκι, **`B / Β`** Μπαταρία, **`G / Γ`** Ελατήριο / Group) + αλληλεπιδράσεις καμβά `v1.1.5` (Κόμβοι `1000%`, `⇄`/`Shift` Bézier, Γωνίες, Χάρακας).
 
 ### 🧭 Πίνακας Πλοήγησης & Χάρτης Ενοτήτων (`v1.1.5`)
 
