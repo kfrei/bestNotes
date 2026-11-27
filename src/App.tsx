@@ -18493,8 +18493,11 @@ export default function App() {
         let natH = rawNatH;
         const isSvgVector =
           /\.svg(\?|$)/i.test(dataUrl) || dataUrl.startsWith('data:image/svg+xml');
+        // Keep built-in library assets (/sketches/, /mind_maps/, /vectors_stem/) as lightweight relative URLs (~30 bytes)
+        // instead of re-encoding them into 120–300 KB base64 PNGs inside the notebook JSON!
+        const isBuiltInStaticAsset = dataUrl.startsWith('/');
 
-        if (!isSvgVector) {
+        if (!isSvgVector && !isBuiltInStaticAsset) {
         try {
           const maxDim = 1350;
           const optScale = Math.min(1, maxDim / Math.max(1, rawNatW, rawNatH));
@@ -18568,7 +18571,7 @@ export default function App() {
           naturalWidth: natW,
           naturalHeight: natH,
           dataUrl: finalDataUrl,
-          originalDataUrl: finalDataUrl,
+          originalDataUrl: isBuiltInStaticAsset ? finalDataUrl : undefined,
           layerId: activeLayerId,
         };
         updateActivePage((page) => ({
