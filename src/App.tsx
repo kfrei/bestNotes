@@ -73732,12 +73732,12 @@ export default function App() {
                           >
                             <button
                               onClick={() => insertPageAtIndex(pageIdx)}
-                              className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                              className="px-2 py-0.5 rounded-lg bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
                               title="Προσθήκη νέας σελίδας ΠΡΙΝ από αυτή τη σελίδα"
                             >
                               + Πριν
                             </button>
-                            <div className="flex items-center rounded-full bg-white/90 border border-slate-300 shadow-2xs overflow-hidden">
+                            <div className="flex items-center rounded-lg bg-white/90 border border-slate-300 shadow-2xs overflow-hidden">
                               <button
                                 type="button"
                                 onClick={() => handleRotatePage('left', pageIdx)}
@@ -73758,14 +73758,14 @@ export default function App() {
                             </div>
                             <button
                               onClick={() => duplicatePageAtIndex(pageIdx)}
-                              className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-slate-100 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                              className="px-2 py-0.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
                               title="Διπλασιασμός αυτής της σελίδας"
                             >
                               Αντίγραφο
                             </button>
                             <button
                               onClick={() => deletePageAtIndex(pageIdx)}
-                              className="px-2 py-0.5 rounded-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 shadow-2xs cursor-pointer"
+                              className="px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 shadow-2xs cursor-pointer"
                               title="Διαγραφή αυτής της σελίδας"
                             >
                               Διαγραφή
@@ -73792,7 +73792,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => insertPageAtIndex(pageIdx + 1)}
-                          className="px-3 py-1 rounded-full bg-sky-600/90 hover:bg-sky-600 text-[11px] font-semibold text-white shadow-sm transition cursor-pointer"
+                          className="px-3 py-1 rounded-lg bg-sky-600/90 hover:bg-sky-600 text-[11px] font-semibold text-white shadow-sm transition cursor-pointer"
                           title="Προσθήκη νέας σελίδας μετά από αυτή τη σελίδα"
                         >
                           + Σελίδα Μετά
