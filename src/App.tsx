@@ -65260,9 +65260,10 @@ export default function App() {
                     ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
                     : lineStyle === 'dashed';
                 const activeFillColor = targetStrokes[0]?.color || strokeColor || '#234978';
-                const effectiveInkPreviewColor = /^#f{3,6}$/i.test(activeFillColor.trim())
-                  ? '#475569'
-                  : activeFillColor;
+                const [inkR, inkG, inkB] = parseHexColor(activeFillColor);
+                const inkLuminance = (0.299 * inkR + 0.587 * inkG + 0.114 * inkB) / 255;
+                const isLightInkPreview = inkLuminance > 0.72;
+                const effectiveInkPreviewColor = activeFillColor;
                 const fillAlpha = Math.max(0.08, Math.min(1, (100 - effectiveTrans) / 100));
 
                 return (
@@ -65287,11 +65288,21 @@ export default function App() {
                               }
                             }}
                             className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
-                              isMatched ? 'bg-[#efebe3]' : 'hover:bg-[#ece7dc]'
+                              isLightInkPreview
+                                ? isMatched
+                                  ? 'bg-[#1b2a4a]'
+                                  : 'bg-[#1b2a4a]/80 hover:bg-[#1b2a4a]'
+                                : isMatched
+                                ? 'bg-[#efebe3]'
+                                : 'hover:bg-[#ece7dc]'
                             }`}
                             style={
                               isMatched
-                                ? { boxShadow: `0 0 0 2px ${effectiveInkPreviewColor}` }
+                                ? {
+                                    boxShadow: isLightInkPreview
+                                      ? `0 0 0 2px #234978, inset 0 0 0 1.5px ${effectiveInkPreviewColor}`
+                                      : `0 0 0 2px ${effectiveInkPreviewColor}`,
+                                  }
                                 : undefined
                             }
                             title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
@@ -65314,7 +65325,11 @@ export default function App() {
                           setShowColorPopover(false);
                           setShowShapeLibraryPanel(false);
                         }}
-                        className="px-1.5 py-0.5 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[10px] font-bold cursor-pointer"
+                        className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                          isLightInkPreview
+                            ? 'bg-[#1b2a4a] hover:bg-[#234978] shadow-2xs'
+                            : 'bg-[#efebe3] hover:bg-[#e4ded2]'
+                        }`}
                         style={{ color: effectiveInkPreviewColor }}
                         title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
                       >
@@ -65326,7 +65341,11 @@ export default function App() {
                           applyLineStyleToSelection(nextLineStyle);
                         }}
                         className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-lg border transition cursor-pointer ${
-                          effectiveDashed
+                          isLightInkPreview
+                            ? effectiveDashed
+                              ? 'bg-[#0f172a] border-[#334155] shadow-xs'
+                              : 'bg-[#1b2a4a] border-[#2c3e66] hover:bg-[#234978]'
+                            : effectiveDashed
                             ? 'bg-[#d6cbb8] border-[#c2b59f] shadow-xs'
                             : 'bg-[#efebe3] border-[#dfd8cb] hover:bg-[#e4ded2]'
                         }`}

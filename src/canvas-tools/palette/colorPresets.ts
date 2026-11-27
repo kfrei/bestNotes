@@ -36,7 +36,7 @@ export const DEFAULT_COLOR_SLOTS: string[] = [
 // Page 1 (indices 0..4): Classic Yellow, Soft Green, Soft Sky Blue, Soft Pink, Soft Peach
 // Page 2 (indices 5..9): Soft Lilac, Soft Mint/Teal, Soft Coral, Soft Lime, Soft Cool Gray
 export const HIGHLIGHTER_COLOR_SLOTS: string[] = [
-  '#fde047', // Κλασικό Κίτρινο
+  '#fff000', // Κλασικό Κίτρινο Καναρινί
   '#86efac', // Απαλό Πράσινο
   '#7dd3fc', // Απαλό Σιέλ
   '#f9a8d4', // Απαλό Ροζ
