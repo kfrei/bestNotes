@@ -3143,6 +3143,13 @@ function getPdfTextFontSpec(
             stack: '"ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
             primaryFamily: '"ExplainBoardsFun"',
           };
+    case 'pop':
+      return {
+        style: '',
+        weight: '700',
+        stack: '"ExplainBoardsFunBold", "ExplainBoardsFun", "ExplainBoardsHand", cursive, sans-serif',
+        primaryFamily: '"ExplainBoardsFunBold"',
+      };
     case 'diary':
       return boldActive
         ? {
@@ -3451,7 +3458,7 @@ async function drawTextObjectForPdf(
         7,
         segSz
       ).toFixed(1)}px ${segSpec.stack}`;
-      return { sz: segSz, bold: segBold, shadow: segShadow, color: segColor, font: segFont };
+      return { sz: segSz, bold: segBold, shadow: segShadow, color: segColor, font: segFont, fontFamily: segFam };
     };
 
     const splitIntoStyleRuns = (s: number, e: number) => {
@@ -3461,7 +3468,7 @@ async function drawTextObjectForPdf(
         if (sp.end > s && sp.end < e) bSet.add(sp.end);
       }
       const bounds = Array.from(bSet).sort((a, b) => a - b);
-      const runs: { text: string; sz: number; bold: boolean; shadow: boolean; color: string; font: string; width: number }[] = [];
+      const runs: { text: string; sz: number; bold: boolean; shadow: boolean; color: string; font: string; fontFamily?: string; width: number }[] = [];
       for (let i = 0; i < bounds.length - 1; i++) {
         const rs = bounds[i];
         const re = bounds[i + 1];
@@ -3569,7 +3576,6 @@ async function drawTextObjectForPdf(
       let curX = tx.x + padX + alignOffsetX;
       for (const seg of rl.runs) {
         ctx.font = seg.font;
-        ctx.fillStyle = seg.color;
         if (seg.shadow) {
           ctx.shadowColor = 'rgba(71, 85, 105, 0.35)';
           ctx.shadowOffsetX = Math.max(0.7, seg.sz * 0.035);
@@ -3578,7 +3584,43 @@ async function drawTextObjectForPdf(
         } else {
           ctx.shadowColor = 'transparent';
         }
-        ctx.fillText(seg.text, curX, baseY);
+        if (seg.fontFamily === 'pop') {
+          ctx.save();
+          ctx.lineJoin = 'round';
+          ctx.miterLimit = 2;
+          ctx.strokeStyle = '#111827';
+          ctx.lineWidth = Math.max(1.8, seg.sz * 0.14);
+          ctx.strokeText(seg.text, curX, baseY);
+          ctx.shadowColor = 'transparent';
+          const hex = (seg.color || '#eab308').replace(/^#/, '');
+          const n = parseInt(hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex, 16);
+          const r = Number.isNaN(n) ? 234 : (n >> 16) & 255;
+          const g = Number.isNaN(n) ? 179 : (n >> 8) & 255;
+          const b = Number.isNaN(n) ? 8 : n & 255;
+          const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          const grad = ctx.createLinearGradient(curX, baseY - seg.sz * 0.85, curX, baseY + seg.sz * 0.15);
+          if (lum < 0.18) {
+            grad.addColorStop(0, '#e2e8f0');
+            grad.addColorStop(0.55, '#94a3b8');
+            grad.addColorStop(1, '#475569');
+          } else {
+            const topR = Math.min(255, Math.round(r + (255 - r) * 0.5));
+            const topG = Math.min(255, Math.round(g + (255 - g) * 0.5));
+            const topB = Math.min(255, Math.round(b + (255 - b) * 0.5));
+            const botR = Math.max(0, Math.round(r * 0.8));
+            const botG = Math.max(0, Math.round(g * 0.8));
+            const botB = Math.max(0, Math.round(b * 0.8));
+            grad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
+            grad.addColorStop(0.54, `rgb(${r},${g},${b})`);
+            grad.addColorStop(1, `rgb(${botR},${botG},${botB})`);
+          }
+          ctx.fillStyle = grad;
+          ctx.fillText(seg.text, curX, baseY);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = seg.color;
+          ctx.fillText(seg.text, curX, baseY);
+        }
         curX += seg.width;
       }
       curTopY += rowH;

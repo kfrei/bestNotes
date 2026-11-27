@@ -19577,6 +19577,16 @@ export default function App() {
           letterSpacing: '0em',
           WebkitTextStroke: boldActive ? '0.35px currentColor' : '0px',
         };
+      case 'pop':
+        return {
+          fontFamily: "'ExplainBoardsFunBold', 'ExplainBoardsFun', 'ExplainBoardsHand', cursive",
+          fontStyle: 'normal',
+          fontWeight: 700,
+          fontSynthesis: 'none',
+          lineHeight: 1.42,
+          letterSpacing: '0.025em',
+          WebkitTextStroke: '0px',
+        };
       case 'diary':
         return {
           fontFamily: boldActive
@@ -66228,6 +66238,7 @@ export default function App() {
                             { id: 'calligraphic', label: 'Καλλιγραφική' },
                             { id: 'marker', label: 'Πένα' },
                             { id: 'fun', label: 'Fun' },
+                            { id: 'pop', label: 'Pop' },
                             { id: 'diary', label: 'Diary' },
                             { id: 'mansalva', label: 'Μαρκαδόρος' },
                             { id: 'handwritten', label: 'Χειρόγραφο' },
@@ -74772,6 +74783,7 @@ export default function App() {
                                           'calligraphic',
                                           'marker',
                                           'fun',
+                                          'pop',
                                           'diary',
                                           'mansalva',
                                           'handwritten',
@@ -74844,7 +74856,7 @@ export default function App() {
                                         }));
                                       }}
                                       className="w-[62px] min-w-[62px] max-w-[62px] py-1 px-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer text-center flex items-center justify-center shrink-0 truncate select-none text-[11px]"
-                                      title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Fun / Diary / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
+                                      title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Fun / Pop / Diary / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
                                       displayedFontFamily === 'calligraphic-bold'
@@ -74853,6 +74865,8 @@ export default function App() {
                                         ? 'Πένα'
                                         : displayedFontFamily === 'fun'
                                         ? 'Fun'
+                                        : displayedFontFamily === 'pop'
+                                        ? 'Pop'
                                         : displayedFontFamily === 'diary'
                                         ? 'Diary'
                                         : displayedFontFamily === 'mansalva'
@@ -75512,28 +75526,103 @@ export default function App() {
                                               bStart >= s &&
                                               bEnd <= e &&
                                               segText !== '\n';
+                                            const isPopFont = segStyle.fontFamily === 'pop';
+                                            const popGradientCss = isPopFont
+                                              ? (() => {
+                                                  const [r, g, b] = parseHexColor(segStyle.color || '#eab308');
+                                                  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                                                  if (lum < 0.18) {
+                                                    return 'linear-gradient(180deg, #e2e8f0 0%, #94a3b8 55%, #475569 100%)';
+                                                  }
+                                                  const topR = Math.min(255, Math.round(r + (255 - r) * 0.5));
+                                                  const topG = Math.min(255, Math.round(g + (255 - g) * 0.5));
+                                                  const topB = Math.min(255, Math.round(b + (255 - b) * 0.5));
+                                                  const botR = Math.max(0, Math.round(r * 0.8));
+                                                  const botG = Math.max(0, Math.round(g * 0.8));
+                                                  const botB = Math.max(0, Math.round(b * 0.8));
+                                                  return `linear-gradient(180deg, rgb(${topR},${topG},${topB}) 0%, rgb(${r},${g},${b}) 54%, rgb(${botR},${botG},${botB}) 100%)`;
+                                                })()
+                                              : undefined;
                                             return (
                                               <React.Fragment key={bStart}>
-                                                <span
-                                                  style={{
-                                                    fontWeight: segStyle.bold ? 700 : 500,
-                                                    ...segCss,
-                                                    textShadow:
-                                                      getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
-                                                      'none',
-                                                    fontSize: `${segStyle.fontSize}px`,
-                                                    color: segStyle.color,
-                                                    backgroundColor: isSelectedSeg
-                                                      ? 'rgba(0, 102, 255, 0.28)'
-                                                      : undefined,
-                                                    boxShadow: isSelectedSeg
-                                                      ? '0 0 0 1.5px rgba(0, 102, 255, 0.55)'
-                                                      : undefined,
-                                                    borderRadius: isSelectedSeg ? '3px' : undefined,
-                                                  }}
-                                                >
-                                                  {segText}
-                                                </span>
+                                                {isPopFont && segText !== '\n' ? (
+                                                  <span
+                                                    style={{
+                                                      fontWeight: 700,
+                                                      ...segCss,
+                                                      fontSize: `${segStyle.fontSize}px`,
+                                                      backgroundColor: isSelectedSeg
+                                                        ? 'rgba(0, 102, 255, 0.28)'
+                                                        : undefined,
+                                                      boxShadow: isSelectedSeg
+                                                        ? '0 0 0 1.5px rgba(0, 102, 255, 0.55)'
+                                                        : undefined,
+                                                      borderRadius: isSelectedSeg ? '3px' : undefined,
+                                                    }}
+                                                  >
+                                                    {segText.split(/(\s+)/).map((tok, tIdx) => {
+                                                      if (!tok) return null;
+                                                      if (/^\s+$/.test(tok)) {
+                                                        return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
+                                                      }
+                                                      return (
+                                                        <span
+                                                          key={tIdx}
+                                                          style={{
+                                                            position: 'relative',
+                                                            display: 'inline-block',
+                                                            color: '#111827',
+                                                            WebkitTextStroke: `${Math.max(1.8, segStyle.fontSize * 0.14).toFixed(1)}px #111827`,
+                                                            paintOrder: 'stroke fill',
+                                                            textShadow:
+                                                              getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
+                                                              'none',
+                                                          }}
+                                                        >
+                                                          {tok}
+                                                          <span
+                                                            aria-hidden="true"
+                                                            style={{
+                                                              position: 'absolute',
+                                                              inset: 0,
+                                                              backgroundImage: popGradientCss,
+                                                              WebkitBackgroundClip: 'text',
+                                                              backgroundClip: 'text',
+                                                              WebkitTextFillColor: 'transparent',
+                                                              color: 'transparent',
+                                                              WebkitTextStroke: '0px transparent',
+                                                              textShadow: 'none',
+                                                              pointerEvents: 'none',
+                                                            }}
+                                                          >
+                                                            {tok}
+                                                          </span>
+                                                        </span>
+                                                      );
+                                                    })}
+                                                  </span>
+                                                ) : (
+                                                  <span
+                                                    style={{
+                                                      fontWeight: segStyle.bold ? 700 : 500,
+                                                      ...segCss,
+                                                      textShadow:
+                                                        getTextShadowCss(segStyle.shadow, segStyle.fontSize) ||
+                                                        'none',
+                                                      fontSize: `${segStyle.fontSize}px`,
+                                                      color: segStyle.color,
+                                                      backgroundColor: isSelectedSeg
+                                                        ? 'rgba(0, 102, 255, 0.28)'
+                                                        : undefined,
+                                                      boxShadow: isSelectedSeg
+                                                        ? '0 0 0 1.5px rgba(0, 102, 255, 0.55)'
+                                                        : undefined,
+                                                      borderRadius: isSelectedSeg ? '3px' : undefined,
+                                                    }}
+                                                  >
+                                                    {segText}
+                                                  </span>
+                                                )}
                                                 {caretPos > 0 && bEnd === caretPos && caretNode}
                                               </React.Fragment>
                                             );

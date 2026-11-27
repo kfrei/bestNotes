@@ -143,6 +143,7 @@ export type TextFontStyle =
   | 'calligraphic'
   | 'calligraphic-bold'
   | 'fun'
+  | 'pop'
   | 'diary'
   | 'neohellenic'
   | 'handwritten'
