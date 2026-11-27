@@ -65300,8 +65300,8 @@ export default function App() {
                             className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
                               isLightInkPreview
                                 ? isMatched
-                                  ? 'bg-[#1b2a4a]'
-                                  : 'bg-[#1b2a4a]/80 hover:bg-[#1b2a4a]'
+                                  ? 'bg-[#7d705e]'
+                                  : 'bg-[#968976]/85 hover:bg-[#7d705e]'
                                 : isMatched
                                 ? 'bg-[#efebe3]'
                                 : 'hover:bg-[#ece7dc]'
@@ -65310,7 +65310,7 @@ export default function App() {
                               isMatched
                                 ? {
                                     boxShadow: isLightInkPreview
-                                      ? `0 0 0 2px #234978, inset 0 0 0 1.5px ${effectiveInkPreviewColor}`
+                                      ? `0 0 0 2px #6b5f4f, inset 0 0 0 1.5px ${effectiveInkPreviewColor}`
                                       : `0 0 0 2px ${effectiveInkPreviewColor}`,
                                   }
                                 : undefined
@@ -65337,7 +65337,7 @@ export default function App() {
                         }}
                         className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                           isLightInkPreview
-                            ? 'bg-[#1b2a4a] hover:bg-[#234978] shadow-2xs'
+                            ? 'bg-[#7d705e] hover:bg-[#6e6252] shadow-2xs'
                             : 'bg-[#efebe3] hover:bg-[#e4ded2]'
                         }`}
                         style={{ color: effectiveInkPreviewColor }}
@@ -65353,8 +65353,8 @@ export default function App() {
                         className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-lg border transition cursor-pointer ${
                           isLightInkPreview
                             ? effectiveDashed
-                              ? 'bg-[#0f172a] border-[#334155] shadow-xs'
-                              : 'bg-[#1b2a4a] border-[#2c3e66] hover:bg-[#234978]'
+                              ? 'bg-[#6b5f4f] border-[#5e5345] shadow-xs'
+                              : 'bg-[#7d705e] border-[#6b5f4f] hover:bg-[#6e6252]'
                             : effectiveDashed
                             ? 'bg-[#d6cbb8] border-[#c2b59f] shadow-xs'
                             : 'bg-[#efebe3] border-[#dfd8cb] hover:bg-[#e4ded2]'
@@ -65474,13 +65474,22 @@ export default function App() {
                           onClick={() => toggleFillStyleToSelection(false)}
                           style={{
                             borderColor: activeFillColor,
-                            color: effectiveFilled && fillAlpha >= 0.55 ? '#ffffff' : activeFillColor,
-                            textShadow:
+                            color:
                               effectiveFilled && fillAlpha >= 0.55
+                                ? isLightInkPreview
+                                  ? '#2c2419'
+                                  : '#ffffff'
+                                : activeFillColor,
+                            textShadow:
+                              effectiveFilled && fillAlpha >= 0.55 && !isLightInkPreview
                                 ? '0 1px 2px rgba(0,0,0,0.45)'
                                 : undefined,
                           }}
-                          className="relative overflow-hidden px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border-[1.5px] bg-[#fdfbf7] transition cursor-pointer"
+                          className={`relative overflow-hidden px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border-[1.5px] transition cursor-pointer ${
+                            isLightInkPreview && !(effectiveFilled && fillAlpha >= 0.55)
+                              ? 'bg-[#7d705e] hover:bg-[#6e6252]'
+                              : 'bg-[#fdfbf7]'
+                          }`}
                           title="Εναλλαγή Γεμάτο / Διάφανο (Συντόμευση: F / Φ)"
                         >
                           {effectiveFilled && (
