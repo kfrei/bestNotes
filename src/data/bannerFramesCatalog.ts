@@ -1371,14 +1371,25 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [10, 52],
           ],
         },
-        // Main fillable note card
+        // Main fillable note card (clipped cleanly at ribbon bottom edge so NO card lines show through the sticker!)
+        {
+          role: 'body',
+          pts: [
+            [35.37, 12],
+            [92, 12],
+            [92, 88],
+            [10, 88],
+            [10, 52],
+            [35.37, 12],
+          ],
+        },
+        // Top-left exposed card corner above the diagonal sticker (no lines under the sticker!)
         {
           role: 'body',
           pts: [
             [10, 12],
-            [92, 12],
-            [92, 88],
-            [10, 88],
+            [24.48, 12],
+            [10, 35.03],
             [10, 12],
           ],
         },
@@ -1834,14 +1845,25 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [4, 88],
           ],
         },
-        // Main wide fillable header card
+        // Main wide fillable header card (clipped cleanly at ribbon edge so NO card lines show through the sticker!)
+        {
+          role: 'body',
+          pts: [
+            [11.62, 14],
+            [98, 14],
+            [98, 88],
+            [3, 88],
+            [3, 62],
+            [11.62, 14],
+          ],
+        },
+        // Top-left exposed card corner above the 45° sticker
         {
           role: 'body',
           pts: [
             [3, 14],
-            [98, 14],
-            [98, 88],
-            [3, 88],
+            [7.55, 14],
+            [3, 40.71],
             [3, 14],
           ],
         },
