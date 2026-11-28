@@ -68,6 +68,41 @@ export const HIGHLIGHTER_COLOR_SLOTS: string[] = [
   '#cbd5e1', // Απαλό Γκρι
 ];
 
+// 6×4 Soft & Luminous Pastel Color Palette for the Highlighter tool (no dark shades):
+// Col 1 = 5 primary highlighter slots + Soft Lilac; Cols 2→4 = bright/pastel family variations
+export const HIGHLIGHTER_PRESET_COLORS: string[] = [
+  // Row 1: Yellows
+  '#fff000',
+  '#fde047',
+  '#fef08a',
+  '#fef9c3',
+  // Row 2: Greens / Lime / Mint
+  '#86efac',
+  '#bef264',
+  '#5eead4',
+  '#bbf7d0',
+  // Row 3: Sky / Cyan / Baby Blue
+  '#7dd3fc',
+  '#67e8f9',
+  '#93c5fd',
+  '#bae6fd',
+  // Row 4: Pinks / Coral / Blush
+  '#f9a8d4',
+  '#fda4af',
+  '#f472b6',
+  '#fbcfe8',
+  // Row 5: Peach / Warm Honey / Apricot
+  '#fdba74',
+  '#fcd34d',
+  '#fed7aa',
+  '#ffedd5',
+  // Row 6: Lilac / Lavender / Soft Highlight Gray
+  '#d8b4fe',
+  '#c4b5fd',
+  '#e9d5ff',
+  '#e2e8f0',
+];
+
 export const THICKNESS_PRESETS: number[] = [
   1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0,
 ];

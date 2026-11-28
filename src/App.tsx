@@ -340,6 +340,7 @@ import {
   PRESET_COLORS,
   DEFAULT_COLOR_SLOTS,
   HIGHLIGHTER_COLOR_SLOTS,
+  HIGHLIGHTER_PRESET_COLORS,
   THICKNESS_PRESETS,
   APP_NAVY,
   APP_NAVY_HOVER,
@@ -66160,13 +66161,13 @@ export default function App() {
               className="fixed right-6 z-[100010] ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#234978]">
-                <span>Παλέτα Χρωμάτων</span>
+                <span>{activeTool === 'highlighter' ? 'Παλέτα Υπογραμμιστή' : 'Παλέτα Χρωμάτων'}</span>
                 <button onClick={() => setShowColorPopover(false)} className="text-[#64748b] hover:text-[#234978] cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {PRESET_COLORS.map((c) => (
+                {(activeTool === 'highlighter' ? HIGHLIGHTER_PRESET_COLORS : PRESET_COLORS).map((c) => (
                   <button
                     key={c}
                     onClick={() => {
