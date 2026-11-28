@@ -28014,7 +28014,7 @@ export default function App() {
     const rad = (rState.angle * Math.PI) / 180;
     const cosA = Math.cos(rad);
     const sinA = Math.sin(rad);
-    const EDGE_PAD = 10; // Terminate cleanly 10px before the page edge so the ruler never spills out of the page!
+    const EDGE_PAD = 0; // Allow the ruler's 0-end & far-end to sit flush right at the page edge without spilling outside
     const marginX = Math.abs(sinA) * (rulerH / 2) + EDGE_PAD;
     const marginY = Math.abs(cosA) * (rulerH / 2) + EDGE_PAD;
 
@@ -78084,8 +78084,10 @@ export default function App() {
                               const uLen = rGeom.userLength;
                               const rawOrigX = st.initialX - (uLen / 2) * cosA + dx;
                               const rawOrigY = st.initialY - (uLen / 2) * sinA + dy;
-                              const clampedOrigX = Math.max(12, Math.min(pW - 36, rawOrigX));
-                              const clampedOrigY = Math.max(12, Math.min(pH - 36, rawOrigY));
+                              const moveMarginX = Math.abs(sinA) * (rulerH / 2);
+                              const moveMarginY = Math.abs(cosA) * (rulerH / 2);
+                              const clampedOrigX = Math.max(moveMarginX, Math.min(pW - moveMarginX, rawOrigX));
+                              const clampedOrigY = Math.max(moveMarginY, Math.min(pH - moveMarginY, rawOrigY));
                               const nextX = clampedOrigX + (uLen / 2) * cosA;
                               let nextY = clampedOrigY + (uLen / 2) * sinA;
 
