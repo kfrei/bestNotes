@@ -79614,7 +79614,73 @@ export default function App() {
                   { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                   { keys: 'G / Γ', label: 'Group (2+ Επιλ.)', icon: <Layers className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  {
+                    keys: 'BB / ΒΒ',
+                    label: 'Μαύρο (Black)',
+                    icon: <span className="w-3 h-3 rounded-full bg-[#111827] border border-white/80 shadow-2xs shrink-0" />,
+                  },
+                  {
+                    keys: 'RR / ΡΡ',
+                    label: 'Κόκκινο (Red)',
+                    icon: <span className="w-3 h-3 rounded-full bg-[#dc2626] border border-white/80 shadow-2xs shrink-0" />,
+                  },
+                  {
+                    keys: 'GG / ΓΓ',
+                    label: 'Πράσινο (Green)',
+                    icon: <span className="w-3 h-3 rounded-full bg-[#16a34a] border border-white/80 shadow-2xs shrink-0" />,
+                  },
                   { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                ].map((sc) => (
+                  <div
+                    key={`${sc.keys}-${sc.label}`}
+                    className="flex items-center justify-between gap-1.5 bg-[#efebe3]/50 border border-[#dfd8cb] rounded-lg px-2 py-1"
+                  >
+                    <span className="flex items-center gap-1.5 text-[#2c3e50] font-medium truncate">
+                      {sc.icon}
+                      <span className="truncate">{sc.label}</span>
+                    </span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-[#fdfbf7] border border-[#dfd8cb] text-[10px] font-bold text-[#234978] shadow-2xs shrink-0">
+                      {sc.keys}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-2.5 mb-1.5">
+                <span className="text-xs font-bold text-[#234978]">Χειρονομίες Apple Pencil & Καμβά:</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                {[
+                  {
+                    keys: '2× Κενό',
+                    label: 'Μολύβι ↔ Σβήστρα',
+                    icon: <Eraser className="w-3.5 h-3.5 text-[#64748b] shrink-0" />,
+                  },
+                  {
+                    keys: '2× Άκρο',
+                    label: 'Βέλος σε Γραμμή',
+                    icon: (
+                      <svg className="w-3.5 h-3.5 text-[#64748b] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="2.5" y1="8" x2="13.5" y2="8" />
+                        <polyline points="9.5 4 13.5 8 9.5 12" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    keys: '2× Κορυφή',
+                    label: 'Μέτρηση Γωνίας (°)',
+                    icon: (
+                      <svg className="w-3.5 h-3.5 text-[#64748b] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 12 3 3" />
+                        <polyline points="3 12 13 12" />
+                        <path d="M 3 7 A 5 5 0 0 1 8 12" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    keys: 'Κράτημα',
+                    label: 'Αυτόματο Σχήμα',
+                    icon: <Sparkles className="w-3.5 h-3.5 text-[#64748b] shrink-0" />,
+                  },
                 ].map((sc) => (
                   <div
                     key={`${sc.keys}-${sc.label}`}
