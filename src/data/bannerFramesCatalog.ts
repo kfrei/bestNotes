@@ -1172,21 +1172,21 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
     // 12. Layered Vertical Swallowtail Bookmark / Pennant Flag (zero inner crossing lines)
     case 'bookmark-layered':
       return [
-        // Back offset layer (only the visible outer L-strip on left & bottom chevron, flush with front)
+        // Tight crisp solid-black 3D shadow strip hugging the left & bottom chevron of the front bookmark
         {
-          role: 'body',
+          role: 'accent-solid',
           pts: [
-            [18, 13],
-            [10, 13],
-            [10, 93],
-            [54, 74],
-            [90, 92],
+            [18, 10],
+            [14.8, 10],
+            [14.8, 89.2],
+            [54, 71],
+            [87.2, 88.8],
             [90, 86],
             [54, 68],
             [18, 86],
-            [18, 13],
+            [18, 10],
           ],
-          widthScale: 0.9,
+          widthScale: 0.85,
         },
         // Front fillable bookmark (clean roomy interior)
         {
