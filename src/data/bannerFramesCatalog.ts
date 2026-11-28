@@ -999,39 +999,6 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           ],
           widthScale: 0.9,
         },
-        // Inset dashed stitching border (4 clean sides inside the corners)
-        {
-          role: 'detail-dashed',
-          pts: [
-            [26, 17],
-            [74, 17],
-          ],
-          widthScale: 0.85,
-        },
-        {
-          role: 'detail-dashed',
-          pts: [
-            [83, 25],
-            [83, 75],
-          ],
-          widthScale: 0.85,
-        },
-        {
-          role: 'detail-dashed',
-          pts: [
-            [74, 83],
-            [26, 83],
-          ],
-          widthScale: 0.85,
-        },
-        {
-          role: 'detail-dashed',
-          pts: [
-            [17, 75],
-            [17, 25],
-          ],
-          widthScale: 0.85,
-        },
       ];
 
     // 10. Comic Book Starburst with Bold Tilted Exclamation Mark (!)
