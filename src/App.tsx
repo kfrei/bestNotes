@@ -3997,7 +3997,14 @@ export default function App() {
     originX?: number;
     originY?: number;
     initialLength?: number;
+    lastSnappedCardinal?: number | null;
   } | null>(null);
+  const [rulerSnapFlash, setRulerSnapFlash] = useState<{
+    pageId: string;
+    label: '0°' | '90°';
+    ts: number;
+  } | null>(null);
+  const rulerSnapFlashTimerRef = useRef<number | null>(null);
 
   // Undo / Redo Stacks
   const [undoStack, setUndoStack] = useState<NotePage[]>([]);
@@ -78132,9 +78139,26 @@ export default function App() {
                               WebkitUserSelect: 'none',
                               userSelect: 'none',
                             }}
-                            className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none"
+                            className={`absolute bg-slate-200/75 backdrop-blur-[1.5px] border rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none transition-shadow duration-150 ${
+                              rulerSnapFlash && rulerSnapFlash.pageId === pageObj.id
+                                ? 'border-[#2563eb] ring-2 ring-[#2563eb]/65 shadow-[0_0_18px_rgba(37,99,235,0.42)]'
+                                : 'border-slate-400/65'
+                            }`}
                           >
-                            {/* 0-Origin Flip Button (Κλικ/Tap στο 0 για αλλαγή αρχής: Αριστερά ↔ Δεξιά ή Επάνω ↔ Κάτω — η λαβή μεγέθους μεταφέρεται αυτόματα απέναντι!) */}
+                            {/* Instant 0° / 90° Magnetic Lock Flash Badge */}
+                            {rulerSnapFlash && rulerSnapFlash.pageId === pageObj.id && (
+                              <div
+                                key={rulerSnapFlash.ts}
+                                style={{
+                                  transform: `translate(-50%, -50%) rotate(${-pageRuler.angle}deg)`,
+                                }}
+                                className="absolute left-1/2 top-1/2 z-30 pointer-events-none px-2.5 py-0.5 rounded-full bg-[#234978]/95 text-white text-[11px] font-mono font-extrabold tracking-tight shadow-lg ring-2 ring-white/90 animate-pulse"
+                              >
+                                {rulerSnapFlash.label}
+                              </div>
+                            )}
+
+                            {/* 0-Origin Flip Arrow (Σκέτο βελάκι στην άκρη του 0 για αλλαγή αρχής: Αριστερά ↔ Δεξιά ή Επάνω ↔ Κάτω) */}
                             <button
                               type="button"
                               data-ui-panel="true"
@@ -78158,32 +78182,20 @@ export default function App() {
                                   };
                                 }, pageObj.id);
                               }}
-                              style={{ left: 3 }}
-                              className="absolute top-1/2 -translate-y-1/2 z-20 h-[22px] min-w-[24px] px-1 rounded-full bg-[#fdfbf7]/95 hover:bg-[#234978] active:scale-95 text-[#234978] hover:text-white border border-[#234978]/35 shadow-2xs flex items-center justify-center gap-0.5 cursor-pointer transition-colors outline-none"
+                              className="absolute left-0 inset-y-0 w-6 z-20 flex items-center justify-center text-slate-700/85 hover:text-[#234978] active:scale-90 cursor-pointer transition outline-none"
                             >
-                              {pageRuler.showMm && (
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    transform: `rotate(${-pageRuler.angle}deg)`,
-                                  }}
-                                  className="text-[9px] font-mono font-extrabold leading-none select-none"
-                                >
-                                  0
-                                </span>
-                              )}
                               <svg
-                                className="w-2.5 h-2.5 shrink-0 opacity-80"
-                                viewBox="0 0 12 12"
+                                className="w-4 h-4 shrink-0"
+                                viewBox="0 0 16 16"
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth="1.6"
+                                strokeWidth="2.2"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               >
-                                <polyline points="4 3 1.5 6 4 9" />
-                                <polyline points="8 3 10.5 6 8 9" />
-                                <line x1="2" y1="6" x2="10" y2="6" />
+                                <polyline points="5.5 4.2 2 8 5.5 11.8" />
+                                <polyline points="10.5 4.2 14 8 10.5 11.8" />
+                                <line x1="2.5" y1="8" x2="13.5" y2="8" />
                               </svg>
                             </button>
 
@@ -78203,7 +78215,7 @@ export default function App() {
                             <div
                               data-ui-panel="true"
                               data-ruler-rotate="true"
-                              title="Σύρετε για περιστροφή του χάρακα"
+                              title="Σύρετε για περιστροφή του χάρακα (κλειδώνει αυτόματα σε 0° & 90°)"
                               onPointerDown={(e) => {
                                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                                 e.stopPropagation();
@@ -78222,6 +78234,13 @@ export default function App() {
                                 const centerClientY = rect ? rect.top + rect.height / 2 : e.clientY + 44;
                                 const startAng =
                                   (Math.atan2(e.clientY - centerClientY, e.clientX - centerClientX) * 180) / Math.PI;
+                                const initNorm = Math.round(pageRuler.angle);
+                                const initCardinal =
+                                  initNorm === 0 || initNorm === 180 || initNorm === -180
+                                    ? 0
+                                    : initNorm === 90 || initNorm === -90
+                                      ? 90
+                                      : null;
                                 rulerDragRef.current = {
                                   pageId: pageObj.id,
                                   mode: 'rotate',
@@ -78234,6 +78253,7 @@ export default function App() {
                                   startPointerAngleDeg: startAng,
                                   centerClientX,
                                   centerClientY,
+                                  lastSnappedCardinal: initCardinal,
                                 };
                               }}
                               onPointerMove={(e) => {
@@ -78257,19 +78277,36 @@ export default function App() {
                                 // Normalize to (-180, 180]
                                 while (nextAngle > 180) nextAngle -= 360;
                                 while (nextAngle <= -180) nextAngle += 360;
-                                // Strong magnetic lock within ±10° of Horizontal (0°, 180°) & Vertical (90°, -90°),
-                                // plus gentle ±4° snap on 45° diagonals
-                                let snappedCardinal = false;
+                                // Magnetic lock within ±7° of Horizontal (0°, 180°) & Vertical (90°, -90°) with flash feedback,
+                                // plus gentle ±3.5° snap on 45° diagonals
+                                let snappedCardinal: number | null = null;
                                 for (const snapDeg of [0, 90, 180, -90, -180]) {
-                                  if (Math.abs(nextAngle - snapDeg) <= 10) {
+                                  if (Math.abs(nextAngle - snapDeg) <= 7) {
                                     nextAngle = snapDeg === -180 ? 180 : snapDeg;
-                                    snappedCardinal = true;
+                                    snappedCardinal = snapDeg === 90 || snapDeg === -90 ? 90 : 0;
                                     break;
                                   }
                                 }
-                                if (!snappedCardinal) {
+                                if (snappedCardinal !== null) {
+                                  if (st.lastSnappedCardinal !== snappedCardinal) {
+                                    st.lastSnappedCardinal = snappedCardinal;
+                                    if (rulerSnapFlashTimerRef.current !== null) {
+                                      window.clearTimeout(rulerSnapFlashTimerRef.current);
+                                    }
+                                    setRulerSnapFlash({
+                                      pageId: pageObj.id,
+                                      label: snappedCardinal === 90 ? '90°' : '0°',
+                                      ts: performance.now(),
+                                    });
+                                    rulerSnapFlashTimerRef.current = window.setTimeout(() => {
+                                      rulerSnapFlashTimerRef.current = null;
+                                      setRulerSnapFlash(null);
+                                    }, 550);
+                                  }
+                                } else {
+                                  st.lastSnappedCardinal = null;
                                   for (const snapDeg of [45, 135, -45, -135]) {
-                                    if (Math.abs(nextAngle - snapDeg) <= 4) {
+                                    if (Math.abs(nextAngle - snapDeg) <= 3.5) {
                                       nextAngle = snapDeg;
                                       break;
                                     }
@@ -78295,7 +78332,7 @@ export default function App() {
                                 WebkitUserSelect: 'none',
                                 userSelect: 'none',
                               }}
-                              className="absolute left-1/2 -top-9 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing"
+                              className="absolute left-[calc(50%-16px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing"
                             >
                               <div
                                 className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center transition ${
@@ -78308,44 +78345,6 @@ export default function App() {
                               </div>
                               <div className="w-[1.5px] h-2 bg-slate-400/80" />
                             </div>
-
-                            {/* 1-Click Horizontal (0°) <-> Vertical (90°) Lock Toggle on Left of Rotation Handle */}
-                            <button
-                              type="button"
-                              data-ui-panel="true"
-                              title="1-Κλικ Κλείδωμα Οριζόντια (0°) ↔ Κατακόρυφα (90°)"
-                              onPointerDown={(e) => {
-                                e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRulerState((prev) => {
-                                  const norm = ((prev.angle % 180) + 180) % 180;
-                                  const isAlreadyHoriz = norm < 5 || norm > 175;
-                                  const nextAngle = isAlreadyHoriz ? 90 : 0;
-                                  return { ...prev, angle: nextAngle };
-                                }, pageObj.id);
-                              }}
-                              className="absolute left-[calc(50%-30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
-                            >
-                              <div
-                                className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center text-[9.5px] font-extrabold tracking-tight transition ${
-                                  Math.abs(pageRuler.angle % 90) < 0.5
-                                    ? 'bg-[#234978] text-white border-[#1b3a60]'
-                                    : 'bg-white/95 text-slate-600 border-slate-400/80 hover:text-slate-900'
-                                }`}
-                              >
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    transform: `rotate(${-pageRuler.angle}deg)`,
-                                  }}
-                                >
-                                  {Math.abs(((pageRuler.angle % 180) + 180) % 180 - 90) < 5 ? '90°' : '0°'}
-                                </span>
-                              </div>
-                              <div className="w-[1.5px] h-2 bg-slate-400/80" />
-                            </button>
 
                             {/* Millimeter Precision Toggle Button Next to Rotation Handle */}
                             <button
@@ -78363,7 +78362,7 @@ export default function App() {
                                   pageObj.id
                                 );
                               }}
-                              className="absolute left-[calc(50%+30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
+                              className="absolute left-[calc(50%+16px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
                             >
                               <div
                                 className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center text-[9.5px] font-extrabold tracking-tight transition ${
