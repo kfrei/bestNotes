@@ -1614,33 +1614,41 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'shade-soft',
           shadeTrans: 76,
           shadeGrad: 55,
-          pts: makeEllipse(42, 20.5, 6.2, 4.6),
+          pts: makeEllipse(42.5, 20.5, 6.2, 4.6),
         },
-        // Pushpin dark shaded body/stem
+        // Pushpin shaded body/stem
         {
           role: 'accent-shade',
-          shadeTrans: 32,
-          shadeGrad: 85,
+          shadeTrans: 36,
+          shadeGrad: 70,
           pts: [
             [42, 14],
             [49, 14],
             [51, 22],
-            ...sampleQuad([51, 22], [45, 25], [39.5, 21.5], 6),
+            ...sampleQuad([51, 22], [45.2, 24.8], [39.5, 21.5], 6),
             [42, 14],
           ],
           widthScale: 0.95,
         },
-        // Pushpin top head cap
+        // Pushpin top head cap — richly filled to match the stem seamlessly
         {
-          role: 'body',
-          pts: makeEllipse(46.5, 11.5, 5.2, 4.4),
+          role: 'accent-shade',
+          shadeTrans: 24,
+          shadeGrad: 65,
+          pts: (() => {
+            const cap = makeEllipse(45.5, 11.2, 5.2, 4.4);
+            return [...cap, cap[0]];
+          })(),
           widthScale: 0.95,
         },
-        // Inner pushpin ring highlight
+        // Inner pushpin ring highlight (cleanly closed loop)
         {
           role: 'detail',
-          pts: makeEllipse(47.2, 11.2, 2.1, 1.8),
-          widthScale: 0.7,
+          pts: (() => {
+            const inner = makeEllipse(45.9, 10.9, 2.0, 1.7);
+            return [...inner, inner[0]];
+          })(),
+          widthScale: 0.72,
         },
       ];
     }
