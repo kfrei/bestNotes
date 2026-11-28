@@ -1823,30 +1823,45 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 23. Wide Page-Title Header: Comic Starburst with True-Aspect 5-Point Stars & Side Rays (620×116)
+    // 23. Wide Page-Title Header: Comic Starburst with Dense Lively Zig-Zag Spikes, True-Aspect Stars & Side Rays (620×116)
     case 'header-comic-wide': {
       const ar = 620 / 116; // ~5.34
-      // 16 wide balanced spikes framing a generous rectangular title interior
+      // 26 dense, punchy, lively comic spikes (10 across top, 3 right, 10 across bottom, 3 left)
       const spikes: Array<[number, number]> = [
-        [14, 18],
-        [28, 16],
-        [43, 14],
-        [58, 13],
-        [74, 16],
-        [87, 19],
-        [95, 34],
-        [97.5, 55],
-        [93.5, 78],
-        [84, 88],
-        [68, 91],
-        [52, 92],
-        [36, 90],
-        [21, 88],
-        [8.5, 81],
-        [4.5, 57],
-        [7.5, 34],
+        // Top edge (10 lively spikes with varied heights)
+        [10, 18],
+        [18, 12],
+        [26, 17],
+        [34, 11],
+        [42, 16],
+        [50, 10],
+        [58, 16],
+        [66, 11],
+        [74, 17],
+        [82, 12],
+        [90, 18],
+        // Right flank (3 dramatic burst spikes)
+        [96.2, 33],
+        [98.4, 54],
+        [95.5, 76],
+        // Bottom edge (10 lively spikes with varied depths)
+        [89, 86],
+        [81, 92],
+        [73, 86],
+        [65, 93],
+        [57, 87],
+        [49, 94],
+        [41, 87],
+        [33, 93],
+        [25, 86],
+        [17, 92],
+        [9.5, 85],
+        // Left flank (3 dramatic burst spikes)
+        [4.5, 73],
+        [2.0, 53],
+        [4.8, 33],
       ];
-      const cx = 51;
+      const cx = 50;
       const cy = 53;
       const burstPts: Array<[number, number]> = [spikes[0]];
       for (let i = 0; i < spikes.length; i++) {
@@ -1854,12 +1869,11 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         const b = spikes[(i + 1) % spikes.length];
         const mx = (a[0] + b[0]) / 2;
         const my = (a[1] + b[1]) / 2;
-        // Gentle inward concave dip along top/bottom, deeper comic dip on left/right sides
-        const isSide = Math.abs(mx - cx) > 36;
-        const pullX = isSide ? 0.14 : 0.04;
-        const pullY = isSide ? 0.16 : 0.28;
+        const isSide = Math.abs(mx - cx) > 40;
+        const pullX = isSide ? 0.14 : 0.02;
+        const pullY = isSide ? 0.18 : 0.44; // deeper, punchier concave comic scallops between dense spikes!
         const cp: [number, number] = [mx + (cx - mx) * pullX, my + (cy - my) * pullY];
-        burstPts.push(...sampleQuad(a, cp, b, 5));
+        burstPts.push(...sampleQuad(a, cp, b, 4));
       }
       // Aspect-compensated true symmetrical 5-pointed star!
       const makeTrueStar = (sx: number, sy: number, rOutY: number): Array<[number, number]> => {
@@ -1880,16 +1894,16 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           pts: burstPts,
         },
         // 5 perfectly proportioned non-squished 5-pointed stars
-        { role: 'accent-solid', pts: makeTrueStar(21, 10, 6.2), widthScale: 0.5 },
-        { role: 'accent-solid', pts: makeTrueStar(50, 7, 5.0), widthScale: 0.45 },
-        { role: 'accent-solid', pts: makeTrueStar(81, 10.5, 5.8), widthScale: 0.5 },
-        { role: 'accent-solid', pts: makeTrueStar(3.2, 85, 5.6), widthScale: 0.5 },
-        { role: 'accent-solid', pts: makeTrueStar(96.8, 20, 5.2), widthScale: 0.48 },
+        { role: 'accent-solid', pts: makeTrueStar(22, 8.5, 5.8), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(50, 5.5, 4.6), widthScale: 0.45 },
+        { role: 'accent-solid', pts: makeTrueStar(78, 8.5, 5.6), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(2.8, 86, 5.4), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(97.2, 18, 5.0), widthScale: 0.48 },
         // Crisp comic speed rays on left & right flanks
-        { role: 'accent-solid', pts: [[1.4, 24], [6.5, 32], [6.1, 34.5], [1.0, 28], [1.4, 24]], widthScale: 0.45 },
-        { role: 'accent-solid', pts: [[1.2, 36], [5.8, 40], [5.6, 42.2], [0.9, 39.5], [1.2, 36]], widthScale: 0.45 },
-        { role: 'accent-solid', pts: [[98.8, 36], [94.5, 42], [94.8, 44.2], [99.1, 39.5], [98.8, 36]], widthScale: 0.45 },
-        { role: 'accent-solid', pts: [[98.6, 72], [93.5, 78], [94.0, 80.5], [99.0, 76], [98.6, 72]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[1.0, 21], [5.8, 29], [5.4, 31.5], [0.6, 25], [1.0, 21]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[0.8, 34], [5.0, 38], [4.8, 40.2], [0.5, 37.5], [0.8, 34]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[99.0, 35], [95.0, 41], [95.3, 43.2], [99.4, 38.5], [99.0, 35]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[98.8, 74], [94.2, 80], [94.7, 82.5], [99.2, 78], [98.8, 74]], widthScale: 0.45 },
       ];
     }
 
