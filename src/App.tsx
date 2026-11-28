@@ -54443,6 +54443,13 @@ export default function App() {
       }
     ) => {
       setStrokeColor(c);
+      if (
+        activeTool !== 'highlighter' &&
+        colorSlots.slice(0, 5).some((pc) => areColorsSimilar(pc, c, 22))
+      ) {
+        setColorStripPage(0);
+        colorStripRef.current?.scrollTo({ left: 0, behavior: 'smooth' });
+      }
       setFillColor(c);
       if (!options?.skipRecentRecord) {
         recordRecentColor(c);
