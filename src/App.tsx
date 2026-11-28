@@ -3517,6 +3517,16 @@ export default function App() {
     null
   );
   const shiftKeyPressedRef = useRef<boolean>(false);
+  const lastColorKeyTapRef = useRef<{
+    keyId: 'B' | 'R' | 'G';
+    time: number;
+    prevTool: ToolType;
+    prevShapePreset: ShapePresetType;
+    prevStrokeIds: string[];
+    prevTextId: string | null;
+    prevLassoTextIds: string[];
+    prevActiveNodeId: string | null;
+  } | null>(null);
   const lastArrowNudgeAtRef = useRef<number>(0);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
@@ -56216,16 +56226,68 @@ export default function App() {
         return;
       }
 
-      // B / Β -> Battery (Μπαταρία)
+      // B / Β -> Battery (Μπαταρία) | Fast double-tap BB / ΒΒ (<=320ms) -> Black (#111827)
       if (code === 'KeyB' || key === 'b' || key === 'β') {
+        e.preventDefault();
+        if (e.repeat) return;
+        const now = performance.now();
+        const prev = lastColorKeyTapRef.current;
+        if (prev && prev.keyId === 'B' && now - prev.time <= 320) {
+          lastColorKeyTapRef.current = null;
+          setActiveTool(prev.prevTool);
+          setShapePreset(prev.prevShapePreset);
+          setSelectedStrokeIds(prev.prevStrokeIds);
+          setSelectedTextId(prev.prevTextId);
+          setSelectedLassoTextIds(prev.prevLassoTextIds);
+          setActiveNodeStrokeId(prev.prevActiveNodeId);
+          applyColorToSelection('#111827');
+          showToast('⚫ Μαύρο — BB / ΒΒ');
+          return;
+        }
+        lastColorKeyTapRef.current = {
+          keyId: 'B',
+          time: now,
+          prevTool: activeTool,
+          prevShapePreset: shapePreset,
+          prevStrokeIds: selectedStrokeIds,
+          prevTextId: selectedTextId,
+          prevLassoTextIds: selectedLassoTextIds,
+          prevActiveNodeId: activeNodeStrokeId,
+        };
         setShapePreset('battery');
         lastCreatedShapeIdsRef.current = [];
         switchToTool('shape', '🔋 Battery (Μπαταρία) — B / Β');
         return;
       }
 
-      // G / Γ -> Spring (Ελατήριο) όταν δεν υπάρχουν 2+ επιλεγμένα αντικείμενα (με 2+ κάνει Group/Ungroup παραπάνω)
+      // G / Γ -> Spring (Ελατήριο) | Fast double-tap GG / ΓΓ (<=320ms) -> Green (#16a34a)
       if (code === 'KeyG' || key === 'g' || key === 'γ') {
+        e.preventDefault();
+        if (e.repeat) return;
+        const now = performance.now();
+        const prev = lastColorKeyTapRef.current;
+        if (prev && prev.keyId === 'G' && now - prev.time <= 320) {
+          lastColorKeyTapRef.current = null;
+          setActiveTool(prev.prevTool);
+          setShapePreset(prev.prevShapePreset);
+          setSelectedStrokeIds(prev.prevStrokeIds);
+          setSelectedTextId(prev.prevTextId);
+          setSelectedLassoTextIds(prev.prevLassoTextIds);
+          setActiveNodeStrokeId(prev.prevActiveNodeId);
+          applyColorToSelection('#16a34a');
+          showToast('🟢 Πράσινο — GG / ΓΓ');
+          return;
+        }
+        lastColorKeyTapRef.current = {
+          keyId: 'G',
+          time: now,
+          prevTool: activeTool,
+          prevShapePreset: shapePreset,
+          prevStrokeIds: selectedStrokeIds,
+          prevTextId: selectedTextId,
+          prevLassoTextIds: selectedLassoTextIds,
+          prevActiveNodeId: activeNodeStrokeId,
+        };
         setShapePreset('spring');
         lastCreatedShapeIdsRef.current = [];
         switchToTool('shape', '🌀 Spring (Ελατήριο) — G / Γ');
@@ -56267,9 +56329,29 @@ export default function App() {
         return;
       }
 
-      // R / Ρ -> Ruler (Χάρακας)
+      // R / Ρ -> Ruler (Χάρακας) | Fast double-tap RR / ΡΡ (<=320ms) -> Red (#dc2626)
       if (code === 'KeyR' || key === 'r' || key === 'ρ') {
         e.preventDefault();
+        if (e.repeat) return;
+        const now = performance.now();
+        const prev = lastColorKeyTapRef.current;
+        if (prev && prev.keyId === 'R' && now - prev.time <= 320) {
+          lastColorKeyTapRef.current = null;
+          toggleRuler(); // Revert tap-1 ruler toggle immediately
+          applyColorToSelection('#dc2626');
+          showToast('🔴 Κόκκινο — RR / ΡΡ');
+          return;
+        }
+        lastColorKeyTapRef.current = {
+          keyId: 'R',
+          time: now,
+          prevTool: activeTool,
+          prevShapePreset: shapePreset,
+          prevStrokeIds: selectedStrokeIds,
+          prevTextId: selectedTextId,
+          prevLassoTextIds: selectedLassoTextIds,
+          prevActiveNodeId: activeNodeStrokeId,
+        };
         toggleRuler();
         return;
       }
@@ -56313,7 +56395,9 @@ export default function App() {
     activeNodeStrokeId,
     activeLayerId,
     activePage,
+    shapePreset,
     updateActivePage,
+    applyColorToSelection,
     toggleFillStyleToSelection,
     handleAlignSelected,
     handleUndo,
