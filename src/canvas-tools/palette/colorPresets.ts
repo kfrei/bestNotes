@@ -4,38 +4,38 @@
  */
 
 // 6×4 Structured Color Palette:
-// Col 1 = 5 primary toolbar colors + Orange; Cols 2→4 = Dark → Mid → Light shades per family
+// Col 1 = 5 primary toolbar colors + Orange; Cols 2→4 = Dark → Airy Mid → Soft Light shades per family
 export const PRESET_COLORS: string[] = [
-  // Row 1: Black & Grays (lightest gray ~30%)
+  // Row 1: Black & Grays
   '#111827',
   '#475569',
-  '#808896',
-  '#b3b8c0',
-  // Row 2: Red → Burgundy → Vibrant Magenta → Soft Pink
+  '#94a3b8',
+  '#cbd5e1',
+  // Row 2: Red → Burgundy → Bright Rose → Soft Blush Pink
   '#dc2626',
   '#881337',
-  '#db2777',
-  '#f9a8d4',
-  // Row 3: Blue → Navy → Teal → Sky
+  '#ec4899',
+  '#fbcfe8',
+  // Row 3: Blue → Navy → Bright Teal → Soft Sky Blue
   '#2563eb',
   '#1e3a8a',
-  '#0d9488',
-  '#38bdf8',
-  // Row 4: Green → Forest → Emerald → Soft Mint
+  '#14b8a6',
+  '#7dd3fc',
+  // Row 4: Green → Forest → Bright Mint → Soft Pastel Mint
   '#16a34a',
   '#14532d',
-  '#10b981',
-  '#86efac',
-  // Row 5: Purple → Deep Plum → Indigo → Soft Lilac
+  '#34d399',
+  '#bbf7d0',
+  // Row 5: Purple → Deep Plum → Soft Periwinkle → Pastel Lilac
   '#9333ea',
   '#4c1d95',
-  '#6366f1',
-  '#c084fc',
-  // Row 6: Orange → Rich Golden Yellow → Bright Yellow → Canary Yellow
+  '#818cf8',
+  '#d8b4fe',
+  // Row 6: Orange → Golden Yellow → Bright Canary → Soft Sunny Yellow
   '#f97316',
   '#f59e0b',
-  '#facc15',
-  '#fff000',
+  '#fde047',
+  '#fef08a',
 ];
 
 // 5 Primary Color Memories (indices 0..4) + 5 Most Recent Colors (indices 5..9, revealed on horizontal scroll)
