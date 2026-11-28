@@ -78184,10 +78184,11 @@ export default function App() {
                                   };
                                 }, pageObj.id);
                               }}
-                              className="absolute left-0.5 inset-y-0 w-7 z-20 flex flex-col items-center justify-center gap-[2px] text-[#234978] hover:text-[#1d4ed8] active:scale-90 cursor-pointer transition outline-none"
+                              className="absolute left-0 inset-y-0 w-7 z-20 text-[#234978] hover:text-[#1d4ed8] active:scale-95 cursor-pointer transition outline-none"
                             >
                               <svg
-                                className="w-4 h-3 shrink-0"
+                                style={{ left: 3, top: 6.5 }}
+                                className="absolute w-3.5 h-2.5 shrink-0"
                                 viewBox="0 0 18 12"
                                 fill="none"
                               >
@@ -78211,10 +78212,10 @@ export default function App() {
                               {pageRuler.showMm && (
                                 <span
                                   style={{
-                                    display: 'inline-block',
-                                    transform: `rotate(${-pageRuler.angle}deg)`,
+                                    left: 7,
+                                    transform: `translate(-50%, -50%) rotate(${-pageRuler.angle}deg)`,
                                   }}
-                                  className="text-[9.5px] font-mono font-extrabold text-slate-800 leading-none select-none"
+                                  className="absolute top-1/2 text-[9px] font-mono font-extrabold text-slate-800 bg-slate-200/85 px-0.5 rounded leading-none select-none"
                                 >
                                   0
                                 </span>
