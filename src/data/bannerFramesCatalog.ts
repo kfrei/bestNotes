@@ -1733,7 +1733,7 @@ export function createBannerFrameStrokes(
   baseZOrder: number,
   fillStyle: 'none' | 'solid' | 'hatching' | 'gradient' = 'none',
   fillTransparency = 90,
-  fillGradient = 0
+  fillGradient = 50
 ): StrokeObject[] {
   const def = BANNER_FRAME_DEFS.find((d) => d.key === key);
   const parts = getBannerNormalizedParts(key);

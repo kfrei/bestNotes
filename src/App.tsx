@@ -2492,7 +2492,7 @@ export default function App() {
   const [fillGradient, setFillGradient] = useState<number>(() =>
     typeof initialSession?.fillGradient === 'number'
       ? Math.max(0, Math.min(100, Math.round(initialSession.fillGradient / 5) * 5))
-      : 0
+      : 50
   );
   const [strokeWidth, setStrokeWidth] = useState<number>(() =>
     typeof initialSession?.strokeWidth === 'number' ? initialSession.strokeWidth : 2.0
