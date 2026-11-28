@@ -31,11 +31,11 @@ export const PRESET_COLORS: string[] = [
   '#4c1d95',
   '#6366f1',
   '#c084fc',
-  // Row 6: Orange → Deep Ochre → Gold Yellow → Bright Yellow
-  '#ea580c',
-  '#b45309',
-  '#eab308',
-  '#fde047',
+  // Row 6: Orange → Rich Golden Yellow → Bright Yellow → Canary Yellow
+  '#f97316',
+  '#f59e0b',
+  '#facc15',
+  '#fff000',
 ];
 
 // 5 Primary Color Memories (indices 0..4) + 5 Most Recent Colors (indices 5..9, revealed on horizontal scroll)
