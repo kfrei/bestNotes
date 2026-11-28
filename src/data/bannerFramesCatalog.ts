@@ -1238,21 +1238,21 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
     // 13. 3D Vertical Spiral Notepad with Shaded Page Block & 5 Top Wire Rings
     case 'spiral-pad-vertical': {
       const parts: RawVectorPart[] = [
-        // 3D right page-stack thickness (shaded with gradient φωτοσκίαση)
+        // Slim 3D right page-stack thickness (shaded with gradient φωτοσκίαση)
         {
           role: 'accent-shade',
           shadeTrans: 68,
           shadeGrad: 75,
           pts: [
             [82, 16],
-            [90, 21],
-            [89, 89],
+            [85.2, 18.2],
+            [85.0, 87.2],
             [82, 85],
             [82, 16],
           ],
           widthScale: 0.9,
         },
-        // 3D bottom page-stack thickness (slightly darker shade)
+        // Slim 3D bottom page-stack thickness (slightly darker shade)
         {
           role: 'accent-shade',
           shadeTrans: 58,
@@ -1260,8 +1260,8 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           pts: [
             [11, 85],
             [82, 85],
-            [89, 89],
-            [16, 91],
+            [85.0, 87.2],
+            [13.8, 87.6],
             [11, 85],
           ],
           widthScale: 0.9,
