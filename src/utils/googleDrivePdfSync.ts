@@ -753,7 +753,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         s.shapeType === 'incline-wedge' ||
         s.shapeType === 'incline-block' ||
         s.shapeType === 'switch' ||
-        s.shapeType === 'switch-knob';
+        s.shapeType === 'switch-knob' ||
+        s.shapeType === 'banner-body' ||
+        s.shapeType === 'banner-accent-shade' ||
+        s.shapeType === 'banner-shade-soft';
       const shadeColor = isStencilCustomFill
         ? s.fillColor || s.color || '#2563eb'
         : s.color || s.fillColor || '#2563eb';

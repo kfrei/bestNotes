@@ -163,6 +163,14 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 330,
     aspectH: 210,
   },
+  {
+    id: 'banner-lightning-triple-vertical',
+    key: 'lightning-triple-vertical',
+    title: 'Κεραυνοί 3D Κατακόρυφοι',
+    tags: ['κεραυνός', 'κεραυνοί', 'αστραπή', 'ενέργεια', 'ηλεκτρισμός', 'κόμικ', 'lightning', 'bolt', 'flash', '3d', 'εφέ'],
+    aspectW: 210,
+    aspectH: 260,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -1619,6 +1627,58 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       return parts;
     }
 
+    // 20. Vertical Triple 3D Comic Lightning Bolts (fanned upward with bold black 3D drop shadows)
+    case 'lightning-triple-vertical': {
+      // Helper to offset a bolt polygon slightly for a crisp 3D comic drop shadow
+      const shiftPts = (pts: Array<[number, number]>, dx: number, dy: number): Array<[number, number]> =>
+        pts.map(([x, y]) => [x + dx, y + dy]);
+
+      // Left-angled bolt (fanning up-left from bottom-left)
+      const leftBolt: Array<[number, number]> = [
+        [24, 90],
+        [18, 56],
+        [25, 58],
+        [10, 14],
+        [25, 11],
+        [33, 49],
+        [26, 48],
+        [24, 90],
+      ];
+      // Center tall vertical bolt (main prominent lightning bolt)
+      const centerBolt: Array<[number, number]> = [
+        [49, 93],
+        [44, 52],
+        [52, 54],
+        [43, 7],
+        [61, 7],
+        [59, 46],
+        [52, 45],
+        [49, 93],
+      ];
+      // Right-angled bolt (fanning up-right from bottom-right)
+      const rightBolt: Array<[number, number]> = [
+        [72, 90],
+        [74, 55],
+        [81, 58],
+        [78, 16],
+        [93, 21],
+        [86, 51],
+        [79, 49],
+        [72, 90],
+      ];
+
+      return [
+        // Bold dark 3D drop shadows behind each bolt
+        { role: 'accent-solid', pts: shiftPts(leftBolt, 3.2, 2.2), widthScale: 0.65 },
+        { role: 'accent-solid', pts: shiftPts(centerBolt, 3.8, 2.2), widthScale: 0.65 },
+        { role: 'accent-solid', pts: shiftPts(rightBolt, 3.2, 2.2), widthScale: 0.65 },
+        // 3 fillable lightning bolt bodies (crisp black outline + chosen fill color)
+        { role: 'body', pts: leftBolt },
+        { role: 'body', pts: centerBolt },
+        { role: 'body', pts: rightBolt },
+      ];
+    }
+
     default:
       return [];
   }
@@ -1640,6 +1700,17 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
   const padX = Math.round((220 - vw) / 2);
   const padY = Math.round((220 - vh) / 2);
 
+  const outlineColor = '#111827';
+  const isDarkDefault =
+    !color ||
+    color.toLowerCase() === '#111827' ||
+    color.toLowerCase() === '#0f172a' ||
+    color.toLowerCase() === '#1e293b';
+  const fillTint = isDarkDefault
+    ? key === 'lightning-triple-vertical'
+      ? '#facc15'
+      : '#64748b'
+    : color;
   const gradId = `bfg-${key.replace(/[^a-z0-9]/gi, '')}`;
   const elements = parts
     .map((part) => {
@@ -1652,26 +1723,29 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
         .join(' ');
       const sw = (3.4 * (part.widthScale ?? 1)).toFixed(1);
       if (part.role === 'accent-solid') {
-        return `<path d="${d} Z" fill="${color}" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+        return `<path d="${d} Z" fill="${outlineColor}" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
       if (part.role === 'shade-soft') {
         const op = Math.max(0.12, Math.min(0.45, (100 - (part.shadeTrans ?? 76)) / 100)).toFixed(2);
-        return `<path d="${d} Z" fill="${color}" fill-opacity="${op}" stroke="none"/>`;
+        return `<path d="${d} Z" fill="${fillTint}" fill-opacity="${op}" stroke="none"/>`;
       }
       if (part.role === 'accent-shade') {
-        return `<path d="${d} Z" fill="url(#${gradId})" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+        return `<path d="${d} Z" fill="url(#${gradId})" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
       if (part.role === 'body') {
-        return `<path d="${d} Z" fill="#ffffff" fill-opacity="0.88" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+        if (key === 'lightning-triple-vertical') {
+          return `<path d="${d} Z" fill="${fillTint}" fill-opacity="0.92" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+        }
+        return `<path d="${d} Z" fill="${isDarkDefault ? '#ffffff' : fillTint}" fill-opacity="${isDarkDefault ? '0.88' : '0.24'}" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
       if (part.role === 'detail-dashed') {
-        return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="5 5" stroke-linecap="round"/>`;
+        return `<path d="${d}" fill="none" stroke="${outlineColor}" stroke-width="${sw}" stroke-dasharray="5 5" stroke-linecap="round"/>`;
       }
-      return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      return `<path d="${d}" fill="none" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
     })
     .join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.42"/><stop offset="100%" stop-color="${color}" stop-opacity="0.14"/></linearGradient></defs>${elements}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${fillTint}" stop-opacity="0.46"/><stop offset="100%" stop-color="${fillTint}" stop-opacity="0.16"/></linearGradient></defs>${elements}</svg>`;
 }
 
 /**
@@ -1700,6 +1774,27 @@ export function createBannerFrameStrokes(
   const y0 = cy - def.aspectH / 2;
   const groupId = `grp-banner-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const baseW = Math.max(1.8, Math.min(4.2, strokeWidth || 2.4));
+  // Always crisp black outline (#111827); user's chosen color drives the interior fill & shading!
+  const outlineHex = '#111827';
+  const isDarkColor =
+    !color ||
+    color.toLowerCase() === '#111827' ||
+    color.toLowerCase() === '#0f172a' ||
+    color.toLowerCase() === '#1e293b';
+  const resolvedFillHex =
+    key === 'lightning-triple-vertical' && isDarkColor ? '#facc15' : color || '#2563eb';
+  const bodyFillStyle =
+    key === 'lightning-triple-vertical'
+      ? 'solid'
+      : !isDarkColor && fillStyle === 'none'
+      ? 'solid'
+      : fillStyle;
+  const bodyFillTrans =
+    key === 'lightning-triple-vertical'
+      ? 10
+      : !isDarkColor && fillStyle === 'none'
+      ? Math.min(80, fillTransparency)
+      : fillTransparency;
 
   return parts.map((part, idx) => {
     const pts = toWorldPts(part.pts, x0, y0, def.aspectW, def.aspectH);
@@ -1711,8 +1806,8 @@ export function createBannerFrameStrokes(
       return {
         id,
         tool: 'pen',
-        color,
-        fillColor: color,
+        color: outlineHex,
+        fillColor: outlineHex,
         fillStyle: 'solid',
         fillTransparency: 0,
         fillGradient: 0,
@@ -1730,8 +1825,8 @@ export function createBannerFrameStrokes(
       return {
         id,
         tool: 'pen',
-        color,
-        fillColor: color,
+        color: outlineHex,
+        fillColor: resolvedFillHex,
         fillStyle: 'solid',
         fillTransparency: part.shadeTrans ?? 76,
         fillGradient: part.shadeGrad ?? 65,
@@ -1749,8 +1844,8 @@ export function createBannerFrameStrokes(
       return {
         id,
         tool: 'pen',
-        color,
-        fillColor: color,
+        color: outlineHex,
+        fillColor: resolvedFillHex,
         fillStyle: 'solid',
         fillTransparency: part.shadeTrans ?? 65,
         fillGradient: part.shadeGrad ?? 70,
@@ -1768,10 +1863,10 @@ export function createBannerFrameStrokes(
       return {
         id,
         tool: 'pen',
-        color,
-        fillColor: color,
-        fillStyle,
-        fillTransparency,
+        color: outlineHex,
+        fillColor: resolvedFillHex,
+        fillStyle: bodyFillStyle,
+        fillTransparency: bodyFillTrans,
         fillGradient,
         width,
         opacity: 1,
@@ -1786,7 +1881,7 @@ export function createBannerFrameStrokes(
     return {
       id,
       tool: 'pen',
-      color,
+      color: outlineHex,
       fillStyle: 'none',
       width,
       opacity: 1,

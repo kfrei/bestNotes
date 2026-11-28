@@ -14163,7 +14163,10 @@ export default function App() {
           s.shapeType === 'incline-wedge' ||
           s.shapeType === 'incline-block' ||
           s.shapeType === 'switch' ||
-          s.shapeType === 'switch-knob';
+          s.shapeType === 'switch-knob' ||
+          s.shapeType === 'banner-body' ||
+          s.shapeType === 'banner-accent-shade' ||
+          s.shapeType === 'banner-shade-soft';
         const shadeColor = isStencilCustomFill
           ? s.fillColor || s.color || '#2563eb'
           : s.color || s.fillColor || '#2563eb';
@@ -54566,6 +54569,29 @@ export default function App() {
                   fillTransparency: s.fillStyle && s.fillStyle !== 'none' ? 0 : undefined,
                 };
               }
+              if (s.shapeType === 'banner-body') {
+                // Always keep crisp black outline (#111827); selected color changes the fill!
+                return {
+                  ...s,
+                  color: '#111827',
+                  fillStyle: 'solid',
+                  fillColor: c,
+                };
+              }
+              if (s.shapeType === 'banner-accent-shade' || s.shapeType === 'banner-shade-soft') {
+                return {
+                  ...s,
+                  color: '#111827',
+                  fillColor: c,
+                };
+              }
+              if (s.shapeType === 'banner-accent-solid' || s.shapeType === 'banner-detail') {
+                return {
+                  ...s,
+                  color: '#111827',
+                  fillColor: s.shapeType === 'banner-accent-solid' ? '#111827' : undefined,
+                };
+              }
               return {
                 ...s,
                 color: c,
@@ -54940,6 +54966,16 @@ export default function App() {
             if (s.shapeType === 'banner-detail' || s.shapeType === 'banner-shade-soft' || s.shapeType === 'banner-accent-shade') {
               return s;
             }
+            if (s.shapeType === 'banner-body') {
+              return {
+                ...s,
+                color: '#111827',
+                fillStyle: nextFill,
+                fillColor: nextFill !== 'none' ? s.fillColor || fillColor || strokeColor || '#2563eb' : undefined,
+                fillTransparency: s.fillTransparency ?? fillTransparency,
+                fillGradient: s.fillGradient ?? fillGradient,
+              };
+            }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
                 ...s,
@@ -55056,6 +55092,15 @@ export default function App() {
             }
             if (s.shapeType === 'banner-detail' || s.shapeType === 'banner-shade-soft' || s.shapeType === 'banner-accent-shade') {
               return s;
+            }
+            if (s.shapeType === 'banner-body') {
+              return {
+                ...s,
+                color: '#111827',
+                fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
+                fillColor: s.fillColor || fillColor || strokeColor || '#2563eb',
+                fillTransparency: nextTrans,
+              };
             }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
