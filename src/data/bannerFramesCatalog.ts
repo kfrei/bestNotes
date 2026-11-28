@@ -2124,13 +2124,11 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         dotPts.push([46 + Math.cos(a) * 6.8, 63 + Math.sin(a) * 6.2]);
       }
       return [
-        // Main fillable starburst badge
+        // Main fillable starburst cloud (variable fill color + gradient)
         { role: 'body', pts: burstPts },
-        // Bold slightly-tilted exclamation wedge (darker accent shade of chosen color)
+        // Solid crisp black exclamation wedge
         {
-          role: 'accent-shade',
-          shadeTrans: 25,
-          shadeGrad: 65,
+          role: 'accent-solid',
           pts: [
             [50, 12],
             [68, 16],
@@ -2138,15 +2136,13 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [44, 45],
             [50, 12],
           ],
-          widthScale: 0.95,
+          widthScale: 0.9,
         },
-        // Exclamation dot (darker accent shade of chosen color)
+        // Solid crisp black exclamation dot
         {
-          role: 'accent-shade',
-          shadeTrans: 25,
-          shadeGrad: 65,
+          role: 'accent-solid',
           pts: dotPts,
-          widthScale: 0.95,
+          widthScale: 0.9,
         },
       ];
     }
