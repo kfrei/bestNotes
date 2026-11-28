@@ -3531,6 +3531,7 @@ export default function App() {
     prevLassoTextIds: string[];
     prevActiveNodeId: string | null;
   } | null>(null);
+  const pendingRulerTimerRef = useRef<number | null>(null);
   const lastArrowNudgeAtRef = useRef<number>(0);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
@@ -56371,7 +56372,7 @@ export default function App() {
         return;
       }
 
-      // R / Ρ -> Ruler (Χάρακας) | Fast double-tap RR / ΡΡ (<=320ms) -> Red (#dc2626)
+      // R / Ρ -> Ruler (Χάρακας) | Fast double-tap RR / ΡΡ (<=320ms) -> Red (#dc2626) without flashing the ruler
       if (code === 'KeyR' || key === 'r' || key === 'ρ') {
         e.preventDefault();
         if (e.repeat) return;
@@ -56379,10 +56380,20 @@ export default function App() {
         const prev = lastColorKeyTapRef.current;
         if (prev && prev.keyId === 'R' && now - prev.time <= 320) {
           lastColorKeyTapRef.current = null;
-          toggleRuler(); // Revert tap-1 ruler toggle immediately
+          if (pendingRulerTimerRef.current !== null) {
+            window.clearTimeout(pendingRulerTimerRef.current);
+            pendingRulerTimerRef.current = null;
+          } else {
+            // Edge case (280..320ms): timer already fired, revert it
+            toggleRuler();
+          }
           applyColorToSelection('#dc2626');
           showToast('🔴 Κόκκινο — RR / ΡΡ');
           return;
+        }
+        if (pendingRulerTimerRef.current !== null) {
+          window.clearTimeout(pendingRulerTimerRef.current);
+          pendingRulerTimerRef.current = null;
         }
         lastColorKeyTapRef.current = {
           keyId: 'R',
@@ -56394,7 +56405,10 @@ export default function App() {
           prevLassoTextIds: selectedLassoTextIds,
           prevActiveNodeId: activeNodeStrokeId,
         };
-        toggleRuler();
+        pendingRulerTimerRef.current = window.setTimeout(() => {
+          pendingRulerTimerRef.current = null;
+          toggleRuler();
+        }, 280);
         return;
       }
     };
