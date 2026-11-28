@@ -1515,6 +1515,7 @@ export default function App() {
           lineStyle?: LineStyleType;
           arrowEnd?: boolean;
           scribbleToEraseEnabled?: boolean;
+          doubleTapEmptyEraserEnabled?: boolean;
           holdToSnapEnabled?: boolean;
           pencilOnlyMode?: boolean;
           showToolSubBar?: boolean;
@@ -2518,6 +2519,9 @@ export default function App() {
   const [arrowEnd, setArrowEnd] = useState<boolean>(() => Boolean(initialSession?.arrowEnd));
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(() =>
     typeof initialSession?.scribbleToEraseEnabled === 'boolean' ? initialSession.scribbleToEraseEnabled : true
+  );
+  const [doubleTapEmptyEraserEnabled, setDoubleTapEmptyEraserEnabled] = useState<boolean>(() =>
+    typeof initialSession?.doubleTapEmptyEraserEnabled === 'boolean' ? initialSession.doubleTapEmptyEraserEnabled : true
   );
   const [holdToSnapEnabled, setHoldToSnapEnabled] = useState<boolean>(() =>
     typeof initialSession?.holdToSnapEnabled === 'boolean' ? initialSession.holdToSnapEnabled : true
@@ -5079,6 +5083,7 @@ export default function App() {
       lineStyle,
       arrowEnd,
       scribbleToEraseEnabled,
+      doubleTapEmptyEraserEnabled,
       holdToSnapEnabled,
       pencilOnlyMode,
       showToolSubBar,
@@ -5139,6 +5144,7 @@ export default function App() {
       lineStyle,
       arrowEnd,
       scribbleToEraseEnabled,
+      doubleTapEmptyEraserEnabled,
       holdToSnapEnabled,
       pencilOnlyMode,
       showToolSubBar,
@@ -52733,24 +52739,36 @@ export default function App() {
       lastEndpointTapRef.current = null;
     }
 
-    // Apple Pencil Stationary Double-Tap with the Tip (in Chrome & Safari without native wrapper):
-    // Two quick vertical micro-taps (duration <= 215ms, movement <= 7.5px) at the same spot (<= 18px)
-    // when not immediately preceded by normal handwriting (> 350ms after last real stroke) toggles Pen <-> Eraser!
+    // Apple Pencil Fast Double-Tap in Empty Space (far from any stroke/line, Web/PWA fallback until native):
+    // Two very quick stationary micro-taps (duration <= 190ms, movement <= 7px) at the same empty spot (<= 22px,
+    // inter-tap 35..320ms, >= 36px away from every existing stroke) toggles Pen/Pencil <-> Eraser!
     const tapTrack = e.pointerType === 'pen' ? penTapTrackRef.current : null;
     penTapTrackRef.current = null;
-    const isStationaryPenMicroTap =
+    const prevStationaryTap = lastStationaryPenTapRef.current;
+    const isEmptyDoubleTapTool =
+      activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'eraser';
+    const isStationaryPenMicroTapRaw =
+      doubleTapEmptyEraserEnabled &&
+      isEmptyDoubleTapTool &&
       tapTrack !== null &&
-      nowUp - tapTrack.startTime <= 215 &&
-      tapTrack.maxDist <= 7.5 &&
-      nowUp - lastRealPenStrokeEndTimeRef.current > 350;
+      nowUp - tapTrack.startTime <= 190 &&
+      tapTrack.maxDist <= 7;
+    const isStationaryPenMicroTap =
+      isStationaryPenMicroTapRaw &&
+      tapTrack !== null &&
+      !activePage.strokes.some(
+        (s) =>
+          s.id !== prevStationaryTap?.strokeId &&
+          isPointNearStroke({ x: tapTrack.startX, y: tapTrack.startY }, s, 36, false, true)
+      );
 
     if (isStationaryPenMicroTap && tapTrack) {
-      const prevTap = lastStationaryPenTapRef.current;
+      const prevTap = prevStationaryTap;
       if (
         prevTap &&
-        nowUp - prevTap.time >= 40 &&
-        nowUp - prevTap.time <= 380 &&
-        Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 18
+        nowUp - prevTap.time >= 35 &&
+        nowUp - prevTap.time <= 320 &&
+        Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 22
       ) {
         lastStationaryPenTapRef.current = null;
         commitLiveEraserStateIfNeeded();
@@ -52771,11 +52789,11 @@ export default function App() {
         if (activeTool === 'eraser') {
           const nextTool = lastNonEraserToolRef.current || 'pen';
           setActiveTool(nextTool);
-          showToast('✏️ Apple Pencil Διπλό Tap: Εναλλαγή σε Πένα!');
+          showToast('✏️ Διπλό Tap σε κενό: Εναλλαγή σε Μολύβι!');
         } else {
           lastNonEraserToolRef.current = activeTool;
           setActiveTool('eraser');
-          showToast('🧹 Apple Pencil Διπλό Tap: Εναλλαγή σε Σβήστρα!');
+          showToast('🧹 Διπλό Tap σε κενό: Εναλλαγή σε Σβήστρα!');
         }
         return;
       }
@@ -79533,6 +79551,13 @@ export default function App() {
                 onChange={(val) => setScribbleToEraseEnabled(val)}
                 label="Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)"
                 icon={<Eraser className="w-4 h-4" />}
+                className="w-full justify-between"
+              />
+              <WarmStudioToggle
+                checked={doubleTapEmptyEraserEnabled}
+                onChange={(val) => setDoubleTapEmptyEraserEnabled(val)}
+                label="Double-Tap σε Κενό (Μολύβι ↔ Σβήστρα)"
+                icon={<Pen className="w-4 h-4" />}
                 className="w-full justify-between"
               />
             </div>
