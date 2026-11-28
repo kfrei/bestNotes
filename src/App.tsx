@@ -78184,7 +78184,7 @@ export default function App() {
                                   };
                                 }, pageObj.id);
                               }}
-                              className="absolute left-0 inset-y-0 w-7 z-20 text-[#234978] hover:text-[#1d4ed8] active:scale-95 cursor-pointer transition outline-none"
+                              className="absolute left-0 inset-y-0 w-7 z-20 text-[#234978] hover:text-[#dc2626] active:scale-95 cursor-pointer transition-colors outline-none"
                             >
                               <svg
                                 style={{ left: 3, top: 6.5 }}
