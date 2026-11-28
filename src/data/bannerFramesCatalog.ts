@@ -1235,40 +1235,24 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       return parts;
     }
 
-    // 14. Horizontal Spiral Flip-Pad with Stacked Back Pages & 9 Top Spiral Loops
+    // 14. Horizontal Spiral Flip-Pad with 2 Pages (front + 1 back page) & 9 Top Spiral Loops
     case 'spiral-pad-horizontal': {
       const parts: RawVectorPart[] = [
-        // Back-most stacked page L-strip (soft shading)
+        // Single back page L-strip (2 pages total)
         {
           role: 'accent-shade',
-          shadeTrans: 74,
-          shadeGrad: 60,
+          shadeTrans: 76,
+          shadeGrad: 55,
           pts: [
-            [9, 22],
-            [5, 22],
-            [5, 92],
-            [90, 92],
-            [90, 88],
-            [9, 88],
-            [9, 22],
-          ],
-          widthScale: 0.75,
-        },
-        // Middle stacked page L-strip
-        {
-          role: 'accent-shade',
-          shadeTrans: 82,
-          shadeGrad: 50,
-          pts: [
-            [11, 19],
-            [7.5, 19],
-            [7.5, 89],
-            [92, 89],
-            [92, 85],
+            [11, 20],
+            [7, 20],
+            [7, 90],
+            [91.5, 90],
+            [91.5, 85],
             [11, 85],
-            [11, 19],
+            [11, 20],
           ],
-          widthScale: 0.78,
+          widthScale: 0.8,
         },
         // Main wide fillable front page
         {
@@ -1689,75 +1673,43 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 21. Wide Page-Title Header: Spiral Pad (620×106 — aspect-true circular holes & 14 crisp wire rings)
+    // 21. Wide Page-Title Header: Single-Page Spiral Strip (620×106 — 19 dense aspect-true circular holes & wire rings)
     case 'header-spiral-wide': {
       const ar = 620 / 106; // ~5.85:1
       const parts: RawVectorPart[] = [
-        // Back-most stacked page L-strip (slim proportional edges)
-        {
-          role: 'accent-shade',
-          shadeTrans: 74,
-          shadeGrad: 60,
-          pts: [
-            [3.2, 23],
-            [1.4, 23],
-            [1.4, 94],
-            [97.2, 94],
-            [97.2, 89],
-            [3.2, 89],
-            [3.2, 23],
-          ],
-          widthScale: 0.75,
-        },
-        // Middle stacked page L-strip
-        {
-          role: 'accent-shade',
-          shadeTrans: 82,
-          shadeGrad: 50,
-          pts: [
-            [4.2, 20],
-            [2.3, 20],
-            [2.3, 90],
-            [98.1, 90],
-            [98.1, 85],
-            [4.2, 85],
-            [4.2, 20],
-          ],
-          widthScale: 0.78,
-        },
-        // Main wide fillable header sheet
+        // Single clean wide fillable header sheet
         {
           role: 'body',
           pts: [
-            [4.2, 17],
-            [99, 17],
-            [99, 85],
-            [4.2, 85],
-            [4.2, 17],
+            [2, 18],
+            [98, 18],
+            [98, 89],
+            [2, 89],
+            [2, 18],
           ],
         },
       ];
-      // 14 evenly spaced, true-circle punch holes & crisp vertical spiral wire loops
-      const count = 14;
-      const startX = 8.2;
-      const endX = 95.2;
+      // 19 denser, evenly spaced true-circle punch holes & crisp vertical spiral wire loops
+      const count = 19;
+      const startX = 5.4;
+      const endX = 95.4;
       const stepX = (endX - startX) / (count - 1);
       for (let i = 0; i < count; i++) {
         const rx = startX + i * stepX;
-        const rY = 3.5; // radius in % of height (~3.7px)
+        const rY = 3.2; // radius in % of height (~3.4px)
         const rX = rY / ar; // exact true circle in world pixels!
         const dotPts: Array<[number, number]> = [];
         for (let k = 0; k <= 12; k++) {
           const a = (k / 12) * Math.PI * 2;
-          dotPts.push([rx + Math.cos(a) * rX, 27.5 + Math.sin(a) * rY]);
+          dotPts.push([rx + Math.cos(a) * rX, 28.5 + Math.sin(a) * rY]);
         }
         parts.push({ role: 'accent-solid', pts: dotPts, widthScale: 0.5 });
         parts.push({
           role: 'detail',
           pts: [
-            [rx, 26.5],
-            ...sampleCubic([rx, 26.5], [rx + 0.5, 13], [rx - 0.5, 4], [rx - 1.35, 10], 8),
-            [rx - 1.55, 17],
+            [rx, 27.5],
+            ...sampleCubic([rx, 27.5], [rx + 0.45, 13.5], [rx - 0.45, 4.5], [rx - 1.2, 10.5], 8),
+            [rx - 1.38, 18],
           ],
           widthScale: 0.85,
         });
