@@ -1474,19 +1474,19 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
     // 17. Tall Spiral-Bound Notebook Page (Left Double-Wire Spiral)
     case 'notebook-spiral-left': {
       const parts: RawVectorPart[] = [
-        // Subtle soft shadow along right & bottom edge
+        // Slim soft shadow along right & bottom edge
         {
           role: 'shade-soft',
           shadeTrans: 80,
           shadeGrad: 55,
           pts: [
-            [92, 9],
-            [95.5, 11],
-            [95.5, 96],
-            [14, 96],
+            [92, 8],
+            [94, 9.5],
+            [94, 94.8],
+            [13.5, 94.8],
             [12, 93],
             [92, 93],
-            [92, 9],
+            [92, 8],
           ],
         },
         // Main tall fillable notebook page
