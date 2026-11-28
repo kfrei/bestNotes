@@ -96,8 +96,8 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     key: 'comic-burst-stars',
     title: 'Κόμικ Έκρηξη με Αστέρια',
     tags: ['κόμικ', 'έκρηξη', 'αστέρια', 'ακτίνες', 'συννεφάκι', 'comic', 'burst', 'stars', 'wow', 'boom', 'τίτλος'],
-    aspectW: 330,
-    aspectH: 245,
+    aspectW: 480,
+    aspectH: 175,
   },
   {
     id: 'banner-bookmark-layered',
@@ -1121,40 +1121,63 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 11. Comic Book Starburst with Solid 5-Pointed Stars & Speed Rays
+    // 11. Comic Book Starburst with Dense Spikes, Aspect-True 5-Pointed Stars & Speed Rays (480×175 wide title ratio)
     case 'comic-burst-stars': {
+      const ar = 480 / 175; // ~2.74:1 wide title ratio
+      // 26 dense, lively comic spikes around the perimeter so it looks awesome even when stretched wide!
       const spikes: Array<[number, number]> = [
-        [24, 21],
-        [41, 22],
-        [63, 15],
-        [75, 26],
-        [90, 34],
-        [96, 61],
-        [89, 85],
-        [68, 93],
-        [50, 96],
-        [31, 95],
-        [15, 88],
-        [6, 70],
-        [11, 43],
+        // Top edge (9 dense spikes)
+        [14, 21],
+        [23, 15],
+        [32, 20],
+        [41, 14],
+        [50, 19],
+        [59, 13],
+        [68, 19],
+        [77, 15],
+        [86, 22],
+        // Right flank (4 dynamic spikes)
+        [94, 34],
+        [97, 50],
+        [94.5, 68],
+        [90, 82],
+        // Bottom edge (9 dense spikes)
+        [82, 89],
+        [73, 85],
+        [64, 92],
+        [55, 86],
+        [46, 93],
+        [37, 86],
+        [28, 92],
+        [19, 86],
+        [11, 82],
+        // Left flank (4 dynamic spikes)
+        [6.5, 69],
+        [3.5, 53],
+        [6.5, 37],
       ];
-      const cx = 52;
-      const cy = 56;
+      const cx = 50;
+      const cy = 54;
       const burstPts: Array<[number, number]> = [spikes[0]];
       for (let i = 0; i < spikes.length; i++) {
         const a = spikes[i];
         const b = spikes[(i + 1) % spikes.length];
         const mx = (a[0] + b[0]) / 2;
         const my = (a[1] + b[1]) / 2;
-        const cp: [number, number] = [mx + (cx - mx) * 0.36, my + (cy - my) * 0.36];
-        burstPts.push(...sampleQuad(a, cp, b, 6));
+        const isSide = Math.abs(mx - cx) > 38;
+        const pullX = isSide ? 0.16 : 0.04;
+        const pullY = isSide ? 0.18 : 0.4;
+        const cp: [number, number] = [mx + (cx - mx) * pullX, my + (cy - my) * pullY];
+        burstPts.push(...sampleQuad(a, cp, b, 5));
       }
-      const makeStar = (sx: number, sy: number, rOut: number, rIn: number): Array<[number, number]> => {
+      const makeStar = (sx: number, sy: number, rOutY: number): Array<[number, number]> => {
+        const rInY = rOutY * 0.44;
         const out: Array<[number, number]> = [];
         for (let i = 0; i <= 10; i++) {
           const ang = -Math.PI / 2 + (i * Math.PI) / 5;
-          const rad = i % 2 === 0 ? rOut : rIn;
-          out.push([sx + Math.cos(ang) * rad, sy + Math.sin(ang) * rad * 1.25]);
+          const ry = i % 2 === 0 ? rOutY : rInY;
+          const rx = ry / ar;
+          out.push([sx + Math.cos(ang) * rx, sy + Math.sin(ang) * ry]);
         }
         return out;
       };
@@ -1164,23 +1187,23 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           role: 'body',
           pts: burstPts,
         },
-        // 4 solid 5-pointed comic stars
-        { role: 'accent-solid', pts: makeStar(35, 16, 3.1, 1.35), widthScale: 0.55 },
-        { role: 'accent-solid', pts: makeStar(43, 8.5, 2.2, 0.95), widthScale: 0.5 },
-        { role: 'accent-solid', pts: makeStar(93, 27, 2.5, 1.1), widthScale: 0.5 },
-        { role: 'accent-solid', pts: makeStar(7.5, 83, 2.9, 1.25), widthScale: 0.55 },
+        // 4 aspect-true solid 5-pointed comic stars
+        { role: 'accent-solid', pts: makeStar(34, 10, 5.2), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeStar(44, 6, 3.8), widthScale: 0.48 },
+        { role: 'accent-solid', pts: makeStar(93.5, 22, 4.4), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeStar(5.5, 84, 5.0), widthScale: 0.5 },
         // Top-left speed rays
-        { role: 'accent-solid', pts: [[9, 23], [18, 32], [17, 33.2], [7.5, 25], [9, 23]], widthScale: 0.5 },
-        { role: 'accent-solid', pts: [[8, 29], [16.5, 34.5], [16, 35.4], [7.2, 31], [8, 29]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[5, 22], [12.5, 30], [11.8, 32], [4, 25], [5, 22]], widthScale: 0.48 },
+        { role: 'accent-solid', pts: [[4.5, 30], [11, 34.5], [10.6, 36.2], [3.8, 32.5], [4.5, 30]], widthScale: 0.48 },
         // Top-center speed rays
-        { role: 'accent-solid', pts: [[47, 9], [49.5, 22], [48.6, 22.2], [45.2, 9.5], [47, 9]], widthScale: 0.5 },
-        { role: 'accent-solid', pts: [[53.5, 6], [52.5, 21.5], [51.6, 21.5], [51.5, 6.2], [53.5, 6]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[48.5, 4.5], [50, 15.5], [49.1, 15.8], [46.8, 5.2], [48.5, 4.5]], widthScale: 0.48 },
+        { role: 'accent-solid', pts: [[53.5, 3.5], [52.2, 15], [51.3, 15], [51.8, 3.8], [53.5, 3.5]], widthScale: 0.48 },
         // Right speed rays
-        { role: 'accent-solid', pts: [[97, 36], [89.5, 48], [88.8, 47.2], [95.4, 34.5], [97, 36]], widthScale: 0.5 },
-        { role: 'accent-solid', pts: [[98, 43], [91.5, 50], [90.9, 49.2], [97, 41.5], [98, 43]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[97.5, 31], [92, 42], [91.3, 41], [96.2, 29.5], [97.5, 31]], widthScale: 0.48 },
+        { role: 'accent-solid', pts: [[98.2, 39], [93.2, 46], [92.6, 45], [97.2, 37.5], [98.2, 39]], widthScale: 0.48 },
         // Bottom-right speed rays
-        { role: 'accent-solid', pts: [[81, 89], [89, 97], [87.4, 97.5], [80.3, 89.6], [81, 89]], widthScale: 0.5 },
-        { role: 'accent-solid', pts: [[84.5, 87.5], [92, 94.5], [90.7, 95.3], [83.9, 88.2], [84.5, 87.5]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[85, 88], [92, 96], [90.6, 97], [84.2, 89], [85, 88]], widthScale: 0.48 },
+        { role: 'accent-solid', pts: [[88, 86], [94.5, 93], [93.3, 94.2], [87.3, 87], [88, 86]], widthScale: 0.48 },
       ];
     }
 
