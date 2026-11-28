@@ -245,6 +245,14 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 96,
     aspectH: 122,
   },
+  {
+    id: 'banner-arrow-curved-3d-hatched',
+    key: 'arrow-curved-3d-hatched',
+    title: 'Καμπύλο Βέλος 3D με Σκίαση',
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', '3d', 'σκίαση', 'arrow', 'curved', 'hatched', 'sketch', 'δείκτης'],
+    aspectW: 190,
+    aspectH: 155,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -2252,6 +2260,84 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
+    // 29. Curved 3D Sketch Arrow with Black Hatched Extrusion & Variable Fill Color
+    case 'arrow-curved-3d-hatched': {
+      // Smooth curved arrow edges
+      const topShaft = sampleQuad([12, 58], [32, 34], [64, 27], 12);
+      const innerHeadRight = sampleQuad([91, 20], [82, 35], [77, 52], 8);
+      const botShaft = sampleQuad([70, 38], [45, 48], [33, 81], 12);
+
+      // 3D underside outer contours (shifted down-right along extrusion vector)
+      const shaftExtrudeOuter = botShaft.map(([x, y], i) => {
+        const t = i / (botShaft.length - 1); // 0 near head, 1 at tail
+        const dx = 2.5 + t * 5.2;
+        const dy = 5.5 + t * 1.6;
+        return [x + dx, y + dy] as [number, number];
+      });
+      const headExtrudeOuter = innerHeadRight.map(([x, y]) => [x + 5.2, y + 4.2] as [number, number]);
+
+      const parts: RawVectorPart[] = [
+        // 3D underside of curved shaft (subtle shaded fill in chosen color)
+        {
+          role: 'accent-shade',
+          shadeTrans: 58,
+          shadeGrad: 65,
+          pts: [
+            [70, 38],
+            ...botShaft,
+            ...shaftExtrudeOuter.slice().reverse(),
+            [70, 38],
+          ],
+          widthScale: 0.9,
+        },
+        // 3D underside of arrowhead right edge (subtle shaded fill)
+        {
+          role: 'accent-shade',
+          shadeTrans: 58,
+          shadeGrad: 65,
+          pts: [
+            [91, 20],
+            ...innerHeadRight,
+            ...headExtrudeOuter.slice().reverse(),
+            [91, 20],
+          ],
+          widthScale: 0.9,
+        },
+        // Main fillable curved arrow face (always crisp black outline, variable fill + gradient)
+        {
+          role: 'body',
+          pts: [
+            [12, 58],
+            ...topShaft,
+            [57, 17],
+            [91, 20],
+            ...innerHeadRight,
+            [70, 38],
+            ...botShaft,
+            [12, 58],
+          ],
+        },
+      ];
+
+      // Crisp black hatch lines across the curved shaft 3D extrusion
+      for (let i = 1; i < botShaft.length - 1; i++) {
+        parts.push({
+          role: 'detail',
+          pts: [botShaft[i], shaftExtrudeOuter[i]],
+          widthScale: 0.65,
+        });
+      }
+      // Crisp black hatch lines across the arrowhead 3D extrusion
+      for (let i = 1; i < innerHeadRight.length - 1; i++) {
+        parts.push({
+          role: 'detail',
+          pts: [innerHeadRight[i], headExtrudeOuter[i]],
+          widthScale: 0.65,
+        });
+      }
+      return parts;
+    }
+
     default:
       return [];
   }
@@ -2284,12 +2370,15 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
     key === 'badge-exclamation-burst' ||
     key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
-    key === 'pushpin-angled';
+    key === 'pushpin-angled' ||
+    key === 'arrow-curved-3d-hatched';
   const fillTint = isDarkDefault
     ? key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst'
       ? '#facc15'
       : key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled'
       ? '#ef4444'
+      : key === 'arrow-curved-3d-hatched'
+      ? '#3b82f6'
       : '#64748b'
     : color;
   const gradId = `bfg-${key.replace(/[^a-z0-9]/gi, '')}`;
@@ -2367,12 +2456,15 @@ export function createBannerFrameStrokes(
     key === 'badge-exclamation-burst' ||
     key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
-    key === 'pushpin-angled';
+    key === 'pushpin-angled' ||
+    key === 'arrow-curved-3d-hatched';
   const resolvedFillHex =
     isDarkColor && (key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst')
       ? '#facc15'
       : isDarkColor && (key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled')
       ? '#ef4444'
+      : isDarkColor && key === 'arrow-curved-3d-hatched'
+      ? '#3b82f6'
       : color || '#2563eb';
   const bodyFillStyle =
     isAccentColorIcon
