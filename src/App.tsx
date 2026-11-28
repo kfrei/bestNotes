@@ -49484,6 +49484,46 @@ export default function App() {
               );
               const stretchedStrokes = page.strokes.map((s) => {
                   if (!expandedSideStretchSet.has(s.id)) return s;
+                  // Keep the lightbulb icon on 'idea-bulb-box' at exact 1:1 aspect ratio & fixed size during horizontal ('scale-x') stretch!
+                  if (
+                    tf.mode === 'scale-x' &&
+                    !isWholeCircuitSideStretch &&
+                    s.id.startsWith('stk-banner-idea-bulb-box-') &&
+                    s.shapeType !== 'banner-body' &&
+                    s.groupId
+                  ) {
+                    const companionBox = page.strokes.find(
+                      (bs) =>
+                        bs.groupId === s.groupId &&
+                        bs.id.startsWith('stk-banner-idea-bulb-box-') &&
+                        bs.shapeType === 'banner-body' &&
+                        expandedSideStretchSet.has(bs.id) &&
+                        bs.points.length >= 2
+                    );
+                    if (companionBox) {
+                      // Measure how much the right edge of the idea box moves along local X
+                      let oldMaxLx = -Infinity;
+                      for (const bp of companionBox.points) {
+                        const lx = (bp.x - tf.anchorX) * cosF + (bp.y - tf.anchorY) * sinF;
+                        if (lx > oldMaxLx) oldMaxLx = lx;
+                      }
+                      const newMaxLx = oldMaxLx * scaleFactor;
+                      const deltaLx = newMaxLx - oldMaxLx;
+                      const shiftX = deltaLx * cosF;
+                      const shiftY = deltaLx * sinF;
+                      return {
+                        ...s,
+                        points: s.points.map((p) => ({
+                          ...p,
+                          x: p.x + shiftX,
+                          y: p.y + shiftY,
+                          ...(p.cx !== undefined && p.cy !== undefined
+                            ? { cx: p.cx + shiftX, cy: p.cy + shiftY }
+                            : {}),
+                        })),
+                      };
+                    }
+                  }
                   // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
                   if (s.shapeType === 'incline-block' && s.groupId) {
                     const companionWedge = page.strokes.find(

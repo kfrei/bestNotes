@@ -1659,13 +1659,16 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         [8, 49],
         ...sampleQuad([8, 49], [8, 42], [14, 42], 5),
       ];
-      // Bulb glass silhouette centered at (69, 23)
+      // Aspect-true narrow, balanced lightbulb silhouette (aspectW=330, aspectH=210 => ar=1.5714)
+      const ar = 330 / 210;
+      const bulbCx = 74;
+      const sx = (dx: number) => bulbCx + dx / ar;
       const bulbPts: Array<[number, number]> = [
-        [65.5, 34],
-        ...sampleCubic([65.5, 34], [65, 30], [61.5, 27], [61.5, 22], 7),
-        ...sampleCubic([61.5, 22], [61.5, 14.5], [76.5, 14.5], [76.5, 22], 10),
-        ...sampleCubic([76.5, 22], [76.5, 27], [73, 30], [72.5, 34], 7),
-        [65.5, 34],
+        [sx(-4.4), 34.2],
+        ...sampleCubic([sx(-4.4), 34.2], [sx(-4.8), 29.5], [sx(-9.4), 26.8], [sx(-9.4), 21.5], 8),
+        ...sampleCubic([sx(-9.4), 21.5], [sx(-9.4), 13.4], [sx(9.4), 13.4], [sx(9.4), 21.5], 12),
+        ...sampleCubic([sx(9.4), 21.5], [sx(9.4), 26.8], [sx(4.8), 29.5], [sx(4.4), 34.2], 8),
+        [sx(-4.4), 34.2],
       ];
       const parts: RawVectorPart[] = [
         // Main fillable rounded idea box
@@ -1681,37 +1684,37 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           pts: bulbPts,
           widthScale: 0.95,
         },
-        // Filament inside bulb
+        // Delicate filament inside bulb
         {
           role: 'detail',
           pts: [
-            [67.2, 33.5],
-            [66.4, 24.5],
-            [67.8, 25.5],
-            [69, 24.3],
-            [70.2, 25.5],
-            [71.6, 24.5],
-            [70.8, 33.5],
+            [sx(-2.3), 33.8],
+            [sx(-3.0), 23.8],
+            [sx(-1.3), 25.0],
+            [sx(0), 23.5],
+            [sx(1.3), 25.0],
+            [sx(3.0), 23.8],
+            [sx(2.3), 33.8],
           ],
-          widthScale: 0.65,
+          widthScale: 0.62,
         },
         // Screw base threads
-        { role: 'detail', pts: [[66.2, 36.2], [71.8, 36.2]], widthScale: 0.85 },
-        { role: 'detail', pts: [[66.8, 38.4], [71.2, 38.4]], widthScale: 0.85 },
-        { role: 'detail', pts: [[67.8, 40.4], [70.2, 40.4]], widthScale: 0.85 },
-        { role: 'detail', pts: [[69, 40.4], [69, 42]], widthScale: 0.85 },
+        { role: 'detail', pts: [[sx(-3.8), 36.2], [sx(3.8), 36.2]], widthScale: 0.85 },
+        { role: 'detail', pts: [[sx(-3.0), 38.3], [sx(3.0), 38.3]], widthScale: 0.85 },
+        { role: 'detail', pts: [[sx(-1.8), 40.3], [sx(1.8), 40.3]], widthScale: 0.85 },
+        { role: 'detail', pts: [[sx(0), 40.3], [sx(0), 42]], widthScale: 0.85 },
       ];
-      // 9 crisp radial light rays around the bulb
+      // 9 crisp aspect-true radial light rays around the bulb
       const rayAngles = [-165, -142, -118, -90, -62, -38, -15, 12, 168];
       for (const deg of rayAngles) {
         const rad = (deg * Math.PI) / 180;
-        const r1 = 10.2;
-        const r2 = deg === -90 || deg === -142 || deg === -38 ? 15.2 : 13.8;
+        const r1 = 12.2;
+        const r2 = deg === -90 || deg === -142 || deg === -38 ? 17.4 : 15.8;
         parts.push({
           role: 'detail',
           pts: [
-            [69 + Math.cos(rad) * r1, 22 + Math.sin(rad) * r1 * 1.15],
-            [69 + Math.cos(rad) * r2, 22 + Math.sin(rad) * r2 * 1.15],
+            [sx(Math.cos(rad) * r1), 21.5 + Math.sin(rad) * r1],
+            [sx(Math.cos(rad) * r2), 21.5 + Math.sin(rad) * r2],
           ],
           widthScale: 0.72,
         });
