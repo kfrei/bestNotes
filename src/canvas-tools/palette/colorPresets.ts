@@ -3,19 +3,39 @@
  * Domain 4: Colors, Thickness Presets, and Color Similarity Algorithms
  */
 
+// 6×4 Structured Color Palette:
+// Col 1 = 5 primary toolbar colors + Orange; Cols 2→4 = Dark → Mid → Light shades per family
 export const PRESET_COLORS: string[] = [
+  // Row 1: Black & Grays (lightest gray ~30%)
   '#111827',
+  '#475569',
+  '#808896',
+  '#b3b8c0',
+  // Row 2: Red → Burgundy → Rose → Soft Pink
   '#dc2626',
+  '#881337',
+  '#e11d48',
+  '#f472b6',
+  // Row 3: Blue → Navy → Teal → Sky
   '#2563eb',
-  '#16a34a',
-  '#9333ea',
-  '#ea580c',
-  '#0284c7',
-  '#eab308',
-  '#db2777',
+  '#1e3a8a',
   '#0d9488',
-  '#4f46e5',
-  '#64748b',
+  '#38bdf8',
+  // Row 4: Green → Forest → Emerald → Soft Mint
+  '#16a34a',
+  '#14532d',
+  '#10b981',
+  '#86efac',
+  // Row 5: Purple → Deep Plum → Indigo → Soft Lilac
+  '#9333ea',
+  '#4c1d95',
+  '#6366f1',
+  '#c084fc',
+  // Row 6: Orange → Deep Ochre → Gold Yellow → Bright Yellow
+  '#ea580c',
+  '#b45309',
+  '#eab308',
+  '#fde047',
 ];
 
 // 5 Primary Color Memories (indices 0..4) + 5 Most Recent Colors (indices 5..9, revealed on horizontal scroll)

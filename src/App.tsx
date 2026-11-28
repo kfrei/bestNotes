@@ -66174,8 +66174,10 @@ export default function App() {
                         colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                       }
                     }}
-                    className={`w-8 h-8 rounded-full border border-[#dfd8cb] mx-auto cursor-pointer transition ${
-                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#234978] scale-110' : 'hover:scale-105'
+                    className={`w-7 h-7 rounded-full border border-[#dfd8cb] mx-auto cursor-pointer transition ${
+                      strokeColor.toLowerCase() === c.toLowerCase()
+                        ? 'ring-2 ring-offset-1 ring-[#234978] scale-110'
+                        : 'hover:scale-105'
                     }`}
                     style={{ backgroundColor: c }}
                   />
