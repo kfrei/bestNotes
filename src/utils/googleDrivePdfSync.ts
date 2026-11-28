@@ -840,7 +840,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
-  } else {
+  } else if (s.shapeType !== 'banner-shade-soft') {
     ctx.stroke();
   }
 

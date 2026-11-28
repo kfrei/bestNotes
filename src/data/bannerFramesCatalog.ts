@@ -107,6 +107,62 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 195,
     aspectH: 250,
   },
+  {
+    id: 'banner-spiral-pad-vertical',
+    key: 'spiral-pad-vertical',
+    title: 'Μπλοκ Σπιράλ Κάθετο 3D',
+    tags: ['μπλοκ', 'σπιράλ', 'τετράδιο', 'σημειώσεις', 'notepad', 'spiral', 'pad', 'πλαίσιο', '3d'],
+    aspectW: 215,
+    aspectH: 265,
+  },
+  {
+    id: 'banner-spiral-pad-horizontal',
+    key: 'spiral-pad-horizontal',
+    title: 'Μπλοκ Σπιράλ Οριζόντιο',
+    tags: ['μπλοκ', 'σπιράλ', 'οριζόντιο', 'σημειώσεις', 'notepad', 'spiral', 'pad', 'πλαίσιο', 'κάρτα'],
+    aspectW: 320,
+    aspectH: 175,
+  },
+  {
+    id: 'banner-corner-ribbon-card',
+    key: 'corner-ribbon-card',
+    title: 'Κάρτα με Γωνιακή Κορδέλα',
+    tags: ['κάρτα', 'κορδέλα', 'γωνία', 'ταινία', 'πλαίσιο', 'card', 'ribbon', 'corner', 'σημείωση'],
+    aspectW: 300,
+    aspectH: 180,
+  },
+  {
+    id: 'banner-card-with-banner',
+    key: 'card-with-banner',
+    title: 'Κάρτα με Κορδέλα Τίτλου',
+    tags: ['κάρτα', 'κορδέλα', 'τίτλος', 'πλαίσιο', 'card', 'banner', 'ribbon', 'σημείωση'],
+    aspectW: 235,
+    aspectH: 265,
+  },
+  {
+    id: 'banner-notebook-spiral-left',
+    key: 'notebook-spiral-left',
+    title: 'Σελίδα Τετραδίου με Σπιράλ',
+    tags: ['τετράδιο', 'σελίδα', 'σπιράλ', 'σημειώσεις', 'notebook', 'spiral', 'page', 'πλαίσιο'],
+    aspectW: 235,
+    aspectH: 310,
+  },
+  {
+    id: 'banner-pinned-sticky-note',
+    key: 'pinned-sticky-note',
+    title: 'Χαρτάκι με Πινέζα & Σκιά',
+    tags: ['χαρτάκι', 'πινέζα', 'σημείωση', 'sticky', 'note', 'pin', 'pushpin', 'σκιά', 'πλαίσιο'],
+    aspectW: 245,
+    aspectH: 280,
+  },
+  {
+    id: 'banner-idea-bulb-box',
+    key: 'idea-bulb-box',
+    title: 'Πλαίσιο Ιδέας με Λάμπα',
+    tags: ['ιδέα', 'λάμπα', 'λαμπτήρας', 'πλαίσιο', 'σημείωση', 'idea', 'bulb', 'lightbulb', 'tip', 'συμβουλή'],
+    aspectW: 330,
+    aspectH: 210,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -172,9 +228,11 @@ function sampleCubic(
 }
 
 interface RawVectorPart {
-  role: 'body' | 'accent-solid' | 'detail' | 'detail-dashed';
+  role: 'body' | 'accent-solid' | 'accent-shade' | 'shade-soft' | 'detail' | 'detail-dashed';
   pts: Array<[number, number]>;
   widthScale?: number;
+  shadeTrans?: number; // 0-95 transparency for accent-shade / shade-soft (default 68)
+  shadeGrad?: number;  // 0-100 vertical gradient for accent-shade / shade-soft (default 60)
 }
 
 function getBannerNormalizedParts(key: string): RawVectorPart[] {
@@ -1061,6 +1119,506 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         },
       ];
 
+    // 13. 3D Vertical Spiral Notepad with Shaded Page Block & 5 Top Wire Rings
+    case 'spiral-pad-vertical': {
+      const parts: RawVectorPart[] = [
+        // 3D right page-stack thickness (shaded with gradient φωτοσκίαση)
+        {
+          role: 'accent-shade',
+          shadeTrans: 68,
+          shadeGrad: 75,
+          pts: [
+            [82, 16],
+            [90, 21],
+            [89, 89],
+            [82, 85],
+            [82, 16],
+          ],
+          widthScale: 0.9,
+        },
+        // 3D bottom page-stack thickness (slightly darker shade)
+        {
+          role: 'accent-shade',
+          shadeTrans: 58,
+          shadeGrad: 55,
+          pts: [
+            [11, 85],
+            [82, 85],
+            [89, 89],
+            [16, 91],
+            [11, 85],
+          ],
+          widthScale: 0.9,
+        },
+        // Main fillable front page
+        {
+          role: 'body',
+          pts: [
+            [11, 17],
+            [82, 16],
+            [82, 85],
+            [11, 85],
+            [11, 17],
+          ],
+        },
+      ];
+      // 5 spiral rings + punch holes along the top
+      const ringXs = [19, 33, 47, 61, 74];
+      for (const rx of ringXs) {
+        // Punch hole dot
+        const dotPts: Array<[number, number]> = [];
+        for (let i = 0; i <= 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          dotPts.push([rx + Math.cos(a) * 2.1, 22.5 + Math.sin(a) * 1.9]);
+        }
+        parts.push({ role: 'accent-solid', pts: dotPts, widthScale: 0.55 });
+        // Curved wire loop arching over top edge
+        parts.push({
+          role: 'detail',
+          pts: [
+            [rx - 0.8, 22],
+            ...sampleCubic([rx - 0.8, 22], [rx - 7.5, 18], [rx - 5, 7], [rx + 1.2, 8.5], 10),
+            ...sampleQuad([rx + 1.2, 8.5], [rx + 5, 10], [rx + 3.2, 16.5], 5),
+          ],
+          widthScale: 1.05,
+        });
+      }
+      return parts;
+    }
+
+    // 14. Horizontal Spiral Flip-Pad with Stacked Back Pages & 9 Top Spiral Loops
+    case 'spiral-pad-horizontal': {
+      const parts: RawVectorPart[] = [
+        // Back-most stacked page L-strip (soft shading)
+        {
+          role: 'accent-shade',
+          shadeTrans: 74,
+          shadeGrad: 60,
+          pts: [
+            [9, 22],
+            [5, 22],
+            [5, 92],
+            [90, 92],
+            [90, 88],
+            [9, 88],
+            [9, 22],
+          ],
+          widthScale: 0.75,
+        },
+        // Middle stacked page L-strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 82,
+          shadeGrad: 50,
+          pts: [
+            [11, 19],
+            [7.5, 19],
+            [7.5, 89],
+            [92, 89],
+            [92, 85],
+            [11, 85],
+            [11, 19],
+          ],
+          widthScale: 0.78,
+        },
+        // Main wide fillable front page
+        {
+          role: 'body',
+          pts: [
+            [11, 16],
+            [94, 16],
+            [94, 85],
+            [11, 85],
+            [11, 16],
+          ],
+        },
+      ];
+      // 9 top wire rings + punch dots
+      for (let i = 0; i < 9; i++) {
+        const rx = 17.5 + i * 9;
+        const dotPts: Array<[number, number]> = [];
+        for (let k = 0; k <= 10; k++) {
+          const a = (k / 10) * Math.PI * 2;
+          dotPts.push([rx + Math.cos(a) * 1.35, 26.5 + Math.sin(a) * 2.1]);
+        }
+        parts.push({ role: 'accent-solid', pts: dotPts, widthScale: 0.5 });
+        parts.push({
+          role: 'detail',
+          pts: [
+            [rx, 26],
+            ...sampleCubic([rx, 26], [rx + 1.5, 14], [rx - 1.5, 6], [rx - 3.6, 11], 8),
+            [rx - 4.2, 16],
+          ],
+          widthScale: 0.85,
+        });
+      }
+      return parts;
+    }
+
+    // 15. Horizontal Note Card with Shaded Diagonal Corner Ribbon
+    case 'corner-ribbon-card':
+      return [
+        // Subtle soft shadow under the diagonal ribbon
+        {
+          role: 'shade-soft',
+          shadeTrans: 78,
+          shadeGrad: 65,
+          pts: [
+            [10, 52],
+            [36, 12],
+            [39, 14],
+            [12, 55],
+            [10, 52],
+          ],
+        },
+        // Main fillable note card
+        {
+          role: 'body',
+          pts: [
+            [10, 12],
+            [92, 12],
+            [92, 88],
+            [10, 88],
+            [10, 12],
+          ],
+        },
+        // Shaded diagonal corner ribbon tucked over top-left corner
+        {
+          role: 'accent-shade',
+          shadeTrans: 62,
+          shadeGrad: 78,
+          pts: [
+            [7.5, 39],
+            [27, 8],
+            ...sampleQuad([27, 8], [32, 6], [36, 11], 5),
+            [10, 52],
+            ...sampleQuad([10, 52], [6.5, 47], [7.5, 39], 5),
+          ],
+          widthScale: 0.95,
+        },
+      ];
+
+    // 16. Vertical Card Wrapped with Shaded Title Ribbon & Soft Bottom Shadow
+    case 'card-with-banner':
+      return [
+        // Soft bottom cast shadow
+        {
+          role: 'shade-soft',
+          shadeTrans: 76,
+          shadeGrad: 70,
+          pts: [
+            [22, 89],
+            [82, 89],
+            [84, 95],
+            [24, 95],
+            [22, 89],
+          ],
+        },
+        // Left swallowtail ribbon end (flush with card left x=21)
+        {
+          role: 'accent-shade',
+          shadeTrans: 60,
+          shadeGrad: 75,
+          pts: [
+            [7, 36],
+            [21, 36],
+            [21, 51],
+            [6, 51],
+            [13, 43.5],
+            [7, 36],
+          ],
+          widthScale: 0.9,
+        },
+        // Right swallowtail ribbon end (flush with card right x=81)
+        {
+          role: 'accent-shade',
+          shadeTrans: 60,
+          shadeGrad: 75,
+          pts: [
+            [81, 36],
+            [94, 36],
+            [88, 43.5],
+            [95, 51],
+            [81, 51],
+            [81, 36],
+          ],
+          widthScale: 0.9,
+        },
+        // Main fillable vertical card
+        {
+          role: 'body',
+          pts: [
+            [21, 9],
+            [81, 9],
+            [81, 89],
+            [21, 89],
+            [21, 9],
+          ],
+        },
+        // Shaded horizontal title ribbon band wrapping across the card
+        {
+          role: 'accent-shade',
+          shadeTrans: 66,
+          shadeGrad: 72,
+          pts: [
+            [20, 27],
+            [82, 27],
+            [82, 42],
+            [20, 42],
+            [20, 27],
+          ],
+          widthScale: 0.95,
+        },
+      ];
+
+    // 17. Tall Spiral-Bound Notebook Page (Left Double-Wire Spiral)
+    case 'notebook-spiral-left': {
+      const parts: RawVectorPart[] = [
+        // Subtle soft shadow along right & bottom edge
+        {
+          role: 'shade-soft',
+          shadeTrans: 80,
+          shadeGrad: 55,
+          pts: [
+            [92, 9],
+            [95.5, 11],
+            [95.5, 96],
+            [14, 96],
+            [12, 93],
+            [92, 93],
+            [92, 9],
+          ],
+        },
+        // Main tall fillable notebook page
+        {
+          role: 'body',
+          pts: [
+            [12, 6],
+            [92, 6],
+            [92, 93],
+            [12, 93],
+            [12, 6],
+          ],
+        },
+      ];
+      // 10 crisp double-wire left spiral coils + neat square punch holes
+      for (let i = 0; i < 10; i++) {
+        const py = 11.5 + i * 8.4;
+        // Square punch hole
+        parts.push({
+          role: 'accent-shade',
+          shadeTrans: 72,
+          shadeGrad: 50,
+          pts: [
+            [14.2, py - 1.5],
+            [18.2, py - 1.5],
+            [18.2, py + 1.5],
+            [14.2, py + 1.5],
+            [14.2, py - 1.5],
+          ],
+          widthScale: 0.72,
+        });
+        // Double wire loop wrapping from left edge into punch hole
+        parts.push({
+          role: 'detail',
+          pts: [
+            [16.2, py - 0.6],
+            ...sampleQuad([16.2, py - 0.6], [8.5, py - 2.2], [7.2, py + 0.2], 5),
+            [8.5, py + 1.4],
+          ],
+          widthScale: 0.78,
+        });
+        parts.push({
+          role: 'detail',
+          pts: [
+            [16.2, py + 0.7],
+            ...sampleQuad([16.2, py + 0.7], [8.8, py - 0.5], [7.4, py + 1.8], 5),
+            [9.4, py + 2.5],
+          ],
+          widthScale: 0.78,
+        });
+      }
+      return parts;
+    }
+
+    // 18. Pinned Sticky Note with Curled Corner & Soft Realistic Cast Shadows
+    case 'pinned-sticky-note': {
+      const makeEllipse = (ex: number, ey: number, rx: number, ry: number): Array<[number, number]> => {
+        const out: Array<[number, number]> = [];
+        for (let i = 0; i <= 14; i++) {
+          const a = (i / 14) * Math.PI * 2;
+          out.push([ex + Math.cos(a) * rx, ey + Math.sin(a) * ry]);
+        }
+        return out;
+      };
+      const rightEdgeCurve = sampleQuad([81, 14], [83, 46], [93, 72], 10);
+      const bottomEdgeCurve = sampleQuad([76, 81], [48, 86], [16, 87], 10);
+      const leftEdgeCurve = sampleQuad([16, 87], [13, 52], [11, 17], 10);
+      return [
+        // Soft cast shadow behind sticky note (bottom-left + under curl)
+        {
+          role: 'shade-soft',
+          shadeTrans: 78,
+          shadeGrad: 65,
+          pts: [
+            [9, 22],
+            [11, 94],
+            [86, 83],
+            [81, 75],
+            [16, 87],
+            [11, 19],
+            [9, 22],
+          ],
+        },
+        // Subtle shadow behind the curled corner
+        {
+          role: 'shade-soft',
+          shadeTrans: 72,
+          shadeGrad: 80,
+          pts: [
+            [74, 82],
+            [79, 64],
+            [87, 70],
+            [92, 72],
+            [74, 82],
+          ],
+        },
+        // Main fillable sticky note body (with curled-up bottom-right corner)
+        {
+          role: 'body',
+          pts: [
+            [11, 17],
+            [81, 14],
+            ...rightEdgeCurve,
+            ...sampleQuad([93, 72], [84, 71], [81, 67], 5),
+            ...sampleQuad([81, 67], [78, 75], [76, 81], 5),
+            ...bottomEdgeCurve,
+            ...leftEdgeCurve,
+          ],
+        },
+        // Shaded curled-up corner flap (φωτοσκίαση)
+        {
+          role: 'accent-shade',
+          shadeTrans: 55,
+          shadeGrad: 85,
+          pts: [
+            [76, 81],
+            ...sampleQuad([76, 81], [78, 75], [81, 67], 5),
+            ...sampleQuad([81, 67], [86, 70], [93, 72], 5),
+            [76, 81],
+          ],
+          widthScale: 0.9,
+        },
+        // Soft circular cast shadow under the pushpin
+        {
+          role: 'shade-soft',
+          shadeTrans: 76,
+          shadeGrad: 55,
+          pts: makeEllipse(42, 20.5, 6.2, 4.6),
+        },
+        // Pushpin dark shaded body/stem
+        {
+          role: 'accent-shade',
+          shadeTrans: 32,
+          shadeGrad: 85,
+          pts: [
+            [42, 14],
+            [49, 14],
+            [51, 22],
+            ...sampleQuad([51, 22], [45, 25], [39.5, 21.5], 6),
+            [42, 14],
+          ],
+          widthScale: 0.95,
+        },
+        // Pushpin top head cap
+        {
+          role: 'body',
+          pts: makeEllipse(46.5, 11.5, 5.2, 4.4),
+          widthScale: 0.95,
+        },
+        // Inner pushpin ring highlight
+        {
+          role: 'detail',
+          pts: makeEllipse(47.2, 11.2, 2.1, 1.8),
+          widthScale: 0.7,
+        },
+      ];
+    }
+
+    // 19. Idea Box with Radiant Lightbulb on Top-Right Edge
+    case 'idea-bulb-box': {
+      // Rounded rectangle coordinates: x=8..86, y=42..92, r=6
+      const boxPts: Array<[number, number]> = [
+        [14, 42],
+        [80, 42],
+        ...sampleQuad([80, 42], [86, 42], [86, 49], 5),
+        [86, 85],
+        ...sampleQuad([86, 85], [86, 92], [80, 92], 5),
+        [14, 92],
+        ...sampleQuad([14, 92], [8, 92], [8, 85], 5),
+        [8, 49],
+        ...sampleQuad([8, 49], [8, 42], [14, 42], 5),
+      ];
+      // Bulb glass silhouette centered at (69, 23)
+      const bulbPts: Array<[number, number]> = [
+        [65.5, 34],
+        ...sampleCubic([65.5, 34], [65, 30], [61.5, 27], [61.5, 22], 7),
+        ...sampleCubic([61.5, 22], [61.5, 14.5], [76.5, 14.5], [76.5, 22], 10),
+        ...sampleCubic([76.5, 22], [76.5, 27], [73, 30], [72.5, 34], 7),
+        [65.5, 34],
+      ];
+      const parts: RawVectorPart[] = [
+        // Main fillable rounded idea box
+        {
+          role: 'body',
+          pts: boxPts,
+        },
+        // Warm soft glow tint inside the lightbulb glass
+        {
+          role: 'accent-shade',
+          shadeTrans: 72,
+          shadeGrad: 80,
+          pts: bulbPts,
+          widthScale: 0.95,
+        },
+        // Filament inside bulb
+        {
+          role: 'detail',
+          pts: [
+            [67.2, 33.5],
+            [66.4, 24.5],
+            [67.8, 25.5],
+            [69, 24.3],
+            [70.2, 25.5],
+            [71.6, 24.5],
+            [70.8, 33.5],
+          ],
+          widthScale: 0.65,
+        },
+        // Screw base threads
+        { role: 'detail', pts: [[66.2, 36.2], [71.8, 36.2]], widthScale: 0.85 },
+        { role: 'detail', pts: [[66.8, 38.4], [71.2, 38.4]], widthScale: 0.85 },
+        { role: 'detail', pts: [[67.8, 40.4], [70.2, 40.4]], widthScale: 0.85 },
+        { role: 'detail', pts: [[69, 40.4], [69, 42]], widthScale: 0.85 },
+      ];
+      // 9 crisp radial light rays around the bulb
+      const rayAngles = [-165, -142, -118, -90, -62, -38, -15, 12, 168];
+      for (const deg of rayAngles) {
+        const rad = (deg * Math.PI) / 180;
+        const r1 = 10.2;
+        const r2 = deg === -90 || deg === -142 || deg === -38 ? 15.2 : 13.8;
+        parts.push({
+          role: 'detail',
+          pts: [
+            [69 + Math.cos(rad) * r1, 22 + Math.sin(rad) * r1 * 1.15],
+            [69 + Math.cos(rad) * r2, 22 + Math.sin(rad) * r2 * 1.15],
+          ],
+          widthScale: 0.72,
+        });
+      }
+      return parts;
+    }
+
     default:
       return [];
   }
@@ -1082,6 +1640,7 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
   const padX = Math.round((220 - vw) / 2);
   const padY = Math.round((220 - vh) / 2);
 
+  const gradId = `bfg-${key.replace(/[^a-z0-9]/gi, '')}`;
   const elements = parts
     .map((part) => {
       const d = part.pts
@@ -1095,6 +1654,13 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
       if (part.role === 'accent-solid') {
         return `<path d="${d} Z" fill="${color}" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
+      if (part.role === 'shade-soft') {
+        const op = Math.max(0.12, Math.min(0.45, (100 - (part.shadeTrans ?? 76)) / 100)).toFixed(2);
+        return `<path d="${d} Z" fill="${color}" fill-opacity="${op}" stroke="none"/>`;
+      }
+      if (part.role === 'accent-shade') {
+        return `<path d="${d} Z" fill="url(#${gradId})" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
       if (part.role === 'body') {
         return `<path d="${d} Z" fill="#ffffff" fill-opacity="0.88" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
@@ -1105,7 +1671,7 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
     })
     .join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220">${elements}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.42"/><stop offset="100%" stop-color="${color}" stop-opacity="0.14"/></linearGradient></defs>${elements}</svg>`;
 }
 
 /**
@@ -1157,6 +1723,44 @@ export function createBannerFrameStrokes(
         groupId,
         isShape: true,
         shapeType: 'banner-accent-solid',
+        zOrder,
+      };
+    }
+    if (part.role === 'shade-soft') {
+      return {
+        id,
+        tool: 'pen',
+        color,
+        fillColor: color,
+        fillStyle: 'solid',
+        fillTransparency: part.shadeTrans ?? 76,
+        fillGradient: part.shadeGrad ?? 65,
+        width: 0.5,
+        opacity: 1,
+        points: pts,
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'banner-shade-soft',
+        zOrder,
+      };
+    }
+    if (part.role === 'accent-shade') {
+      return {
+        id,
+        tool: 'pen',
+        color,
+        fillColor: color,
+        fillStyle: 'solid',
+        fillTransparency: part.shadeTrans ?? 65,
+        fillGradient: part.shadeGrad ?? 70,
+        width,
+        opacity: 1,
+        points: pts,
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'banner-accent-shade',
         zOrder,
       };
     }

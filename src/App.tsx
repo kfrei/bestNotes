@@ -14252,7 +14252,7 @@ export default function App() {
       ctx.lineJoin = 'round';
       ctx.stroke();
       ctx.restore();
-    } else {
+    } else if (s.shapeType !== 'banner-shade-soft') {
       ctx.stroke();
     }
 
@@ -54937,7 +54937,7 @@ export default function App() {
                 fillGradient: 0,
               };
             }
-            if (s.shapeType === 'banner-detail') {
+            if (s.shapeType === 'banner-detail' || s.shapeType === 'banner-shade-soft' || s.shapeType === 'banner-accent-shade') {
               return s;
             }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
@@ -55054,7 +55054,7 @@ export default function App() {
             if (s.shapeType === 'banner-accent-solid') {
               return { ...s, fillStyle: 'solid', fillColor: s.color, fillTransparency: 0, fillGradient: 0 };
             }
-            if (s.shapeType === 'banner-detail') {
+            if (s.shapeType === 'banner-detail' || s.shapeType === 'banner-shade-soft' || s.shapeType === 'banner-accent-shade') {
               return s;
             }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
@@ -55117,6 +55117,8 @@ export default function App() {
                 s.shapeType === 'ammeter-needle' ||
                 s.shapeType === 'voltmeter-needle' ||
                 s.shapeType === 'banner-accent-solid' ||
+                s.shapeType === 'banner-accent-shade' ||
+                s.shapeType === 'banner-shade-soft' ||
                 s.shapeType === 'banner-detail'
               ) {
                 return s;
