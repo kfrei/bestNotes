@@ -212,6 +212,31 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 620,
     aspectH: 100,
   },
+  // --- Μικρά Εικονίδια Προσοχής & Πινέζες (Μαύρο Περίγραμμα + Μεταβλητό Γέμισμα) ---
+  {
+    id: 'banner-badge-exclamation-burst',
+    key: 'badge-exclamation-burst',
+    title: 'Θαυμαστικό σε Έκρηξη (!)',
+    tags: ['θαυμαστικό', 'προσοχή', 'έκρηξη', 'σημαντικό', 'sos', 'alert', 'burst', 'exclamation', 'badge', '!'],
+    aspectW: 110,
+    aspectH: 118,
+  },
+  {
+    id: 'banner-pushpin-horizontal',
+    key: 'pushpin-horizontal',
+    title: 'Πινέζα Οριζόντια',
+    tags: ['πινέζα', 'καρφίτσα', 'σημείωση', 'pin', 'pushpin', 'thumbtack', 'οριζόντια', 'εικονίδιο'],
+    aspectW: 120,
+    aspectH: 82,
+  },
+  {
+    id: 'banner-pushpin-angled',
+    key: 'pushpin-angled',
+    title: 'Πινέζα Πλάγια',
+    tags: ['πινέζα', 'καρφίτσα', 'σημείωση', 'pin', 'pushpin', 'thumbtack', 'πλάγια', 'εικονίδιο'],
+    aspectW: 96,
+    aspectH: 122,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -2027,6 +2052,167 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         },
       ];
 
+    // 26. Exclamation Mark Burst Badge (always black outline, changeable fill + gradient)
+    case 'badge-exclamation-burst': {
+      const spikes: Array<[number, number]> = [
+        [37, 17],
+        [63, 21],
+        [83, 27],
+        [77, 47],
+        [89, 64],
+        [66, 86],
+        [33, 89],
+        [12, 68],
+        [14, 38],
+      ];
+      const cx = 50;
+      const cy = 54;
+      const burstPts: Array<[number, number]> = [spikes[0]];
+      for (let i = 0; i < spikes.length; i++) {
+        const a = spikes[i];
+        const b = spikes[(i + 1) % spikes.length];
+        const mx = (a[0] + b[0]) / 2;
+        const my = (a[1] + b[1]) / 2;
+        const cp: [number, number] = [mx + (cx - mx) * 0.36, my + (cy - my) * 0.36];
+        burstPts.push(...sampleQuad(a, cp, b, 6));
+      }
+      const dotPts: Array<[number, number]> = [];
+      for (let i = 0; i <= 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        dotPts.push([46 + Math.cos(a) * 6.8, 63 + Math.sin(a) * 6.2]);
+      }
+      return [
+        // Main fillable starburst badge
+        { role: 'body', pts: burstPts },
+        // Bold slightly-tilted exclamation wedge (darker accent shade of chosen color)
+        {
+          role: 'accent-shade',
+          shadeTrans: 25,
+          shadeGrad: 65,
+          pts: [
+            [50, 12],
+            [68, 16],
+            [54, 48],
+            [44, 45],
+            [50, 12],
+          ],
+          widthScale: 0.95,
+        },
+        // Exclamation dot (darker accent shade of chosen color)
+        {
+          role: 'accent-shade',
+          shadeTrans: 25,
+          shadeGrad: 65,
+          pts: dotPts,
+          widthScale: 0.95,
+        },
+      ];
+    }
+
+    // 27. Horizontal 3D Pushpin (clean — NO 3 motion lines, always black outline + variable fill)
+    case 'pushpin-horizontal': {
+      return [
+        // Metallic pin needle pointing left
+        {
+          role: 'accent-shade',
+          shadeTrans: 72,
+          shadeGrad: 50,
+          pts: [
+            [8, 52],
+            [16, 47.5],
+            [38, 44],
+            [38, 53],
+            [16, 54.5],
+            [8, 52],
+          ],
+          widthScale: 0.85,
+        },
+        // Rounded base collar flange (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [39, 25],
+            ...sampleCubic([39, 25], [56, 22], [62, 36], [60, 50], 10),
+            ...sampleCubic([60, 50], [58, 68], [46, 77], [37, 71], 10),
+            ...sampleCubic([37, 71], [31, 60], [31, 35], [39, 25], 10),
+          ],
+        },
+        // Cylindrical neck connecting collar to cap (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [54, 34],
+            [74, 31],
+            [76, 57],
+            [55, 62],
+            ...sampleQuad([55, 62], [51, 48], [54, 34], 6),
+          ],
+        },
+        // Rounded top cap head (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [75, 22],
+            ...sampleCubic([75, 22], [90, 21], [94, 38], [91, 52], 10),
+            ...sampleCubic([91, 52], [88, 66], [76, 70], [72, 62], 10),
+            ...sampleCubic([72, 62], [68, 48], [69, 30], [75, 22], 10),
+          ],
+        },
+      ];
+    }
+
+    // 28. Angled 3D Pushpin pointing down-left (clean — NO 3 motion lines, always black outline + variable fill)
+    case 'pushpin-angled': {
+      return [
+        // Sharp pin needle pointing down-left
+        {
+          role: 'accent-shade',
+          shadeTrans: 72,
+          shadeGrad: 50,
+          pts: [
+            [24, 92],
+            [34, 77],
+            [47, 56],
+            [53, 60],
+            [38, 82],
+            [24, 92],
+          ],
+          widthScale: 0.85,
+        },
+        // Rounded lower flange base (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [31, 46],
+            ...sampleCubic([31, 46], [42, 36], [62, 42], [72, 54], 10),
+            ...sampleCubic([72, 54], [76, 66], [62, 72], [47, 65], 10),
+            ...sampleCubic([47, 65], [32, 58], [26, 52], [31, 46], 10),
+          ],
+        },
+        // Angled cylindrical stem (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [44, 46],
+            [58, 22],
+            [78, 32],
+            [64, 55],
+            ...sampleQuad([64, 55], [52, 53], [44, 46], 6),
+          ],
+        },
+        // Rounded top cap head (fillable body)
+        {
+          role: 'body',
+          pts: [
+            [52, 13],
+            ...sampleCubic([52, 13], [60, 6], [78, 12], [87, 21], 10),
+            ...sampleCubic([87, 21], [91, 29], [80, 35], [68, 29], 10),
+            ...sampleCubic([68, 29], [54, 24], [48, 18], [52, 13], 10),
+          ],
+        },
+      ];
+    }
+
     default:
       return [];
   }
@@ -2054,9 +2240,16 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
     color.toLowerCase() === '#111827' ||
     color.toLowerCase() === '#0f172a' ||
     color.toLowerCase() === '#1e293b';
+  const isSolidColorIcon =
+    key === 'lightning-triple-vertical' ||
+    key === 'badge-exclamation-burst' ||
+    key === 'pushpin-horizontal' ||
+    key === 'pushpin-angled';
   const fillTint = isDarkDefault
-    ? key === 'lightning-triple-vertical'
+    ? key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst'
       ? '#facc15'
+      : key === 'pushpin-horizontal' || key === 'pushpin-angled'
+      ? '#ef4444'
       : '#64748b'
     : color;
   const gradId = `bfg-${key.replace(/[^a-z0-9]/gi, '')}`;
@@ -2081,8 +2274,8 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
         return `<path d="${d} Z" fill="url(#${gradId})" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
       if (part.role === 'body') {
-        if (key === 'lightning-triple-vertical') {
-          return `<path d="${d} Z" fill="${fillTint}" fill-opacity="0.92" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+        if (isSolidColorIcon) {
+          return `<path d="${d} Z" fill="${fillTint}" fill-opacity="0.88" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
         }
         return `<path d="${d} Z" fill="${isDarkDefault ? '#ffffff' : fillTint}" fill-opacity="${isDarkDefault ? '0.88' : '0.24'}" stroke="${outlineColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
       }
@@ -2129,22 +2322,31 @@ export function createBannerFrameStrokes(
     color.toLowerCase() === '#111827' ||
     color.toLowerCase() === '#0f172a' ||
     color.toLowerCase() === '#1e293b';
+  const isAccentColorIcon =
+    key === 'lightning-triple-vertical' ||
+    key === 'badge-exclamation-burst' ||
+    key === 'pushpin-horizontal' ||
+    key === 'pushpin-angled';
   const resolvedFillHex =
-    key === 'lightning-triple-vertical' && isDarkColor ? '#facc15' : color || '#2563eb';
+    isDarkColor && (key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst')
+      ? '#facc15'
+      : isDarkColor && (key === 'pushpin-horizontal' || key === 'pushpin-angled')
+      ? '#ef4444'
+      : color || '#2563eb';
   const bodyFillStyle =
-    key === 'lightning-triple-vertical'
+    isAccentColorIcon
       ? 'solid'
       : !isDarkColor && fillStyle === 'none'
       ? 'solid'
       : fillStyle;
   const bodyFillTrans =
-    key === 'lightning-triple-vertical'
-      ? 5
+    isAccentColorIcon
+      ? 10
       : !isDarkColor && fillStyle === 'none'
       ? Math.min(80, fillTransparency)
       : fillTransparency;
   const bodyFillGrad =
-    key === 'lightning-triple-vertical' && fillGradient === 0 ? 55 : fillGradient;
+    isAccentColorIcon && fillGradient === 0 ? 55 : fillGradient;
 
   return parts.map((part, idx) => {
     const pts = toWorldPts(part.pts, x0, y0, def.aspectW, def.aspectH);
