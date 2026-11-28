@@ -2181,18 +2181,16 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
     // 27. Horizontal 3D Pushpin (single unified silhouette + clean 3D contour lines, NO X-ray overlap, NO motion lines)
     case 'pushpin-horizontal': {
       return [
-        // Sleek tapered needle stopping flush at collar left edge (x=37)
+        // Sleek tapered needle stopping exactly flush on collar left contour (x=36.45) — role: 'body' so transparent mode clears it too
         {
-          role: 'accent-shade',
-          shadeTrans: 78,
-          shadeGrad: 40,
+          role: 'body',
           pts: [
-            [8, 56],
-            [16, 51.5],
-            [37.2, 48.5],
-            [37.2, 54],
-            [16.5, 58],
-            [8, 56],
+            [8, 55.5],
+            [16, 51.2],
+            [36.45, 48.8],
+            [36.45, 53.6],
+            [16.5, 57.4],
+            [8, 55.5],
           ],
           widthScale: 0.85,
         },
@@ -2245,16 +2243,14 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
     // 28. Angled 3D Pushpin pointing down-left (single unified silhouette + clean 3D contour lines, NO motion lines)
     case 'pushpin-angled': {
       return [
-        // Sleek tapered needle pointing down-left, flush at lower flange underside
+        // Sleek tapered needle pointing down-left, stopping exactly flush on lower flange outer curve — role: 'body' so transparent mode clears it too
         {
-          role: 'accent-shade',
-          shadeTrans: 78,
-          shadeGrad: 40,
+          role: 'body',
           pts: [
             [26, 94],
-            [32.5, 79],
-            [43, 60.5],
-            [48, 63],
+            [32.5, 79.5],
+            [42.4, 63.65],
+            [46.9, 65.35],
             [35.5, 83.5],
             [26, 94],
           ],
