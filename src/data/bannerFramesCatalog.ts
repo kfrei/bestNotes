@@ -1414,33 +1414,33 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [22, 89],
           ],
         },
-        // Left swallowtail ribbon end (flush with card left x=21)
+        // Left swallowtail ribbon end (flush with card left x=21, tucked cleanly behind card)
         {
           role: 'accent-shade',
-          shadeTrans: 60,
+          shadeTrans: 58,
           shadeGrad: 75,
           pts: [
-            [7, 36],
-            [21, 36],
-            [21, 51],
-            [6, 51],
-            [13, 43.5],
-            [7, 36],
+            [8.5, 20],
+            [21, 20],
+            [21, 33],
+            [8, 33],
+            [13.5, 26.5],
+            [8.5, 20],
           ],
           widthScale: 0.9,
         },
-        // Right swallowtail ribbon end (flush with card right x=81)
+        // Right swallowtail ribbon end (flush with card right x=81, tucked cleanly behind card)
         {
           role: 'accent-shade',
-          shadeTrans: 60,
+          shadeTrans: 58,
           shadeGrad: 75,
           pts: [
-            [81, 36],
-            [94, 36],
-            [88, 43.5],
-            [95, 51],
-            [81, 51],
-            [81, 36],
+            [81, 20],
+            [93.5, 20],
+            [88.5, 26.5],
+            [94, 33],
+            [81, 33],
+            [81, 20],
           ],
           widthScale: 0.9,
         },
@@ -1455,17 +1455,39 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [21, 9],
           ],
         },
-        // Shaded horizontal title ribbon band wrapping across the card
+        // Left 3D under-fold triangle where ribbon wraps behind the left card edge
+        {
+          role: 'accent-solid',
+          pts: [
+            [21, 28],
+            [21, 33],
+            [17.5, 28],
+            [21, 28],
+          ],
+          widthScale: 0.7,
+        },
+        // Right 3D under-fold triangle where ribbon wraps behind the right card edge
+        {
+          role: 'accent-solid',
+          pts: [
+            [81, 28],
+            [84.5, 28],
+            [81, 33],
+            [81, 28],
+          ],
+          widthScale: 0.7,
+        },
+        // Shaded horizontal title ribbon band wrapping flush across the upper card (x=21..81, y=14..28)
         {
           role: 'accent-shade',
-          shadeTrans: 66,
+          shadeTrans: 64,
           shadeGrad: 72,
           pts: [
-            [20, 27],
-            [82, 27],
-            [82, 42],
-            [20, 42],
-            [20, 27],
+            [21, 14],
+            [81, 14],
+            [81, 28],
+            [21, 28],
+            [21, 14],
           ],
           widthScale: 0.95,
         },
