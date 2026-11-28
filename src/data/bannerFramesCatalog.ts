@@ -2178,106 +2178,129 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 27. Horizontal 3D Pushpin (clean — NO 3 motion lines, always black outline + variable fill)
+    // 27. Horizontal 3D Pushpin (single unified silhouette + clean 3D contour lines, NO X-ray overlap, NO motion lines)
     case 'pushpin-horizontal': {
       return [
-        // Metallic pin needle pointing left
+        // Sleek tapered needle stopping flush at collar left edge (x=37)
         {
           role: 'accent-shade',
-          shadeTrans: 72,
-          shadeGrad: 50,
+          shadeTrans: 78,
+          shadeGrad: 40,
           pts: [
-            [8, 52],
-            [16, 47.5],
-            [38, 44],
-            [38, 53],
-            [16, 54.5],
-            [8, 52],
+            [8, 56],
+            [16, 51.5],
+            [37.2, 48.5],
+            [37.2, 54],
+            [16.5, 58],
+            [8, 56],
           ],
           widthScale: 0.85,
         },
-        // Rounded base collar flange (fillable body)
+        // Single unified fillable plastic pushpin silhouette (collar + neck + cap — ZERO inner crossing lines)
         {
           role: 'body',
           pts: [
-            [39, 25],
-            ...sampleCubic([39, 25], [56, 22], [62, 36], [60, 50], 10),
-            ...sampleCubic([60, 50], [58, 68], [46, 77], [37, 71], 10),
-            ...sampleCubic([37, 71], [31, 60], [31, 35], [39, 25], 10),
+            [40, 26],
+            ...sampleCubic([40, 26], [52, 22], [58, 28], [60.5, 35], 8),
+            [73, 32],
+            ...sampleQuad([73, 32], [75, 22], [80, 19], 5),
+            ...sampleCubic([80, 19], [91, 17], [96, 36], [92.5, 53], 10),
+            ...sampleCubic([92.5, 53], [89.5, 65], [81, 69], [75, 63], 8),
+            ...sampleQuad([75, 63], [73.5, 60], [73.5, 56], 4),
+            [61.5, 61.5],
+            ...sampleCubic([61.5, 61.5], [58, 76], [46, 84], [39, 73], 10),
+            ...sampleCubic([39, 73], [35.5, 62], [35.5, 37], [40, 26], 10),
           ],
         },
-        // Cylindrical neck connecting collar to cap (fillable body)
+        // Clean 3D contour seam where neck enters collar
         {
-          role: 'body',
+          role: 'detail',
           pts: [
-            [54, 34],
-            [74, 31],
-            [76, 57],
-            [55, 62],
-            ...sampleQuad([55, 62], [51, 48], [54, 34], 6),
+            [56.5, 36],
+            ...sampleQuad([56.5, 36], [52.5, 49], [57, 61], 7),
           ],
+          widthScale: 0.85,
         },
-        // Rounded top cap head (fillable body)
+        // Clean 3D contour seam where neck meets cap bevel
         {
-          role: 'body',
+          role: 'detail',
           pts: [
-            [75, 22],
-            ...sampleCubic([75, 22], [90, 21], [94, 38], [91, 52], 10),
-            ...sampleCubic([91, 52], [88, 66], [76, 70], [72, 62], 10),
-            ...sampleCubic([72, 62], [68, 48], [69, 30], [75, 22], 10),
+            [73, 32],
+            ...sampleQuad([73, 32], [71, 45], [73.5, 56], 7),
           ],
+          widthScale: 0.85,
+        },
+        // Clean 3D front cap face arc
+        {
+          role: 'detail',
+          pts: [
+            [81.5, 19.5],
+            ...sampleCubic([81.5, 19.5], [75.5, 34], [76.5, 54], [83, 66], 10),
+          ],
+          widthScale: 0.82,
         },
       ];
     }
 
-    // 28. Angled 3D Pushpin pointing down-left (clean — NO 3 motion lines, always black outline + variable fill)
+    // 28. Angled 3D Pushpin pointing down-left (single unified silhouette + clean 3D contour lines, NO motion lines)
     case 'pushpin-angled': {
       return [
-        // Sharp pin needle pointing down-left
+        // Sleek tapered needle pointing down-left, flush at lower flange underside
         {
           role: 'accent-shade',
-          shadeTrans: 72,
-          shadeGrad: 50,
+          shadeTrans: 78,
+          shadeGrad: 40,
           pts: [
-            [24, 92],
-            [34, 77],
-            [47, 56],
-            [53, 60],
-            [38, 82],
-            [24, 92],
+            [26, 94],
+            [32.5, 79],
+            [43, 60.5],
+            [48, 63],
+            [35.5, 83.5],
+            [26, 94],
           ],
           widthScale: 0.85,
         },
-        // Rounded lower flange base (fillable body)
+        // Single unified fillable plastic pushpin silhouette (flange + stem + cap — ZERO inner crossing lines)
         {
           role: 'body',
           pts: [
-            [31, 46],
-            ...sampleCubic([31, 46], [42, 36], [62, 42], [72, 54], 10),
-            ...sampleCubic([72, 54], [76, 66], [62, 72], [47, 65], 10),
-            ...sampleCubic([47, 65], [32, 58], [26, 52], [31, 46], 10),
+            [28, 49],
+            ...sampleQuad([28, 49], [33, 41], [43, 41.5], 6),
+            [55.5, 22],
+            ...sampleCubic([55.5, 22], [49, 15], [53, 7], [63, 9.5], 8),
+            ...sampleCubic([63, 9.5], [76, 13], [88, 20], [85.5, 27.5], 10),
+            ...sampleQuad([85.5, 27.5], [82, 31.5], [74, 31], 6),
+            [63, 52],
+            ...sampleCubic([63, 52], [72, 59], [71, 70], [58, 68.5], 10),
+            ...sampleCubic([58, 68.5], [44, 65.5], [24, 57], [28, 49], 10),
           ],
         },
-        // Angled cylindrical stem (fillable body)
+        // Clean 3D seam where stem enters lower flange
         {
-          role: 'body',
+          role: 'detail',
           pts: [
-            [44, 46],
-            [58, 22],
-            [78, 32],
-            [64, 55],
-            ...sampleQuad([64, 55], [52, 53], [44, 46], 6),
+            [43, 41.5],
+            ...sampleQuad([43, 41.5], [50.5, 49], [62, 52.5], 7),
           ],
+          widthScale: 0.85,
         },
-        // Rounded top cap head (fillable body)
+        // Clean 3D cap underside lip
         {
-          role: 'body',
+          role: 'detail',
           pts: [
-            [52, 13],
-            ...sampleCubic([52, 13], [60, 6], [78, 12], [87, 21], 10),
-            ...sampleCubic([87, 21], [91, 29], [80, 35], [68, 29], 10),
-            ...sampleCubic([68, 29], [54, 24], [48, 18], [52, 13], 10),
+            [55.5, 22],
+            ...sampleQuad([55.5, 22], [63, 28], [73.5, 31], 7),
           ],
+          widthScale: 0.85,
+        },
+        // Subtle top cap highlight ridge
+        {
+          role: 'detail',
+          pts: [
+            [60, 13],
+            ...sampleQuad([60, 13], [69, 16.5], [78, 21.5], 6),
+          ],
+          widthScale: 0.75,
         },
       ];
     }
