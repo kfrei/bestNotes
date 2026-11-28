@@ -55323,6 +55323,22 @@ export default function App() {
     ]
   );
 
+  const getNextAvailableNoteTitle = useCallback((existingNotebooks: Notebook[]): string => {
+    const usedNums = new Set<number>();
+    for (const nb of existingNotebooks) {
+      const m = (nb.title || '').trim().match(/^Σημείωση\s+0*(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > 0) usedNums.add(n);
+      }
+    }
+    let candidate = 1;
+    while (usedNums.has(candidate)) {
+      candidate++;
+    }
+    return `Σημείωση ${String(candidate).padStart(2, '0')}`;
+  }, []);
+
   const handleCreateNewNoteTab = useCallback(() => {
     const rawTargetFolder = activeLibraryFolder || activeNotebook?.folder || '';
     const isTargetShowcase = isShowcaseFolderPath(rawTargetFolder, showcaseFolderNameRef.current);
@@ -55334,7 +55350,7 @@ export default function App() {
       id: creatingAsShowcase
         ? `${SHOWCASE_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
         : `nb-${Date.now()}`,
-      title: `Σημείωση ${notebooks.length + 1}`,
+      title: getNextAvailableNoteTitle(notebooksRef.current),
       folder: effectiveFolder,
       coverColor: '#0284c7',
       updatedAt: new Date().toISOString(),
@@ -62853,7 +62869,7 @@ export default function App() {
                                   .toString(36)
                                   .slice(2, 6)}`
                               : `nb-${Date.now()}`,
-                            title: `Σημείωση ${notebooks.length + 1}`,
+                            title: getNextAvailableNoteTitle(notebooksRef.current),
                             folder: effectiveFolder,
                             coverColor: '#0284c7',
                             updatedAt: new Date().toISOString(),
