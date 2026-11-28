@@ -60,14 +60,6 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectH: 290,
   },
   {
-    id: 'banner-scroll-parchment',
-    key: 'scroll-parchment',
-    title: 'Πάπυρος / Περγαμηνή',
-    tags: ['πάπυρος', 'περγαμηνή', 'scroll', 'parchment', 'πλαίσιο', 'ιστορία', 'αρχαία', 'σημείωση'],
-    aspectW: 230,
-    aspectH: 300,
-  },
-  {
     id: 'banner-wood-sign',
     key: 'wood-sign',
     title: 'Ξύλινη Ταμπέλα',
@@ -736,95 +728,6 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
           widthScale: 0.78,
         },
       ];
-
-    // 7. Vintage Parchment Scroll with Curled Top/Bottom Rollers & Aged Notches
-    case 'scroll-parchment': {
-      const topCurve = sampleQuad([15, 11], [50, 15], [85, 11], 10);
-      const botCurve = sampleQuad([83, 86], [50, 91], [17, 86], 10);
-      return [
-        // Main fillable parchment sheet with aged side notches
-        {
-          role: 'body',
-          pts: [
-            [15, 11],
-            ...topCurve,
-            [84, 24],
-            [78, 27],
-            [84, 30],
-            [85, 48],
-            [79, 51],
-            [85, 55],
-            [84, 72],
-            [80, 74],
-            [84, 77],
-            [83, 86],
-            ...botCurve,
-            [16, 76],
-            [21, 73],
-            [16, 70],
-            [15, 53],
-            [23, 49],
-            [15, 46],
-            [16, 26],
-            [21, 23],
-            [16, 20],
-            [15, 11],
-          ],
-        },
-        // Top-left curl
-        {
-          role: 'detail',
-          pts: [
-            [15, 11],
-            ...sampleQuad([15, 11], [6, 12], [7, 19], 6),
-            ...sampleQuad([7, 19], [9, 24], [16, 20], 6),
-          ],
-          widthScale: 0.9,
-        },
-        // Top-right curl
-        {
-          role: 'detail',
-          pts: [
-            [85, 11],
-            ...sampleQuad([85, 11], [94, 12], [93, 18], 6),
-            ...sampleQuad([93, 18], [91, 22], [84, 19], 6),
-          ],
-          widthScale: 0.9,
-        },
-        // Bottom roller outline
-        {
-          role: 'detail',
-          pts: [
-            [17, 86],
-            ...sampleQuad([17, 86], [11, 91], [16, 95], 6),
-            ...sampleQuad([16, 95], [50, 97], [84, 95], 10),
-            ...sampleQuad([84, 95], [89, 91], [83, 86], 6),
-          ],
-          widthScale: 0.9,
-        },
-        // Bottom-left & bottom-right inner roll spirals
-        {
-          role: 'detail',
-          pts: [
-            [16, 93],
-            [22, 91],
-            [21, 88],
-            [17, 89],
-          ],
-          widthScale: 0.75,
-        },
-        {
-          role: 'detail',
-          pts: [
-            [84, 93],
-            [78, 91],
-            [79, 88],
-            [83, 89],
-          ],
-          widthScale: 0.75,
-        },
-      ];
-    }
 
     // 8. Rustic Wooden Signpost Board
     case 'wood-sign':
