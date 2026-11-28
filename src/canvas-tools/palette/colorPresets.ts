@@ -11,11 +11,11 @@ export const PRESET_COLORS: string[] = [
   '#475569',
   '#808896',
   '#b3b8c0',
-  // Row 2: Red → Burgundy → Rose → Soft Pink
+  // Row 2: Red → Burgundy → Vibrant Magenta → Soft Pink
   '#dc2626',
   '#881337',
-  '#e11d48',
-  '#f472b6',
+  '#db2777',
+  '#f9a8d4',
   // Row 3: Blue → Navy → Teal → Sky
   '#2563eb',
   '#1e3a8a',
