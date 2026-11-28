@@ -3522,7 +3522,7 @@ export default function App() {
   );
   const shiftKeyPressedRef = useRef<boolean>(false);
   const lastColorKeyTapRef = useRef<{
-    keyId: 'B' | 'R' | 'G';
+    keyId: 'B' | 'R' | 'G' | 'C';
     time: number;
     prevTool: ToolType;
     prevShapePreset: ShapePresetType;
@@ -3532,6 +3532,7 @@ export default function App() {
     prevActiveNodeId: string | null;
   } | null>(null);
   const pendingRulerTimerRef = useRef<number | null>(null);
+  const pendingCropTimerRef = useRef<number | null>(null);
   const lastArrowNudgeAtRef = useRef<number>(0);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
@@ -56186,26 +56187,70 @@ export default function App() {
         return;
       }
 
-      // C / Ψ -> Crop (Ξάκρισμα — Lasso Crop)
+      // C / Ψ -> Crop (Ξάκρισμα — Lasso Crop) | Fast double-tap CC / ΨΨ (<=320ms) -> Blue (#2563eb) without flashing Crop
       if (code === 'KeyC' || key === 'c' || key === 'ψ') {
         e.preventDefault();
-        setActiveTool('lasso');
-        setShowToolSubBar(true);
-        setSelectedTextId(null);
-        setEditingTextId(null);
-        setActiveNodeStrokeId(null);
+        if (e.repeat) return;
+        const now = performance.now();
+        const prev = lastColorKeyTapRef.current;
+        if (prev && prev.keyId === 'C' && now - prev.time <= 320) {
+          lastColorKeyTapRef.current = null;
+          if (pendingCropTimerRef.current !== null) {
+            window.clearTimeout(pendingCropTimerRef.current);
+            pendingCropTimerRef.current = null;
+          } else {
+            // Edge case (280..320ms): timer already fired, revert tool & selection
+            setActiveTool(prev.prevTool);
+            setShapePreset(prev.prevShapePreset);
+            setSelectedStrokeIds(prev.prevStrokeIds);
+            setSelectedTextId(prev.prevTextId);
+            setSelectedLassoTextIds(prev.prevLassoTextIds);
+            setActiveNodeStrokeId(prev.prevActiveNodeId);
+            setImageCropMode('none');
+          }
+          applyColorToSelection('#2563eb', {
+            overrideStrokeIds: prev.prevStrokeIds,
+            overrideTextId: prev.prevTextId,
+            overrideLassoTextIds: prev.prevLassoTextIds,
+            overrideActiveNodeId: prev.prevActiveNodeId,
+          });
+          showToast('🔵 Μπλε — CC / ΨΨ');
+          return;
+        }
+        if (pendingCropTimerRef.current !== null) {
+          window.clearTimeout(pendingCropTimerRef.current);
+          pendingCropTimerRef.current = null;
+        }
+        lastColorKeyTapRef.current = {
+          keyId: 'C',
+          time: now,
+          prevTool: activeTool,
+          prevShapePreset: shapePreset,
+          prevStrokeIds: selectedStrokeIds,
+          prevTextId: selectedTextId,
+          prevLassoTextIds: selectedLassoTextIds,
+          prevActiveNodeId: activeNodeStrokeId,
+        };
         const targetImgId =
           selectedImageId ||
           (activePage.images.length > 0 ? activePage.images[activePage.images.length - 1].id : null);
-        if (targetImgId) {
-          setSelectedImageId(targetImgId);
-          setImageCropMode('freehand');
-          lassoPolygonRef.current = [];
-          showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Σχεδίασε γύρω από την εικόνα για Lasso Crop!');
-        } else {
-          setImageCropMode('none');
-          showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Επίλεξε ή επικόλλησε πρώτα μια εικόνα!');
-        }
+        pendingCropTimerRef.current = window.setTimeout(() => {
+          pendingCropTimerRef.current = null;
+          setActiveTool('lasso');
+          setShowToolSubBar(true);
+          setSelectedTextId(null);
+          setEditingTextId(null);
+          setActiveNodeStrokeId(null);
+          if (targetImgId) {
+            setSelectedImageId(targetImgId);
+            setImageCropMode('freehand');
+            lassoPolygonRef.current = [];
+            showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Σχεδίασε γύρω από την εικόνα για Lasso Crop!');
+          } else {
+            setImageCropMode('none');
+            showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Επίλεξε ή επικόλλησε πρώτα μια εικόνα!');
+          }
+        }, 280);
         return;
       }
 
@@ -79642,6 +79687,11 @@ export default function App() {
                     keys: 'GG / ΓΓ',
                     label: 'Πράσινο (Green)',
                     icon: <span className="w-3 h-3 rounded-full bg-[#16a34a] border border-white/80 shadow-2xs shrink-0" />,
+                  },
+                  {
+                    keys: 'CC / ΨΨ',
+                    label: 'Μπλε (Blue)',
+                    icon: <span className="w-3 h-3 rounded-full bg-[#2563eb] border border-white/80 shadow-2xs shrink-0" />,
                   },
                   { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                 ].map((sc) => (
