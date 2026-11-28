@@ -78086,8 +78086,28 @@ export default function App() {
                               const rawOrigY = st.initialY - (uLen / 2) * sinA + dy;
                               const moveMarginX = Math.abs(sinA) * (rulerH / 2);
                               const moveMarginY = Math.abs(cosA) * (rulerH / 2);
-                              const clampedOrigX = Math.max(moveMarginX, Math.min(pW - moveMarginX, rawOrigX));
-                              const clampedOrigY = Math.max(moveMarginY, Math.min(pH - moveMarginY, rawOrigY));
+                              let clampedOrigX = Math.max(moveMarginX, Math.min(pW - moveMarginX, rawOrigX));
+                              let clampedOrigY = Math.max(moveMarginY, Math.min(pH - moveMarginY, rawOrigY));
+                              // Gentle ±3.5px magnetic snap of the 0-origin onto notebook grid lines (23px = 0.5cm)
+                              if (Math.abs(cosA) >= 0.99) {
+                                const snappedGridX = Math.round(clampedOrigX / A4_GRID_STEP_PX) * A4_GRID_STEP_PX;
+                                if (
+                                  Math.abs(clampedOrigX - snappedGridX) <= 3.5 &&
+                                  snappedGridX >= moveMarginX &&
+                                  snappedGridX <= pW - moveMarginX
+                                ) {
+                                  clampedOrigX = snappedGridX;
+                                }
+                              } else if (Math.abs(sinA) >= 0.99) {
+                                const snappedGridY = Math.round(clampedOrigY / A4_GRID_STEP_PX) * A4_GRID_STEP_PX;
+                                if (
+                                  Math.abs(clampedOrigY - snappedGridY) <= 3.5 &&
+                                  snappedGridY >= moveMarginY &&
+                                  snappedGridY <= pH - moveMarginY
+                                ) {
+                                  clampedOrigY = snappedGridY;
+                                }
+                              }
                               const nextX = clampedOrigX + (uLen / 2) * cosA;
                               let nextY = clampedOrigY + (uLen / 2) * sinA;
 
@@ -78141,10 +78161,10 @@ export default function App() {
                               WebkitUserSelect: 'none',
                               userSelect: 'none',
                             }}
-                            className={`absolute bg-slate-200/75 backdrop-blur-[1.5px] border rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none transition-shadow duration-150 ${
+                            className={`absolute bg-slate-200/75 backdrop-blur-[1.5px] rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none transition-shadow duration-150 ${
                               rulerSnapFlash && rulerSnapFlash.pageId === pageObj.id
-                                ? 'border-[#2563eb] ring-2 ring-[#2563eb]/65 shadow-[0_0_18px_rgba(37,99,235,0.42)]'
-                                : 'border-slate-400/65'
+                                ? 'ring-2 ring-[#2563eb]/75 shadow-[0_0_18px_rgba(37,99,235,0.42)]'
+                                : 'ring-1 ring-inset ring-slate-400/65'
                             }`}
                           >
                             {/* Instant 0° / 90° Magnetic Lock Flash Badge */}
