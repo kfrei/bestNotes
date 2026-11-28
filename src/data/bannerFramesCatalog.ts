@@ -75,6 +75,38 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 290,
     aspectH: 230,
   },
+  {
+    id: 'banner-photo-corners-frame',
+    key: 'photo-corners-frame',
+    title: 'Πλαίσιο Άλμπουμ με Γωνίες',
+    tags: ['πλαίσιο', 'γωνίες', 'άλμπουμ', 'φωτογραφία', 'ραφή', 'frame', 'photo', 'corners', 'note', 'σημείωση'],
+    aspectW: 225,
+    aspectH: 275,
+  },
+  {
+    id: 'banner-comic-burst-alert',
+    key: 'comic-burst-alert',
+    title: 'Κόμικ Έκρηξη με Θαυμαστικό (!)',
+    tags: ['κόμικ', 'έκρηξη', 'θαυμαστικό', 'συννεφάκι', 'προσοχή', 'comic', 'burst', 'alert', 'pow', 'boom', 'sos', '!'],
+    aspectW: 290,
+    aspectH: 250,
+  },
+  {
+    id: 'banner-comic-burst-stars',
+    key: 'comic-burst-stars',
+    title: 'Κόμικ Έκρηξη με Αστέρια',
+    tags: ['κόμικ', 'έκρηξη', 'αστέρια', 'ακτίνες', 'συννεφάκι', 'comic', 'burst', 'stars', 'wow', 'boom', 'τίτλος'],
+    aspectW: 330,
+    aspectH: 245,
+  },
+  {
+    id: 'banner-bookmark-layered',
+    key: 'bookmark-layered',
+    title: 'Σελιδοδείκτης / Κάθετη Σημαία',
+    tags: ['σελιδοδείκτης', 'σημαία', 'κάθετη', 'πλαίσιο', 'bookmark', 'ribbon', 'flag', 'banner', 'σημείωση'],
+    aspectW: 195,
+    aspectH: 250,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -754,6 +786,278 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
             [50.5, 69],
           ],
           widthScale: 1.2,
+        },
+      ];
+
+    // 9. Photo Album Frame with 4 Triangular Corner Pockets & Inset Dashed Border
+    case 'photo-corners-frame':
+      return [
+        // Chamfered main fillable frame (all 4 corners cleanly hidden behind the 4 corner triangles)
+        {
+          role: 'body',
+          pts: [
+            [27, 12],
+            [73, 12],
+            [88, 25],
+            [88, 75],
+            [73, 88],
+            [27, 88],
+            [12, 75],
+            [12, 25],
+            [27, 12],
+          ],
+        },
+        // 4 crisp corner photo-pocket triangles (flush on the 4 chamfered edges)
+        {
+          role: 'body',
+          pts: [
+            [9, 9],
+            [30, 9],
+            [9, 28],
+            [9, 9],
+          ],
+          widthScale: 0.9,
+        },
+        {
+          role: 'body',
+          pts: [
+            [91, 9],
+            [70, 9],
+            [91, 28],
+            [91, 9],
+          ],
+          widthScale: 0.9,
+        },
+        {
+          role: 'body',
+          pts: [
+            [9, 91],
+            [30, 91],
+            [9, 72],
+            [9, 91],
+          ],
+          widthScale: 0.9,
+        },
+        {
+          role: 'body',
+          pts: [
+            [91, 91],
+            [70, 91],
+            [91, 72],
+            [91, 91],
+          ],
+          widthScale: 0.9,
+        },
+        // Inset dashed stitching border (4 clean sides inside the corners)
+        {
+          role: 'detail-dashed',
+          pts: [
+            [26, 17],
+            [74, 17],
+          ],
+          widthScale: 0.85,
+        },
+        {
+          role: 'detail-dashed',
+          pts: [
+            [83, 25],
+            [83, 75],
+          ],
+          widthScale: 0.85,
+        },
+        {
+          role: 'detail-dashed',
+          pts: [
+            [74, 83],
+            [26, 83],
+          ],
+          widthScale: 0.85,
+        },
+        {
+          role: 'detail-dashed',
+          pts: [
+            [17, 75],
+            [17, 25],
+          ],
+          widthScale: 0.85,
+        },
+      ];
+
+    // 10. Comic Book Starburst with Bold Tilted Exclamation Mark (!)
+    case 'comic-burst-alert': {
+      const spikes: Array<[number, number]> = [
+        [36, 18],
+        [60, 23],
+        [91, 18],
+        [81, 46],
+        [95, 64],
+        [83, 79],
+        [92, 92],
+        [60, 96],
+        [34, 94],
+        [15, 84],
+        [31, 66],
+        [13, 57],
+        [31, 44],
+      ];
+      const cx = 56;
+      const cy = 58;
+      const burstPts: Array<[number, number]> = [spikes[0]];
+      for (let i = 0; i < spikes.length; i++) {
+        const a = spikes[i];
+        const b = spikes[(i + 1) % spikes.length];
+        const mx = (a[0] + b[0]) / 2;
+        const my = (a[1] + b[1]) / 2;
+        // Pull midpoint inward toward center for crisp comic concave arcs
+        const cp: [number, number] = [mx + (cx - mx) * 0.42, my + (cy - my) * 0.42];
+        burstPts.push(...sampleQuad(a, cp, b, 6));
+      }
+      const makeDot = (dx: number, dy: number, rx: number, ry: number): Array<[number, number]> => {
+        const out: Array<[number, number]> = [];
+        const steps = 14;
+        for (let i = 0; i <= steps; i++) {
+          const ang = (i / steps) * Math.PI * 2;
+          out.push([dx + Math.cos(ang) * rx, dy + Math.sin(ang) * ry]);
+        }
+        return out;
+      };
+      return [
+        // Main fillable comic starburst
+        {
+          role: 'body',
+          pts: burstPts,
+        },
+        // Exclamation wedge comic drop shadow
+        {
+          role: 'accent-solid',
+          pts: [
+            [9, 13],
+            [24, 33],
+            [21, 35.5],
+            [6.5, 16.5],
+            [9, 13],
+          ],
+          widthScale: 0.65,
+        },
+        // Exclamation wedge body
+        {
+          role: 'body',
+          pts: [
+            [7, 11],
+            [17.5, 4.5],
+            [26.5, 31],
+            [7, 11],
+          ],
+          widthScale: 0.9,
+        },
+        // Exclamation dot shadow
+        {
+          role: 'accent-solid',
+          pts: makeDot(28, 41.5, 3.2, 3.6),
+          widthScale: 0.6,
+        },
+        // Exclamation dot body
+        {
+          role: 'body',
+          pts: makeDot(29.5, 38.2, 3.4, 3.8),
+          widthScale: 0.85,
+        },
+      ];
+    }
+
+    // 11. Comic Book Starburst with Solid 5-Pointed Stars & Speed Rays
+    case 'comic-burst-stars': {
+      const spikes: Array<[number, number]> = [
+        [24, 21],
+        [41, 22],
+        [63, 15],
+        [75, 26],
+        [90, 34],
+        [96, 61],
+        [89, 85],
+        [68, 93],
+        [50, 96],
+        [31, 95],
+        [15, 88],
+        [6, 70],
+        [11, 43],
+      ];
+      const cx = 52;
+      const cy = 56;
+      const burstPts: Array<[number, number]> = [spikes[0]];
+      for (let i = 0; i < spikes.length; i++) {
+        const a = spikes[i];
+        const b = spikes[(i + 1) % spikes.length];
+        const mx = (a[0] + b[0]) / 2;
+        const my = (a[1] + b[1]) / 2;
+        const cp: [number, number] = [mx + (cx - mx) * 0.36, my + (cy - my) * 0.36];
+        burstPts.push(...sampleQuad(a, cp, b, 6));
+      }
+      const makeStar = (sx: number, sy: number, rOut: number, rIn: number): Array<[number, number]> => {
+        const out: Array<[number, number]> = [];
+        for (let i = 0; i <= 10; i++) {
+          const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+          const rad = i % 2 === 0 ? rOut : rIn;
+          out.push([sx + Math.cos(ang) * rad, sy + Math.sin(ang) * rad * 1.25]);
+        }
+        return out;
+      };
+      return [
+        // Main fillable comic starburst
+        {
+          role: 'body',
+          pts: burstPts,
+        },
+        // 4 solid 5-pointed comic stars
+        { role: 'accent-solid', pts: makeStar(35, 16, 3.1, 1.35), widthScale: 0.55 },
+        { role: 'accent-solid', pts: makeStar(43, 8.5, 2.2, 0.95), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeStar(93, 27, 2.5, 1.1), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeStar(7.5, 83, 2.9, 1.25), widthScale: 0.55 },
+        // Top-left speed rays
+        { role: 'accent-solid', pts: [[9, 23], [18, 32], [17, 33.2], [7.5, 25], [9, 23]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[8, 29], [16.5, 34.5], [16, 35.4], [7.2, 31], [8, 29]], widthScale: 0.5 },
+        // Top-center speed rays
+        { role: 'accent-solid', pts: [[47, 9], [49.5, 22], [48.6, 22.2], [45.2, 9.5], [47, 9]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[53.5, 6], [52.5, 21.5], [51.6, 21.5], [51.5, 6.2], [53.5, 6]], widthScale: 0.5 },
+        // Right speed rays
+        { role: 'accent-solid', pts: [[97, 36], [89.5, 48], [88.8, 47.2], [95.4, 34.5], [97, 36]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[98, 43], [91.5, 50], [90.9, 49.2], [97, 41.5], [98, 43]], widthScale: 0.5 },
+        // Bottom-right speed rays
+        { role: 'accent-solid', pts: [[81, 89], [89, 97], [87.4, 97.5], [80.3, 89.6], [81, 89]], widthScale: 0.5 },
+        { role: 'accent-solid', pts: [[84.5, 87.5], [92, 94.5], [90.7, 95.3], [83.9, 88.2], [84.5, 87.5]], widthScale: 0.5 },
+      ];
+    }
+
+    // 12. Layered Vertical Swallowtail Bookmark / Pennant Flag (zero inner crossing lines)
+    case 'bookmark-layered':
+      return [
+        // Back offset layer (only the visible outer L-strip on left & bottom chevron, flush with front)
+        {
+          role: 'body',
+          pts: [
+            [18, 13],
+            [10, 13],
+            [10, 93],
+            [54, 74],
+            [90, 92],
+            [90, 86],
+            [54, 68],
+            [18, 86],
+            [18, 13],
+          ],
+          widthScale: 0.9,
+        },
+        // Front fillable bookmark (clean roomy interior)
+        {
+          role: 'body',
+          pts: [
+            [18, 7],
+            [90, 7],
+            [90, 86],
+            [54, 68],
+            [18, 86],
+            [18, 7],
+          ],
         },
       ];
 
