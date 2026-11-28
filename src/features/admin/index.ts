@@ -8,6 +8,5 @@ export * from './services/userStatsService';
 export * from './services/trafficService';
 export * from './hooks/useAdminRoute';
 export * from './hooks/useAppTelemetry';
-// Note: AdminDashboard & Admin sub-views are intentionally NOT re-exported here
-// so AdminPortal's React.lazy(() => import('./AdminDashboard')) code-splits the entire Admin chunk!
-export * from './AdminPortal';
+// Note: AdminPortal, AdminDashboard & Admin sub-views are intentionally NOT re-exported here
+// so App.tsx's React.lazy(() => import('./features/admin/AdminPortal')) code-splits the entire Admin chunk!

@@ -118,7 +118,7 @@ import {
   getRedirectResult,
   type User,
 } from './firebase';
-import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
+import { isExplainBoardsBrand } from './utils/brand';
 import { AdminPerfPill, AdminPerfDropdownButton } from './components/AdminPerfPill';
 import { recordSimFrameSample, markSimLoopStopped } from './utils/perfTelemetry';
 import {
@@ -131,7 +131,7 @@ import {
   applyAngleArmMoveToStrokes,
   drawInteractiveAngleOverlay,
 } from './utils/interactiveAngleTool';
-import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
+import type { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
   syncNotebookPdfToGoogleDrive,
   syncDriveFolderStructureToGoogleDrive,
@@ -140,7 +140,29 @@ import {
   exportNotebookToPdfBlob,
   exportNotebookToLivePdfHtml,
   DEFAULT_DRIVE_BASE_PATH,
-} from './utils/googleDrivePdfSync';
+  importGoodnotesFile,
+  exportBestnotesFile,
+  createBestnotesFileBlob,
+  renderPdfFileToPages,
+  renderImageFileToPage,
+  getCachedPdfPageDataUrl,
+  getBestAvailablePdfPageDataUrl,
+  ensurePdfPageDataUrl,
+  loadRawPdfFromIndexedDB,
+  saveRawPdfToIndexedDB,
+  evictPdfCachesForNotebook,
+  type PdfQualityMode,
+} from './utils/lazyPdfAndDrive';
+
+const LazyLandingPage = React.lazy(() =>
+  import('./components/LandingPage').then((m) => ({ default: m.LandingPage }))
+);
+const LazyAuthModal = React.lazy(() =>
+  import('./components/LandingPage').then((m) => ({ default: m.AuthModal }))
+);
+const LazyAdminPortal = React.lazy(() =>
+  import('./features/admin/AdminPortal').then((m) => ({ default: m.AdminPortal }))
+);
 import {
   Notebook,
   CustomFolderMeta,
@@ -195,11 +217,6 @@ import { ShapeBooleanDropdown } from './components/ShapeBooleanDropdown';
 import { ShapeSliceDropdown } from './components/ShapeSliceDropdown';
 import { RichHoverTooltipHost } from './components/RichHoverTooltip';
 import {
-  importGoodnotesFile,
-  exportBestnotesFile,
-  createBestnotesFileBlob,
-} from './utils/goodnotesParser';
-import {
   VOLCANO_NOTEBOOK_ID,
   PHOTOSYNTHESIS_NOTEBOOK_ID,
   ACIDS_NOTEBOOK_ID,
@@ -215,17 +232,6 @@ import {
   ELECTRIC_CIRCUIT_NOTEBOOK_ID,
   CONDUCTORS_CURRENT_NOTEBOOK_ID,
 } from './data/seedIds';
-import {
-  renderPdfFileToPages,
-  renderImageFileToPage,
-  getCachedPdfPageDataUrl,
-  getBestAvailablePdfPageDataUrl,
-  ensurePdfPageDataUrl,
-  loadRawPdfFromIndexedDB,
-  saveRawPdfToIndexedDB,
-  evictPdfCachesForNotebook,
-  type PdfQualityMode,
-} from './utils/pdfAndImageImporter';
 import {
   IS_SIM_BENCH_ENABLED,
   recordBenchAppRender,
@@ -420,7 +426,6 @@ import {
 } from './components/modals';
 import { PageSettingsModal } from './components/modals/PageSettingsModal';
 import {
-  AdminPortal,
   ADMIN_EMAIL,
   useAdminRoute,
   useAppTelemetry,
@@ -9541,10 +9546,10 @@ export default function App() {
   );
 
   const handleExportBestnotesFile = useCallback(
-    (targetNotebook?: Notebook) => {
+    async (targetNotebook?: Notebook) => {
       const nb = targetNotebook ?? activeNotebook;
       try {
-        exportBestnotesFile(nb);
+        await exportBestnotesFile(nb);
         showToast(`💾 Αποθηκεύτηκε τοπικά το αρχείο «${nb.title}.bestnotes»!`);
       } catch (err: any) {
         showToast(`❌ Σφάλμα αποθήκευσης .bestnotes: ${err?.message || 'Άγνωστο σφάλμα'}`);
@@ -9557,7 +9562,7 @@ export default function App() {
     async (targetNotebook?: Notebook) => {
       const nb = targetNotebook ?? activeNotebook;
       try {
-        const { blob, fileName } = createBestnotesFileBlob(nb);
+        const { blob, fileName } = await createBestnotesFileBlob(nb);
         const bnFile = new File([blob], fileName, {
           type: 'application/json',
           lastModified: Date.now(),
@@ -9582,7 +9587,7 @@ export default function App() {
             }
           }
         }
-        exportBestnotesFile(nb);
+        await exportBestnotesFile(nb);
         showToast(`💾 Αποθηκεύτηκε τοπικά το αρχείο «${fileName}»!`);
       } catch (err: any) {
         showToast(`❌ Σφάλμα κοινοποίησης .bestnotes: ${err?.message || 'Άγνωστο σφάλμα'}`);
@@ -38727,13 +38732,19 @@ export default function App() {
       setLiveTvStatus({ connected: false, mode: 'waiting', latencyMs: null });
       return;
     }
-    const sender = new LiveTvSenderEngine('default', (st) => {
-      setLiveTvStatus(st);
+    let cancelled = false;
+    let sender: LiveTvSenderEngine | null = null;
+    void import('./utils/liveTvSync').then(({ LiveTvSenderEngine: SenderCtor }) => {
+      if (cancelled) return;
+      sender = new SenderCtor('default', (st) => {
+        setLiveTvStatus(st);
+      });
+      liveTvSenderRef.current = sender;
     });
-    liveTvSenderRef.current = sender;
     return () => {
-      sender.destroy();
-      if (liveTvSenderRef.current === sender) {
+      cancelled = true;
+      sender?.destroy();
+      if (sender && liveTvSenderRef.current === sender) {
         liveTvSenderRef.current = null;
       }
     };
@@ -38862,9 +38873,13 @@ export default function App() {
       tvTransformRafRef.current = window.requestAnimationFrame(step);
     };
 
-    const receiver = new LiveTvReceiverEngine(
-      'default',
-      (packet, via) => {
+    let cancelledRx = false;
+    let receiver: LiveTvReceiverEngine | null = null;
+    void import('./utils/liveTvSync').then(({ LiveTvReceiverEngine: ReceiverCtor }) => {
+      if (cancelledRx) return;
+      receiver = new ReceiverCtor(
+        'default',
+        (packet, via) => {
         if (packet.t === 'pages') {
           const nbId = packet.notebookId || 'nb-tv-live';
           const tvNb: Notebook = {
@@ -39029,11 +39044,13 @@ export default function App() {
         setLiveTvRxMode(mode);
       }
     );
-    liveTvReceiverRef.current = receiver;
+      liveTvReceiverRef.current = receiver;
+    });
 
     return () => {
-      receiver.destroy();
-      if (liveTvReceiverRef.current === receiver) {
+      cancelledRx = true;
+      receiver?.destroy();
+      if (receiver && liveTvReceiverRef.current === receiver) {
         liveTvReceiverRef.current = null;
       }
       if (tvTransformRafRef.current !== null) {
@@ -60088,26 +60105,41 @@ export default function App() {
 
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
-  // Dedicated Admin Portal View (ExplainBoards Admin Dashboard)
+  // Dedicated Admin Portal View (ExplainBoards Admin Dashboard — Lazy-loaded chunk)
   if (isAdminOpen) {
     return (
-      <AdminPortal
-        currentUser={currentUser}
-        notebooks={notebooks}
-        initialTab={adminInitialTab}
-        onClose={() => {
-          setAdminInitialTab(undefined);
-          setShowLibraryTreeSidebar(false);
-          setViewMode('library');
-          closeAdmin();
-        }}
-      />
+      <React.Suspense
+        fallback={
+          <div className="w-screen h-[100dvh] flex items-center justify-center bg-[#f4f1ea] text-[#234978] text-sm font-semibold">
+            Φόρτωση Admin Dashboard...
+          </div>
+        }
+      >
+        <LazyAdminPortal
+          currentUser={currentUser}
+          notebooks={notebooks}
+          initialTab={adminInitialTab}
+          onClose={() => {
+            setAdminInitialTab(undefined);
+            setShowLibraryTreeSidebar(false);
+            setViewMode('library');
+            closeAdmin();
+          }}
+        />
+      </React.Suspense>
     );
   }
 
   if (viewMode === 'landing' && !isCleanProjectorMode && !isTvReceiverMode) {
     return (
-      <LandingPage
+      <React.Suspense
+        fallback={
+          <div className="w-screen h-[100dvh] flex items-center justify-center bg-[#fdfbf7] text-[#234978] text-sm font-semibold">
+            Φόρτωση ExplainBoards...
+          </div>
+        }
+      >
+        <LazyLandingPage
         currentUser={currentUser}
         onEnterApp={() => {
           explicitLandingNavRef.current = false;
@@ -60140,6 +60172,7 @@ export default function App() {
         authMode={authMode}
         setAuthMode={setAuthMode}
       />
+      </React.Suspense>
     );
   }
 
@@ -79743,17 +79776,21 @@ export default function App() {
           );
         })()}
 
-      {/* Global Firebase Auth Modal (Google Sign-In & Email/Password Sign-In / Sign-Up) */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        mode={authMode}
-        setMode={setAuthMode}
-        onSuccess={() => {
-          setShowAuthModal(false);
-          showToast('🎉 Συνδέθηκες επιτυχώς στο BestNotes Cloud!');
-        }}
-      />
+      {/* Global Firebase Auth Modal (Lazy-loaded only when opened) */}
+      {showAuthModal && (
+        <React.Suspense fallback={null}>
+          <LazyAuthModal
+            isOpen={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+            mode={authMode}
+            setMode={setAuthMode}
+            onSuccess={() => {
+              setShowAuthModal(false);
+              showToast('🎉 Συνδέθηκες επιτυχώς στο BestNotes Cloud!');
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Heat Simulation Liquid Configuration Glass Modal */}
       <HeatLiquidConfigModal

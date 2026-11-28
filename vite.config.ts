@@ -9,29 +9,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (
-            id.includes('/src/features/admin/AdminDashboard') ||
-            id.includes('/src/features/admin/components/')
-          ) {
-            return 'feature-admin';
-          }
-          if (id.includes('/src/simulations/')) {
-            return 'feature-simulations';
-          }
+          // Keep manualChunks strictly for pure vendor libraries & static seeds.
+          // Dynamic import() boundaries (Admin, Landing, LiveTV, PDF/Drive, Library Catalogs, Simulations)
+          // are split automatically by Rollup so shared helpers stay in the entry chunk and
+          // lazy chunks NEVER leak into <link rel="modulepreload"> on startup!
           if (id.includes('/src/data/seeds/')) {
             return 'data-seeds';
-          }
-          if (
-            id.includes('/src/data/mindMapsCatalog') ||
-            id.includes('/src/data/vectors/')
-          ) {
-            return 'catalog-science';
-          }
-          if (
-            id.includes('/src/data/stickersCatalog') ||
-            id.includes('/src/data/bannerFramesCatalog')
-          ) {
-            return 'catalog-stickers';
           }
           if (id.includes('node_modules/firebase/') || id.includes('node_modules/@firebase/')) {
             return 'vendor-firebase';

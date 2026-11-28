@@ -6,7 +6,6 @@ import {
   autoTrimCanvasToVisibleBounds,
   tintMonochromeSketchDataUrl,
 } from '../utils/canvasImageTrim';
-export { autoTrimCanvasToVisibleBounds, tintMonochromeSketchDataUrl };
 
 export type StickerCategory =
   | 'Όλα'
