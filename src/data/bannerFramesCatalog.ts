@@ -16,32 +16,32 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     key: 'flag-shadow',
     title: 'Πλαίσιο Σημαία με Σκιά',
     tags: ['πλαίσιο', 'σημαία', 'κορδέλα', 'τίτλος', 'banner', 'ribbon', 'flag', 'σκιά', 'κουτί', 'επικεφαλίδα'],
-    aspectW: 340,
+    aspectW: 420,
     aspectH: 78,
   },
   {
     id: 'banner-ribbon-3d',
     key: 'ribbon-3d',
-    title: 'Κορδέλα Τίτλου 3D με Ραφή',
-    tags: ['κορδέλα', 'πλαίσιο', 'τίτλος', 'banner', 'ribbon', '3d', 'ραφή', 'επικεφαλίδα', 'σκιά'],
-    aspectW: 360,
-    aspectH: 96,
+    title: 'Κορδέλα Τίτλου 3D',
+    tags: ['κορδέλα', 'πλαίσιο', 'τίτλος', 'banner', 'ribbon', '3d', 'επικεφαλίδα', 'σκιά'],
+    aspectW: 440,
+    aspectH: 94,
   },
   {
     id: 'banner-ribbon-classic',
     key: 'ribbon-classic',
     title: 'Κλασική Κορδέλα Τίτλου',
     tags: ['κορδέλα', 'πλαίσιο', 'τίτλος', 'banner', 'ribbon', 'κλασική', 'επικεφαλίδα', 'σημειώσεις'],
-    aspectW: 340,
-    aspectH: 94,
+    aspectW: 440,
+    aspectH: 92,
   },
   {
     id: 'banner-ribbon-wave',
     key: 'ribbon-wave',
     title: 'Κυματιστή Κορδέλα Τίτλου',
     tags: ['κορδέλα', 'κυματιστή', 'καμπύλη', 'banner', 'ribbon', 'wave', 'τίτλος', 'επικεφαλίδα'],
-    aspectW: 370,
-    aspectH: 92,
+    aspectW: 440,
+    aspectH: 90,
   },
   {
     id: 'banner-ribbon-arch',
@@ -335,247 +335,242 @@ interface RawVectorPart {
 
 function getBannerNormalizedParts(key: string): RawVectorPart[] {
   switch (key) {
-    // 1. Horizontal Flag / Pennant Banner with bold lower shadow
+    // 1. Horizontal Flag / Pennant Banner with sleek compact right notch & bold lower shadow
     case 'flag-shadow':
       return [
         // Solid lower + notch drop shadow
         {
           role: 'accent-solid',
           pts: [
-            [4, 79],
-            [95, 79],
-            [83, 49],
-            [95, 22],
-            [97, 26],
-            [86, 51],
-            [97, 87],
-            [4, 87],
-            [4, 79],
+            [3, 79],
+            [96, 79],
+            [90.5, 48],
+            [96, 21],
+            [97.5, 25],
+            [92.5, 50],
+            [97.5, 86],
+            [3, 86],
+            [3, 79],
           ],
           widthScale: 0.7,
         },
-        // Main fillable flag body
+        // Main fillable flag body (compact crisp notch)
         {
           role: 'body',
           pts: [
-            [4, 16],
-            [95, 16],
-            [81, 47],
-            [95, 79],
-            [4, 79],
-            [4, 16],
+            [3, 16],
+            [96, 16],
+            [89.5, 47.5],
+            [96, 79],
+            [3, 79],
+            [3, 16],
           ],
         },
       ];
 
-    // 2. Classic 3D Ribbon Banner with notched ends & bold folded shadows (clean center, no dashed lines)
+    // 2. Classic 3D Ribbon Banner with sleek compact swallowtail ends & bold folded shadows
     case 'ribbon-3d':
       return [
-        // Left tail shadow
+        // Left compact tail shadow
         {
           role: 'accent-solid',
           pts: [
-            [5, 81],
-            [27, 81],
-            [27, 88],
-            [5, 88],
-            [15, 57],
-            [5, 34],
-            [8, 34],
-            [18, 57],
-            [5, 81],
+            [3, 81],
+            [15.5, 81],
+            [15.5, 87],
+            [3, 87],
+            [7.2, 57],
+            [3, 35],
+            [4.5, 35],
+            [8.6, 57],
+            [3, 81],
           ],
           widthScale: 0.6,
         },
-        // Right tail shadow
+        // Right compact tail shadow
         {
           role: 'accent-solid',
           pts: [
-            [73, 81],
-            [95, 81],
-            [85, 57],
-            [95, 34],
-            [92, 34],
-            [82, 57],
-            [95, 88],
-            [73, 88],
-            [73, 81],
+            [84.5, 81],
+            [97, 81],
+            [92.8, 57],
+            [97, 35],
+            [95.5, 35],
+            [91.4, 57],
+            [97, 87],
+            [84.5, 87],
+            [84.5, 81],
           ],
           widthScale: 0.6,
         },
-        // Left tail body (flush with center box left edge x=19 — zero inner line)
+        // Left compact tail body (flush with center box left edge x=12)
         {
           role: 'body',
           pts: [
-            [5, 32],
-            [19, 32],
-            [19, 65],
-            [27, 81],
-            [5, 81],
-            [15, 56],
-            [5, 32],
+            [3, 33],
+            [12, 33],
+            [12, 66],
+            [15.5, 81],
+            [3, 81],
+            [6.8, 57],
+            [3, 33],
           ],
         },
-        // Right tail body (flush with center box right edge x=81 — zero inner line)
+        // Right compact tail body (flush with center box right edge x=88)
         {
           role: 'body',
           pts: [
-            [81, 32],
-            [95, 32],
-            [85, 56],
-            [95, 81],
-            [73, 81],
-            [81, 65],
-            [81, 32],
+            [88, 33],
+            [97, 33],
+            [93.2, 57],
+            [97, 81],
+            [84.5, 81],
+            [88, 66],
+            [88, 33],
           ],
         },
         // Dark folded under-ribbon shadow bar
         {
           role: 'accent-solid',
           pts: [
-            [19, 65],
-            [81, 65],
-            [73, 81],
-            [73, 73],
-            [27, 73],
-            [27, 81],
-            [19, 65],
+            [12, 66],
+            [88, 66],
+            [84.5, 81],
+            [84.5, 73],
+            [15.5, 73],
+            [15.5, 81],
+            [12, 66],
           ],
           widthScale: 0.6,
         },
-        // Main center ribbon box (fillable, completely clean interior)
+        // Main spacious center ribbon box (x=12..88)
         {
           role: 'body',
           pts: [
-            [19, 11],
-            [81, 11],
-            [81, 65],
-            [19, 65],
-            [19, 11],
+            [12, 11],
+            [88, 11],
+            [88, 66],
+            [12, 66],
+            [12, 11],
           ],
         },
       ];
 
-    // 3. Clean Notebook Classic Folded Ribbon Banner
+    // 3. Clean Notebook Classic Folded Ribbon Banner (sleek compact tails)
     case 'ribbon-classic':
       return [
-        // Left tail (flush with center box left edge x=21)
+        // Left compact tail (flush with center box left edge x=12)
         {
           role: 'body',
           pts: [
-            [5, 34],
-            [21, 34],
-            [21, 63],
-            [29, 84],
-            [5, 84],
-            [14, 59],
-            [5, 34],
+            [3, 34],
+            [12, 34],
+            [12, 64],
+            [15.5, 83],
+            [3, 83],
+            [6.8, 58.5],
+            [3, 34],
           ],
         },
-        // Right tail (flush with center box right edge x=79)
+        // Right compact tail (flush with center box right edge x=88)
         {
           role: 'body',
           pts: [
-            [79, 34],
-            [95, 34],
-            [86, 59],
-            [95, 84],
-            [71, 84],
-            [79, 63],
-            [79, 34],
+            [88, 34],
+            [97, 34],
+            [93.2, 58.5],
+            [97, 83],
+            [84.5, 83],
+            [88, 64],
+            [88, 34],
           ],
         },
-        // Left fold triangle
+        // Left compact fold triangle
         {
           role: 'accent-solid',
           pts: [
-            [21, 63],
-            [29, 63],
-            [29, 84],
-            [21, 63],
+            [12, 64],
+            [15.5, 64],
+            [15.5, 83],
+            [12, 64],
           ],
           widthScale: 0.7,
         },
-        // Right fold triangle
+        // Right compact fold triangle
         {
           role: 'accent-solid',
           pts: [
-            [79, 63],
-            [71, 63],
-            [71, 84],
-            [79, 63],
+            [88, 64],
+            [84.5, 64],
+            [84.5, 83],
+            [88, 64],
           ],
           widthScale: 0.7,
         },
-        // Main center banner box
+        // Main spacious center banner box (x=12..88)
         {
           role: 'body',
           pts: [
-            [21, 14],
-            [79, 14],
-            [79, 63],
-            [21, 63],
-            [21, 14],
+            [12, 14],
+            [88, 14],
+            [88, 64],
+            [12, 64],
+            [12, 14],
           ],
         },
       ];
 
-    // 4. Wavy Flowing Ribbon Banner (tails flush along outer center edges — zero inner lines)
+    // 4. Wavy Flowing Ribbon Banner (compact sleek tails flush along outer center edges)
     case 'ribbon-wave': {
-      const centerTop = sampleQuad([18, 22], [50, 8], [82, 22], 14);
-      const centerRight = sampleQuad([82, 22], [79, 44], [83, 66], 8);
-      const centerBot = sampleQuad([83, 66], [50, 52], [17, 66], 14);
-      const centerLeft = sampleQuad([17, 66], [21, 44], [18, 22], 8);
-      // Exact shared edge segments where tails meet the center ribbon (indices 0..5 of centerLeft/Right)
-      const leftSharedEdgeUp: Array<[number, number]> = [[17, 66], ...centerLeft.slice(0, 6)];
+      const centerTop = sampleQuad([12, 22], [50, 9], [88, 22], 14);
+      const centerRight = sampleQuad([88, 22], [86.5, 44], [88.5, 66], 8);
+      const centerBot = sampleQuad([88.5, 66], [50, 53], [11.5, 66], 14);
+      const centerLeft = sampleQuad([11.5, 66], [13.5, 44], [12, 22], 8);
+      const leftSharedEdgeUp: Array<[number, number]> = [[11.5, 66], ...centerLeft.slice(0, 6)];
       const leftAttach = leftSharedEdgeUp[leftSharedEdgeUp.length - 1];
       const rightSharedEdgeDown: Array<[number, number]> = centerRight.slice(2);
       const rightAttach = rightSharedEdgeDown[0];
       const rightSharedEdgeUp: Array<[number, number]> = [...rightSharedEdgeDown].reverse();
 
-      const leftTailTop = sampleQuad(leftAttach, [12, 42], [5, 36], 8);
-      const leftTailNotch1 = sampleQuad([5, 36], [11, 47], [14, 58], 6);
-      const leftTailNotch2 = sampleQuad([14, 58], [8, 68], [5, 84], 6);
-      const leftTailBot = sampleQuad([5, 84], [16, 78], [24, 70], 8);
-      const rightTailTop = sampleQuad(rightAttach, [88, 42], [95, 36], 8);
-      const rightTailNotch1 = sampleQuad([95, 36], [89, 47], [86, 58], 6);
-      const rightTailNotch2 = sampleQuad([86, 58], [92, 68], [95, 84], 6);
-      const rightTailBot = sampleQuad([95, 84], [84, 78], [76, 70], 8);
+      const leftTailTop = sampleQuad(leftAttach, [8, 41], [3, 36], 6);
+      const leftTailNotch1 = sampleQuad([3, 36], [6, 47], [7.5, 58], 5);
+      const leftTailNotch2 = sampleQuad([7.5, 58], [5, 68], [3, 83], 5);
+      const leftTailBot = sampleQuad([3, 83], [9.5, 78], [15.5, 70], 6);
+      const rightTailTop = sampleQuad(rightAttach, [92, 41], [97, 36], 6);
+      const rightTailNotch1 = sampleQuad([97, 36], [94, 47], [92.5, 58], 5);
+      const rightTailNotch2 = sampleQuad([92.5, 58], [95, 68], [97, 83], 5);
+      const rightTailBot = sampleQuad([97, 83], [90.5, 78], [84.5, 70], 6);
       return [
-        // Left wavy tail (closes along shared outer edge — zero inner line)
         {
           role: 'body',
           pts: [leftAttach, ...leftTailTop, ...leftTailNotch1, ...leftTailNotch2, ...leftTailBot, ...leftSharedEdgeUp],
         },
-        // Right wavy tail (closes along shared outer edge — zero inner line)
         {
           role: 'body',
           pts: [rightAttach, ...rightTailTop, ...rightTailNotch1, ...rightTailNotch2, ...rightTailBot, ...rightSharedEdgeUp],
         },
-        // Left & right fold triangles (hugging exact centerBot curve points — zero protrusion)
         {
           role: 'accent-solid',
           pts: [
-            ...centerBot.slice(11),
-            [24, 70],
-            centerBot[11],
+            ...centerBot.slice(12),
+            [15.5, 70],
+            centerBot[12],
           ],
           widthScale: 0.65,
         },
         {
           role: 'accent-solid',
           pts: [
-            [83, 66],
-            ...centerBot.slice(0, 3),
-            [76, 70],
-            [83, 66],
+            [88.5, 66],
+            ...centerBot.slice(0, 2),
+            [84.5, 70],
+            [88.5, 66],
           ],
           widthScale: 0.65,
         },
-        // Main arched ribbon body
         {
           role: 'body',
-          pts: [[18, 22], ...centerTop, ...centerRight, ...centerBot, ...centerLeft],
+          pts: [[12, 22], ...centerTop, ...centerRight, ...centerBot, ...centerLeft],
         },
       ];
     }
@@ -1931,66 +1926,66 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
-    // 24. Wide Page-Title Header: Elegant Full-Width Ribbon Banner (620×98 — compact crisp tails)
+    // 24. Wide Page-Title Header: Elegant Full-Width Ribbon Banner (620×98 — sleek petite swallowtails)
     case 'header-ribbon-banner-wide':
       return [
-        // Left compact swallowtail (flush with center left edge x=11)
+        // Left petite swallowtail (flush with center left edge x=8)
         {
           role: 'body',
           pts: [
-            [1.5, 32],
-            [11, 32],
-            [11, 68],
-            [15.5, 86],
-            [1.5, 86],
-            [5.8, 59],
-            [1.5, 32],
+            [2, 33],
+            [8, 33],
+            [8, 69],
+            [10.5, 85],
+            [2, 85],
+            [4.4, 59],
+            [2, 33],
           ],
         },
-        // Right compact swallowtail (flush with center right edge x=89)
+        // Right petite swallowtail (flush with center right edge x=92)
         {
           role: 'body',
           pts: [
-            [89, 32],
-            [98.5, 32],
-            [94.2, 59],
-            [98.5, 86],
-            [84.5, 86],
-            [89, 68],
-            [89, 32],
+            [92, 33],
+            [98, 33],
+            [95.6, 59],
+            [98, 85],
+            [89.5, 85],
+            [92, 69],
+            [92, 33],
           ],
         },
-        // Left fold shadow triangle
+        // Left petite fold shadow triangle
         {
           role: 'accent-solid',
           pts: [
-            [11, 68],
-            [15.5, 68],
-            [15.5, 86],
-            [11, 68],
+            [8, 69],
+            [10.5, 69],
+            [10.5, 85],
+            [8, 69],
           ],
           widthScale: 0.65,
         },
-        // Right fold shadow triangle
+        // Right petite fold shadow triangle
         {
           role: 'accent-solid',
           pts: [
-            [89, 68],
-            [84.5, 68],
-            [84.5, 86],
-            [89, 68],
+            [92, 69],
+            [89.5, 69],
+            [89.5, 85],
+            [92, 69],
           ],
           widthScale: 0.65,
         },
-        // Wide spacious center title banner box (x=11..89)
+        // Huge spacious center title banner box (x=8..92)
         {
           role: 'body',
           pts: [
-            [11, 11],
-            [89, 11],
-            [89, 68],
-            [11, 68],
-            [11, 11],
+            [8, 12],
+            [92, 12],
+            [92, 69],
+            [8, 69],
+            [8, 12],
           ],
         },
       ];
