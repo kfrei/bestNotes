@@ -79775,7 +79775,7 @@ export default function App() {
                   },
                   {
                     keys: 'CC / ΨΨ',
-                    label: 'Μπλε (Blue)',
+                    label: 'Μπλε (Ciel)',
                     icon: <span className="w-3 h-3 rounded-full bg-[#2563eb] border border-white/80 shadow-2xs shrink-0" />,
                   },
                   { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
