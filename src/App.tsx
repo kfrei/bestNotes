@@ -78160,7 +78160,7 @@ export default function App() {
                               </div>
                             )}
 
-                            {/* 0-Origin Flip Arrow (Σκέτο βελάκι στην άκρη του 0 για αλλαγή αρχής: Αριστερά ↔ Δεξιά ή Επάνω ↔ Κάτω) */}
+                            {/* 0-Origin Single Navy Arrow + 0 Label (Μονό σκούρο μπλε βελάκι πάνω από το 0 μέσα στον χάρακα — κλικ/tap για αλλαγή αρχής) */}
                             <button
                               type="button"
                               data-ui-panel="true"
@@ -78184,21 +78184,41 @@ export default function App() {
                                   };
                                 }, pageObj.id);
                               }}
-                              className="absolute left-0 inset-y-0 w-6 z-20 flex items-center justify-center text-slate-700/85 hover:text-[#234978] active:scale-90 cursor-pointer transition outline-none"
+                              className="absolute left-0.5 inset-y-0 w-7 z-20 flex flex-col items-center justify-center gap-[2px] text-[#234978] hover:text-[#1d4ed8] active:scale-90 cursor-pointer transition outline-none"
                             >
                               <svg
-                                className="w-4 h-4 shrink-0"
-                                viewBox="0 0 16 16"
+                                className="w-4 h-3 shrink-0"
+                                viewBox="0 0 18 12"
                                 fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
                               >
-                                <polyline points="5.5 4.2 2 8 5.5 11.8" />
-                                <polyline points="10.5 4.2 14 8 10.5 11.8" />
-                                <line x1="2.5" y1="8" x2="13.5" y2="8" />
+                                <line
+                                  x1="2"
+                                  y1="6"
+                                  x2="9.5"
+                                  y2="6"
+                                  stroke="currentColor"
+                                  strokeWidth="2.4"
+                                  strokeLinecap="round"
+                                />
+                                <path
+                                  d="M 9.2 2.1 L 15.6 6 L 9.2 9.9 Z"
+                                  fill="currentColor"
+                                  stroke="currentColor"
+                                  strokeWidth="1.2"
+                                  strokeLinejoin="round"
+                                />
                               </svg>
+                              {pageRuler.showMm && (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    transform: `rotate(${-pageRuler.angle}deg)`,
+                                  }}
+                                  className="text-[9.5px] font-mono font-extrabold text-slate-800 leading-none select-none"
+                                >
+                                  0
+                                </span>
+                              )}
                             </button>
 
                             {/* Far-End Interactive Resize Grip (Σύρετε με δάχτυλο ή ποντίκι στην άκρη του χάρακα για μείωση/αύξηση μεγέθους) */}
