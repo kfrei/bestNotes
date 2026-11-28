@@ -166,10 +166,10 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
   {
     id: 'banner-lightning-triple-vertical',
     key: 'lightning-triple-vertical',
-    title: 'Κεραυνοί 3D Κατακόρυφοι',
+    title: 'Κεραυνός 3D (Μαύρο Περίγραμμα)',
     tags: ['κεραυνός', 'κεραυνοί', 'αστραπή', 'ενέργεια', 'ηλεκτρισμός', 'κόμικ', 'lightning', 'bolt', 'flash', '3d', 'εφέ'],
-    aspectW: 210,
-    aspectH: 260,
+    aspectW: 120,
+    aspectH: 210,
   },
 ];
 
@@ -1627,55 +1627,24 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       return parts;
     }
 
-    // 20. Vertical Triple 3D Comic Lightning Bolts (fanned upward with bold black 3D drop shadows)
+    // 20. Clean Iconic Vertical 3D Comic Lightning Bolt (zero self-intersection, crisp black outline + gradient fill)
     case 'lightning-triple-vertical': {
-      // Helper to offset a bolt polygon slightly for a crisp 3D comic drop shadow
-      const shiftPts = (pts: Array<[number, number]>, dx: number, dy: number): Array<[number, number]> =>
-        pts.map(([x, y]) => [x + dx, y + dy]);
-
-      // Left-angled bolt (fanning up-left from bottom-left)
-      const leftBolt: Array<[number, number]> = [
-        [24, 90],
-        [18, 56],
-        [25, 58],
-        [10, 14],
-        [25, 11],
-        [33, 49],
-        [26, 48],
-        [24, 90],
+      const bolt: Array<[number, number]> = [
+        [38, 6],
+        [72, 6],
+        [52, 44],
+        [76, 44],
+        [26, 95],
+        [44, 55],
+        [22, 55],
+        [38, 6],
       ];
-      // Center tall vertical bolt (main prominent lightning bolt)
-      const centerBolt: Array<[number, number]> = [
-        [49, 93],
-        [44, 52],
-        [52, 54],
-        [43, 7],
-        [61, 7],
-        [59, 46],
-        [52, 45],
-        [49, 93],
-      ];
-      // Right-angled bolt (fanning up-right from bottom-right)
-      const rightBolt: Array<[number, number]> = [
-        [72, 90],
-        [74, 55],
-        [81, 58],
-        [78, 16],
-        [93, 21],
-        [86, 51],
-        [79, 49],
-        [72, 90],
-      ];
-
+      const shadowBolt: Array<[number, number]> = bolt.map(([x, y]) => [x + 5, y + 2.5]);
       return [
-        // Bold dark 3D drop shadows behind each bolt
-        { role: 'accent-solid', pts: shiftPts(leftBolt, 3.2, 2.2), widthScale: 0.65 },
-        { role: 'accent-solid', pts: shiftPts(centerBolt, 3.8, 2.2), widthScale: 0.65 },
-        { role: 'accent-solid', pts: shiftPts(rightBolt, 3.2, 2.2), widthScale: 0.65 },
-        // 3 fillable lightning bolt bodies (crisp black outline + chosen fill color)
-        { role: 'body', pts: leftBolt },
-        { role: 'body', pts: centerBolt },
-        { role: 'body', pts: rightBolt },
+        // Crisp black 3D drop shadow behind the lightning bolt
+        { role: 'accent-solid', pts: shadowBolt, widthScale: 0.7 },
+        // Clean fillable lightning bolt body (always black outline, gradient fill in chosen color)
+        { role: 'body', pts: bolt },
       ];
     }
 
@@ -1791,10 +1760,12 @@ export function createBannerFrameStrokes(
       : fillStyle;
   const bodyFillTrans =
     key === 'lightning-triple-vertical'
-      ? 10
+      ? 5
       : !isDarkColor && fillStyle === 'none'
       ? Math.min(80, fillTransparency)
       : fillTransparency;
+  const bodyFillGrad =
+    key === 'lightning-triple-vertical' && fillGradient === 0 ? 55 : fillGradient;
 
   return parts.map((part, idx) => {
     const pts = toWorldPts(part.pts, x0, y0, def.aspectW, def.aspectH);
@@ -1867,7 +1838,7 @@ export function createBannerFrameStrokes(
         fillColor: resolvedFillHex,
         fillStyle: bodyFillStyle,
         fillTransparency: bodyFillTrans,
-        fillGradient,
+        fillGradient: bodyFillGrad,
         width,
         opacity: 1,
         points: pts,
