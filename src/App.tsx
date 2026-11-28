@@ -40663,7 +40663,11 @@ export default function App() {
                 symmetryAxis: isEqualSides && oppPt ? [oppPt, snappedPt] : undefined,
                 badgeLabel: isEqualSides
                   ? isRightAngle
-                    ? '□ Τετράγωνο (1:1)'
+                    ? s1Len < 116
+                      ? '1:1'
+                      : '□ Τετράγωνο (1:1)'
+                    : s1Len < 116
+                    ? '1:1'
                     : '◇ Ρόμβος (1:1)'
                   : undefined,
                 angleArcs: c1.angleArcs,
@@ -40707,7 +40711,7 @@ export default function App() {
           refEdge: best.refEdge,
           kind: isEqualSideSnap ? 'symmetry' : best.kind,
           symmetryAxis: isEqualSideSnap ? [best.anchor, snappedPt] : undefined,
-          badgeLabel: isEqualSideSnap ? '□ Τετράγωνο (1:1)' : undefined,
+          badgeLabel: isEqualSideSnap ? (Math.abs(projT) < 116 ? '1:1' : '□ Τετράγωνο (1:1)') : undefined,
           angleArcs: best.angleArcs,
         },
       ],
@@ -41538,6 +41542,7 @@ export default function App() {
   };
 
   // Draws a crisp 1:1 Equal-Dimensions Visual Guide (Circle ◯ or Square □) when stretching a shape/ellipse/rectangle to 1:1 aspect ratio!
+  // For small shapes (< 116px), hides long words ("Κύκλος"/"Τετράγωνο") and shows a crisp luminous 1:1 flash + compact "1:1" badge.
   const drawOneToOneSnapOverlay = (
     cx: number,
     cy: number,
@@ -41547,16 +41552,31 @@ export default function App() {
   ) => {
     clearActiveOverlay();
     const aCtx = activeCtxRef.current;
-    if (!aCtx || halfDim < 8) return;
+    if (!aCtx || halfDim < 4) return;
+
+    const isCompactShape = halfDim < 58;
 
     aCtx.save();
     aCtx.translate(cx, cy);
     aCtx.rotate(angleRad);
 
-    // 1. Dashed 1:1 reference outline (Circle or Square)
-    aCtx.strokeStyle = 'rgba(124, 58, 237, 0.85)';
-    aCtx.lineWidth = 1.8;
-    aCtx.setLineDash([6, 4]);
+    // 1. Luminous 1:1 flash outline (stronger brief-flash feel on compact shapes so lock is unmistakable without covering the shape!)
+    aCtx.save();
+    if (isCompactShape) {
+      aCtx.shadowColor = 'rgba(124, 58, 237, 0.78)';
+      aCtx.shadowBlur = 11;
+      aCtx.fillStyle = 'rgba(139, 92, 246, 0.14)';
+      aCtx.beginPath();
+      if (kind === 'circle') {
+        aCtx.arc(0, 0, halfDim, 0, Math.PI * 2);
+      } else {
+        aCtx.rect(-halfDim, -halfDim, halfDim * 2, halfDim * 2);
+      }
+      aCtx.fill();
+    }
+    aCtx.strokeStyle = isCompactShape ? 'rgba(124, 58, 237, 0.96)' : 'rgba(124, 58, 237, 0.85)';
+    aCtx.lineWidth = isCompactShape ? 2.2 : 1.8;
+    aCtx.setLineDash(isCompactShape ? [] : [6, 4]);
     aCtx.beginPath();
     if (kind === 'circle') {
       aCtx.arc(0, 0, halfDim, 0, Math.PI * 2);
@@ -41564,21 +41584,24 @@ export default function App() {
       aCtx.rect(-halfDim, -halfDim, halfDim * 2, halfDim * 2);
     }
     aCtx.stroke();
+    aCtx.restore();
 
-    // 2. Dashed equal-diameter / equal-side orthogonal axes
-    aCtx.strokeStyle = 'rgba(139, 92, 246, 0.75)';
-    aCtx.lineWidth = 1.5;
-    aCtx.setLineDash([4, 4]);
-    aCtx.beginPath();
-    aCtx.moveTo(-halfDim, 0);
-    aCtx.lineTo(halfDim, 0);
-    aCtx.moveTo(0, -halfDim);
-    aCtx.lineTo(0, halfDim);
-    aCtx.stroke();
+    // 2. Dashed equal-diameter / equal-side orthogonal axes (only on medium/large shapes to avoid clutter on tiny shapes)
+    if (!isCompactShape) {
+      aCtx.strokeStyle = 'rgba(139, 92, 246, 0.75)';
+      aCtx.lineWidth = 1.5;
+      aCtx.setLineDash([4, 4]);
+      aCtx.beginPath();
+      aCtx.moveTo(-halfDim, 0);
+      aCtx.lineTo(halfDim, 0);
+      aCtx.moveTo(0, -halfDim);
+      aCtx.lineTo(0, halfDim);
+      aCtx.stroke();
+    }
 
     // 3. Double equality ticks ("||") on the horizontal and vertical half-axes
     aCtx.setLineDash([]);
-    if (halfDim >= 24) {
+    if (!isCompactShape && halfDim >= 24) {
       const rMid = halfDim * 0.56;
       const tickHalf = 5;
       const drawDoubleTick = (tx: number, ty: number, isHorizAxis: boolean) => {
@@ -41614,20 +41637,27 @@ export default function App() {
       drawDoubleTick(0, -rMid, false);
     }
 
-    // 4. Upright center pill badge: "◯ Κύκλος (1:1)" or "□ Τετράγωνο (1:1)"
+    // 4. Upright badge: full "◯ Κύκλος (1:1)" / "□ Τετράγωνο (1:1)" for normal shapes; compact "1:1" flash pill for small shapes
     aCtx.rotate(-angleRad);
-    aCtx.font = 'bold 11px sans-serif';
-    const label = kind === 'circle' ? '◯ Κύκλος (1:1)' : '□ Τετράγωνο (1:1)';
+    aCtx.font = isCompactShape ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
+    const label = isCompactShape
+      ? '1:1'
+      : kind === 'circle'
+      ? '◯ Κύκλος (1:1)'
+      : '□ Τετράγωνο (1:1)';
     const tw = aCtx.measureText(label).width;
-    aCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    aCtx.strokeStyle = '#7c3aed';
+    const padX = isCompactShape ? 6 : 8;
+    const pillH = isCompactShape ? 17 : 20;
+    const badgeY = isCompactShape && halfDim < 28 ? -halfDim - pillH / 2 - 6 : 0;
+    aCtx.fillStyle = isCompactShape ? 'rgba(124, 58, 237, 0.94)' : 'rgba(255, 255, 255, 0.95)';
+    aCtx.strokeStyle = isCompactShape ? '#ffffff' : '#7c3aed';
     aCtx.lineWidth = 1.6;
     aCtx.beginPath();
-    aCtx.roundRect(-tw / 2 - 8, -10, tw + 16, 20, 10);
+    aCtx.roundRect(-tw / 2 - padX, badgeY - pillH / 2, tw + padX * 2, pillH, pillH / 2);
     aCtx.fill();
     aCtx.stroke();
-    aCtx.fillStyle = '#5b21b6';
-    aCtx.fillText(label, -tw / 2, 4);
+    aCtx.fillStyle = isCompactShape ? '#ffffff' : '#5b21b6';
+    aCtx.fillText(label, -tw / 2, badgeY + 3.5);
 
     aCtx.restore();
   };
@@ -48265,7 +48295,7 @@ export default function App() {
                     refEdge: [ellipseCircleRecenter.n1Pt, ellipseCircleRecenter.n2Pt],
                     kind: 'symmetry',
                     symmetryAxis: [oppPt, circlePt],
-                    badgeLabel: '◯ Κύκλος (1:1)',
+                    badgeLabel: perpDiam < 116 ? '1:1' : '◯ Κύκλος (1:1)',
                   },
                 ];
               }
@@ -49107,6 +49137,7 @@ export default function App() {
             ((selStrokesList[0].shapeType === 'ellipse' ||
               selStrokesList[0].shapeType === 'circle') ||
               ((selStrokesList[0].shapeType === 'rectangle' ||
+                selStrokesList[0].shapeType === 'title-box' ||
                 selStrokesList[0].shapeType === 'parallelogram' ||
                 selStrokesList[0].shapeType === 'trapezoid' ||
                 selStrokesList[0].shapeType === 'cuboid' ||
@@ -49130,11 +49161,14 @@ export default function App() {
           const curDim = tf.mode === 'scale-x' ? curW : curH;
           const targetDim = tf.mode === 'scale-x' ? curH : curW;
           const candDim = curDim * (rawSpan / Math.max(1, tf.initialDist));
-          const snapTol1to1 = Math.max(15, Math.min(30, targetDim * 0.11));
+          const snapTol1to1 =
+            targetDim < 80
+              ? Math.max(8, targetDim * 0.16)
+              : Math.max(14, Math.min(28, targetDim * 0.11));
           const isSnapped1to1 =
             canSnap1to1Shape &&
-            curW >= 12 &&
-            curH >= 12 &&
+            curW >= 8 &&
+            curH >= 8 &&
             Math.abs(candDim - targetDim) <= snapTol1to1;
 
           let scaleFactor: number;
