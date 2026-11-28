@@ -66189,16 +66189,12 @@ export default function App() {
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#e8e2d6] text-xs">
                 <span className="text-[11px] font-semibold text-[#64748b] leading-tight">Επιλογή Νέου Χρώματος:</span>
                 <label
-                  className="relative w-20 h-8 rounded-xl cursor-pointer border border-[#d6cfc2] shadow-inner overflow-hidden shrink-0 hover:scale-[1.03] active:scale-[0.98] transition-transform"
+                  className="relative w-20 h-8 rounded-md cursor-pointer border border-[#d6cfc2] shadow-inner overflow-hidden shrink-0 hover:scale-[1.03] active:scale-[0.98] transition-transform"
                   title="Κλικ για επιλογή απόχρωσης από το φάσμα"
                   style={{
                     background: `linear-gradient(to top, rgba(15,23,42,0.72) 0%, rgba(15,23,42,0) 62%), linear-gradient(to right, rgba(255,255,255,0.9) 0%, ${strokeColor} 78%)`,
                   }}
                 >
-                  <span
-                    className="absolute right-1.5 top-1.5 w-3 h-3 rounded-full border border-white/95 shadow-xs pointer-events-none"
-                    style={{ backgroundColor: strokeColor }}
-                  />
                   <input
                     type="color"
                     value={strokeColor}
