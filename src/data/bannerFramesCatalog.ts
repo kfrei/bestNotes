@@ -222,6 +222,14 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectH: 118,
   },
   {
+    id: 'banner-badge-exclamation-shadow',
+    key: 'badge-exclamation-shadow',
+    title: 'Θαυμαστικό 3D με Σκιά (!)',
+    tags: ['θαυμαστικό', 'προσοχή', 'σκιά', 'σημαντικό', 'sos', 'alert', 'exclamation', 'shadow', '3d', '!'],
+    aspectW: 86,
+    aspectH: 126,
+  },
+  {
     id: 'banner-pushpin-horizontal',
     key: 'pushpin-horizontal',
     title: 'Πινέζα Οριζόντια',
@@ -2109,6 +2117,37 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       ];
     }
 
+    // 26b. Bold Exclamation Mark with Soft Offset Drop Shadow (no radial rays, always black outline + variable fill)
+    case 'badge-exclamation-shadow': {
+      const ar = 86 / 126; // ~0.683
+      // Slightly organic tapered comic exclamation wedge
+      const wedgePts: Array<[number, number]> = [
+        [24, 10],
+        [74, 18],
+        ...sampleQuad([74, 18], [60, 44], [52, 69], 8),
+        [33, 69],
+        ...sampleQuad([33, 69], [34, 40], [24, 10], 8),
+      ];
+      const wedgeShadow: Array<[number, number]> = wedgePts.map(([x, y]) => [x + 9, y + 5.5]);
+      // Aspect-true circular dot
+      const rY = 9.5;
+      const rX = rY / ar; // true circle in world pixels
+      const dotPts: Array<[number, number]> = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        dotPts.push([41 + Math.cos(a) * rX, 83 + Math.sin(a) * rY]);
+      }
+      const dotShadow: Array<[number, number]> = dotPts.map(([x, y]) => [x + 8.5, y + 5.5]);
+      return [
+        // Soft borderless drop shadows behind wedge & dot
+        { role: 'shade-soft', shadeTrans: 70, shadeGrad: 45, pts: wedgeShadow },
+        { role: 'shade-soft', shadeTrans: 70, shadeGrad: 45, pts: dotShadow },
+        // Main fillable wedge & dot (always crisp black outline, variable fill + gradient)
+        { role: 'body', pts: wedgePts },
+        { role: 'body', pts: dotPts },
+      ];
+    }
+
     // 27. Horizontal 3D Pushpin (clean — NO 3 motion lines, always black outline + variable fill)
     case 'pushpin-horizontal': {
       return [
@@ -2243,12 +2282,13 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
   const isSolidColorIcon =
     key === 'lightning-triple-vertical' ||
     key === 'badge-exclamation-burst' ||
+    key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
     key === 'pushpin-angled';
   const fillTint = isDarkDefault
     ? key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst'
       ? '#facc15'
-      : key === 'pushpin-horizontal' || key === 'pushpin-angled'
+      : key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled'
       ? '#ef4444'
       : '#64748b'
     : color;
@@ -2325,12 +2365,13 @@ export function createBannerFrameStrokes(
   const isAccentColorIcon =
     key === 'lightning-triple-vertical' ||
     key === 'badge-exclamation-burst' ||
+    key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
     key === 'pushpin-angled';
   const resolvedFillHex =
     isDarkColor && (key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst')
       ? '#facc15'
-      : isDarkColor && (key === 'pushpin-horizontal' || key === 'pushpin-angled')
+      : isDarkColor && (key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled')
       ? '#ef4444'
       : color || '#2563eb';
   const bodyFillStyle =
