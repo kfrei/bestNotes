@@ -21,6 +21,18 @@ export default defineConfig({
           if (id.includes('/src/data/seeds/')) {
             return 'data-seeds';
           }
+          if (
+            id.includes('/src/data/mindMapsCatalog') ||
+            id.includes('/src/data/vectors/')
+          ) {
+            return 'catalog-science';
+          }
+          if (
+            id.includes('/src/data/stickersCatalog') ||
+            id.includes('/src/data/bannerFramesCatalog')
+          ) {
+            return 'catalog-stickers';
+          }
           if (id.includes('node_modules/firebase/') || id.includes('node_modules/@firebase/')) {
             return 'vendor-firebase';
           }
