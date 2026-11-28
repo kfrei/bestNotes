@@ -171,6 +171,47 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 120,
     aspectH: 210,
   },
+  // --- Φαρδιά Πλαίσια Τίτλου Σελίδας (Native ~6:1 αναλογία, χωρίς παραμόρφωση) ---
+  {
+    id: 'banner-header-spiral-wide',
+    key: 'header-spiral-wide',
+    title: 'Τίτλος Σελίδας: Σπιράλ (Φαρδύ)',
+    tags: ['τίτλος', 'σελίδας', 'επικεφαλίδα', 'φαρδύ', 'σπιράλ', 'μπλοκ', 'header', 'wide', 'title', 'spiral', 'πλαίσιο'],
+    aspectW: 620,
+    aspectH: 106,
+  },
+  {
+    id: 'banner-header-corner-ribbon-wide',
+    key: 'header-corner-ribbon-wide',
+    title: 'Τίτλος Σελίδας: Γωνιακή Κορδέλα (Φαρδύ)',
+    tags: ['τίτλος', 'σελίδας', 'επικεφαλίδα', 'φαρδύ', 'κορδέλα', 'κάρτα', 'header', 'wide', 'title', 'ribbon', 'πλαίσιο'],
+    aspectW: 620,
+    aspectH: 98,
+  },
+  {
+    id: 'banner-header-comic-wide',
+    key: 'header-comic-wide',
+    title: 'Τίτλος Σελίδας: Κόμικ Έκρηξη (Φαρδύ)',
+    tags: ['τίτλος', 'σελίδας', 'επικεφαλίδα', 'φαρδύ', 'κόμικ', 'έκρηξη', 'αστέρια', 'header', 'wide', 'comic', 'πλαίσιο'],
+    aspectW: 620,
+    aspectH: 116,
+  },
+  {
+    id: 'banner-header-ribbon-banner-wide',
+    key: 'header-ribbon-banner-wide',
+    title: 'Τίτλος Σελίδας: Κορδέλα Banner (Φαρδύ)',
+    tags: ['τίτλος', 'σελίδας', 'επικεφαλίδα', 'φαρδύ', 'κορδέλα', 'banner', 'ribbon', 'header', 'wide', 'πλαίσιο'],
+    aspectW: 620,
+    aspectH: 98,
+  },
+  {
+    id: 'banner-header-taped-banner-wide',
+    key: 'header-taped-banner-wide',
+    title: 'Τίτλος Σελίδας: Με Ταινίες (Φαρδύ)',
+    tags: ['τίτλος', 'σελίδας', 'επικεφαλίδα', 'φαρδύ', 'ταινίες', 'tape', 'header', 'wide', 'title', 'πλαίσιο'],
+    aspectW: 620,
+    aspectH: 100,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -1647,6 +1688,378 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
         { role: 'body', pts: bolt },
       ];
     }
+
+    // 21. Wide Page-Title Header: Spiral Pad (620×106 — aspect-true circular holes & 14 crisp wire rings)
+    case 'header-spiral-wide': {
+      const ar = 620 / 106; // ~5.85:1
+      const parts: RawVectorPart[] = [
+        // Back-most stacked page L-strip (slim proportional edges)
+        {
+          role: 'accent-shade',
+          shadeTrans: 74,
+          shadeGrad: 60,
+          pts: [
+            [3.2, 23],
+            [1.4, 23],
+            [1.4, 94],
+            [97.2, 94],
+            [97.2, 89],
+            [3.2, 89],
+            [3.2, 23],
+          ],
+          widthScale: 0.75,
+        },
+        // Middle stacked page L-strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 82,
+          shadeGrad: 50,
+          pts: [
+            [4.2, 20],
+            [2.3, 20],
+            [2.3, 90],
+            [98.1, 90],
+            [98.1, 85],
+            [4.2, 85],
+            [4.2, 20],
+          ],
+          widthScale: 0.78,
+        },
+        // Main wide fillable header sheet
+        {
+          role: 'body',
+          pts: [
+            [4.2, 17],
+            [99, 17],
+            [99, 85],
+            [4.2, 85],
+            [4.2, 17],
+          ],
+        },
+      ];
+      // 14 evenly spaced, true-circle punch holes & crisp vertical spiral wire loops
+      const count = 14;
+      const startX = 8.2;
+      const endX = 95.2;
+      const stepX = (endX - startX) / (count - 1);
+      for (let i = 0; i < count; i++) {
+        const rx = startX + i * stepX;
+        const rY = 3.5; // radius in % of height (~3.7px)
+        const rX = rY / ar; // exact true circle in world pixels!
+        const dotPts: Array<[number, number]> = [];
+        for (let k = 0; k <= 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          dotPts.push([rx + Math.cos(a) * rX, 27.5 + Math.sin(a) * rY]);
+        }
+        parts.push({ role: 'accent-solid', pts: dotPts, widthScale: 0.5 });
+        parts.push({
+          role: 'detail',
+          pts: [
+            [rx, 26.5],
+            ...sampleCubic([rx, 26.5], [rx + 0.5, 13], [rx - 0.5, 4], [rx - 1.35, 10], 8),
+            [rx - 1.55, 17],
+          ],
+          widthScale: 0.85,
+        });
+      }
+      return parts;
+    }
+
+    // 22. Wide Page-Title Header: Clean Card with True 45° Shaded Corner Ribbon (620×98)
+    case 'header-corner-ribbon-wide': {
+      // At 620×98 (ar ≈ 6.33), 45° diagonal means dx_pct = dy_pct / 6.33
+      return [
+        // Subtle soft bottom drop shadow
+        {
+          role: 'shade-soft',
+          shadeTrans: 78,
+          shadeGrad: 65,
+          pts: [
+            [4, 88],
+            [98, 88],
+            [98.6, 95],
+            [4.6, 95],
+            [4, 88],
+          ],
+        },
+        // Main wide fillable header card
+        {
+          role: 'body',
+          pts: [
+            [3, 14],
+            [98, 14],
+            [98, 88],
+            [3, 88],
+            [3, 14],
+          ],
+        },
+        // Subtle shadow strip under the 45° corner ribbon
+        {
+          role: 'shade-soft',
+          shadeTrans: 76,
+          shadeGrad: 60,
+          pts: [
+            [3, 62],
+            [11.8, 14],
+            [12.7, 16],
+            [3.7, 66],
+            [3, 62],
+          ],
+        },
+        // True 45° shaded corner ribbon tucked cleanly over the top-left corner
+        {
+          role: 'accent-shade',
+          shadeTrans: 58,
+          shadeGrad: 75,
+          pts: [
+            [2.1, 46],
+            [8.4, 9],
+            ...sampleQuad([8.4, 9], [10.4, 7], [11.8, 13], 5),
+            [3, 62],
+            ...sampleQuad([3, 62], [1.7, 55], [2.1, 46], 5),
+          ],
+          widthScale: 0.92,
+        },
+      ];
+    }
+
+    // 23. Wide Page-Title Header: Comic Starburst with True-Aspect 5-Point Stars & Side Rays (620×116)
+    case 'header-comic-wide': {
+      const ar = 620 / 116; // ~5.34
+      // 16 wide balanced spikes framing a generous rectangular title interior
+      const spikes: Array<[number, number]> = [
+        [14, 18],
+        [28, 16],
+        [43, 14],
+        [58, 13],
+        [74, 16],
+        [87, 19],
+        [95, 34],
+        [97.5, 55],
+        [93.5, 78],
+        [84, 88],
+        [68, 91],
+        [52, 92],
+        [36, 90],
+        [21, 88],
+        [8.5, 81],
+        [4.5, 57],
+        [7.5, 34],
+      ];
+      const cx = 51;
+      const cy = 53;
+      const burstPts: Array<[number, number]> = [spikes[0]];
+      for (let i = 0; i < spikes.length; i++) {
+        const a = spikes[i];
+        const b = spikes[(i + 1) % spikes.length];
+        const mx = (a[0] + b[0]) / 2;
+        const my = (a[1] + b[1]) / 2;
+        // Gentle inward concave dip along top/bottom, deeper comic dip on left/right sides
+        const isSide = Math.abs(mx - cx) > 36;
+        const pullX = isSide ? 0.14 : 0.04;
+        const pullY = isSide ? 0.16 : 0.28;
+        const cp: [number, number] = [mx + (cx - mx) * pullX, my + (cy - my) * pullY];
+        burstPts.push(...sampleQuad(a, cp, b, 5));
+      }
+      // Aspect-compensated true symmetrical 5-pointed star!
+      const makeTrueStar = (sx: number, sy: number, rOutY: number): Array<[number, number]> => {
+        const rInY = rOutY * 0.44;
+        const out: Array<[number, number]> = [];
+        for (let i = 0; i <= 10; i++) {
+          const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+          const ry = i % 2 === 0 ? rOutY : rInY;
+          const rx = ry / ar;
+          out.push([sx + Math.cos(ang) * rx, sy + Math.sin(ang) * ry]);
+        }
+        return out;
+      };
+      return [
+        // Main fillable wide comic starburst
+        {
+          role: 'body',
+          pts: burstPts,
+        },
+        // 5 perfectly proportioned non-squished 5-pointed stars
+        { role: 'accent-solid', pts: makeTrueStar(21, 10, 6.2), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(50, 7, 5.0), widthScale: 0.45 },
+        { role: 'accent-solid', pts: makeTrueStar(81, 10.5, 5.8), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(3.2, 85, 5.6), widthScale: 0.5 },
+        { role: 'accent-solid', pts: makeTrueStar(96.8, 20, 5.2), widthScale: 0.48 },
+        // Crisp comic speed rays on left & right flanks
+        { role: 'accent-solid', pts: [[1.4, 24], [6.5, 32], [6.1, 34.5], [1.0, 28], [1.4, 24]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[1.2, 36], [5.8, 40], [5.6, 42.2], [0.9, 39.5], [1.2, 36]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[98.8, 36], [94.5, 42], [94.8, 44.2], [99.1, 39.5], [98.8, 36]], widthScale: 0.45 },
+        { role: 'accent-solid', pts: [[98.6, 72], [93.5, 78], [94.0, 80.5], [99.0, 76], [98.6, 72]], widthScale: 0.45 },
+      ];
+    }
+
+    // 24. Wide Page-Title Header: Elegant Full-Width Ribbon Banner (620×98 — compact crisp tails)
+    case 'header-ribbon-banner-wide':
+      return [
+        // Left compact swallowtail (flush with center left edge x=11)
+        {
+          role: 'body',
+          pts: [
+            [1.5, 32],
+            [11, 32],
+            [11, 68],
+            [15.5, 86],
+            [1.5, 86],
+            [5.8, 59],
+            [1.5, 32],
+          ],
+        },
+        // Right compact swallowtail (flush with center right edge x=89)
+        {
+          role: 'body',
+          pts: [
+            [89, 32],
+            [98.5, 32],
+            [94.2, 59],
+            [98.5, 86],
+            [84.5, 86],
+            [89, 68],
+            [89, 32],
+          ],
+        },
+        // Left fold shadow triangle
+        {
+          role: 'accent-solid',
+          pts: [
+            [11, 68],
+            [15.5, 68],
+            [15.5, 86],
+            [11, 68],
+          ],
+          widthScale: 0.65,
+        },
+        // Right fold shadow triangle
+        {
+          role: 'accent-solid',
+          pts: [
+            [89, 68],
+            [84.5, 68],
+            [84.5, 86],
+            [89, 68],
+          ],
+          widthScale: 0.65,
+        },
+        // Wide spacious center title banner box (x=11..89)
+        {
+          role: 'body',
+          pts: [
+            [11, 11],
+            [89, 11],
+            [89, 68],
+            [11, 68],
+            [11, 11],
+          ],
+        },
+      ];
+
+    // 25. Wide Page-Title Header: Taped Note Strip with 4 True-45° Washi Tape Corners (620×100)
+    case 'header-taped-banner-wide':
+      return [
+        // Chamfered wide header card (corners cleanly hidden behind the 4 diagonal tape strips)
+        {
+          role: 'body',
+          pts: [
+            [7.2, 15],
+            [50, 14],
+            [92.8, 15],
+            [96.6, 36],
+            [96.9, 50],
+            [96.6, 64],
+            [92.8, 85],
+            [50, 86],
+            [7.2, 85],
+            [3.4, 64],
+            [3.1, 50],
+            [3.4, 36],
+            [7.2, 15],
+          ],
+        },
+        // Top-left true-45° shaded washi tape strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 62,
+          shadeGrad: 70,
+          pts: [
+            [2.4, 41],
+            [8.2, 10],
+            [7.2, 8],
+            [7.4, 4.5],
+            [6.1, 6.5],
+            [5.5, 3],
+            [1.0, 27],
+            [1.8, 29],
+            [1.4, 34],
+            [2.1, 33],
+            [2.4, 41],
+          ],
+          widthScale: 0.78,
+        },
+        // Top-right true-45° shaded washi tape strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 62,
+          shadeGrad: 70,
+          pts: [
+            [91.8, 10],
+            [97.6, 41],
+            [97.9, 33],
+            [98.6, 34],
+            [98.2, 29],
+            [99.0, 27],
+            [94.5, 3],
+            [93.9, 6.5],
+            [92.6, 4.5],
+            [92.8, 8],
+            [91.8, 10],
+          ],
+          widthScale: 0.78,
+        },
+        // Bottom-left true-45° shaded washi tape strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 62,
+          shadeGrad: 70,
+          pts: [
+            [2.4, 59],
+            [8.2, 90],
+            [7.2, 92],
+            [7.4, 95.5],
+            [6.1, 93.5],
+            [5.5, 97],
+            [1.0, 73],
+            [1.8, 71],
+            [1.4, 66],
+            [2.1, 67],
+            [2.4, 59],
+          ],
+          widthScale: 0.78,
+        },
+        // Bottom-right true-45° shaded washi tape strip
+        {
+          role: 'accent-shade',
+          shadeTrans: 62,
+          shadeGrad: 70,
+          pts: [
+            [91.8, 90],
+            [97.6, 59],
+            [97.9, 67],
+            [98.6, 66],
+            [98.2, 71],
+            [99.0, 73],
+            [94.5, 97],
+            [93.9, 93.5],
+            [92.6, 95.5],
+            [92.8, 92],
+            [91.8, 90],
+          ],
+          widthScale: 0.78,
+        },
+      ];
 
     default:
       return [];
