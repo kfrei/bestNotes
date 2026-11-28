@@ -253,6 +253,14 @@ export const BANNER_FRAME_DEFS: BannerFrameDef[] = [
     aspectW: 190,
     aspectH: 155,
   },
+  {
+    id: 'banner-hanging-lightbulb',
+    key: 'hanging-lightbulb',
+    title: 'Κρεμαστή Λάμπα Ιδέας',
+    tags: ['λάμπα', 'λαμπτήρας', 'κρεμαστή', 'ιδέα', 'φως', 'σχοινί', 'bulb', 'lightbulb', 'hanging', 'idea', 'tip'],
+    aspectW: 105,
+    aspectH: 310,
+  },
 ];
 
 export const BANNER_FRAMES_STICKERS: StickerCatalogItem[] = BANNER_FRAME_DEFS.map((b) => ({
@@ -2338,6 +2346,103 @@ function getBannerNormalizedParts(key: string): RawVectorPart[] {
       return parts;
     }
 
+    // 30. Hanging Ceiling Lightbulb with Long Vertical Cord, Curly Filament & Rays
+    case 'hanging-lightbulb': {
+      const ar = 105 / 310; // ~0.339 (tall)
+      // Bulb glass silhouette hanging down (y=69..90)
+      const bulbGlass: Array<[number, number]> = [
+        [37, 69],
+        ...sampleCubic([37, 69], [36, 74], [25, 77], [25, 82.5], 8),
+        ...sampleCubic([25, 82.5], [25, 91.5], [75, 91.5], [75, 82.5], 12),
+        ...sampleCubic([75, 82.5], [75, 77], [64, 74], [63, 69], 8),
+        [37, 69],
+      ];
+      // Screw socket cap (y=61.5..69)
+      const socketCap: Array<[number, number]> = [
+        [43, 61.5],
+        [57, 61.5],
+        ...sampleQuad([57, 61.5], [64, 63], [63, 69], 5),
+        [37, 69],
+        ...sampleQuad([37, 69], [36, 63], [43, 61.5], 5),
+      ];
+      const parts: RawVectorPart[] = [
+        // Long vertical hanging cord (y=2..61.5)
+        {
+          role: 'detail',
+          pts: [
+            [50, 2],
+            [50, 61.5],
+          ],
+          widthScale: 1.05,
+        },
+        // Small cord-entry collar
+        {
+          role: 'detail',
+          pts: [
+            [45.5, 61.5],
+            [45.5, 59.8],
+            [54.5, 59.8],
+            [54.5, 61.5],
+          ],
+          widthScale: 0.85,
+        },
+        // Main fillable hanging bulb glass (always black outline, variable fill + gradient)
+        {
+          role: 'body',
+          pts: bulbGlass,
+        },
+        // Shaded screw socket cap
+        {
+          role: 'accent-shade',
+          shadeTrans: 58,
+          shadeGrad: 60,
+          pts: socketCap,
+          widthScale: 0.9,
+        },
+        // Socket screw thread lines
+        { role: 'detail', pts: [[38.5, 64.2], [61.5, 64.2]], widthScale: 0.72 },
+        { role: 'detail', pts: [[37.5, 66.6], [62.5, 66.6]], widthScale: 0.72 },
+        // Cute curly filament inside the hanging bulb
+        {
+          role: 'detail',
+          pts: [
+            [44, 69],
+            [46, 80.5],
+            ...sampleCubic([46, 80.5], [36, 79], [36, 83.5], [44.5, 83], 8),
+            ...sampleCubic([44.5, 83], [52, 82.5], [51, 79], [48.5, 81.5], 6),
+            ...sampleCubic([48.5, 81.5], [56, 84], [62, 82.5], [55.5, 80.5], 8),
+            [56, 69],
+          ],
+          widthScale: 0.7,
+        },
+        // Subtle inner glass reflection highlight arc on bottom-right
+        {
+          role: 'detail',
+          pts: [
+            [68.5, 83],
+            ...sampleQuad([68.5, 83], [67, 86.5], [59.5, 88], 6),
+          ],
+          widthScale: 0.72,
+        },
+      ];
+      // 9 crisp radial light rays around bottom & sides of the bulb (aspect-true!)
+      const rayAngles = [160, 180, 140, 115, 90, 65, 40, 20, 0];
+      for (const deg of rayAngles) {
+        const rad = (deg * Math.PI) / 180;
+        const r1X = 33;
+        const r2X = deg === 90 || deg === 180 || deg === 0 ? 45 : 43;
+        parts.push({
+          role: 'detail',
+          pts: [
+            [50 + Math.cos(rad) * r1X, 82.5 + Math.sin(rad) * r1X * ar],
+            [50 + Math.cos(rad) * r2X, 82.5 + Math.sin(rad) * r2X * ar],
+          ],
+          widthScale: 0.8,
+        });
+      }
+      return parts;
+    }
+
     default:
       return [];
   }
@@ -2371,9 +2476,10 @@ export function buildBannerFrameSvgMarkup(key: string, color: string): string {
     key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
     key === 'pushpin-angled' ||
-    key === 'arrow-curved-3d-hatched';
+    key === 'arrow-curved-3d-hatched' ||
+    key === 'hanging-lightbulb';
   const fillTint = isDarkDefault
-    ? key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst'
+    ? key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst' || key === 'hanging-lightbulb'
       ? '#facc15'
       : key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled'
       ? '#ef4444'
@@ -2457,9 +2563,10 @@ export function createBannerFrameStrokes(
     key === 'badge-exclamation-shadow' ||
     key === 'pushpin-horizontal' ||
     key === 'pushpin-angled' ||
-    key === 'arrow-curved-3d-hatched';
+    key === 'arrow-curved-3d-hatched' ||
+    key === 'hanging-lightbulb';
   const resolvedFillHex =
-    isDarkColor && (key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst')
+    isDarkColor && (key === 'lightning-triple-vertical' || key === 'badge-exclamation-burst' || key === 'hanging-lightbulb')
       ? '#facc15'
       : isDarkColor && (key === 'badge-exclamation-shadow' || key === 'pushpin-horizontal' || key === 'pushpin-angled')
       ? '#ef4444'
