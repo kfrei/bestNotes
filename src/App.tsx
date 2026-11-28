@@ -66079,7 +66079,8 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="width"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-20 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-4 flex flex-col gap-3 w-72"
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 114px)' }}
+              className="fixed right-20 z-[100010] ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-4 flex flex-col gap-3 w-72"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#234978]">
                 <span>Πάχος Γραμμής (12 Επιλογές)</span>
@@ -66155,7 +66156,8 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="color"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-6 top-24 z-50 ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 114px)' }}
+              className="fixed right-6 z-[100010] ipados-liquid-glass bg-[#fdfbf7]/38 backdrop-blur-2xl backdrop-saturate-200 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/85 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#234978]">
                 <span>Παλέτα Χρωμάτων</span>
