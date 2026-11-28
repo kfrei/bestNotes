@@ -77976,7 +77976,7 @@ export default function App() {
                               if (e.pointerType === 'mouse' && e.button !== 0) return;
                               if (
                                 (e.target as HTMLElement).closest(
-                                  '[data-ruler-rotate="true"], [data-ruler-mm="true"]'
+                                  '[data-ruler-rotate="true"], [data-ruler-mm="true"], [data-ruler-flip="true"]'
                                 )
                               ) {
                                 return;
@@ -78134,6 +78134,59 @@ export default function App() {
                             }}
                             className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-[70] outline-none"
                           >
+                            {/* 0-Origin Flip Button (Κλικ/Tap στο 0 για αλλαγή αρχής: Αριστερά ↔ Δεξιά ή Επάνω ↔ Κάτω — η λαβή μεγέθους μεταφέρεται αυτόματα απέναντι!) */}
+                            <button
+                              type="button"
+                              data-ui-panel="true"
+                              data-ruler-flip="true"
+                              title="Αλλαγή αρχής (0) του χάρακα: Αριστερά ↔ Δεξιά ή Επάνω ↔ Κάτω"
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRulerState((prev) => {
+                                  let nextAngle = prev.angle + 180;
+                                  while (nextAngle > 180) nextAngle -= 360;
+                                  while (nextAngle <= -180) nextAngle += 360;
+                                  return {
+                                    ...prev,
+                                    x: rGeom.centerX,
+                                    y: rGeom.centerY,
+                                    lengthPx: rGeom.effectiveRulerW,
+                                    angle: nextAngle,
+                                  };
+                                }, pageObj.id);
+                              }}
+                              style={{ left: 3 }}
+                              className="absolute top-1/2 -translate-y-1/2 z-20 h-[22px] min-w-[24px] px-1 rounded-full bg-[#fdfbf7]/95 hover:bg-[#234978] active:scale-95 text-[#234978] hover:text-white border border-[#234978]/35 shadow-2xs flex items-center justify-center gap-0.5 cursor-pointer transition-colors outline-none"
+                            >
+                              {pageRuler.showMm && (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    transform: `rotate(${-pageRuler.angle}deg)`,
+                                  }}
+                                  className="text-[9px] font-mono font-extrabold leading-none select-none"
+                                >
+                                  0
+                                </span>
+                              )}
+                              <svg
+                                className="w-2.5 h-2.5 shrink-0 opacity-80"
+                                viewBox="0 0 12 12"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="4 3 1.5 6 4 9" />
+                                <polyline points="8 3 10.5 6 8 9" />
+                                <line x1="2" y1="6" x2="10" y2="6" />
+                              </svg>
+                            </button>
+
                             {/* Far-End Interactive Resize Grip (Σύρετε με δάχτυλο ή ποντίκι στην άκρη του χάρακα για μείωση/αύξηση μεγέθους) */}
                             <div
                               data-ruler-resize="end"
@@ -78338,16 +78391,6 @@ export default function App() {
 
                               {pageRuler.showMm ? (
                                 <>
-                                  {/* 0 cm origin label */}
-                                  <span
-                                    style={{
-                                      left: 7,
-                                      transform: `translate(-50%, -50%) rotate(${-pageRuler.angle}deg)`,
-                                    }}
-                                    className="absolute top-1/2 text-[8.5px] font-mono font-bold text-slate-700/90 bg-slate-200/85 px-0.5 rounded select-none"
-                                  >
-                                    0
-                                  </span>
                                   {Array.from(
                                     { length: Math.floor(rulerW / (oneCmPx / 10)) - 1 },
                                     (_, i) => {
