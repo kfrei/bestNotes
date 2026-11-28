@@ -54317,7 +54317,16 @@ export default function App() {
 
   // Apply Color, Thickness, or Line Style to any selected line, shape, group of lines, recently drawn shape, or selected Text Box!
   const applyColorToSelection = useCallback(
-    (c: string, options?: { skipRecentRecord?: boolean }) => {
+    (
+      c: string,
+      options?: {
+        skipRecentRecord?: boolean;
+        overrideStrokeIds?: string[];
+        overrideTextId?: string | null;
+        overrideLassoTextIds?: string[];
+        overrideActiveNodeId?: string | null;
+      }
+    ) => {
       setStrokeColor(c);
       setFillColor(c);
       if (!options?.skipRecentRecord) {
@@ -54346,7 +54355,8 @@ export default function App() {
         };
       });
 
-      const activeTxtId = selectedTextId || editingTextId;
+      const activeTxtId =
+        options?.overrideTextId !== undefined ? options.overrideTextId : selectedTextId || editingTextId;
       if (activeTxtId) {
         const curPageTxt = (activePage.texts || []).find((t) => t.id === activeTxtId);
         const selRange = curPageTxt
@@ -54461,19 +54471,23 @@ export default function App() {
         renderStaticSceneRef.current?.();
       }
 
+      const effStrokeIds = options?.overrideStrokeIds ?? selectedStrokeIds;
+      const effActiveNodeId =
+        options?.overrideActiveNodeId !== undefined ? options.overrideActiveNodeId : activeNodeStrokeId;
+      const effLassoTxtIds = options?.overrideLassoTextIds ?? selectedLassoTextIds;
       const baseIds =
-        selectedStrokeIds.length > 0
-          ? selectedStrokeIds
-          : activeNodeStrokeId
-          ? [activeNodeStrokeId]
+        effStrokeIds.length > 0
+          ? effStrokeIds
+          : effActiveNodeId
+          ? [effActiveNodeId]
           : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
           ? lastCreatedShapeIdsRef.current
           : [];
-      if (baseIds.length === 0 && selectedLassoTextIds.length === 0) return;
+      if (baseIds.length === 0 && effLassoTxtIds.length === 0) return;
 
       updateActivePage((page) => {
         const baseSet = new Set(baseIds);
-        const lassoTxtSet = new Set(selectedLassoTextIds);
+        const lassoTxtSet = new Set(effLassoTxtIds);
         // Only expand a groupId to all its members if it's NOT a single-curve selection inside `math-graph-grp-...`
         const fullMathGroups = new Set(
           page.strokes
@@ -56240,7 +56254,12 @@ export default function App() {
           setSelectedTextId(prev.prevTextId);
           setSelectedLassoTextIds(prev.prevLassoTextIds);
           setActiveNodeStrokeId(prev.prevActiveNodeId);
-          applyColorToSelection('#111827');
+          applyColorToSelection('#111827', {
+            overrideStrokeIds: prev.prevStrokeIds,
+            overrideTextId: prev.prevTextId,
+            overrideLassoTextIds: prev.prevLassoTextIds,
+            overrideActiveNodeId: prev.prevActiveNodeId,
+          });
           showToast('⚫ Μαύρο — BB / ΒΒ');
           return;
         }
@@ -56274,7 +56293,12 @@ export default function App() {
           setSelectedTextId(prev.prevTextId);
           setSelectedLassoTextIds(prev.prevLassoTextIds);
           setActiveNodeStrokeId(prev.prevActiveNodeId);
-          applyColorToSelection('#16a34a');
+          applyColorToSelection('#16a34a', {
+            overrideStrokeIds: prev.prevStrokeIds,
+            overrideTextId: prev.prevTextId,
+            overrideLassoTextIds: prev.prevLassoTextIds,
+            overrideActiveNodeId: prev.prevActiveNodeId,
+          });
           showToast('🟢 Πράσινο — GG / ΓΓ');
           return;
         }
