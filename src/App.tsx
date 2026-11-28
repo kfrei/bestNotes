@@ -54903,11 +54903,14 @@ export default function App() {
         return;
       }
 
-      // Determine next fill state: if a fan is selected, check its blades; otherwise check targetStrokes
+      // Determine next fill state: if a fan or banner/icon group is selected, check its main fillable body; otherwise check targetStrokes
       const fanBladesInSelection = targetStrokes.filter((s) => s.shapeType === 'fan-blade');
+      const bannerBodiesInSelection = targetStrokes.filter((s) => s.shapeType === 'banner-body');
       const currentlyFilled =
         fanBladesInSelection.length > 0
           ? fanBladesInSelection.some((s) => s.fillStyle && s.fillStyle !== 'none')
+          : bannerBodiesInSelection.length > 0
+          ? bannerBodiesInSelection.some((s) => s.fillStyle && s.fillStyle !== 'none')
           : targetStrokes.length > 0
           ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
           : fillStyle !== 'none';
@@ -65639,22 +65642,29 @@ export default function App() {
                         (t) => t.id === (selectedTextId || editingTextId) && t.fontFamily === 'pop'
                       )
                     : undefined;
+                const bannerBodies = targetStrokes.filter((s) => s.shapeType === 'banner-body');
                 const effectiveFilled =
                   activePopText
                     ? activePopText.fillStyle !== 'none'
+                    : bannerBodies.length > 0
+                    ? bannerBodies.some((s) => s.fillStyle && s.fillStyle !== 'none')
                     : targetStrokes.length > 0
                     ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
                     : fillStyle !== 'none';
                 const rawTrans = activePopText
                   ? (typeof activePopText.fillTransparency === 'number' ? activePopText.fillTransparency : 0)
-                  : targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0)
-                      ?.fillTransparency ?? fillTransparency;
+                  : (bannerBodies.length > 0 ? bannerBodies : targetStrokes).find(
+                        (s) => typeof s.fillTransparency === 'number' && s.fillTransparency >= 0
+                      )?.fillTransparency ?? fillTransparency;
                 const effectiveTrans = Math.max(0, Math.min(95, Math.round(rawTrans / 5) * 5));
                 const effectiveDashed =
                   styleTargetStrokes.length > 0
                     ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
                     : lineStyle === 'dashed';
-                const activeFillColor = targetStrokes[0]?.color || strokeColor || '#234978';
+                const activeFillColor =
+                  (bannerBodies.length > 0 ? bannerBodies[0]?.fillColor : targetStrokes[0]?.color) ||
+                  strokeColor ||
+                  '#234978';
                 const [inkR, inkG, inkB] = parseHexColor(activeFillColor);
                 const inkLuminance = (0.299 * inkR + 0.587 * inkG + 0.114 * inkB) / 255;
                 const isLightInkPreview = inkLuminance > 0.72;
