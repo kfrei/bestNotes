@@ -52693,6 +52693,51 @@ export default function App() {
         renderStaticSceneRef.current();
         return;
       }
+      // Apple Pencil Fast Double-Tap in Empty Space while in Lasso:
+      // 1st tap deselects & arms; 2nd fast tap (<= 320ms, far from strokes) switches to Eraser (and next double-tap returns to Pen!)
+      const lassoTapTrack = e.pointerType === 'pen' ? penTapTrackRef.current : null;
+      penTapTrackRef.current = null;
+      const nowLassoUp = performance.now();
+      const isLassoEmptyMicroTap =
+        doubleTapEmptyEraserEnabled &&
+        lassoTapTrack !== null &&
+        nowLassoUp - lassoTapTrack.startTime <= 190 &&
+        lassoTapTrack.maxDist <= 7 &&
+        !activePage.strokes.some((s) =>
+          isPointNearStroke({ x: lassoTapTrack.startX, y: lassoTapTrack.startY }, s, 36, false, true)
+        );
+      if (isLassoEmptyMicroTap && lassoTapTrack) {
+        const prevTap = lastStationaryPenTapRef.current;
+        if (
+          prevTap &&
+          nowLassoUp - prevTap.time >= 35 &&
+          nowLassoUp - prevTap.time <= 320 &&
+          Math.hypot(lassoTapTrack.startX - prevTap.x, lassoTapTrack.startY - prevTap.y) <= 22
+        ) {
+          lastStationaryPenTapRef.current = null;
+          lassoPolygonRef.current = [];
+          setSelectedStrokeIds([]);
+          setSelectedImageId(null);
+          setSelectedImageIds([]);
+          setSelectedTextId(null);
+          setSelectedLassoTextIds([]);
+          setSelectedReactionSimId(null);
+          lastNonEraserToolRef.current = 'pen';
+          setActiveTool('eraser');
+          showToast('🧹 Διπλό Tap σε κενό: Εναλλαγή σε Σβήστρα!');
+          return;
+        }
+        finalizeLassoSelection([...lassoPolygonRef.current], e.shiftKey);
+        lastStationaryPenTapRef.current = {
+          time: nowLassoUp,
+          x: lassoTapTrack.startX,
+          y: lassoTapTrack.startY,
+          strokeId: '',
+        };
+        return;
+      } else if (e.pointerType === 'pen') {
+        lastStationaryPenTapRef.current = null;
+      }
       finalizeLassoSelection([...lassoPolygonRef.current], e.shiftKey);
       return;
     }
